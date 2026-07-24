@@ -41,7 +41,7 @@ findings:
     status: open             # open | fixed | deferred | rejected | answered
 ```
 
-The body carries one section per finding — the concrete scenario, why it matters, the recommended mitigation, and the artifact/code ids it impugns (`FR-NN`, `AC-NN`, task `N.M`, `D-NNNN`) — followed by the Resolution Log.
+The body carries one section per finding — the concrete scenario, why it matters, the recommended mitigation, and the artifact/code ids it impugns (`FR-NN`, `AC-NN`, task `N.M`, `D-NNNN`) — followed by the Resolution Log. Findings and lane evidence follow `shared/frontmatter-schema.md` § Sensitive Data: repo-relative paths, no credentials, no `/home/<user>`-style absolute paths in pasted output.
 
 Artifact `status`: `open` while any finding is `open`; `resolved` when every finding has a terminal disposition; `superseded` when a newer review of the same target replaces it (link both ways, like ledger supersession).
 

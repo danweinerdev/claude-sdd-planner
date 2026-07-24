@@ -2,6 +2,18 @@
 
 Single source of truth for all artifact metadata in this project.
 
+## Sensitive Data — never captured in artifacts
+
+SDD artifacts are committed, shared, and often pushed to remotes. No artifact — frontmatter, body, evidence table, pasted command output, or review finding — may capture:
+
+- **Credentials of any kind**: tokens, API keys, passwords, connection strings, signed URLs
+- **Machine-specific absolute paths** that identify a user or host: `/home/<user>/...`, `/Users/<user>/...`, `C:\Users\...`
+- Private hostnames, internal IPs, usernames, email addresses, or customer data that the target repo itself doesn't already publish
+
+Path form, in order of preference: **relative to the repo or planning root** (`.`, `./services/api`, `Specs/Auth`) — the default for all artifact content; `~/...` or `$HOME/...` where a path outside the current root is genuinely needed (both are generic — they name no user); literal `/home/<user>`-style prefixes never. Machine-specific absolute paths belong only in the gitignored `planning-config.local.json`.
+
+When pasting command output as evidence, scrub what the tool printed (replace the repo root with `.` or the home prefix with `~`); the observable result — exit status, counts, assertions — is the evidence, not the noise around it. Where the completion-evidence contract requires a resolvable repository identity, `~/...` is the accepted form (see `shared/completion-evidence.md`). No hygiene pass reliably catches leaks after the fact — the rule is enforced at write time, by every skill and agent that produces an artifact.
+
 ## Common Fields
 
 Every artifact includes these fields (one exception: `phase` docs omit `tags` and `related` — they inherit the plan's):

@@ -57,6 +57,9 @@ sdd-planner/                      # Repository root = plugin root
 ### Frontmatter
 All artifacts use YAML frontmatter as the machine-readable data layer. See `shared/frontmatter-schema.md` for the complete schema. The companion `sdd-dashboard` plugin reads exclusively from frontmatter — no markdown table parsing.
 
+### Sensitive data
+Artifacts never capture credentials, private hostnames/IPs, usernames, or machine-specific absolute paths (`/home/<user>/...`, `C:\Users\...`). Paths are repo/planning-root-relative by default; `~/...`/`$HOME/...` are acceptable generic forms where a path outside the root is needed; scrub pasted command output. Single source of truth: `shared/frontmatter-schema.md` § Sensitive Data.
+
 ### VCS-agnostic operations
 The plugin works with git, git worktrees, Perforce, and unversioned directories. Skills that inspect files or history detect the VCS first using the algorithm in `shared/vcs-detection.md`, then use the corresponding command from that file's operations table (`git mv` / `p4 move` / plain `mv`, `git diff` / `p4 diff2`, etc.). Don't hard-code `git` in skills. Likewise, path resolution (planning root, plugin directory, target repo) is defined once in `shared/path-resolution.md` — the single source of truth; don't re-derive it in skills.
 

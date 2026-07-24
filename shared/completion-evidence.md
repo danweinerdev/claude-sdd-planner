@@ -39,6 +39,14 @@ Before setting a task to `complete`, replace the pending marker with:
 | `<tool or exact procedure>` | `<paths/environment>` | PASS | `<specific observation>` |
 ```
 
+**Sensitive data (`shared/frontmatter-schema.md` § Sensitive Data):** evidence
+is committed artifact content — repo-root-relative paths are the default
+everywhere. Record `Working directory` cells relative to the repo root (`.`,
+`./services/api`). `Repository` is the one label that must resolve to the
+target root, so it uses the generic `~/...` form (the validator expands `~`);
+never a literal `/home/<user>` prefix. Scrub user-identifying paths and
+credentials from any pasted output before it lands in an evidence row.
+
 Record the exact command, working directory, exit status, and observable result.
 At least one command or tool/inspection row is required. Every final check must
 pass. Every evidence label shown above occurs exactly once as a visible list

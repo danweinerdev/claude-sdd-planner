@@ -60,7 +60,10 @@ External dependencies, prerequisites, and assumptions.
 <!-- Keep the exact `Pending — not complete.` line until completion. Evidence
 uses the exact labels `Verified`, `Repository`, `VCS`, `Revision / checkpoint`,
 and `Identity recheck`, each exactly once visibly as `- <label>: <value>`.
-`Verified` is `YYYY-MM-DD`; `Repository` is the exact resolved target root;
+`Verified` is `YYYY-MM-DD`; `Repository` is the exact resolved target root,
+recorded home-anchored (`~/...`) — never a literal `/home/<user>` prefix, and
+no credentials or user-identifying paths anywhere in evidence
+(shared/frontmatter-schema.md § Sensitive Data);
 `VCS` identifies a validated SCM adapter; record the tested native SCM
  revision/checkpoint. Git adapter: plan `Revision / checkpoint` is a full
  40-hex native Git commit and may be a validated integration merge. The
