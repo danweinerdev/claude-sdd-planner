@@ -6,212 +6,69 @@ description: "Set up a directory for sdd-planner — generates planning-config.j
 # /setup — Configure a Directory for SDD Planner
 
 ## Path Resolution
-The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Setup *writes* the config the other skills resolve from — the planning-root and target-repository rules in `shared/path-resolution.md` (in the plugin directory) define how the `planningRoot` written here is later interpreted; Step 3 below determines its value.
+The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Setup *writes* the config the other skills resolve from — `shared/path-resolution.md` defines how the `planningRoot` written here is later interpreted.
 
 ## When to Use
-When configuring a directory (an existing repo, a fresh `git init`, a Perforce workspace, or even an empty directory) to work with the sdd-planner plugin. This generates `planning-config.json`, bootstraps planning artifact directories, and creates launcher scripts.
+When configuring a directory (an existing repo, a fresh `git init`, a Perforce workspace, or an empty directory) to work with the sdd-planner plugin. **Idempotent and safe to re-run**: overwrites `planning-config.json` only when the resolved `planningRoot` differs, overwrites launcher scripts, and creates only missing directories.
 
-**Idempotent and safe to re-run.** Overwrites `planning-config.json` only when the resolved `planningRoot` differs from the existing one; otherwise reports OK and leaves it alone. Overwrites launcher scripts. Creates missing directories without touching existing ones.
-
-## What It Does
-
-1. Detects the VCS rooted at the target directory using `shared/vcs-detection.md` (one of: `git`, `git-worktree`, `git-bare`, `perforce`, `none`)
-2. For `git-worktree`, searches sibling worktrees for an existing `planning-config.json` and inherits settings
-3. Generates `planning-config.json` — the config that tells the plugin where planning artifacts live
-4. Bootstraps planning directories (Plans/, Research/, Brainstorm/, Specs/, Designs/, Retro/, Diagrams/) if they don't exist
-5. Creates launcher scripts (`claude.sh` and `claude.cmd`) for launching Claude with the plugin
-6. Sets up the appropriate ignore file for the detected VCS (`.gitignore`, `.p4ignore`, or skipped for `none`)
-7. Cleans any stale legacy symlinks or file copies from older plugin versions
-8. Optionally offers to add planning guidance to the target's CLAUDE.md (asks first; skipped if declined)
-
-## What It Does NOT Do
-
-- **Resolve paths.** Whatever path the user gives — relative or absolute — is preserved verbatim in `planning-config.json`. Setup never silently rewrites a relative path into an absolute one.
-- **Initialize a VCS.** If the target has no VCS (`none`), setup proceeds without one. The user can `git init` (or set up a Perforce client) afterward — setup is not in that business.
-- Copy skills, agents, or plugin files — the plugin discovers its own files via `--plugin-dir`
-- Generate CLAUDE.md unprompted — the plugin provides its own context; Step 10 *offers* optional CLAUDE.md guidance, but nothing is written without the user's consent
-- Copy templates or frontmatter schemas
-- Handle git-bare repos directly — run setup on individual worktrees instead
+What setup does **not** do: resolve paths (user-given paths are stored verbatim — relative stays relative, absolute stays absolute), initialize a VCS, copy plugin files/templates/schemas into the target (the plugin reads its own files in place), write CLAUDE.md unprompted, or handle bare git repos (run it on a worktree instead).
 
 ## Arguments
-
-The user may provide these inline with the command:
-- **target path** — directory to configure (defaults to current working directory). May be relative or absolute; **kept as-given**.
-- **--planning-root `<path>`** — where planning artifacts live. **Kept as-given** — relative stays relative, absolute stays absolute.
-- **--dashboard** — set the `dashboard: true` flag in `planning-config.json` so the companion `sdd-dashboard` plugin (if installed) will generate HTML output
-
-Examples:
-```
-/setup                                       # current directory
-/setup ../my-project                         # relative path, kept relative
-/setup /path/to/my-project                   # absolute path, kept absolute
-/setup my-repo                               # config key lookup
-/setup . --planning-root Planning            # planningRoot stored as "Planning"
-/setup . --planning-root /home/u/plans       # planningRoot stored as "/home/u/plans"
-/setup /path/to/repo --dashboard             # opt into HTML dashboard generation
-```
+- **target path** — directory to configure (defaults to cwd). A non-path name is looked up in the current directory's `planning-config.local.json` under `repositories.<name>.path`.
+- **--planning-root `<path>`** — where planning artifacts live; stored as-given.
+- **--dashboard** — set `"dashboard": true` for the companion `sdd-dashboard` plugin.
 
 ## Process
 
-### 1. Determine Target
+### 1. Target and VCS
+Determine the target directory (see Arguments; verify it exists). Detect its VCS per `shared/vcs-detection.md`: `git`, `git-worktree`, `git-bare`, `perforce`, or `none`. For `git-bare`, **stop**: "This is a bare git repository. Run setup on individual worktrees instead." Everything else proceeds; the VCS only affects the ignore-file step.
 
-- If the user specified a path, use it **as given**. Do not resolve symlinks or convert relative paths to absolute. Just verify the directory exists.
-- If the user specified a name (not a path), look it up in the **current directory's** `planning-config.local.json` under `repositories.<name>.path` (or as a plain string value). Use whatever value is stored there as-given.
-- Otherwise, use the **current working directory**.
+### 2. Resolve Planning Root
+Priority order — the chosen value is stored **verbatim**, never resolved to absolute:
+1. `--planning-root` flag.
+2. Existing `<target>/planning-config.json` — reuse its `planningRoot` and report `planning-config.json: OK (existing planningRoot preserved)`.
+3. Sibling inheritance (`git-worktree` only): check `git -C <target> worktree list --porcelain` siblings for a `planning-config.json` and inherit its `planningRoot`, reporting which sibling.
+4. Ask (skip when context makes it obvious): at the target root (`"."`, default), a relative subdirectory (e.g., `Planning`), or an absolute external path. **Never default to the plugin directory** — the marketplace cache is deleted on plugin updates.
 
-### 2. Detect VCS
+Also ask about the dashboard opt-in unless `--dashboard` was passed or inherited.
 
-Apply the algorithm in `shared/vcs-detection.md` to the target directory. Record the result as one of: `git`, `git-worktree`, `git-bare`, `perforce`, `none`.
-
-If the result is `git-bare`, **stop with an error**: "This is a bare git repository. Run setup on individual worktrees instead."
-
-For every other result (`git`, `git-worktree`, `perforce`, `none`), proceed. Setup is VCS-agnostic from here on — the only place the VCS affects behavior is the ignore-file step (Step 9).
-
-### 3. Resolve Planning Root
-
-Determine where planning artifacts will live, in this priority order. **The value is stored verbatim** in `planning-config.json` — never resolved to absolute:
-
-1. **Explicit flag**: If `--planning-root` was provided, use that path verbatim.
-2. **Existing config**: if `<target>/planning-config.json` already exists, reuse its `planningRoot` verbatim and report `planning-config.json: OK (existing planningRoot preserved)`.
-3. **Sibling inheritance** (only when VCS is `git-worktree`): Run `git -C <target> worktree list --porcelain` to find sibling worktrees. For each sibling (excluding the target itself), check if `<sibling>/planning-config.json` exists. If found, read its `planningRoot` value and use it verbatim. Report: "Inheriting planningRoot from sibling worktree: `<sibling-path>`". This step is skipped for non-git VCS.
-4. **Default**: Use `"."` — planning artifacts at the target directory root. **Never default the planning root to the plugin directory** — the marketplace cache is deleted on plugin updates, and artifacts stored there would be lost.
-
-### 4. Ask Configuration Questions (if needed)
-
-Skip questions when the answer is obvious from arguments or context.
-
-**Planning root** — skip if `--planning-root` was provided, reused from an existing config, inherited from sibling, or context makes it obvious:
-> Where do your planning artifacts live?
-> - At the target directory root (default — stored as `"."`)
-> - In a relative subdirectory of this repo (e.g., `Planning`) — stored as a relative path
-> - In an absolute path elsewhere on disk — stored as an absolute path
-
-**Dashboard** — skip if `--dashboard` was provided or inherited from sibling config:
-> Do you want to opt in to the HTML dashboard? (rendered by the companion `sdd-dashboard` plugin via `/sdd-dashboard:dashboard`)
-> - No (default) — `dashboard` flag is omitted; nothing is generated
-> - Yes — sets `"dashboard": true` in `planning-config.json`. The flag is read by the `sdd-dashboard` plugin if installed; `sdd-planner` ignores it.
-
-### 5. Write planning-config.json
-
-Write (or overwrite) `planning-config.json` in the target directory:
-
+### 3. Write planning-config.json
 ```json
-{
-  "planningRoot": "<the path the user gave, verbatim>"
-}
+{ "planningRoot": "<verbatim>" }
 ```
+With the dashboard opt-in, also include `"dashboard": true`, `"title"`, and `"description"` (read by the companion `sdd-dashboard` plugin; ignored otherwise). Overwrite only when `planningRoot` differs from an existing config — but still add/update `dashboard` when explicitly requested.
 
-`planningRoot` is just a path. Relative paths are interpreted relative to the directory containing `planning-config.json`; absolute paths are used as-is. The plugin doesn't care which kind you pick.
-
-If the user opted into the dashboard, also include `"dashboard": true` along with `"title"` and `"description"` fields (the companion `sdd-dashboard` plugin reads these for the page chrome):
-
-```json
-{
-  "planningRoot": "<verbatim>",
-  "dashboard": true,
-  "title": "<project-name> Dashboard",
-  "description": "Plans, specs, designs, research, and progress tracking"
-}
+### 4. Bootstrap Planning Directories
+Resolve the planning root for this step only (relative → joined with target; absolute → as-is) and `mkdir -p`:
 ```
-
-Overwrite only when the resolved `planningRoot` differs from the existing one. If the file already exists and `planningRoot` matches, report `planning-config.json: OK (existing planningRoot preserved)` and leave it alone (but still add/update the `dashboard` field if the user explicitly requested it).
-
-### 6. Bootstrap Planning Directories
-
-Resolve the planning root path *for this step only*: if relative, join with the target directory; if absolute, use as-is. (The stored value in `planning-config.json` does not change.) Then create these directories if they don't already exist:
-
+Plans/  Research/  Brainstorm/  Specs/  Designs/  Decisions/
 ```
-<resolved-planning-root>/Plans/
-<resolved-planning-root>/Research/
-<resolved-planning-root>/Brainstorm/
-<resolved-planning-root>/Specs/
-<resolved-planning-root>/Designs/
-<resolved-planning-root>/Retro/
-<resolved-planning-root>/Diagrams/
-<resolved-planning-root>/Decisions/
-```
+Plan lifecycle is tracked in each plan README's frontmatter `status` — `Plans/` stays flat. Report created vs already-existing.
 
-Plan lifecycle is tracked in each plan's README frontmatter `status` field — `Plans/` stays flat.
+### 5. Write Launcher Scripts
+Create both launchers in the target unconditionally, passing the `planningRoot` value through verbatim (`claude --add-dir` accepts relative and absolute paths).
 
-Use `mkdir -p` — safe to run on existing directories. Report which directories were created vs already existed.
-
-### 7. Clean Stale Legacy Files
-
-Check `<target>/.claude/skills/` and `<target>/.claude/agents/` for leftover files from older plugin versions:
-
-**Symlinks**: Remove any `.md` symlinks that point into the plugin directory (these are from the legacy symlink-based setup).
-
-**Copies**: For each `.md` file under `.claude/skills/`, check the plugin directory for a same-basename match (`.claude/skills/plan.md` matches if `commands/plan/SKILL.md` exists in the plugin, since the plugin's commands are now directory-bundled). For each `.md` file under `.claude/agents/`, check for a same-name `.md` in `agents/`. Remove the matches — they're stale copies from before the plugin system. Keep non-matching files — they may be user-created.
-
-Remove empty `.claude/skills/` or `.claude/agents/` directories after cleanup.
-
-Report what was cleaned, if anything.
-
-### 8. Write Launcher Scripts
-
-Create **both** launcher scripts in the target directory unconditionally (regardless of the current platform). Each starts Claude with the planning root added to its allowed-paths list. Pass the `planningRoot` value through verbatim — `claude --add-dir` accepts both relative and absolute paths.
-
-**Unix** (`claude.sh`):
+`claude.sh` (make executable):
 ```bash
 #!/usr/bin/env bash
 # Launch Claude Code with planning context
-exec claude \
-    --add-dir="<planning-root verbatim>" \
-    "$@"
+exec claude --add-dir="<planning-root verbatim>" "$@"
 ```
-Make it executable (`chmod +x`).
 
-**Windows** (`claude.cmd`):
+`claude.cmd`:
 ```cmd
 @echo off
 claude --add-dir="<planning-root verbatim>" %*
 ```
 
-### 9. Set Up Ignore File (VCS-aware)
+### 6. Ignore File
+`git`/`git-worktree` → `.gitignore`; `perforce` → `.p4ignore` (its syntax: one path per line, no leading slash); `none` → skip. Ensure these entries exist without duplicating: `Dashboard/` (generated HTML, harmless if the dashboard plugin isn't installed) and `planning-config.local.json` (local filesystem paths).
 
-Pick the ignore file based on the detected VCS:
+### 7. Offer CLAUDE.md Guidance (optional)
+Ask before writing anything. For a dedicated planning-only repo, instantiate `shared/templates/claude-md-full.md`; for an existing project, append `shared/templates/claude-md-snippet.md`. Skip silently if declined.
 
-| VCS | File | Action |
-|---|---|---|
-| `git` / `git-worktree` | `.gitignore` | Ensure both entries below are present (add if missing, don't duplicate) |
-| `perforce` | `.p4ignore` | Same — write entries in `.p4ignore` syntax (one path per line, no leading slash) |
-| `none` | (skip) | No VCS to ignore for; nothing to write |
-
-Entries:
-- `Dashboard/` — generated HTML; only relevant if the `sdd-dashboard` companion plugin is installed; harmless to add unconditionally
-- `planning-config.local.json` — local filesystem paths to other repos
-
-### 10. Offer CLAUDE.md Guidance (optional)
-
-Ask the user whether to add planning instructions to the target's CLAUDE.md:
-- For a dedicated planning-only repo, instantiate `shared/templates/claude-md-full.md`
-- For an existing project, append `shared/templates/claude-md-snippet.md` to its CLAUDE.md
-
-Skip silently if declined. Record the outcome (created / appended / skipped) for the setup report.
-
-### 11. Report Results
-
-Display a summary:
-
-```
-## Setup Complete
-
-**Target:** <path-as-user-provided>
-**VCS:** git | git-worktree | perforce | none
-**Planning root:** <verbatim, with a note if relative or absolute>
-**Dashboard flag:** enabled | disabled (rendered by the companion `sdd-dashboard` plugin)
-
-### Created/Updated
-- planning-config.json
-- Planning directories (list any that were created)
-- claude.sh
-- claude.cmd
-- ignore file (.gitignore | .p4ignore | none)
-- CLAUDE.md guidance (created | appended | skipped)
-
-### Next Steps
-- `cd <target> && ./claude.sh`
-```
+### 8. Report
+Summarize: target path (as given), detected VCS, planning root (verbatim, noting relative/absolute), dashboard flag, files created/updated (config, directories, launchers, ignore file, CLAUDE.md guidance created/appended/skipped), and the next step: `cd <target> && ./claude.sh`.
 
 ## Context
 - VCS detection: `shared/vcs-detection.md`
