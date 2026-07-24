@@ -13,6 +13,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 - Look up what was decided about a topic ("what did we decide about auth?")
 - Reconcile a collision — supersede an old decision with a new one
 - Backfill a decision the automatic capture missed
+- Audit ledger hygiene (`/decide check`) — stale citations, missed collisions, malformed entries
 
 The convention — entry schema, lifecycle rules, collision procedure — is defined in `shared/decision-log.md` (single source of truth). Read it before operating on the ledger.
 
@@ -25,6 +26,7 @@ The convention — entry schema, lifecycle rules, collision procedure — is def
 /decide show D-NNNN            # Show one entry with its body section, if any
 /decide accept D-NNNN          # Promote a proposed entry to accepted
 /decide supersede D-NNNN       # Replace an entry with a new decision
+/decide check                  # Hygiene audit of the ledger and its citations
 ```
 
 ## Process
@@ -33,7 +35,7 @@ The convention — entry schema, lifecycle rules, collision procedure — is def
 Resolve the ledger per `shared/decision-log.md` § Ledger location: `<planning-root>/Decisions/decisions.md` when the planning root is inside the repo; `<repo-root>/DECISIONS.md` when the planning root is external (decisions live with the repo they represent — resolve the repo via `shared/path-resolution.md`). If missing, create it from `shared/templates/decision-log.md` (and `mkdir -p` any needed directory) before proceeding.
 
 ### Record (default)
-1. Draft the entry per the schema in `shared/decision-log.md`: next sequential `D-NNNN`, `kind`, `statement` (one standalone sentence), `rationale`, and — pull these from the conversation or ask briefly — `rejected[]` alternatives, `scope`, `tags`. `decided_by: user` and `status: accepted` only when the user actually made the choice; an agent-inferred decision is `status: proposed`.
+1. Draft the entry per the schema in `shared/decision-log.md`: next sequential `D-NNNN`, `kind`, `statement` (one standalone sentence), `rationale`, and — pull these from the conversation or ask briefly — `rejected[]` alternatives, `scope`, `tags`. `decided_by: user` and `status: accepted` only when the user actually made the choice; an agent-inferred decision is `status: proposed` with `decided_by: agent` (acceptance later flips it to `user-approved`).
 2. **Run the collision check** (`shared/decision-log.md` § Collision Detection) before appending. On `contradicts`/`supersedes`, STOP and present both entries; the user chooses supersede / keep-old / both-hold-with-narrowed-scope. Never auto-resolve.
 3. Show the drafted entry to the user in-flow, append it to `decisions[]`, update the ledger's `updated` date, and re-read the frontmatter to confirm it parses as YAML.
 
@@ -48,6 +50,9 @@ Promoting a `proposed` entry is an **append-equivalent event** (`shared/decision
 2. Draft the replacement entry with `supersedes: D-NNNN`; confirm with the user.
 3. Append the new entry; on the old entry set `status: superseded` and `superseded_by: <new id>` — touching nothing else in it.
 4. Run the **supersession cascade** from `shared/decision-log.md`: grep `Specs/`, `Designs/`, `Plans/` for citations of the superseded entry and report possibly-stale artifacts. Don't rewrite them unasked.
+
+### Check (hygiene audit)
+Run the audit defined in `shared/decision-log.md` § Hygiene: missed collisions among `accepted` entries, superseded entries still cited by live artifacts, `scope` references to artifacts that no longer exist, prose decision sections never promoted to the ledger, `proposed` entries older than 30 days, fired `refresh_when` triggers on `assumption` entries, duplicate-id repair, and malformed entries. Report findings; repairs and rotation (also defined there) run only with the user's go-ahead.
 
 ## Output
 Appends to (or creates) `Decisions/decisions.md`. Never deletes or rewrites accepted entries — status and supersession links are the only permitted mutations.

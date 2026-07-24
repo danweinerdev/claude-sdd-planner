@@ -25,7 +25,7 @@ decisions:
     kind: decision            # decision | definition | answered-question | assumption
     status: accepted          # proposed | accepted | rejected | superseded
     date: YYYY-MM-DD
-    decided_by: user          # user | user-approved (agent-proposed, user confirmed)
+    decided_by: user          # user | user-approved | agent (agent only while proposed)
     statement: "One-sentence declarative truth — the lookup value."
     question: "What was asked?"          # required for kind: answered-question, optional otherwise
     rejected: [Option B, Option C]       # anti-choices explicitly decided against (collision fuel)
@@ -40,19 +40,19 @@ decisions:
 
 | Field | Required | Notes |
 |---|---|---|
-| `id`, `kind`, `status`, `date`, `decided_by`, `statement` | yes | `statement` must stand alone — a reader with no other context learns the truth from it |
+| `id`, `kind`, `status`, `date`, `decided_by`, `statement` | yes | `statement` must stand alone — a reader with no other context learns the truth from it. `decided_by: agent` is valid only for an unconfirmed `proposed` entry; acceptance changes it to `user-approved` |
 | `rationale` | yes | one or two sentences; deeper deliberation goes in a body section |
 | `question` | for `answered-question` | verbatim or near-verbatim, so the same question is findable later |
 | `rejected`, `scope`, `tags` | recommended | these three power collision detection and scoped lookups |
-| `confirmation` | recommended | how a reviewer or `/tend` checks the decision is still being honored — reviewers run or apply it when auditing coverage |
+| `confirmation` | recommended | how a reviewer or `/decide check` verifies the decision is still being honored — reviewers run or apply it when auditing coverage |
 | `supersedes`, `superseded_by`, `reversibility` | situational | supersession links are bidirectional — always write both |
 
 ### Lifecycle Rules (append-only)
 
 - **Entries are immutable once `accepted`**, except `status` and `superseded_by`. A change of mind is a **new entry** that `supersedes` the old one — never an edit to the old statement.
 - **`rejected` entries are kept** with their rationale. They are negative truths that prevent relitigating.
-- **`proposed`** marks an entry awaiting user confirmation (e.g., drafted from a brainstorm recommendation the user hasn't endorsed). Only `accepted` entries bind future work; `proposed` entries are surfaced, not enforced. A `proposed` entry may still be edited freely — it isn't immutable yet.
-- **Accepting a `proposed` entry is an append-equivalent event.** Only the user can accept, and the full collision check below re-runs at acceptance time — entries accepted since the proposal was logged may collide with it. Flip `status` to `accepted` and update `date` only after the check passes.
+- **`proposed`** marks an entry awaiting user confirmation (e.g., drafted from a brainstorm recommendation the user hasn't endorsed). An agent-originated proposal uses `decided_by: agent`; only `accepted` entries bind future work, and `proposed` entries are surfaced rather than enforced. A `proposed` entry may still be edited freely — it isn't immutable yet.
+- **Accepting a `proposed` entry is an append-equivalent event.** Only the user can accept, and the full collision check below re-runs at acceptance time — entries accepted since the proposal was logged may collide with it. Flip `status` to `accepted`, set `decided_by: user-approved` for an agent-originated proposal, and update `date` only after the check passes.
 - **`assumption`-kind entries** may additionally carry `refresh_when` triggers (see `shared/frontmatter-schema.md`); an invalidated assumption is reconciled like any collision — flag every entry and artifact that cited it.
 
 ## Capture — when to record
@@ -74,8 +74,8 @@ Rules of capture:
 - **Making the decision is the user's; writing the entry is autonomous** (it's a template-following artifact write per `shared/autonomy.md`). Draft the entry, show it in-flow (a short block, not a modal ceremony), and append. `decided_by: user` requires the user actually stated the choice; an agent inference the user merely didn't object to is `proposed`, not `accepted`.
 - **Record decisions, not events.** "We chose PostgreSQL over DynamoDB for X" is an entry; "phase 2 completed" is not. Test: would a future session act differently for knowing this?
 - **Don't double-log.** Prose sections (Key Decisions, Design Decisions, Decisions Made) still exist for narrative; the ledger entry is the machine-readable pointer of record. Cross-reference the artifact in `scope` rather than duplicating its full deliberation.
-- **Cite ids in governed artifacts (bidirectional linking).** When an artifact section is governed by a ledger entry, cite the id inline — e.g., `## Key Decisions` … `Use JWT for session tokens (D-0010)`. The entry points at the artifact via `scope`; the artifact points back via the citation. The supersession cascade and `/tend`'s stale-citation check grep for these ids — without citations they are blind.
-- **Capture guarantee, stated honestly.** Capture at the structured moments (approval gates, escalations, debrief backfill) is reliable — it's written into the skills. Ad-hoc conversational capture depends on the `decision-log` model-only skill loading, which is best-effort; `/decide` is the manual recovery path and `/tend decisions` the periodic net. Do not present conversational capture as guaranteed.
+- **Cite ids in governed artifacts (bidirectional linking).** When an artifact section is governed by a ledger entry, cite the id inline — e.g., `## Key Decisions` … `Use JWT for session tokens (D-0010)`. The entry points at the artifact via `scope`; the artifact points back via the citation. The supersession cascade and `/decide check`'s stale-citation pass grep for these ids — without citations they are blind.
+- **Capture guarantee, stated honestly.** Capture at the structured moments (approval gates, escalations, debrief backfill) is reliable — it's written into the skills. Ad-hoc conversational capture depends on the `decision-log` model-only skill loading, which is best-effort; `/decide` is the manual recovery path and `/decide check` the periodic net. Do not present conversational capture as guaranteed.
 
 ## Collision Detection — before every append
 
@@ -95,7 +95,7 @@ Run this check before appending any new entry E. Cheapest layer first; later lay
    - **Both hold** — the user declares the scopes disjoint: narrow both entries' `scope` explicitly so the collision is structurally resolved, and append E
    - Never resolve silently, never pick a winner by recency, and treat a collision with a `reversibility: one-way` entry as high-stakes — say so explicitly.
    - **One-step supersession for fresh instructions:** when E comes from an explicit user statement made moments ago (an escalation answer, a direct instruction), don't reopen the decision — present the collision as a single confirmation: "This supersedes D-NNNN (*old statement*) — confirm?" One yes resolves it; anything less than yes falls back to the full menu above.
-5. **Supersession cascade:** after a supersession, grep artifacts (`Specs/`, `Designs/`, `Plans/`) for the superseded entry's id — this is why the citation convention above is load-bearing — plus the entry's `scope` artifacts regardless of citation. Report any hits to the user as possibly-stale artifacts (a `/tend decisions` concern thereafter) — don't rewrite them unasked.
+5. **Supersession cascade:** after a supersession, grep artifacts (`Specs/`, `Designs/`, `Plans/`) for the superseded entry's id — this is why the citation convention above is load-bearing — plus the entry's `scope` artifacts regardless of citation. Report any hits to the user as possibly-stale artifacts (a `/decide check` concern thereafter) — don't rewrite them unasked.
 
 ## Consultation — how the ledger is read
 
@@ -110,10 +110,10 @@ The ledger is **intent context**. It goes to: the primary context, `researcher`,
 
 ## Concurrency and Merge Conflicts (known limitation)
 
-Sequential ids and a single ledger file assume **one writer at a time**. Two concurrent sessions or two branches can each mint the same `D-NNNN` and will conflict on merge (a YAML array is merge-hostile). This is accepted for the common solo-planner case; teams should expect occasional conflicts. Repair is a `/tend decisions` job: on duplicate ids, keep the earlier entry's id, renumber the later one to the next free id, and chase every incoming `supersedes`/`superseded_by` link and artifact citation of the renumbered id. Never resolve a duplicate by deleting either entry.
+Sequential ids and a single ledger file assume **one writer at a time**. Two concurrent sessions or two branches can each mint the same `D-NNNN` and will conflict on merge (a YAML array is merge-hostile). This is accepted for the common solo-planner case; teams should expect occasional conflicts. Repair is a `/decide check` job: on duplicate ids, keep the earlier entry's id, renumber the later one to the next free id, and chase every incoming `supersedes`/`superseded_by` link and artifact citation of the renumbered id. Never resolve a duplicate by deleting either entry.
 
 ## Hygiene
 
-`/tend decisions` mode checks: collisions among `accepted` entries using the scope-overlap definition above (the append-time check can miss pairs that predate it), superseded entries still cited by live artifacts (grep for ids), `scope` references to artifacts that no longer exist, prose decision sections never promoted to the ledger, `proposed` entries older than 30 days, `assumption` entries whose `refresh_when` triggers have fired (an invalidated assumption is reconciled like a collision), duplicate-id repair (above), and malformed entries (missing required fields, broken supersession links).
+`/decide check` audits: collisions among `accepted` entries using the scope-overlap definition above (the append-time check can miss pairs that predate it), superseded entries still cited by live artifacts (grep for ids), `scope` references to artifacts that no longer exist, prose decision sections never promoted to the ledger, `proposed` entries older than 30 days, `assumption` entries whose `refresh_when` triggers have fired (an invalidated assumption is reconciled like a collision), duplicate-id repair (above), and malformed entries (missing required fields, broken supersession links).
 
-**Rotation:** when the ledger grows past ~100 entries, `/tend decisions` offers to move `superseded` and `rejected` entries to `Decisions/archive-<YYYY>.md` (type `decision-log`, status `archived`). Ids stay unique across live ledger and archives. `accepted` and `proposed` entries never rotate. The collision candidate filter greps `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths; only session onboarding is limited to the live ledger.
+**Rotation:** when the ledger grows past ~100 entries, `/decide check` offers to move `superseded` and `rejected` entries to `Decisions/archive-<YYYY>.md` (type `decision-log`, status `archived`). Ids stay unique across live ledger and archives. `accepted` and `proposed` entries never rotate. The collision candidate filter greps `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths; only session onboarding is limited to the live ledger.
