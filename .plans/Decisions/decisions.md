@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-07-24
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -74,6 +74,50 @@ decisions:
     rationale: "The ledger is small and text-first; revisit if ledgers grow or users ask for visual browsing."
     scope: []
     tags: [decision-log, dashboard]
+    reversibility: two-way
+  - id: D-0007
+    kind: decision
+    status: accepted
+    date: 2026-07-23
+    decided_by: user
+    statement: "The plugin carries a compact core of 12 lifecycle skills; /diagram, /excavate, /retro, /simplify, and /tend are cut, retro and diagram artifact types are read-only legacy, and /tend's decision hygiene lives in /decide check."
+    rejected: [keeping the full 16-skill roster, moving cut skills to an optional module]
+    rationale: "The user's sharpened runtime-neutral fork (~/.agents/plugins/sdd-planner) proved the cut skills added surface without proportional value; both plugins should carry the same compact core."
+    scope: []
+    tags: [skills, compact-core]
+    reversibility: two-way
+  - id: D-0008
+    kind: decision
+    status: accepted
+    date: 2026-07-24
+    decided_by: user
+    statement: "Completion is evidence-gated at task, phase, and plan level per shared/completion-evidence.md: each plan task is one clean, independently bisectable native-SCM revision; retrospective evidence with exact commands and revision identity must be populated before any status flips to complete; phase completion requires a persisted frozen four-lane Aligned review; lifecycle bookkeeping lands in separate scoped commits."
+    rejected: [status flips on assertion, evidence collected only at phase level, mixing lifecycle bookkeeping into implementation commits]
+    rationale: "Ported from the sharpened fork's evidence pass: prospective verification says how work will be judged, retrospective evidence records what actually ran — without the gate, complete is a claim, not a fact."
+    scope: []
+    tags: [completion-evidence, implement, code-review]
+    reversibility: two-way
+  - id: D-0009
+    kind: decision
+    status: accepted
+    date: 2026-07-24
+    decided_by: user
+    statement: "Deterministic validation ships as scripts/sdd_validate.py and scripts/sdd_decision_validate.py, copied verbatim from the sharpened fork and surfaced as /validate; review-artifact frontmatter uses the stable lane identifiers (review_plan_drift, review_quality, review_spec_compliance, review_blind_spots) mapped to the four reviewer agents, so the validator runs unmodified."
+    rejected: [forking the validator to use agent names in lane_results, model-only validation without a script]
+    rationale: "Keeping the scripts byte-identical to the fork means fixes flow between the two plugins without divergence; the stable identifiers decouple the data layer from whichever agent or runtime executes a lane."
+    scope: []
+    tags: [validate, review-lanes, scripts]
+    reversibility: two-way
+  - id: D-0010
+    kind: decision
+    status: accepted
+    date: 2026-07-24
+    decided_by: user
+    statement: "sdd-planner does not integrate beads (sdd-beads) for issue tracking; plan/phase/task frontmatter remains the only work-tracking layer."
+    rejected: [sdd-beads integration]
+    rationale: "The user tried the integration in the sharpened fork and removed it — it added more complexity than it helped."
+    scope: []
+    tags: [tracking, integrations]
     reversibility: two-way
 ---
 
