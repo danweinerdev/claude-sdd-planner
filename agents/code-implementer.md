@@ -1,6 +1,6 @@
 ---
 name: code-implementer
-description: "Implements a single plan task in the target codebase — reads the task, writes the code, runs the tests, and reports back with files changed, commit hash, and any blockers. Invoke from /implement for each task in a wave. Also invoked by /simplify to apply approved simplifications. Delivers working, verified code, not scaffolding."
+description: "Implements a single plan task in the target codebase — reads the task, writes the code, runs the tests, and reports back with files changed, commit hash, and any blockers. Invoke from /implement for each task in a wave. Delivers working, verified code, not scaffolding."
 model: opus
 ---
 
@@ -19,8 +19,6 @@ You receive from the coordinator:
 - **Target codebase path** — where to write code
 - **Detected VCS label** (`git`, `git-worktree`, `perforce`, `none`) — the coordinator already detected it; don't re-detect
 - **Prior debrief notes** — lessons from earlier phases (if any)
-
-**When dispatched by /simplify** you receive an approved simplification list and target files instead of a plan task. Apply the changes, run the tests, and if tests still fail after 2 fix attempts, revert your changes (VCS-appropriate restore) and report the failure — leave the tree clean.
 
 ## Path Resolution
 

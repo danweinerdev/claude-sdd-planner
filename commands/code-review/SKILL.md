@@ -357,7 +357,6 @@ The inline review is presented to the user; the same findings are persisted to t
 ## What This Is NOT
 - Not a general code review (style, formatting, best practices) — focuses specifically on plan alignment
 - Not `/poke-holes` (which analyzes planning artifacts, not code)
-- Not `/simplify` (which improves code clarity, not plan compliance)
 - Not a substitute for tests — assumes the test suite validates correctness independently
 
 ## Context

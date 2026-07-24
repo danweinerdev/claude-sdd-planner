@@ -1,12 +1,12 @@
 # SDD Planner
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for spec-driven development — structured project planning end-to-end. It provides slash commands that guide you through a full planning lifecycle — from research to retrospective — with YAML-frontmatter-driven artifacts.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for spec-driven development — structured project planning end-to-end. It provides slash commands that guide you through a full planning lifecycle — from research to debrief — with YAML-frontmatter-driven artifacts.
 
 For the optional HTML dashboard view of these artifacts, install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin.
 
 ## How It Works
 
-SDD Planner is a standalone Claude Code **plugin**. When loaded (via `--plugin-dir` or through a marketplace), it registers 16 slash commands (namespaced under `/sdd-planner:*`) and 8 review/implementation agents that Claude can delegate to. All artifacts are Markdown files with YAML frontmatter — companion tools (like `sdd-dashboard`) read frontmatter exclusively, so there's no brittle table parsing.
+SDD Planner is a standalone Claude Code **plugin**. When loaded (via `--plugin-dir` or through a marketplace), it registers 11 slash commands (namespaced under `/sdd-planner:*`) and 8 review/implementation agents that Claude can delegate to. All artifacts are Markdown files with YAML frontmatter — companion tools (like `sdd-dashboard`) read frontmatter exclusively, so there's no brittle table parsing.
 
 ```mermaid
 graph LR
@@ -22,7 +22,7 @@ graph LR
 
     subgraph Project ["Your Project"]
         config["planning-config.json"]
-        artifacts["Plans/ Research/ Specs/ Diagrams/ ..."]
+        artifacts["Plans/ Research/ Specs/ Designs/ ..."]
     end
 
     subgraph Optional ["sdd-dashboard (separate plugin)"]
@@ -81,19 +81,14 @@ All commands are namespaced as `/sdd-planner:*` automatically by the plugin syst
 | `/sdd-planner:plan` | Create or expand an implementation plan (gap-analysis-driven on re-run) | `Plans/<Name>/README.md` + phase docs |
 | `/sdd-planner:implement` | Execute a plan phase | Code + updated task/phase statuses |
 | `/sdd-planner:code-review` | Review code — orchestrated drift + quality + spec + blind-spot review | Unified report (synthesis + raw sub-reports) |
-| `/sdd-planner:simplify` | Post-implementation cleanup | Simplified code, tests verified |
 | `/sdd-planner:debrief` | After-action notes | `Plans/<Name>/notes/<phase>.md` |
-| `/sdd-planner:retro` | Capture learnings | `Retro/YYYY-MM-DD-<slug>.md` |
 
 ### Utility Commands
 
 | Command | Purpose | Output |
 |---------|---------|--------|
 | `/sdd-planner:poke-holes` | Adversarial critical analysis | Inline findings (no artifact) |
-| `/sdd-planner:decide` | Record, look up, or reconcile decided truths in the decision ledger | `Decisions/decisions.md` entries |
-| `/sdd-planner:tend` | Artifact hygiene (incl. decision-ledger audit) | Updates stale statuses, tags, conventions |
-| `/sdd-planner:diagram` | Generate Mermaid diagrams | `Diagrams/<subject>.md` or inline |
-| `/sdd-planner:excavate` | Progressive codebase discovery | `Research/<codebase>.md` |
+| `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths in the decision ledger | `Decisions/decisions.md` entries |
 
 For the HTML dashboard and quick text status, install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin. It adds `/sdd-dashboard:dashboard` and `/sdd-dashboard:status`.
 
@@ -110,20 +105,14 @@ graph TD
     design --> plan["/sdd-planner:plan"]
     plan --> implement["/sdd-planner:implement"]
     implement --> codereview["/sdd-planner:code-review"]
-    codereview --> simplify["/sdd-planner:simplify"]
-    simplify --> debrief["/sdd-planner:debrief"]
-    debrief --> retro["/sdd-planner:retro"]
+    codereview --> debrief["/sdd-planner:debrief"]
 
     poke["⚡ /sdd-planner:poke-holes"]
     decide["📌 /sdd-planner:decide"]
-    tend["🔧 /sdd-planner:tend"]
-    diagram["📊 /sdd-planner:diagram"]
-    excavate["🔍 /sdd-planner:excavate"]
 
     poke -. "before approving" .-> specify
     poke -. "before approving" .-> design
     poke -. "before approving" .-> plan
-    excavate -. "understand code" .-> research
 
     classDef setupC fill:#3a3a5a,stroke:#333,color:#fff
     classDef discovery fill:#4a6741,stroke:#333,color:#fff
@@ -137,20 +126,20 @@ graph TD
     class research,brainstorm discovery
     class specify,design definition
     class plan execution
-    class implement,codereview,simplify implementation
-    class debrief,retro review
-    class poke,decide,tend,diagram,excavate utility
+    class implement,codereview implementation
+    class debrief review
+    class poke,decide utility
 ```
 
 | Phase | Commands | What happens |
 |-------|----------|-------------|
 | **Setup** | `setup` | Configure a repo for planner |
-| **Discovery** | `research`, `brainstorm`, `excavate` | Gather context, explore options, map codebases |
+| **Discovery** | `research`, `brainstorm` | Gather context, explore options |
 | **Definition** | `specify`, `design` | Lock down requirements and architecture |
 | **Execution** | `plan` | Structure work into phases, tasks, subtasks (re-run to deepen an existing plan) |
-| **Implementation** | `implement`, `code-review`, `simplify` | Build it, verify it, then clean it up |
-| **Review** | `debrief`, `retro` | Capture what happened and what you learned |
-| **Utilities** | `poke-holes`, `decide`, `tend`, `diagram`, `excavate` | Challenge, record truth, maintain, visualize, explore |
+| **Implementation** | `implement`, `code-review` | Build it, then verify it |
+| **Review** | `debrief` | Capture what happened and what you learned |
+| **Utilities** | `poke-holes`, `decide` | Challenge artifacts, record decided truth |
 
 ## Plan Hierarchy
 
@@ -263,7 +252,7 @@ required: false           # optional: true = a non-run forces the verdict to BLO
 
 The full convention — `appliesTo`/`lane` semantics, the input bundle each `lane` receives, the `required` gate, and the failure taxonomy — is in `shared/review-lanes.md`, with a copy-and-fill template at `shared/templates/custom-reviewer.md`.
 
-`/implement` dispatches `quality-scanner` directly after each task for a fast intent-blind quality check. `/simplify` dispatches it in `simplify` mode for complexity analysis. Both bypass the full four-lane review because the question they're asking is local to the code at hand.
+`/implement` dispatches `quality-scanner` directly after each task for a fast intent-blind quality check. It bypasses the full four-lane review because the question after a single task is local to the code at hand.
 
 ### MCP Server Inheritance
 
@@ -334,17 +323,12 @@ sdd-planner/                       # The plugin itself (not your project)
 │   ├── debrief/SKILL.md
 │   ├── decide/SKILL.md
 │   ├── design/SKILL.md
-│   ├── diagram/SKILL.md
-│   ├── excavate/SKILL.md
 │   ├── implement/SKILL.md
 │   ├── plan/SKILL.md
 │   ├── poke-holes/SKILL.md
 │   ├── research/SKILL.md
-│   ├── retro/SKILL.md
 │   ├── setup/SKILL.md
-│   ├── simplify/SKILL.md
-│   ├── specify/SKILL.md
-│   └── tend/SKILL.md
+│   └── specify/SKILL.md
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
 │   ├── cpp-specifications/SKILL.md
 │   ├── decision-log/SKILL.md
@@ -376,7 +360,7 @@ sdd-planner/                       # The plugin itself (not your project)
 │   ├── review-lanes.md           # Project-supplied review-lane socket convention
 │   ├── language-verification.md  # Language-specific verification — what good looks like
 │   ├── languages/                # Per-language verification references
-│   └── templates/                # Document templates (plan, spec, design, diagram, ...)
+│   └── templates/                # Document templates (plan, spec, design, ...)
 ├── Makefile                      # make bump-patch / bump-minor / bump-major
 ├── bump-version.py               # Version-bump helper used by the Makefile
 ├── LICENSE

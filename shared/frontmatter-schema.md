@@ -8,7 +8,7 @@ Every artifact includes these fields (one exception: `phase` docs omit `tags` an
 
 ```yaml
 title: "Human-readable title"
-type: research | brainstorm | spec | design | plan | phase | debrief | retro | diagram | decision-log | review
+type: research | brainstorm | spec | design | plan | phase | debrief | decision-log | review
 status: <type-specific, see below>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -16,9 +16,9 @@ tags: [tag1, tag2]
 related: [Specs/FeatureName, Research/topic-slug.md]
 ```
 
-`related` entries are planning-root-relative: use the **directory** path for specs, designs, and plans (`Specs/FeatureName`, `Designs/ComponentName`, `Plans/PlanName`), and the **file** path for flat artifacts (`Research/topic-slug.md`, `Brainstorm/topic-slug.md`, `Retro/YYYY-MM-DD-slug.md`, `Diagrams/slug.md`). Consumers that need the document behind a directory entry append `/README.md`.
+`related` entries are planning-root-relative: use the **directory** path for specs, designs, and plans (`Specs/FeatureName`, `Designs/ComponentName`, `Plans/PlanName`), and the **file** path for flat artifacts (`Research/topic-slug.md`, `Brainstorm/topic-slug.md`). Legacy `Retro/YYYY-MM-DD-slug.md` and `Diagrams/slug.md` references remain valid for read compatibility, but the plugin no longer creates them. Consumers that need the document behind a directory entry append `/README.md`.
 
-Any artifact may additionally declare an optional `refresh_when` field — a list of event-shaped trigger descriptions that force a refresh (e.g., `refresh_when: ["dependency X ships v3", "Specs/Payments changes", "vendor answers the webhooks question"]`). `/tend` checks these: a fired trigger makes the artifact stale regardless of its `updated` date; demonstrably-unfired triggers exempt it from the default 30-day staleness rule.
+Any artifact may additionally declare an optional `refresh_when` field — a list of event-shaped trigger descriptions that force a refresh (e.g., `refresh_when: ["dependency X ships v3", "Specs/Payments changes", "vendor answers the webhooks question"]`). A fired trigger makes the artifact stale regardless of its `updated` date (lifecycle skills honor known-fired triggers; `/decide check` audits them on `assumption` ledger entries); demonstrably-unfired triggers exempt it from the default 30-day staleness rule.
 
 ## Status Values by Type
 
@@ -32,8 +32,8 @@ Any artifact may additionally declare an optional `refresh_when` field — a lis
 | phase | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | task | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | debrief | `draft`, `complete` |
-| retro | `draft`, `complete` |
-| diagram | `draft`, `active`, `archived` |
+| retro (legacy) | `draft`, `complete` |
+| diagram (legacy) | `draft`, `active`, `archived` |
 | decision-log | `active`, `archived` |
 | review | `open`, `resolved`, `superseded` |
 
@@ -137,7 +137,7 @@ Rules:
 
 - **Ids are append-only and never renumbered.** Removing an item leaves its id retired (strike the line or note "removed — see <reason/citation>") so existing cross-references never silently re-bind to a different item.
 - **Cross-reference by id.** A plan task's `verification` (or its body section) names the `AC-NN`/`FR-NN` ids it satisfies; a design section that realizes a requirement cites its `FR-NN`; governed sections cite ledger ids (`D-NNNN`) per `shared/decision-log.md`. These citations are what make drift detectable — without them every reconciliation check is blind.
-- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade). `/tend` completeness mode audits for unnumbered elements and dangling id citations.
+- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade).
 
 ## Review Artifact Schema
 
@@ -172,7 +172,7 @@ related: []
 
 ## Dashboard Color Mapping
 
-Consumed by the companion `sdd-dashboard` plugin and by `/diagram`'s status styling (`classDef` colors):
+Consumed by the companion `sdd-dashboard` plugin; inline Mermaid diagrams in artifacts may use the same status styling (`classDef` colors):
 
 - `complete` / `approved` / `implemented` -> green
 - `in-progress` / `active` / `review` -> amber

@@ -83,4 +83,4 @@ followups:
     tracked_in: ""        # filled with the task id (e.g. "3.4") once planned; empty = not yet landed
 ```
 
-A review with any `followups[]` entry whose `tracked_in` is empty is not fully resolved — it may be `resolved` only if the user explicitly accepts the floating follow-up, and `/tend` keeps flagging it until it lands in a plan. This is the net that keeps implementation follow-ups from getting lost.
+A review with any `followups[]` entry whose `tracked_in` is empty is not fully resolved — it may be `resolved` only if the user explicitly accepts the floating follow-up; later reviews of the same target keep flagging it until it lands in a plan. This is the net that keeps implementation follow-ups from getting lost.

@@ -30,7 +30,7 @@ Invoke the `sdd-planner:researcher` agent and ask it to return a **structured** 
 
 - **Relevant requirements** — spec items under `Specs/` that this plan should cover
 - **Architectural constraints** — design decisions in `Designs/`, component boundaries, interfaces, contracts that constrain implementation
-- **Background** — research, brainstorms, retros bearing on this work
+- **Background** — research, brainstorms, and prior debriefs bearing on this work
 - **Related plans** — other plans in `Plans/` that touch the same area (filter by `status` — usually `active`, `approved`, and plans completed within roughly the last three months; tell the researcher explicitly to include the latter, since it skips `complete` plans by default)
 - **Existing code** — implementations already present in the target repo that this plan would extend, modify, or replace
 - **Current coverage and gaps** — in Revise mode, what the existing tasks and subtasks already address, and what's missing, vague, or contradicted by the latest specs/designs. In Create mode, this comes through as "which spec requirements have no plan covering them yet."

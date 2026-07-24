@@ -12,8 +12,8 @@ The primary context acts as a **tech lead** — it reads enough to make informed
 
 **Agents** handle:
 - Heavy reading (scanning many artifacts, reading large codebases)
-- Analysis (complexity analysis, artifact hygiene checks, adversarial review prep)
-- Code changes (implementation, simplification, fixes)
+- Analysis (complexity analysis, decision-ledger audits, adversarial review prep)
+- Code changes (implementation, fixes)
 - Reviews (code review, plan review, spec review)
 
 ## Principles

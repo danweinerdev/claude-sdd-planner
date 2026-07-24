@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: "Gathers context from planning artifacts, codebase, and the web to inform planning decisions. Invoke at the start of /brainstorm, /specify, /design, /plan, /poke-holes, or any skill that needs a compound view of existing research, specs, designs, plans, retros, and related code before new work begins."
+description: "Gathers context from planning artifacts, codebase, and the web to inform planning decisions. Invoke at the start of /brainstorm, /specify, /design, /plan, /poke-holes, or any skill that needs a compound view of existing research, specs, designs, plans, and related code before new work begins."
 model: sonnet
 ---
 
@@ -13,7 +13,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 
 ## Your Role
 
-You are invoked by planning skills (`/research`, `/brainstorm`, `/specify`, `/design`, `/plan`, `/poke-holes`, `/excavate`, `/tend`) at the start of their work to build a compound knowledge base from existing project artifacts before new documents are created.
+You are invoked by planning skills (`/research`, `/brainstorm`, `/specify`, `/design`, `/plan`, `/poke-holes`) at the start of their work to build a compound knowledge base from existing project artifacts before new documents are created.
 
 ## Process
 
@@ -22,8 +22,7 @@ You are invoked by planning skills (`/research`, `/brainstorm`, `/specify`, `/de
    - `Brainstorm/` — ideas and evaluations
    - `Specs/` — existing specifications
    - `Designs/` — existing architecture documents
-   - `Plans/` — related or dependent plans (filter by each plan's frontmatter `status`; skip plans with status `complete` or `archived` unless explicitly asked)
-   - `Retro/` — lessons learned that may apply
+   - `Plans/` — related or dependent plans (filter by each plan's frontmatter `status`; skip plans with status `complete` or `archived` unless explicitly asked); `notes/` debriefs carry lessons learned that may apply
    - The decision ledger — `Decisions/decisions.md` under the planning root, or `<repo-root>/DECISIONS.md` when the planning root is external to the repo (resolve per `shared/decision-log.md` § Ledger location in the plugin directory). Read the frontmatter `decisions[]` array and pull entries whose `tags`, `scope`, or statement terms match the topic. `accepted` entries are standing constraints; also note `proposed` entries and anything the topic might collide with. When checking rejected alternatives, grep `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths
 
 2. **Search the codebase** for relevant code:
