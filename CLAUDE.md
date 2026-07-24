@@ -19,8 +19,13 @@ sdd-planner/                      # Repository root = plugin root
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
 │   └── <lang>-specifications/    # Per-language structural verification (cpp, rust, go, python, typescript, java, swift)
 ├── agents/                       # Subagent definitions
+├── scripts/                      # Deterministic validators (read-only; PyYAML per requirements.txt)
+│   ├── sdd_validate.py           # Full artifact validator — structure, graph, evidence, ledger
+│   └── sdd_decision_validate.py  # Focused decision-ledger validator
+├── requirements.txt              # Python deps for scripts/ (PyYAML)
 ├── shared/
 │   ├── frontmatter-schema.md     # Single source of truth for artifact metadata
+│   ├── completion-evidence.md    # Evidence-gated completion — what `complete` requires, per level
 │   ├── decision-log.md           # Decision ledger — entry schema, capture triggers, collision procedure
 │   ├── path-resolution.md        # Canonical planning-root / plugin-dir / target-repo resolution
 │   ├── vcs-detection.md          # VCS detection algorithm + operations table (git / p4 / plain)
@@ -76,11 +81,14 @@ Plan (README.md)       <- like a Jira Project
 | phase | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | task | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 
+### Completion Evidence
+`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence (`### Completion Evidence` per task, `## Phase Completion Evidence`, `## Plan Completion Evidence`) records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. A task, phase, or plan may not transition to `complete` while its evidence section is pending or nonconforming. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `scripts/sdd_validate.py` (surfaced as `/validate`) enforces it deterministically.
+
 ### Plan Lifecycle
 Plans live flat under `Plans/<PlanName>/`. Lifecycle is tracked in the plan README's frontmatter `status` field (`draft`, `approved`, `active`, `complete`, `archived`) — not by moving directories. Commands update `status` as plans progress:
 - `/plan` creates the plan with `status: draft`, then sets `status: approved` after review
 - `/implement` sets `status: active` when starting work
-- `/implement` sets `status: complete` when the final phase finishes; `/debrief` backfills it if missed
+- `/implement` sets `status: complete` when the final phase finishes (evidence-gated — see above); `/debrief` backfills it if missed, subject to the same gate
 
 AI commands filter by `status` to scope what they read.
 
@@ -106,6 +114,7 @@ Always use templates from `shared/templates/` when creating new artifacts. Repla
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
+| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories, creates launcher |
 
 ### Model-only reference skills (`skills/`)
@@ -179,7 +188,7 @@ The typical flow through skills:
 /sdd-planner:setup → /sdd-planner:research → /sdd-planner:brainstorm → /sdd-planner:specify → /sdd-planner:design → /sdd-planner:plan → /sdd-planner:implement → /sdd-planner:code-review → /sdd-planner:debrief
 ```
 Install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin to add `/sdd-dashboard:dashboard` (HTML dashboard) and `/sdd-dashboard:status` (quick text summary) for checking progress.
-Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point (`/sdd-planner:decide check` is the periodic hygiene net for the ledger).
+Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point (`/sdd-planner:decide check` is the periodic hygiene net for the ledger). Use `/sdd-planner:validate` before implementation, before any completion transition, or in CI — lifecycle skills also invoke its validator script at their own gates.
 
 ## Artifact Status Values
 
@@ -221,7 +230,7 @@ When adding, removing, or renaming skills (`commands/`), agents (`agents/`), or 
 - **`CLAUDE.md`** — skill table, agent table, workflow lifecycle
 - **`shared/templates/claude-md-full.md`** — full CLAUDE.md template for a planning-only repo (skill table, agent table, workflow lifecycle)
 - **`shared/templates/claude-md-snippet.md`** — embeddable section to drop into an existing project's CLAUDE.md (skill table only)
-- **Templates ↔ schema** — when changing any template or `shared/frontmatter-schema.md`, verify every template still satisfies the schema (required fields present, statuses valid)
+- **Templates ↔ schema ↔ validator** — when changing any template, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md`, verify every template still satisfies the schema AND `scripts/sdd_validate.py`'s contract (required fields and exact headings present, statuses valid, evidence labels intact). The validator is the enforcement layer; docs and script must not drift apart
 - **`shared/decision-framework.md` ↔ agents** — when changing the framework, update the canonical agent block in that file and re-sync the identical `## Decision Framework` section in all eight `agents/*.md`
 
 ## Versioning

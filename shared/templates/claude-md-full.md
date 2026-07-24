@@ -76,6 +76,7 @@ AI commands filter by `status` to scope what they read.
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
+| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories, creates launcher |
 
 If the optional `sdd-dashboard` plugin is installed:
@@ -107,7 +108,7 @@ The typical flow through skills:
 ```
 /sdd-planner:setup → /sdd-planner:research → /sdd-planner:brainstorm → /sdd-planner:specify → /sdd-planner:design → /sdd-planner:plan → /sdd-planner:implement → /sdd-planner:code-review → /sdd-planner:debrief
 ```
-Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point.
+Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point. Use `/sdd-planner:validate` before implementation, before completion transitions, or in CI.
 If the `sdd-dashboard` plugin is installed, use `/sdd-dashboard:dashboard` or `/sdd-dashboard:status` at any point to check progress.
 
 ## Artifact Status Values

@@ -6,7 +6,7 @@ description: "Execute a plan phase — implement tasks, track progress, update s
 # /implement — Execute Plan Phase
 
 ## Path Resolution
-The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Resolve the planning root (artifacts) and target repository per `shared/path-resolution.md` in the plugin directory.
+The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Resolve the planning root (artifacts) and target repository per `shared/path-resolution.md` in the plugin directory. Also read `shared/completion-evidence.md` — no task, phase, or plan flips to `complete` without conforming retrospective evidence.
 
 ## When to Use
 When a plan is approved and you're ready to implement a phase. This skill **coordinates** implementation: it delegates actual code work to `code-implementer` agents, runs them in parallel where dependencies allow, triggers `quality-scanner` agents after each task for a fast intent-blind quality check, and manages the review-fix cycle. It bridges the gap between `/plan` (which defines *what* to build) and `/debrief` (which captures *what happened*).
@@ -122,8 +122,9 @@ Before launching each wave, check whether two or more tasks in the same wave mig
 - Launch all tasks in the wave as concurrent Task tool calls
 
 **b. Collect results**
-- As each agent completes, collect: files changed, test results, verification evidence, the change reference (commit hash for git, changelist number for perforce, "no VCS" plus file list otherwise), issues
+- As each agent completes, collect: files changed, test results, verification evidence (exact commands, working directories, exit statuses, observable results), the change reference (for git a **full 40-hex, clean, non-merge implementation commit** containing the complete task and its tests — nothing else; changelist number for perforce; "no VCS" plus file list otherwise), issues
 - **Reject evidence-free success.** A success report must contain the verification command(s) actually run and their pasted output. If verification is asserted rather than shown ("tests should pass", "verified", a paraphrase of expected output), the task is **not done**: resume the agent to produce the evidence — this consumes its one retry.
+- **The task boundary is a revision boundary.** If the implementer reports it could not land the task as one clean, complete, bisectable revision (half-wired scaffold, mixed feature slices), that is a plan-structure defect — surface it per Escalation Rule 3 rather than accepting a mixed or dirty change reference.
 - If an agent reports failure/blockers → resume it **once** with clarified guidance; if it fails again, mark the task `blocked`, record the reason, and escalate per Escalation Rule 1
 - If an agent reports a **plan-vs-reality mismatch** (the plan names files, APIs, or prerequisites that don't match the codebase) → do not re-dispatch with a workaround; surface the mismatch to the user per Escalation Rule 2/3 — it's a planning bug, and patching around it in dispatch hides it
 - If an agent reports success with evidence → proceed to review
@@ -144,9 +145,11 @@ Never use "pre-existing" to justify deferring or hiding a finding. "Pre-existing
 
 Never downscope a finding, recommendation, or fix by estimating how long it would take a human. Agents are not constrained by human development timelines. The right fix is right; surface it. Prefer a smaller change only when it is genuinely better on its own merits — clearer, lower risk, smaller surface area — never because a larger one would "take too long." The user decides what is worth fixing; don't pre-decide for them on time grounds.
 
-**e. Finalize wave**
-- Update completed task statuses to `complete`
-- Check off subtask checklists (`- [x]`) in the phase doc
+**e. Populate completion evidence, then finalize the wave**
+- For each task that passed implementation and review, replace its `### Completion Evidence` pending marker per `shared/completion-evidence.md`: verification date, repository root, VCS, the exact native revision/checkpoint as the tested source identity, an immediate identity recheck, every exact command with working directory and exit status, and the observable results satisfying the task's prospective `verification`. Record the focused review in strict syntax — for git, exactly `` `git show <full40>` `` (or `` `git diff <full40>..<full40>` `` for a range whose base is the task commit's direct first parent) followed by `; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary`, then `Reviewed candidate / final:` with the exact identity and `Review result: PASS/Aligned`. The per-task quality-scanner pass (step c) is that focused review; it must have ended with no unresolved critical findings before you may record PASS/Aligned.
+- Re-read each task section: evidence present, no pending marker, at least one command or tool/inspection row, every required behavior covered, identity recheck matches. Only then set the task status to `complete` and check off its subtask checklists (`- [x]`). A task with absent, pending, vague, or failing evidence stays non-complete.
+- Run `python3 <plugin-dir>/scripts/sdd_validate.py --scope Plans/<PlanName> --format json` and resolve any diagnostics on the tasks just completed.
+- When the planning root is git-versioned, record the lifecycle update (statuses, checkboxes, evidence) as a **separate scoped lifecycle commit** containing only plan/evidence bookkeeping — never mixed into an implementation commit. The evidence names the tested implementation revision, which avoids a self-referential lifecycle SHA. For an unversioned planning root, the artifact update stands but note that durable lifecycle transport is unavailable.
 - Update the `updated` date in the phase frontmatter
 - Present non-critical findings summary to user using the `shared/templates/per-task-findings.md` template — render once per task with the scanner's table and your recommendation. Keeping the structure consistent across tasks lets the user compare findings at a glance.
 - Ask user for decisions on any findings requiring human judgment
@@ -156,9 +159,15 @@ Never downscope a finding, recommendation, or fix by estimating how long it woul
 Once all tasks are complete (or all remaining tasks are blocked):
 
 **All tasks complete:**
-- Update phase status to `complete` in both the phase doc and plan README
-- Update `updated` dates
-- If all phases in the plan are now complete, set the plan README frontmatter `status` to `complete`
+- **Run the phase gate before flipping status.** Phase completion requires, per `shared/completion-evidence.md` and `shared/review-artifacts.md` § Phase-completion review gate:
+  1. Every task `complete` with conforming evidence and every phase acceptance criterion checked
+  2. A clean target worktree and a frozen native-SCM phase revision/range
+  3. A persisted, resolved, frozen **Aligned** four-lane `/code-review` of that range (dispatch `/code-review` in phase-gate mode — it records `lane_results`, `review_mode`, and `reviewed_planning_revision`)
+  4. `## Phase Completion Evidence` populated: common verification fields, `### Completed task identities` (one `- <id>: <revision>` line per task), and `- Final aligned review: <artifact path>; frozen: <exact rev>`
+  5. `python3 <plugin-dir>/scripts/sdd_validate.py --scope Plans/<PlanName> --format json` passing for the phase
+- Material review fixes get a **new planned task id**, land as complete task revisions, and force a fresh frozen four-lane review — never an unplanned patch on a gated phase
+- Then update phase status to `complete` in both the phase doc and plan README, update `updated` dates, and commit the lifecycle record (separate scoped commit when the planning root is git-versioned)
+- If all phases in the plan are now complete, populate `## Plan Completion Evidence` (common fields plus `### Completed phase identities` — `- <phase id>: <checkpoint>; review: <final review path>` per phase) and set the plan README frontmatter `status` to `complete`
 - Suggest running `/debrief` to capture what happened
 
 **Some tasks blocked:**

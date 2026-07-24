@@ -55,6 +55,40 @@ decisions:
 - **Accepting a `proposed` entry is an append-equivalent event.** Only the user can accept, and the full collision check below re-runs at acceptance time — entries accepted since the proposal was logged may collide with it. Flip `status` to `accepted`, set `decided_by: user-approved` for an agent-originated proposal, and update `date` only after the check passes.
 - **`assumption`-kind entries** may additionally carry `refresh_when` triggers (see `shared/frontmatter-schema.md`); an invalidated assumption is reconciled like any collision — flag every entry and artifact that cited it.
 
+## Deterministic Validation
+
+Before trusting or mutating a resolved ledger, and again after every mutation,
+run the bundled read-only validator:
+
+```bash
+python3 <plugin-dir>/scripts/sdd_decision_validate.py <resolved-ledger> --format json
+```
+
+The validator discovers `archive-*.md` siblings and checks UTF-8/LF and YAML
+frontmatter, canonical filenames and lifecycle status, common and entry field
+types, real ISO dates, decision id uniqueness, archive eligibility, safe relative
+scope syntax, optional body-section links, supersession existence/reciprocity/
+state/cycles, structural collision candidates among accepted and proposed
+entries, and Git-backed immutability of previously accepted entries. It is
+read-only. Exit `0` means no deterministic error was found, but the JSON may
+still contain `severity: candidate` diagnostics requiring the judgment pass
+below. Exit `1` means error diagnostics are authoritative structural findings,
+and exit `2` means the validator could not run. PyYAML is declared in the
+plugin's `requirements.txt`; a dependency or operational failure is a stop, not
+permission to substitute model parsing.
+
+`--no-history` disables only the Git-backed immutability comparison and is for
+unversioned fixtures or an explicitly historical/non-worktree inspection. Do
+not use it during a normal ledger write.
+
+Diagnostics for same-question answers, chosen-versus-rejected options, and
+conflicting definitions are deterministic **collision candidates**, not an
+automatic verdict. The judgment pass below still decides whether candidates
+contradict, supersede, refine, or are unrelated, and only the user resolves a
+real collision. The full `/validate` skill remains responsible for repository
+graph checks that a focused ledger command cannot prove, including scope
+resolution, artifact citations, and related-artifact scope connectivity.
+
 ## Capture — when to record
 
 A decision is recorded **after the user makes it**, at these moments:

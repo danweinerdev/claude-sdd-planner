@@ -21,6 +21,7 @@ When a plan phase has been completed (or substantially completed) and you want t
 
 2. **Gather Information**
    - Review the phase's tasks and subtasks for completion status
+   - Read every task's `### Completion Evidence` — an absent or pending section on a `complete` task is a legacy evidence gap (`shared/completion-evidence.md`); report it in the debrief, never treat it as proof
    - Read related designs from `Designs/` to identify deviations from intended architecture
    - Read related specs from `Specs/` to assess requirements coverage
    - If more than ~3 related documents are involved, delegate the sweep to `sdd-planner:researcher` instead of reading them all yourself
@@ -51,11 +52,12 @@ When a plan phase has been completed (or substantially completed) and you want t
    - For each item in Decisions Made that the user confirmed (step 2) and that isn't already in `Decisions/decisions.md`, append an entry per `shared/decision-log.md` — collision check first; a collision stops for the user. Scope entries to the plan. This is the safety net for decisions made mid-implementation that escaped capture.
 
 6. **Update Phase Status**
-   - Set the phase status to `complete` in both:
+   - A status backfill here is subject to the same gate as `/implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
+   - When the gate holds, set the phase status to `complete` in both:
      - The phase doc frontmatter
      - The plan README's `phases[]` array
    - Update `updated` dates
-   - If this was the final phase and all phases are now complete, set the plan README frontmatter `status` to `complete`
+   - If this was the final phase and all phases are now complete (including populated `## Plan Completion Evidence`), set the plan README frontmatter `status` to `complete`
 
 ## Output
 ```

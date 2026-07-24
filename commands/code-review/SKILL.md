@@ -40,6 +40,7 @@ Use this:
 - End-of-phase: before running `/debrief`, to have a clear picture of what happened vs. what was planned
 - After resuming work: to re-orient on where things stand
 - Before merging: to ensure the branch delivers what the plan promised
+- **Phase-gate mode**: as the persisted final gate `/implement` requires before a phase flips to `complete` (see `shared/review-artifacts.md` § Phase-completion review gate). Phase-gate reviews carry extra obligations, flagged inline in Steps 2c and 7 below.
 
 ## Why four sub-agents
 
@@ -84,6 +85,8 @@ To dispatch the sub-agents with the right inputs, you need a little bit of infor
    - **perforce**: use the changelist immediately **before** the first changelist on or after the date.
 
    If you still can't resolve (or the VCS is `none`, in which case there is no history), ask the user for a base. Capture the scope as a concrete diff command (`git diff <base>..<head>` for git, `p4 diff2 -dw //path/...@<base> //path/...@<head>` for perforce) plus any unsubmitted/working coverage the user requested. If working/staged changes are in scope, note in every dispatch that the tree is not frozen — and where the review matters, recommend the user commit first. **Do not** run the diff and read the patch content — the sub-agents will. Pass the detected VCS and the resolved diff command to each sub-agent so they don't have to re-detect.
+
+   **Phase-gate mode:** uncommitted or moving work is not eligible. Require a clean target worktree and freeze an exact `<full40>..<full40>` range whose commits exist in the target repo, whose base is an ancestor of the endpoint, and whose endpoint equals the phase evidence's `Revision / checkpoint` commit. Record the exact range — it becomes the review's `rev` and the phase evidence's `frozen` value. Also capture the planning repo's current full commit (`git -C <planning-root> rev-parse HEAD`) for `reviewed_planning_revision`; if the planning root isn't git-versioned, the phase cannot complete (report the adapter diagnostic — the review may still run as advisory).
 
 **d. Language-verification note (optional).** If `shared/language-verification.md` exists and the project language warrants structural checks, pass a one-line note to `drift-detector` and `quality-scanner` so they can flag missing sanitizers/static-analysis/type-checking work. You do not need to read the full language-verification doc — just detect the project language from a quick file-extension glance at the target repo and include it as context.
 
@@ -235,6 +238,8 @@ Never downscope a finding, recommendation, or fix by estimating how long it woul
 
 ### 7. Persist the Review
 Write the unified review to a review artifact per `shared/review-artifacts.md`: `Plans/<PlanName>/reviews/<NN>-<plan-slug>-code-review-<rev>.md` from `shared/templates/review.md`, with `rev` = the reviewed repo's short revision (`-dirty` when the tree wasn't frozen). Number the consolidated findings `F-NN`, mirror them in `findings[]`, and set `status: open`. The raw sub-reports stay in the conversation; the review artifact carries the synthesized findings — the durable record.
+
+**Phase-gate mode:** `rev` is the frozen `<full40>..<full40>` range from Step 2c. The artifact additionally records `review_scope: phase`, `frozen: true`, `review_mode` (`independent` when all four lanes ran as fresh-context agents), `reviewed_planning_revision`, and exactly four `lane_results` under the **stable lane identifiers** — `review_plan_drift` (drift-detector), `review_quality` (quality-scanner), `review_spec_compliance` (spec-compliance), `review_blind_spots` (blind-spot-finder) — each with `result: PASS/Aligned`, `reviewed_identity` exactly equal to `rev`, and specific concrete evidence naming inspected paths, behaviors, or observations (never a generic `No findings`). Only an all-lanes-Aligned review may carry `verdict: Aligned`; anything else forbids phase completion, and material fixes become new planned tasks followed by a fresh frozen review. When the planning root is git-versioned, commit the exact cited artifact at planning-root `HEAD` with the lifecycle record. Validate with `python3 <plugin-dir>/scripts/sdd_validate.py --scope Plans/<PlanName> --format json` before handing the gate result back to `/implement`.
 
 ### 8. Acting on Findings
 If the user asks to address findings, follow `shared/review-artifacts.md`: mechanical fixes (fully determined by hard facts — an accepted `D-NNNN`, approved artifact text, a verifiable fact) apply directly with the fact cited; design decisions stop for user discussion and land in the decision ledger; every disposition gets a Resolution Log entry; changed numbered elements trigger the reconciliation sweep; deferred findings become plan tasks or tracked `FU-NN` follow-ups.

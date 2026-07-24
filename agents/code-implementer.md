@@ -75,7 +75,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 
 ### 5. Commit
 Use the VCS label the coordinator passed (consult `shared/vcs-detection.md` in the plugin directory only for the operations table, or if no label was passed).
-- **git**: stage your changes and make exactly **one commit per task**, message `[<Plan>/<Phase>] Task <X.Y>: <title>`; never push.
+- **git**: stage your changes and make exactly **one clean, non-merge commit per task**, message `[<Plan>/<Phase>] Task <X.Y>: <title>`; never push. The commit contains the complete task and its tests — the whole feature slice and nothing else. No planning-artifact or evidence bookkeeping goes in it (the coordinator records lifecycle separately), and no second task's work rides along. If the task cannot land as one complete, buildable, test-passing commit, that is a plan-structure problem — STOP and report it rather than committing a half-wired state.
 - **perforce**: keep the task's changes in a single pending changelist with that description; do not submit unless the coordinator instructed it.
 - **none**: report "no VCS — changes on disk only" plus the file list.
 
@@ -85,8 +85,8 @@ Report back to the coordinator with:
 - **Status**: `success` or `blocked`
 - **Files changed**: list of files created/modified
 - **Tests**: which tests ran, what new/changed behavior each test covers
-- **Verification evidence**: the exact command(s) you ran and their **pasted output** (summary tail, or the full failing section) — never a bare assertion that criteria are satisfied. The coordinator rejects evidence-free success reports.
-- **Commit hash** (git) / changelist number (perforce) / "no VCS" — plus the file list either way
+- **Verification evidence**: the exact command(s) you ran, **their working directory and exit status**, and their **pasted output** (summary tail, or the full failing section) — never a bare assertion that criteria are satisfied. The coordinator rejects evidence-free success reports and needs the exact commands to populate the task's `### Completion Evidence` section.
+- **Commit hash** (git — the **full 40-hex** hash) / changelist number (perforce) / "no VCS" — plus the file list either way
 - **Issues/blockers**: any problems encountered (empty if none)
 
 ## Escalation — STOP and Report

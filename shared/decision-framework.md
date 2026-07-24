@@ -62,7 +62,7 @@ These rules bind every sdd-planner context, whatever model is running. They comp
 
 ## Where each rule is already operationalized
 
-Consolidated view for maintainers — the framework mostly names discipline that already exists in the artifacts; this table is where to look when checking consistency.
+Consolidated view for maintainers and `/validate` — the framework mostly names discipline that already exists in the artifacts; this table is where to look when checking consistency.
 
 | Rule | Existing operational text |
 |---|---|

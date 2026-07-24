@@ -137,13 +137,27 @@ Rules:
 
 - **Ids are append-only and never renumbered.** Removing an item leaves its id retired (strike the line or note "removed — see <reason/citation>") so existing cross-references never silently re-bind to a different item.
 - **Cross-reference by id.** A plan task's `verification` (or its body section) names the `AC-NN`/`FR-NN` ids it satisfies; a design section that realizes a requirement cites its `FR-NN`; governed sections cite ledger ids (`D-NNNN`) per `shared/decision-log.md`. These citations are what make drift detectable — without them every reconciliation check is blind.
-- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade).
+- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade). `/validate` audits for unnumbered elements and dangling id citations.
 
 ## Review Artifact Schema
 
 A review artifact (`<target-home>/reviews/…`, type `review`) carries `findings[]` and `followups[]` frontmatter arrays — the machine layer for review tracking. Entry fields, location/naming, the Resolution Log, disposition rules, and follow-up tracking are defined in `shared/review-artifacts.md` — the single source of truth for this artifact.
 
 Per-finding statuses (entry-level, not artifact statuses): `open`, `fixed`, `deferred`, `rejected`, `answered`. The artifact is `resolved` only when no finding is `open`; `superseded` links to the newer review of the same target.
+
+A phase-completion review additionally requires `review_scope: phase`,
+`frozen: true`, `verdict: Aligned`, and `review_mode` of `independent`, `mixed`,
+or `single-agent`. Its `lane_results` is exactly four mappings, one for every
+stable lane: `review_plan_drift`, `review_quality`, `review_spec_compliance`,
+and `review_blind_spots` (the data-layer identifiers for `drift-detector`,
+`quality-scanner`, `spec-compliance`, and `blind-spot-finder`). Each mapping has
+`lane`, `result: PASS/Aligned`, `reviewed_identity` exactly equal to the
+review's `rev`, and nonempty `evidence`. It also requires
+`reviewed_planning_revision`: the full planning-Git commit at which the phase
+and plan README were reviewed — the validator loads both artifacts at that
+native revision and compares lifecycle-normalized content to the current
+artifacts, allowing lifecycle-only changes. The complete example and
+Git-specific frozen-identity adapter are in `shared/review-artifacts.md`.
 
 ## Decision Ledger Schema
 

@@ -15,6 +15,7 @@ Planning artifacts live at the planning root defined by `planning-config.json` (
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
+| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories |
 
 Typical lifecycle: `setup → research → brainstorm → specify → design → plan → implement → code-review → debrief` (all `/sdd-planner:*`).

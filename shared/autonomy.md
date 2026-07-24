@@ -7,7 +7,7 @@ Cross-skill view of what runs autonomously versus what stops for the user. Each 
 | Work | Notes |
 |---|---|
 | Reads, searches, agent dispatch | Including parallel waves and resumes |
-| Artifact writes that follow templates and scripted status transitions | `/plan` writing `draft`, `/implement` flipping task statuses, appending a collision-free decision-ledger entry after the user decides (`shared/decision-log.md`), etc. |
+| Artifact writes that follow templates and evidence-gated status transitions | `/plan` writing `draft`, `/implement` recording completion evidence before flipping task statuses, appending a collision-free decision-ledger entry after the user decides (`shared/decision-log.md`), etc. |
 | Wave-to-wave progression in `/implement` | Unless unresolved critical findings are pending end-of-wave escalation |
 | Retries within budget | One resume with clarified guidance after a failure (2 attempts total) |
 | Non-critical review findings | Collected and presented at end of wave, work continues |
@@ -18,6 +18,7 @@ Cross-skill view of what runs autonomously versus what stops for the user. Each 
 |---|---|
 | Destructive actions — deleting data, prod config, shared systems | `/implement` escalation rules; `code-implementer` |
 | Approval transitions — spec/design/plan `approved` | `/specify`, `/design`, `/plan`; explicit user sign-off only |
+| Completion without durable evidence | `shared/completion-evidence.md` — task, phase, and plan stay non-complete |
 | Gated scope — in-scope work depends on an unanswered external question | `/plan`, `/specify`, `/design`; reviewers flag as Critical |
 | Decision collision — a new decision contradicts or supersedes an `accepted` ledger entry | `shared/decision-log.md` collision procedure; `/decide` and every capture point; never auto-resolved, never picked by recency |
 | Plan-vs-reality mismatch — the plan describes a codebase that doesn't exist as written | `code-implementer` STOPs; `/implement` surfaces, never patches around it |
