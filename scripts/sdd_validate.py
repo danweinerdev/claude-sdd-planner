@@ -734,7 +734,7 @@ class Validator:
         """Validate the durable, frozen all-lane review gate for phase closure."""
         target_is_git = self._phase_review_identity_adapter_available(artifact, line)
         final_review_values = evidence_values(body, "Final aligned review")
-        value = markdown_scalar(final_review_values[0] if len(final_review_values) == 1 else None)
+        value = final_review_values[0] if len(final_review_values) == 1 else None
         parsed = parse_final_aligned_review(value)
         if parsed is None:
             self.error(
