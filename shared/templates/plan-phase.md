@@ -13,6 +13,8 @@ tasks: []
 #   title: "Task title"
 #   status: planned
 #   verification: "How we know this complete, bisectable task revision passes"
+#   justifies: "Why this task exists — the FR/NFR/AC/D ids it serves, or the
+#     concrete failure it prevents. Not a restatement of the title."
 #   depends_on: ["X.Z"]  # optional
 ---
 
@@ -25,9 +27,13 @@ tasks: []
   of `planned`, `in-progress`, `complete`, `blocked`, or `deferred`; dates use
   `YYYY-MM-DD`. Task status uses the same vocabulary.
 - `plan`, `phase`, and `deliverable` are required. `tasks` is a YAML list of
-  mappings; each task requires nonempty `id`, `title`, `status`, and
-  `verification`. Task IDs are unique within the plan and use exactly
-  `<phase>.<digits>`; status uses the task status vocabulary.
+  mappings; each task requires nonempty `id`, `title`, `status`,
+  `verification`, and `justifies`. Task IDs are unique within the plan and use
+  exactly `<phase>.<digits>`; status uses the task status vocabulary.
+- `justifies` states why the task exists — the FR-NN/NFR-NN/AC-NN/D-NNNN ids it
+  serves, or the concrete failure it prevents. It must not restate the task
+  title, and placeholder justifications ("for completeness", "might need it
+  later", "part of the architecture", "TBD") are rejected.
 - Optional `depends_on` is a YAML list of task IDs from this plan. It contains
   no unknown IDs, self-dependencies, or dependency cycles.
 - Every task mapping has one matching H2 beginning `## <task-id>:` (a space in

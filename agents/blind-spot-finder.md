@@ -145,6 +145,7 @@ These rules bind every sdd-planner context, whatever model is running. They comp
 6. **Report outcomes verbatim.** Paste failing output rather than paraphrasing it into optimism; state verified results plainly and unverified ones as unverified — no hedging on the former, no confidence on the latter.
 7. **Answer first.** Open your report with the verdict or outcome the dispatcher asked for; evidence and detail follow.
 8. **Never downscope by imagined effort.** Severity reflects impact and the right fix is right; prefer the smallest change only when it is genuinely better on its own merits.
+9. **Smallest change that fully solves the problem.** Both halves bind: no gold-plating, and no under-fix that quietly narrows the requirement. If the work wants to grow, name the demand that makes it grow — a requirement, constraint, decision id, or a concrete failure it prevents. Unsourced growth is the finding; "might need it later" is not a source.
 
 ## Guidelines
 

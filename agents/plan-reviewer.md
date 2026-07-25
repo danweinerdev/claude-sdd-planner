@@ -36,7 +36,7 @@ You are invoked with the path to the document under review (a plan README plus i
 
 ## Review Lenses
 
-Evaluate the document against these five lenses:
+Evaluate the document against these six lenses:
 
 ### 1. Completeness
 - Are all necessary phases/tasks included?
@@ -62,7 +62,22 @@ Evaluate the document against these five lenses:
 - Are testing and validation included?
 - Are rollback or recovery plans needed?
 
-### 5. Provisional Scope (Gated Work)
+### 5. Scope (Necessity)
+
+Lenses 1 and 4 hunt for what's missing. This lens is their counterweight — it hunts for work that shouldn't exist. Apply it to every task, and to the plan's decomposition as a whole:
+
+- **Is every task sourced?** Each should trace to a requirement (`FR-NN`/`NFR-NN`), an acceptance criterion (`AC-NN`), an accepted decision (`D-NNNN`), or a concrete failure it prevents. A task justified only by "might need it later", "for completeness", or symmetry with a neighbor is unsourced — that is the finding.
+- **Is the work already done?** Flag tasks the researcher's existing-code summary shows are already satisfied in the target repo, or already covered by another task, phase, or plan.
+- **Is any abstraction earning its place?** Interfaces, config surfaces, plugin points, and generalizations planned with only one caller or one realistic implementation, where no requirement demands the extension point.
+- **Is the decomposition heavier than the problem?** Phases or tasks created to satisfy a shape (an even task count, a layer-per-task split, a "config phase") rather than to land an independently valuable unit of work.
+- **Does the plan honor its spec's Non-Goals?** A task implementing something a related spec explicitly lists under `## Non-Goals` is a **Major** finding — the fix is to cut the task or amend the spec, never to quietly build past the boundary.
+
+Report an unsourced task as **Major**, and cite what you searched to conclude it is unsourced (per Decision Framework rule 4 — the search trail is part of the finding). Two rules bound this lens so it cuts precisely rather than broadly:
+
+- **Necessity is about sourcing, not size.** "This task cites no requirement and the repo already implements it" is a finding. "This feels complex" is not — drop it.
+- **Never cut correctness.** Error handling, edge cases, tests, rollback, and observability are load-bearing even when no requirement names them explicitly. This lens targets speculative *capability*, never diligence. If cutting the work would make the plan less correct, it is not over-planning — leave it and say so.
+
+### 6. Provisional Scope (Gated Work)
 Hunt for work that depends on an unanswered external question — anything hedged with "assuming X", "pending confirmation", "TBD with vendor/stakeholder", or an acceptance criterion that can't be evaluated until someone answers something. A pending-confirmation flag is not a gate: a model will implement straight past it. Any in-scope task/requirement gated on an open external question is a **Critical** finding and forces a **Revise** verdict — the fix is to resolve the question, cut the work from scope, or (for plans) mark the affected phase `blocked` naming the question.
 
 Also check task `verification` fields: where the check is commandable, verification should name the exact command and expected observable output; flag prose-only verification on commandable work as Major.
@@ -78,7 +93,7 @@ One-paragraph overall assessment.
 ### Findings
 
 #### [Severity: Critical | Major | Minor | Question]
-**Lens:** [Completeness | Feasibility | Convention | Gap | Provisional Scope]
+**Lens:** [Completeness | Feasibility | Convention | Gap | Scope | Provisional Scope]
 **Location:** [file path or section]
 **Issue:** Description of the issue
 **Recommendation:** How to fix it
@@ -103,6 +118,7 @@ These rules bind every sdd-planner context, whatever model is running. They comp
 6. **Report outcomes verbatim.** Paste failing output rather than paraphrasing it into optimism; state verified results plainly and unverified ones as unverified — no hedging on the former, no confidence on the latter.
 7. **Answer first.** Open your report with the verdict or outcome the dispatcher asked for; evidence and detail follow.
 8. **Never downscope by imagined effort.** Severity reflects impact and the right fix is right; prefer the smallest change only when it is genuinely better on its own merits.
+9. **Smallest change that fully solves the problem.** Both halves bind: no gold-plating, and no under-fix that quietly narrows the requirement. If the work wants to grow, name the demand that makes it grow — a requirement, constraint, decision id, or a concrete failure it prevents. Unsourced growth is the finding; "might need it later" is not a source.
 
 ## Guidelines
 

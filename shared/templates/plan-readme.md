@@ -46,6 +46,9 @@ phases: []
 ## Overview
 What this plan delivers and why it matters.
 
+## Non-Goals
+What this plan deliberately does not deliver, and why. Carry forward the `## Non-Goals` of every related spec, plus boundaries decided during planning (approaches considered and declined, work deferred to a later plan). A task that implements something listed here is a scope violation — cut the task or amend this section deliberately, never both.
+
 ## Architecture
 High-level technical approach. Use Mermaid diagrams where visual structure helps (e.g., `graph TD` for component relationships, `flowchart LR` for data flow).
 

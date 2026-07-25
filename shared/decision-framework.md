@@ -58,6 +58,7 @@ These rules bind every sdd-planner context, whatever model is running. They comp
 6. **Report outcomes verbatim.** Paste failing output rather than paraphrasing it into optimism; state verified results plainly and unverified ones as unverified — no hedging on the former, no confidence on the latter.
 7. **Answer first.** Open your report with the verdict or outcome the dispatcher asked for; evidence and detail follow.
 8. **Never downscope by imagined effort.** Severity reflects impact and the right fix is right; prefer the smallest change only when it is genuinely better on its own merits.
+9. **Smallest change that fully solves the problem.** Both halves bind: no gold-plating, and no under-fix that quietly narrows the requirement. If the work wants to grow, name the demand that makes it grow — a requirement, constraint, decision id, or a concrete failure it prevents. Unsourced growth is the finding; "might need it later" is not a source.
 ```
 
 ## Where each rule is already operationalized
@@ -71,6 +72,7 @@ Consolidated view for maintainers and `/validate` — the framework mostly names
 | 6 — diffs lie | Validation Requirement sections in `drift-detector`, `quality-scanner`, `spec-compliance`, `blind-spot-finder` |
 | 7 — evidence ranking | `researcher` §Fact Discipline (tier-matched evidence); docs-MCP-before-memory rules in `code-implementer`, `quality-scanner`, `plan-reviewer`, `spec-reviewer` |
 | 8 — absence search | `researcher` §Fact Discipline; search-trail requirements in `drift-detector` and `spec-compliance` output formats; `devtools:fact-discipline` skill |
+| 10 — smallest change / sourced growth | `plan-reviewer` §Scope lens (necessity questions, `justifies` audit); `commands/plan/SKILL.md` §3 sourced-necessity bullet and Revise-mode retirement category; `quality-scanner` §Over-Engineering; `poke-holes` Alternatives Lens; task `justifies` field (`shared/frontmatter-schema.md`), enforced by SDD076/SDD077 |
 | 11 — cause, not assertion | `code-implementer` spec-fidelity rule; `spec-compliance` §Weakened Assertions; `shared/autonomy.md` spec-amendment row |
 | 12 — match idiom | `code-implementer` §Design Approach and comment policy |
 | 13 — self-service first | `shared/autonomy.md` "Runs autonomously" table |

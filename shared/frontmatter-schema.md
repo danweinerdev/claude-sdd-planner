@@ -112,6 +112,7 @@ tasks:
 | `status` | yes | Task status (see status values above) |
 | `depends_on` | no | List of task IDs this task depends on |
 | `verification` | yes | How we know the work is good and complete — name each new or changed behavior to cover, not test counts. Where the check is commandable, include the exact command and expected observable output (e.g., `cargo test auth:: — 14 pass incl. the new refresh-expiry case`); prose-only criteria are for behavior no command can observe |
+| `justifies` | yes | Why this task exists — the demand that motivates it, not what it does. Either cite the ids it serves (`FR-NN`, `NFR-NN`, `AC-NN`, `D-NNNN`) or name the concrete failure it prevents (e.g., "prevents silent data loss when a partial write is retried"). `verification` says how we know it is done; `justifies` says why it should be started. Restating the title, or a placeholder like "required for completeness", "might need it later", or "part of the architecture", does not justify a task — an unsourced task is cut, not annotated |
 
 Body contains task detail sections keyed by task ID as headings:
 

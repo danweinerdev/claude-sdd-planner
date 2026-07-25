@@ -62,12 +62,78 @@ DEFINITIONS = {
     "AC": re.compile(r"^\s*-\s+\[[ xX]\]\s+\*\*(AC-\d{2,})\*\*\s*:", re.MULTILINE),
 }
 NON_BLOCKING = re.compile(r"\*\*non-blocking\*\*", re.IGNORECASE)
+# A task's `justifies` must name the demand that motivates it. These are the
+# non-answers: deferred need, shape/symmetry, and bare placeholders. Each is
+# anchored to a whole phrase so ordinary prose that merely contains a word
+# ("completeness check against the manifest") is not caught.
+# Failing evidence pasted *outside* a conforming result row. The Result column
+# of each row is checked precisely by SDD072 (`row[2].startswith("PASS")`), so
+# this is the backstop for failure output that never made it into a table.
+#
+# It is deliberately narrow, because the wide version produced false positives
+# on ordinary prose. Three constraints do that work:
+#   - `FAIL`/`FAILED` are matched case-sensitively: test runners emit them
+#     uppercase, while "fail" in prose ("the guard is fail-closed") is English.
+#   - Neither may sit inside a hyphenated compound (`fail-closed`, `fail-fast`,
+#     `fail-safe`, `FAIL-OPEN`) — those name a design property, not a result.
+#   - A nonzero exit only counts as `exit N`, not any stray digit.
+# `0 failed, 42 passed` is passing output and must not match; the lowercase
+# exclusion covers it.
+FAILING_EVIDENCE = re.compile(
+    r"""(?x)
+      (?<! [\w-] ) (?: FAIL | FAILED ) (?! [\w-] )
+    | \b exit \s+ [1-9]\d* \b
+    """
+)
+
+# A brainstorm's do-nothing baseline. Matched on intent rather than on the
+# template's exact wording, so a renamed but genuine baseline ("Idea 0: Keep
+# the current cron", "### Do nothing") still counts. Anchored to a heading so
+# prose merely mentioning the status quo does not satisfy the check.
+BASELINE_IDEA = re.compile(
+    r"""(?xim)
+    ^ [ \t]{0,3} \#{3} [ \t]+
+    (?:
+        # A numbered zero-slot is the baseline by position.
+          (?: idea | option | approach ) [ \t]* 0 \b
+        # Otherwise the heading must *lead* with the baseline phrase, optionally
+        # behind a short label ("Baseline:", "Idea A -"). Anything longer is
+        # prose about the status quo, not an idea that is the status quo.
+        | (?: [^\n:—-]{0,24} [:—-] [ \t]* )?
+          (?: do [ \t-]* nothing
+            | status [ \t-]* quo
+            | no [ \t]+ change
+            | leave [ \t]+ (?: it | as ) [ \t]+ is
+            | baseline
+            ) \b
+    )
+    """
+)
+JUSTIFICATION_PLACEHOLDERS = re.compile(
+    r"""(?xi)
+    (?: ^ | (?<= [\s(\[,;:—-] ) )
+    (?:
+          might \s+ (?:be\s+)? need (?:ed)? (?:\s+ (?:it|this|later|in\s+(?:the\s+)?future) )*
+        | may \s+ (?:be\s+)? need (?:ed)?
+        | (?:just\s+)? in \s+ case
+        | for \s+ (?:the\s+sake\s+of\s+)? (?: completeness | symmetry | consistency | parity )
+        | (?:for|to\s+match) \s+ (?:consistency|symmetry) \s+ with
+        | nice \s+ to \s+ have
+        | future[\s-]* (?: proof (?:ing)? | use | need | work | expansion )
+        | (?: good | best ) \s+ practice
+        | standard \s+ practice
+        | (?:it\s+is\s+|it's\s+)? (?: needed | required | necessary ) \s* (?: \. | $ )
+        | part \s+ of \s+ the \s+ (?: architecture | design | plan | refactor )
+        | (?: TBD | TODO | N/?A )
+    )
+    """
+)
 REQUIRED_HEADINGS = {
     "research": ("Context", "Findings", "Analysis", "Open Questions"),
     "brainstorm": ("Problem Statement", "Ideas", "Evaluation", "Next Steps"),
     "spec": ("Overview", "Goals", "Non-Goals", "Requirements", "User Stories", "Acceptance Criteria", "Constraints", "Dependencies", "Open Questions"),
-    "design": ("Overview", "Architecture", "Design Decisions", "Error Handling", "Testing Strategy", "Migration / Rollout"),
-    "plan": ("Overview", "Architecture", "Key Decisions", "Dependencies", "Plan Completion Evidence"),
+    "design": ("Overview", "Non-Goals", "Architecture", "Design Decisions", "Error Handling", "Testing Strategy", "Migration / Rollout"),
+    "plan": ("Overview", "Non-Goals", "Architecture", "Key Decisions", "Dependencies", "Plan Completion Evidence"),
     "phase": ("Overview", "Acceptance Criteria", "Phase Completion Evidence"),
     "review": ("Findings", "Resolution Log"),
     "debrief": ("Decisions Made", "Requirements Assessment", "Deviations", "Risks & Issues Encountered", "Lessons Learned", "Impact on Subsequent Phases", "Skill Opportunities"),
@@ -395,6 +461,8 @@ class Validator:
             for family in ("FR", "NFR", "AC"):
                 if not self.spec_ids[artifact.rel][family]:
                     self.error(artifact, "SDD050", f"Spec defines no `{family}-NN` element.", f"Number applicable elements with stable `{family}-NN` ids.")
+        elif artifact.kind == "brainstorm":
+            self._brainstorm(artifact)
         elif artifact.kind == "plan":
             self._plan(artifact)
         elif artifact.kind == "phase":
@@ -602,9 +670,10 @@ class Validator:
             if not isinstance(task, dict):
                 self.error(artifact, "SDD062", "A task entry is not a mapping.", "Add id, title, status, and verification fields.")
                 continue
-            for field in ("id", "title", "status", "verification"):
+            for field in ("id", "title", "status", "verification", "justifies"):
                 if task.get(field) in (None, ""):
                     self.error(artifact, "SDD063", f"Task is missing `{field}`.", f"Add a nonempty `{field}`.")
+            self._task_justification(artifact, task)
             task_id = str(task.get("id", ""))
             if not re.fullmatch(rf"{re.escape(phase_id)}\.\d+", task_id):
                 self.error(artifact, "SDD064", f"Task id `{task_id}` is not in phase `{phase_id}`.", f"Use `{phase_id}.N`.")
@@ -658,6 +727,105 @@ class Validator:
                     phase_evidence[0],
                     "task",
                 )
+
+    def _brainstorm(self, artifact: Artifact) -> None:
+        """Surface a brainstorm that never considered the status quo.
+
+        Idea 0 ("do nothing") is the baseline every other option has to beat;
+        without it a brainstorm can only choose *which* thing to build, never
+        *whether* to. This is a candidate rather than an error: dropping the
+        baseline is legitimate when inaction is genuinely impossible, and a
+        draft in progress should not be blocked. The point is that the omission
+        is deliberate and visible, not silent.
+        """
+        ideas = self.sections(artifact).get("Ideas")
+        if not ideas:
+            return  # A missing `## Ideas` section is SDD020's finding.
+        line, body = ideas
+        if BASELINE_IDEA.search(body):
+            return
+        self.candidate(
+            artifact,
+            "SDD078",
+            "Brainstorm considers no do-nothing baseline.",
+            "Add `### Idea 0: Do nothing / status quo` and evaluate it on the same "
+            "criteria — it is the baseline the other ideas must beat. Omit it only "
+            "when inaction is impossible (hard deadline, compliance obligation, "
+            "active outage), and say which in the Recommendation.",
+            line,
+        )
+
+    def _task_justification(self, artifact: Artifact, task: dict[str, Any]) -> None:
+        """Check that `justifies` names a demand rather than restating the task.
+
+        Two failure modes are detectable without judging content: a
+        justification that is a placeholder ("might need it later"), and one
+        that only echoes the title. Anything else passes here — whether a
+        stated demand is a *good* one is the plan-reviewer's Scope lens, not a
+        script's call.
+        """
+        value = task.get("justifies")
+        if not isinstance(value, str) or not value.strip():
+            return  # Absence is SDD063's finding; don't double-report.
+        task_id = str(task.get("id", ""))
+        text = value.strip()
+        if JUSTIFICATION_PLACEHOLDERS.search(text):
+            self.error(
+                artifact,
+                "SDD076",
+                f"Task `{task_id}` justifies itself with a placeholder: {text!r}.",
+                "State the demand: cite the FR-NN/NFR-NN/AC-NN/D-NNNN ids the task "
+                "serves, or name the concrete failure it prevents. A task with no "
+                "such demand is cut, not annotated.",
+            )
+            return
+        if any(pattern.search(text) for pattern in IDS.values()):
+            return  # Cites a requirement, criterion, or decision — sourced.
+        if self._echoes_title(text, str(task.get("title", ""))):
+            self.error(
+                artifact,
+                "SDD077",
+                f"Task `{task_id}` justifies itself by restating its title: {text!r}.",
+                "`justifies` says why the task should be started, not what it does. "
+                "Cite the ids it serves, or name the failure it prevents.",
+            )
+
+    @staticmethod
+    def _echoes_title(justification: str, title: str) -> bool:
+        """True when the justification adds no words beyond the task title.
+
+        Compared as content-word sets so that "Add retry logic" and "Adds the
+        retry logic" both count as echoes, while "Add retry logic" against
+        "prevents dropped webhooks when the upstream 503s" does not.
+        """
+        stop = {
+            "a", "an", "the", "to", "of", "for", "and", "or", "in", "on", "at",
+            "by", "with", "is", "are", "be", "this", "that", "it", "its", "we",
+            "so", "as", "from", "into", "add", "adds", "added", "adding",
+            "implement", "implements", "implemented", "implementing", "task",
+        }
+
+        def stem(word: str) -> str:
+            """Crude suffix strip so 'refreshing'/'refreshes'/'refresh' unify.
+
+            Deliberately naive — this only has to make an echo look like an
+            echo. Over-stemming risks a false SDD077, so each suffix is only
+            removed when a reasonable stem remains.
+            """
+            for suffix in ("ing", "ed", "es", "s"):
+                if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+                    return word[: -len(suffix)]
+            return word
+
+        def content(text: str) -> set[str]:
+            words = re.findall(r"[a-z0-9]+", text.lower())
+            return {stem(word) for word in words if word not in stop}
+
+        title_words = content(title)
+        justification_words = content(justification)
+        if not title_words or not justification_words:
+            return False
+        return justification_words <= title_words
 
     def _task_completion_evidence_structure(
         self, artifact: Artifact, task_ids: Sequence[str]
@@ -1261,8 +1429,9 @@ class Validator:
                     self.error(artifact, "SDD072", f"`{name}` contains non-passing result `{row[2]}`.", "Every required command and inspection row must record PASS.", line)
                 if row_kind == "command" and not re.search(r"\bexit\s+0\b", row[2], re.IGNORECASE):
                     self.error(artifact, "SDD072", f"`{name}` command row lacks explicit `exit 0`.", "Record PASS with the command exit status.", line)
-        if re.search(r"\b(?:FAIL|FAILED|exit\s+[1-9]\d*)\b", visible_body, re.IGNORECASE):
-            self.error(artifact, "SDD073", f"`{name}` contains failing evidence.", "Return it to a non-complete status until final checks pass.", line)
+        stray = FAILING_EVIDENCE.search(strip_evidence_rows(visible_body))
+        if stray:
+            self.error(artifact, "SDD073", f"`{name}` contains failing evidence `{stray.group(0)}` outside a result row.", "Return it to a non-complete status until final checks pass, or move passing narration out of failure-shaped wording.", line)
         recheck = evidence_value(body, "Identity recheck") or ""
         if recheck and (
             not re.search(r"\bmatch(?:ed|es|ing)?\b", recheck, re.IGNORECASE)
@@ -2510,6 +2679,23 @@ def evidence_rows(body: str) -> list[tuple[str, tuple[str, str, str, str]]]:
         if all(values) and not any("<" in value and ">" in value for value in values):
             rows.append((active, values))  # type: ignore[arg-type]
     return rows
+
+
+def strip_evidence_rows(body: str) -> str:
+    """Drop table rows so only narration outside the evidence tables remains.
+
+    SDD072 validates each row's Result cell exactly. Without this, SDD073
+    re-scanned those same rows with a fuzzy pattern and flagged descriptive
+    text in the `Observable evidence` column ("3 assertions failed" in a row
+    that correctly records `FAIL (exit 1)`) as a second, redundant finding —
+    and worse, flagged passing narration like "0 failed, 42 passed".
+    """
+    kept = [
+        raw_line
+        for raw_line in body.splitlines()
+        if not raw_line.lstrip().startswith("|")
+    ]
+    return "\n".join(kept)
 
 
 def resolution_entry(log: str, finding_id: str) -> str:
