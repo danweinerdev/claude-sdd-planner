@@ -17,6 +17,7 @@ Two consequences the rest of this file makes good on:
 Discovered lanes are **agent instructions that live in the target repo**, executed with the session's tool access. When you run `/code-review` against a branch you don't fully control — a contractor's branch, an open-source PR, anything where someone else could have added files under `.claude/agents/` — a malicious `*-reviewer.md` can carry instructions to read secrets, call MCP servers, or emit a misleading "no issues." Treat the socket the same way you treat running the repo's own code:
 
 - Enable project lanes only against repos you trust. The orchestrator **must list discovered lanes to the user before dispatching**, and **must ask for confirmation** when the target repo is not the session's own project.
+- The plugin's `hooks/reviewer-bash-guard.py` PreToolUse guard covers only the plugin's **own** read-only agents — a project lane's agent name isn't known to it, so project lanes get no mechanical Bash screening. The trust gate above is their only protection; that asymmetry is another reason to keep it strict.
 - Lanes are **read-only** (see below) and should ship a restrictive `tools:` allowlist. The plugin cannot enforce a project agent's tool list, so the template defaults to read-only and the convention requires it.
 
 ## Discovery

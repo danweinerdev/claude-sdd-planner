@@ -119,6 +119,17 @@ decisions:
     scope: []
     tags: [tracking, integrations]
     reversibility: two-way
+  - id: D-0011
+    kind: decision
+    status: accepted
+    date: 2026-07-24
+    decided_by: user
+    statement: "The read-only guarantee of the seven reviewer/researcher agents is enforced mechanically by a PreToolUse hook (hooks/reviewer-bash-guard.py) that allowlists read-only git/p4 subcommands and denies write- or network-shaped Bash; it fails open for all other agents and covers only plugin-owned agents, not project review lanes."
+    rejected: [prompt-only behavioral guarantee, removing Bash from reviewer allowlists, per-agent Bash(pattern) frontmatter restrictions]
+    rationale: "Reviewers need a shell for diffs and test runs, agent tools: frontmatter cannot express argument patterns, and a prompt-level read-only promise is not a permission boundary; the hook closes the gap without breaking the lanes' validation duties. Defense-in-depth against sloppiness, not adversarial sandboxing."
+    scope: []
+    tags: [agents, hooks, security, review-lanes]
+    reversibility: two-way
 ---
 
 # Decision Ledger

@@ -10,8 +10,9 @@ sdd-planner/                      # Repository root = plugin root
 │   └── plugin.json               # Plugin manifest (name: "sdd-planner")
 ├── CLAUDE.md                     # This file
 ├── hooks/
-│   ├── hooks.json                # Plugin hooks — SessionStart decision-ledger injection
-│   └── load-decisions.sh         # Emits accepted ledger entries as additionalContext
+│   ├── hooks.json                # Plugin hooks — SessionStart ledger injection + PreToolUse Bash guard
+│   ├── load-decisions.sh         # Emits accepted ledger entries as additionalContext
+│   └── reviewer-bash-guard.py    # Denies write/network-shaped Bash from the read-only agents
 ├── Makefile                      # make bump-patch / bump-minor / bump-major
 ├── planning-config.json          # Planning configuration
 ├── .gitignore
@@ -180,7 +181,7 @@ Agents fall into two groups based on how they handle MCP servers:
 - `spec-compliance` — diff + specs/designs only. Reading the plan via tickets would muddy what counts as "the spec."
 - `blind-spot-finder` — diff only. Any external context erodes the diff-only adversarial guarantee.
 
-The allowlists block MCP/Write/Edit, but `Bash` remains a residual read channel — the isolation is therefore enforced behaviorally: the orchestrator curates each lane's inputs, and each lane's prompt explicitly forbids reading planning config or out-of-lane artifacts.
+The allowlists block MCP/Write/Edit, but the lanes keep `Bash` because the diff is their input — only a shell can run `git diff`/`p4 diff2` and the tests/linters their validation duties require. Bash is not inherently read-only, so it is guarded twice: behaviorally (each lane's prompt forbids writes and out-of-lane reads, and the orchestrator curates inputs) and mechanically, by the `hooks/reviewer-bash-guard.py` PreToolUse hook — for the seven read-only agents (`drift-detector`, `spec-compliance`, `blind-spot-finder`, `quality-scanner`, `researcher`, `plan-reviewer`, `spec-reviewer`) it allowlists read-only `git`/`p4` subcommands and denies write- or network-shaped commands (`rm`, `sed -i`, redirection outside `/dev/null`, `curl`, package installs, `git commit/push/checkout/...`). Test and lint runs still pass through, since reviewers are required to run them. The guard fails open for every other agent and the main session, and it covers only the plugin's own agents — project-supplied review lanes remain protected by the trust gate, not the guard. Intent isolation (what a lane is *given*) remains behavioral either way.
 
 The inheriting agents carry behavioral guardrails in their bodies (`researcher`, `quality-scanner`, `plan-reviewer`, and `spec-reviewer` are read-only even though they could technically inherit Write/Edit and write-shaped MCP calls from the session). Projects that want stricter guarantees can drop overrides into `.claude/agents/<name>.md` at the project level — those take precedence over plugin-provided agents.
 

@@ -264,6 +264,8 @@ The plugin aims to be **generic** — it should work with whatever MCP servers y
 | **Inherit session tools** (no `tools:` frontmatter) | `researcher`, `code-implementer`, `quality-scanner`, `plan-reviewer`, `spec-reviewer` | Automatically pick up any MCP servers available in the session — `context7`, Linear, Notion, Slack, whatever. They use these for library docs, ticket lookups, and API verification. Guardrails in each agent's body keep the read-only ones (`researcher`, `quality-scanner`, `plan-reviewer`, `spec-reviewer`) from making write-shaped calls even though they technically could. |
 | **Restricted allowlist** (`tools:` frontmatter) | `drift-detector`, `spec-compliance`, `blind-spot-finder` | Tight allowlist of built-in tools only. No MCP access. These three depend on intent isolation — `blind-spot-finder`'s value is that it's given only the diff; adding MCPs would let intent leak in through tickets or external docs. |
 
+The read-only guarantee is also enforced mechanically: a PreToolUse hook (`hooks/reviewer-bash-guard.py`) screens every Bash call from the seven read-only agents (the three above plus `quality-scanner`, `researcher`, `plan-reviewer`, `spec-reviewer`). Read-only `git`/`p4` subcommands, test suites, and linters pass; `git commit/push/checkout`, file mutation (`rm`, `sed -i`, redirection outside `/dev/null`), network commands, and package installs are denied with an explanation. The hook fails open for every other agent and the main session.
+
 If you want stricter guarantees on the inheriting agents (e.g., preventing `code-implementer` from touching your ticketing MCP), drop an override into your project's `.claude/agents/<name>.md` — project-local agents take precedence over plugin-provided ones and can declare an explicit `tools:` list of your choosing.
 
 Recommended MCP servers to install for the best experience:
@@ -350,8 +352,9 @@ sdd-planner/                       # The plugin itself (not your project)
 │   ├── spec-compliance.md
 │   └── spec-reviewer.md
 ├── hooks/
-│   ├── hooks.json                # Plugin hooks — SessionStart decision-ledger injection
-│   └── load-decisions.sh         # Emits accepted ledger entries as additionalContext
+│   ├── hooks.json                # Plugin hooks — SessionStart ledger injection + PreToolUse Bash guard
+│   ├── load-decisions.sh         # Emits accepted ledger entries as additionalContext
+│   └── reviewer-bash-guard.py    # Denies write/network-shaped Bash from the read-only agents
 ├── scripts/
 │   ├── sdd_validate.py           # Deterministic artifact validator (read-only)
 │   └── sdd_decision_validate.py  # Focused decision-ledger validator (read-only)
