@@ -14,5 +14,29 @@ __pycache__/
 *.swp
 *.swo
 *~
+.idea
 .idea/
+.vscode
 .vscode/
+
+# Claude Code sandbox artifacts.
+# The sandbox mounts the user's shell/tool config into the repo root, so these
+# surface as untracked noise and can be swept into a commit by `git add -A`.
+# None of them belong to the plugin.
+#
+# NOTE: `.claude/` is ignored here because in this repo it is sandbox-local
+# setup. If this project ever needs checked-in project-scoped Claude config
+# (agents, hooks, settings), negate the specific file — e.g. `!.claude/settings.json`
+# — rather than dropping this rule.
+.claude/
+.mcp.json
+.bashrc
+.bash_profile
+.profile
+.zshrc
+.zprofile
+.gitconfig
+.ripgreprc
+# Sandbox-mounted, not this repo's. If real submodules are ever added, drop
+# this line — `.gitmodules` must be committed for submodules to work.
+.gitmodules
