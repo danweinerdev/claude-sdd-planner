@@ -569,6 +569,57 @@ def validate_history(primary: Path, ledgers: list[Ledger], entries_by_ledger: di
     return out
 
 
+def on_disk_name(path: Path) -> Path:
+    """Return `path` respelled to the filename the directory actually holds.
+
+    A case-insensitive filesystem answers `is_file()` for `DECISIONS.md` when
+    the directory really holds `decisions.md`. Carrying the probed spelling
+    forward misreports the ledger's role — a canonical `decisions.md` would be
+    judged as an external `DECISIONS.md` in the wrong directory (DLG042).
+    """
+    try:
+        entries = {entry.name for entry in path.parent.iterdir()}
+    except OSError:
+        return path
+    if path.name in entries:
+        return path
+    folded = path.name.casefold()
+    for name in sorted(entries):
+        if name.casefold() == folded:
+            return path.parent / name
+    return path
+
+
+def distinct_files(candidates: set[Path]) -> list[Path]:
+    """Collapse paths that name the same file on disk.
+
+    Discovery probes both `DECISIONS.md` and `decisions.md` in the same
+    directory. On a case-insensitive filesystem (macOS, Windows) both probes
+    succeed against a single file, which would otherwise load one ledger twice
+    and report every decision id as a cross-file duplicate.
+
+    Identity is keyed on `(st_dev, st_ino)` rather than a case-folded name:
+    on a case-sensitive filesystem the two spellings are genuinely two files
+    with two inodes, and both must survive so the real "multiple active
+    canonical ledgers" diagnostic still fires. `Path.resolve()` is not
+    sufficient — it normalizes symlinks but preserves case.
+    """
+    seen: set[tuple[int, int]] = set()
+    out: list[Path] = []
+    for path in sorted(on_disk_name(candidate) for candidate in candidates):
+        try:
+            info = path.stat()
+        except OSError:
+            out.append(path)  # unreadable: let the parser report it
+            continue
+        key = (info.st_dev, info.st_ino)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return out
+
+
 def discover(primary: Path) -> list[Path]:
     primary = primary.absolute()
     candidates = {primary}
@@ -584,7 +635,7 @@ def discover(primary: Path) -> list[Path]:
         directories.update({repository, repository / "Decisions"})
     for directory in directories:
         candidates.update(path.absolute() for path in directory.glob("archive-*.md") if path.is_file())
-    return sorted(candidates)
+    return distinct_files(candidates)
 
 
 def validate(primary: Path, history: bool = True) -> tuple[list[Diagnostic], int, int]:
