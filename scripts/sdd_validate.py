@@ -124,7 +124,7 @@ JUSTIFICATION_PLACEHOLDERS = re.compile(
         | standard \s+ practice
         | (?:it\s+is\s+|it's\s+)? (?: needed | required | necessary ) \s* (?: \. | $ )
         | part \s+ of \s+ the \s+ (?: architecture | design | plan | refactor )
-        | (?: TBD | TODO | N/?A )
+        | (?: TBD | TODO | N/A | NA ) (?! [\w/-] )
     )
     """
 )

@@ -96,6 +96,10 @@ class TestSourcedJustifications(JustificationHarness):
             "Runs a completeness check against the upstream manifest (AC-02).",
             "The consistency guarantee breaks without this — readers see torn writes.",
             "Required by the vendor's API contract: unsigned requests are rejected.",
+            # Words beginning with "na" must not trip the N/A stub pattern.
+            "All three native completion APIs ship behind the portable fallback.",
+            "Prevents the failure modes named in the design's error table.",
+            "Narrows the blast radius of a corrupted bundle read.",
         ):
             with self.subTest(value=value):
                 self.assertAccepted(value)
@@ -133,7 +137,7 @@ class TestPlaceholderJustifications(JustificationHarness):
                 self.assertRejected(value, "SDD076")
 
     def test_bare_assertions_and_stubs_rejected(self):
-        for value in ("TBD", "TODO", "N/A", "Required.", "It is needed.", "Necessary."):
+        for value in ("TBD", "TODO", "N/A", "NA", "Required.", "It is needed.", "Necessary."):
             with self.subTest(value=value):
                 self.assertRejected(value, "SDD076")
 
