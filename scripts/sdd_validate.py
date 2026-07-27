@@ -2053,8 +2053,22 @@ class Validator:
             if entry.get("decided_by") == "agent" and entry.get("status") != "proposed":
                 self.error(artifact, "SDD118", f"Decision `{decision_id}` attributes a non-proposed entry to agent.", "Use agent only for unconfirmed proposals; user acceptance changes provenance to user-approved.")
 
+    def _frontmatter_citation_text(self, artifact: Artifact) -> str:
+        tasks = artifact.meta.get("tasks")
+        if not isinstance(tasks, list):
+            return ""
+        parts: list[str] = []
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            for field in ("justifies", "verification"):
+                value = task.get(field)
+                if isinstance(value, str):
+                    parts.append(value)
+        return "\n".join(parts)
+
     def _citations(self, artifact: Artifact) -> None:
-        body = no_comments(artifact.body)
+        body = no_comments(artifact.body) + "\n" + self._frontmatter_citation_text(artifact)
         if artifact.kind != "decision-log":
             repository_key = str(self._repo_for_artifact(artifact))
             for number in IDS["D"].findall(body):

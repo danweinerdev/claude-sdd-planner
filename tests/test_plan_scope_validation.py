@@ -43,7 +43,7 @@ class TestBaselineFixtureIsValid(unittest.TestCase):
 
     def test_multiple_tasks_validate_clean(self):
         with PlanningRoot() as root:
-            root.add_task(title="Add retry logic", justifies="Satisfies FR-04.")
+            root.add_task(title="Add retry logic", justifies="Prevents duplicate charges after a redelivered webhook.")
             root.add_task(title="Add metrics", justifies="Prevents blind rollouts.")
             result = root.validate()
             self.assertTrue(result.valid, repr(result))
@@ -105,7 +105,7 @@ class TestJustifiesEnforcedEndToEnd(unittest.TestCase):
 
     def test_sourced_justifies_reports_nothing(self):
         with PlanningRoot() as root:
-            root.set_task(0, justifies="Satisfies FR-03 and prevents mid-session logout.")
+            root.set_task(0, justifies="Prevents mid-session logout when the token expires.")
             result = root.validate()
             self.assertNotIn("SDD076", result.codes, repr(result))
             self.assertNotIn("SDD077", result.codes, repr(result))
