@@ -130,5 +130,46 @@ class TestFrontmatterResolvedCitations(unittest.TestCase):
             self.assertNotIn("SDD122", result.codes, repr(result))
 
 
+class TestFrontmatterCitationLineNumbers(unittest.TestCase):
+    def test_frontmatter_only_citation_reports_its_yaml_line(self):
+        """A YAML-only id must point at its frontmatter line, not line 1."""
+        with FrontmatterCitationRoot() as root:
+            root.set_task(0, justifies="Implements the ledger shape decided in D-0002.")
+            result = root.validate()
+            findings = result.codes_for("SDD120")
+            self.assertTrue(findings, repr(result))
+            self.assertGreater(findings[0]["line"], 1, repr(result))
+
+
+class TestCompletedTaskVerificationIsHistorical(unittest.TestCase):
+    """A completed task's `verification` records what was true at completion.
+
+    Its citations were resolved when the task completed; a decision superseded
+    or a spec reshuffled afterwards must not retroactively flag the record.
+    `justifies` stays live even on completed tasks — it states why the work
+    exists, which remains a claim about the present.
+    """
+
+    def test_completed_task_verification_is_not_scanned(self):
+        with FrontmatterCitationRoot() as root:
+            root.set_task(
+                0,
+                status="complete",
+                verification="pytest tests/test_x.py — covers FR-02.",
+            )
+            result = root.validate()
+            self.assertNotIn("SDD122", result.codes, repr(result))
+
+    def test_completed_task_justifies_is_still_scanned(self):
+        with FrontmatterCitationRoot() as root:
+            root.set_task(
+                0,
+                status="complete",
+                justifies="Implements the ledger shape decided in D-0002.",
+            )
+            result = root.validate()
+            self.assertIn("SDD120", result.codes, repr(result))
+
+
 if __name__ == "__main__":
     unittest.main()

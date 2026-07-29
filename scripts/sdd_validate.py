@@ -2062,10 +2062,28 @@ class Validator:
             if not isinstance(task, dict):
                 continue
             for field in ("justifies", "verification"):
+                # A completed task's `verification` is a historical record —
+                # its citations were resolved when the task completed, and a
+                # decision superseded afterwards must not retroactively flag
+                # it. `justifies` stays live: it states why work exists.
+                if field == "verification" and task.get("status") == "complete":
+                    continue
                 value = task.get(field)
                 if isinstance(value, str):
                     parts.append(value)
         return "\n".join(parts)
+
+    @staticmethod
+    def _citation_line(artifact: Artifact, text: str) -> int:
+        """Locate a citation, falling back to frontmatter for YAML-only ids.
+
+        An id that appears only in a task's `justifies`/`verification` string
+        is absent from the Markdown body, and a body-only lookup would report
+        line 1; the source lookup finds its actual frontmatter line.
+        """
+        if text in artifact.body:
+            return artifact.line(text, True)
+        return artifact.line(text)
 
     def _citations(self, artifact: Artifact) -> None:
         body = no_comments(artifact.body) + "\n" + self._frontmatter_citation_text(artifact)
@@ -2075,9 +2093,9 @@ class Validator:
                 decision_id = f"D-{number}"
                 target = self.decisions.get((repository_key, decision_id))
                 if target is None:
-                    self.error(artifact, "SDD120", f"Citation `{decision_id}` does not resolve.", "Correct it or restore the decision.", artifact.line(decision_id, True))
+                    self.error(artifact, "SDD120", f"Citation `{decision_id}` does not resolve.", "Correct it or restore the decision.", self._citation_line(artifact, decision_id))
                 elif self._is_live(artifact) and target[1].get("status") in {"rejected", "superseded"}:
-                    self.error(artifact, "SDD121", f"Live artifact cites `{decision_id}` with status `{target[1].get('status')}`.", "Cite the accepted replacement or reconcile content.", artifact.line(decision_id, True))
+                    self.error(artifact, "SDD121", f"Live artifact cites `{decision_id}` with status `{target[1].get('status')}`.", "Cite the accepted replacement or reconcile content.", self._citation_line(artifact, decision_id))
         if artifact.kind == "spec":
             return
         specs = self._related_specs(artifact)
@@ -2086,7 +2104,7 @@ class Validator:
             for number in IDS[family].findall(body):
                 value = f"{family}-{number}"
                 if value not in available:
-                    self.error(artifact, "SDD122", f"Citation `{value}` does not resolve in a related spec.", "Relate the owning spec or correct the citation.", artifact.line(value, True))
+                    self.error(artifact, "SDD122", f"Citation `{value}` does not resolve in a related spec.", "Relate the owning spec or correct the citation.", self._citation_line(artifact, value))
 
     def _related_specs(self, artifact: Artifact) -> list[Artifact]:
         result: dict[str, Artifact] = {}
@@ -2696,19 +2714,27 @@ def evidence_rows(body: str) -> list[tuple[str, tuple[str, str, str, str]]]:
 
 
 def strip_evidence_rows(body: str) -> str:
-    """Drop table rows so only narration outside the evidence tables remains.
+    """Reduce evidence tables to the text SDD073 still owns.
 
-    SDD072 validates each row's Result cell exactly. Without this, SDD073
-    re-scanned those same rows with a fuzzy pattern and flagged descriptive
-    text in the `Observable evidence` column ("3 assertions failed" in a row
-    that correctly records `FAIL (exit 1)`) as a second, redundant finding —
-    and worse, flagged passing narration like "0 failed, 42 passed".
+    SDD072 validates each row's Result cell exactly, so a row whose Result is
+    non-passing is suppressed here — re-scanning it with a fuzzy pattern only
+    produced a second, redundant finding ("3 assertions failed" in a row that
+    correctly records `FAIL (exit 1)`). But SDD072 never reads the
+    `Observable evidence` cell, so for rows whose Result claims PASS that cell
+    is kept: failure output pasted there ("initial run FAIL (exit 1);
+    retried") must not vanish from every check just because the Result column
+    says otherwise. Passing narration like "0 failed, 42 passed" stays safe —
+    FAILING_EVIDENCE matches only the uppercase tokens.
     """
-    kept = [
-        raw_line
-        for raw_line in body.splitlines()
-        if not raw_line.lstrip().startswith("|")
-    ]
+    kept: list[str] = []
+    for raw_line in body.splitlines():
+        stripped = raw_line.lstrip()
+        if not stripped.startswith("|"):
+            kept.append(raw_line)
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) == 4 and cells[2].startswith("PASS"):
+            kept.append(cells[3])
     return "\n".join(kept)
 
 

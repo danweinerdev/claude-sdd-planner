@@ -134,6 +134,30 @@ class TestResultRowsAreLeftToSDD072(unittest.TestCase):
     def test_strip_handles_indented_rows(self):
         self.assertEqual(strip_evidence_rows("  | a | b |").strip(), "")
 
+    def test_failing_narration_in_pass_row_is_caught(self):
+        """A PASS Result must not launder failure output pasted next to it.
+
+        SDD072 only reads the Result cell, so the Observable-evidence cell of
+        a passing row is SDD073's to scan — otherwise a flaky command flipped
+        to PASS after a retry hides its earlier failing output from every
+        check.
+        """
+        smuggled = (
+            "| Command | Working directory | Result | Observable evidence |\n"
+            "| --- | --- | --- | --- |\n"
+            "| pytest | . | PASS (exit 0) | initial run FAIL (exit 1); retried |\n"
+        )
+        self.assertTrue(flags(smuggled))
+
+    def test_non_passing_row_stays_suppressed_even_with_narration(self):
+        """The FAIL row is SDD072's exact finding; SDD073 must not duplicate it."""
+        body = (
+            "| Command | Working directory | Result | Observable evidence |\n"
+            "| --- | --- | --- | --- |\n"
+            "| pytest | . | FAIL (exit 1) | FAILED twice, exit 1 both runs |\n"
+        )
+        self.assertFalse(flags(body))
+
 
 if __name__ == "__main__":
     unittest.main()

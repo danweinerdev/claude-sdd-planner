@@ -175,6 +175,15 @@ graph TD
 | **Task** | Phase frontmatter `tasks:` array | `planned` `in-progress` `complete` `blocked` `deferred` |
 | **Subtask** | Phase body as `- [ ]` checklists | Checkbox state |
 
+**Upgrading existing planning roots:** `/validate` now requires a `justifies`
+field on every plan task (SDD063, with SDD076/SDD077 rejecting placeholder or
+title-echo justifications) and a `## Non-Goals` section in every design and
+plan document. Planning roots written before these checks will report new
+errors on artifacts that have not otherwise changed; the one-time remediation
+is to add the missing section and record each task's motivating demand (the
+FR/NFR/AC/D ids it serves, or the failure it prevents). A task with no
+stateable demand should be retired, not annotated.
+
 ## Agents
 
 The plugin includes review agents that Claude can delegate to:
