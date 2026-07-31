@@ -11,7 +11,7 @@ decisions: []
 
 # Decision Ledger
 
-Machine-readable record of decided truths — design choices, concept definitions, answered design questions. The frontmatter `decisions[]` array is canonical; see `shared/decision-log.md` in the plugin for the entry schema, lifecycle rules, and collision procedure.
+Machine-readable record of decided truths that outlive the document they were made in — design choices, concept definitions, and answered design questions that constrain work elsewhere. Choices a spec, design, or plan already states in full stay in that artifact. The frontmatter `decisions[]` array is canonical; see `shared/decision-log.md` in the plugin for the admission test, entry schema, lifecycle rules, and collision procedure.
 
 Entries are append-only: an accepted entry is never edited except to mark it superseded. A change of mind is a new entry that supersedes the old one.
 

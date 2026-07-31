@@ -9,7 +9,7 @@ description: "Record, look up, or reconcile entries in the decision ledger — t
 The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Resolve the planning root (artifacts) per `shared/path-resolution.md` in the plugin directory.
 
 ## When to Use
-- Explicitly record a decision, concept definition, or answered design question as durable truth
+- Explicitly record a decision, concept definition, or answered design question as durable truth — a truth that must be findable without knowing which document to open, not a choice a spec or design already states (`shared/decision-log.md` § Capture, the admission test)
 - Look up what was decided about a topic ("what did we decide about auth?")
 - Reconcile a collision — supersede an old decision with a new one
 - Backfill a decision the automatic capture missed
@@ -35,6 +35,7 @@ The convention — entry schema, lifecycle rules, collision procedure — is def
 Resolve the ledger per `shared/decision-log.md` § Ledger location: `<planning-root>/Decisions/decisions.md` when the planning root is inside the repo; `<repo-root>/DECISIONS.md` when the planning root is external (decisions live with the repo they represent — resolve the repo via `shared/path-resolution.md`). If missing, create it from `shared/templates/decision-log.md` (and `mkdir -p` any needed directory) before proceeding.
 
 ### Record (default)
+0. An explicit `/decide` is the user asking for the entry — record it. But if the statement plainly fails the admission test (it restates what an artifact already says, or it's an event or one-off disposition), say so in one line and name the artifact that already carries it, then follow the user's call. Don't refuse, and don't silently skip.
 1. Draft the entry per the schema in `shared/decision-log.md`: next sequential `D-NNNN`, `kind`, `statement` (one standalone sentence), `rationale`, and — pull these from the conversation or ask briefly — `rejected[]` alternatives, `scope`, `tags`. `decided_by: user` and `status: accepted` only when the user actually made the choice; an agent-inferred decision is `status: proposed` with `decided_by: agent` (acceptance later flips it to `user-approved`).
 2. **Run the collision check** (`shared/decision-log.md` § Collision Detection) before appending. On `contradicts`/`supersedes`, STOP and present both entries; the user chooses supersede / keep-old / both-hold-with-narrowed-scope. Never auto-resolve.
 3. Show the drafted entry to the user in-flow, append it to `decisions[]`, update the ledger's `updated` date, and re-read the frontmatter to confirm it parses as YAML.

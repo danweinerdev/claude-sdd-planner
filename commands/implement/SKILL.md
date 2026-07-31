@@ -225,7 +225,7 @@ These conditions require stopping and asking the user:
 
 Everything else is autonomous. Don't ask for confirmation between waves.
 
-**Record escalation resolutions.** When the user answers an escalation (rules 1–5) with a choice that constrains future work — an ambiguity resolved, scope accepted or cut, an approach picked for a blocked task — record it in the decision ledger per `shared/decision-log.md` (collision check before appending; a collision is itself a stop). If the fresh answer collides with an accepted entry, use the ledger's **one-step supersession**: "this supersedes D-NNNN — confirm?" — don't make the user relitigate what they just decided. Scope the entry to the plan. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions — don't log them.
+**Record escalation resolutions.** When the user answers an escalation (rules 1–5) with a choice that constrains future work — an ambiguity resolved, scope accepted or cut, an approach picked for a blocked task — record it in the decision ledger per `shared/decision-log.md` (apply its admission test — the binding has to reach past the task that raised the escalation; collision check before appending; a collision is itself a stop). If the fresh answer collides with an accepted entry, use the ledger's **one-step supersession**: "this supersedes D-NNNN — confirm?" — don't make the user relitigate what they just decided. Scope the entry to the plan. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions — don't log them.
 
 ## Output
 Updates existing plan artifacts in place:

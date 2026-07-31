@@ -49,7 +49,7 @@ When a plan phase has been completed (or substantially completed) and you want t
    - The filename mirrors the phase doc number (e.g., `01-Core-Setup.md` -> `notes/01-Core-Setup.md`)
 
 5. **Backfill the Decision Ledger**
-   - For each item in Decisions Made that the user confirmed (step 2) and that isn't already in `Decisions/decisions.md`, append an entry per `shared/decision-log.md` — collision check first; a collision stops for the user. Scope entries to the plan. This is the safety net for decisions made mid-implementation that escaped capture.
+   - For each item in Decisions Made that the user confirmed (step 2), isn't already in `Decisions/decisions.md`, and passes the **admission test** in `shared/decision-log.md` § Capture, append an entry per that convention — collision check first; a collision stops for the user. Items that only explain how this phase went stay in the debrief. Scope entries to the plan. This is the safety net for decisions made mid-implementation that escaped capture.
 
 6. **Update Phase Status**
    - A status backfill here is subject to the same gate as `/implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through

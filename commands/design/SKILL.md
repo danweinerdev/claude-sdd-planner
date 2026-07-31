@@ -39,7 +39,7 @@ When you need to define the technical architecture for a component or system bef
    - Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
 
 5. **Record Decisions**
-   - After approval, record in the decision ledger per `shared/decision-log.md`: each Design Decision the user weighed in on (its rejected options go in the entry's `rejected[]`) and each user-resolved open question. Run the collision check before each append — a collision stops for the user. Scope entries to `Designs/<ComponentName>`, and **cite each new entry's id inline** in the governed Design Decision section (e.g., "(D-0012)") — the bidirectional link is what makes supersession detection work. Design Decisions the user never engaged with are the design's own content — don't promote them as `accepted`.
+   - After approval, take each Design Decision the user weighed in on (its rejected options go in the entry's `rejected[]`) and each user-resolved open question, run it through the **admission test** in `shared/decision-log.md` § Capture, and record only those that pass — a decision that governs only this component's internals is the design's content, while one that constrains callers, other components, or later implementation earns an entry. Run the collision check before each append — a collision stops for the user. Scope entries to `Designs/<ComponentName>`, and **cite each new entry's id inline** in the governed Design Decision section (e.g., "(D-0012)") — the bidirectional link is what makes supersession detection work. Design Decisions the user never engaged with are the design's own content — don't promote them as `accepted`.
 
 ## Output
 ```

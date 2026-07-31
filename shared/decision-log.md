@@ -1,6 +1,6 @@
 # Decision Log
 
-Single source of truth for the **decision ledger** — the persistent, machine-readable record of decisions the user has made: design choices, concept definitions, and answered design questions. Skills and agents treat `accepted` entries as truth in all future interactions; a new decision that collides with a recorded one stops for user reconciliation, never auto-resolves.
+Single source of truth for the **decision ledger** — the persistent, machine-readable record of the user's **durable** decisions: design choices, concept definitions, and answered design questions that bind work beyond the document they were made in. It is a constraint set, not a decision diary — what earns an entry is defined by the admission test in § Capture. Skills and agents treat `accepted` entries as truth in all future interactions; a new decision that collides with a recorded one stops for user reconciliation, never auto-resolves.
 
 > **Naming:** this is the *decision log* (recorded truths). It is unrelated to `shared/decision-framework.md` (the reasoning discipline). Never abbreviate either to "the decision framework/log" ambiguously.
 
@@ -89,25 +89,43 @@ real collision. The full `/validate` skill remains responsible for repository
 graph checks that a focused ledger command cannot prove, including scope
 resolution, artifact citations, and related-artifact scope connectivity.
 
-## Capture — when to record
+## Capture — what earns an entry
 
-A decision is recorded **after the user makes it**, at these moments:
+The ledger is **not a log of everything decided**. It is the small set of truths that must be found *without knowing which document to open* — standing constraints a future session is expected to obey while working somewhere else entirely. Most choices made while writing a spec, design, or plan **are that document's content**: the spec says the field is optional, the design says the cache is write-through, and reading the artifact is how anyone learns it. Copying those into the ledger buys nothing and costs the thing the ledger exists for — that every `accepted` entry can be trusted as a real constraint, cheaply read at session start, and checked for collision on every append. A ledger diluted with document-local detail is one nobody can afford to read.
+
+### The admission test
+
+A decision earns an entry only when **all three** hold:
+
+1. **It outlives its document.** Work elsewhere — another spec, a later plan, an implementation task, a review — would get it wrong without knowing it. If the only work it binds is the artifact currently being written, it is that artifact's content.
+2. **The artifact doesn't already carry it.** The ledger indexes truths that are hard to find, not truths already stated in the obvious place. If "read `Designs/AuthService`" is a complete answer to the question, the design is the record.
+3. **A real alternative lost.** Something plausible was rejected, a term was pinned against a competing meaning, or a question had more than one defensible answer. A choice with no live alternative was documentation, not a decision — `rejected[]` empty and nothing to contradict later means nothing to collide with.
+
+**Always record, regardless of the test above:** a reversal or supersession of an existing entry; a project-wide term definition; an escalation answer that binds implementation beyond the task that raised it; and a constraint the user states as durable ("from now on…", "never do X here"). These are exactly the truths whose absence causes silent forks.
+
+**Never record:** events and status ("phase 2 completed"), one-off dispositions ("retry it", "skip that file for now"), restatements of an artifact's own requirements or design details, and agent-drafted choices the user merely didn't object to (those are `proposed` at most).
+
+When it's genuinely a coin flip, **leave it in the artifact**. Under-capture is recoverable — `/decide` backfills, `/decide check` sweeps prose decision sections, and `/debrief` is the safety net. Over-capture is not: accepted entries are immutable, so every marginal entry is permanent collision-check surface and permanent reading cost.
+
+### When to record
+
+A qualifying decision is recorded **after the user makes it**, at these moments:
 
 | Moment | Where |
 |---|---|
-| An open question is resolved at an approval gate | `/specify`, `/design`, `/plan` — each resolved question becomes an `answered-question` entry |
-| The user answers an escalation | `/implement` escalation rules — spec ambiguity, scope, destructive-action, blocked-task decisions |
-| The user resolves a review finding that required a design decision | the `/poke-holes` / `/code-review` resolution flow (`shared/review-artifacts.md`) — the chosen approach becomes an entry, cited in the Resolution Log |
+| An open question is resolved at an approval gate | `/specify`, `/design`, `/plan` — a resolved question that passes the admission test becomes an `answered-question` entry; one that only settles the document at hand stays in the document |
+| The user answers an escalation in a way that binds work beyond the task that raised it | `/implement` escalation rules — spec ambiguity, scope, destructive-action, blocked-task decisions |
+| The user resolves a review finding that required a design decision | the `/poke-holes` / `/code-review` resolution flow (`shared/review-artifacts.md`) — the chosen approach becomes an entry, cited in the Resolution Log; a finding fixed mechanically or answered locally stays in the Resolution Log alone |
 | The user accepts a brainstorm recommendation | `/brainstorm` — the accepted approach becomes a `decision` entry (unaccepted recommendations stay out, or go in as `proposed`) |
 | The user defines a project concept or term | any context — a `definition` entry |
 | The user decides ad hoc in conversation | any context — the `decision-log` model-only skill covers moments outside lifecycle skills |
-| A debrief captures decisions never logged | `/debrief` backfills "Decisions Made" items as entries |
+| A debrief captures decisions never logged | `/debrief` backfills the "Decisions Made" items that pass the admission test |
 
 Rules of capture:
 
 - **Making the decision is the user's; writing the entry is autonomous** (it's a template-following artifact write per `shared/autonomy.md`). Draft the entry, show it in-flow (a short block, not a modal ceremony), and append. `decided_by: user` requires the user actually stated the choice; an agent inference the user merely didn't object to is `proposed`, not `accepted`.
-- **Record decisions, not events.** "We chose PostgreSQL over DynamoDB for X" is an entry; "phase 2 completed" is not. Test: would a future session act differently for knowing this?
-- **Don't double-log.** Prose sections (Key Decisions, Design Decisions, Decisions Made) still exist for narrative; the ledger entry is the machine-readable pointer of record. Cross-reference the artifact in `scope` rather than duplicating its full deliberation.
+- **Apply the admission test to each candidate individually.** A gate that resolved six questions does not produce six entries by default — it produces entries for the ones that outlive the document. Skipping a candidate is a normal outcome, not a capture failure; say so in one line rather than logging defensively.
+- **Don't double-log.** Prose sections (Key Decisions, Design Decisions, Decisions Made) are where document-local choices live and stay. When a decision does qualify, the ledger entry is the machine-readable pointer of record: cross-reference the artifact in `scope` and cite the id back in the prose, rather than duplicating the deliberation.
 - **Cite ids in governed artifacts (bidirectional linking).** When an artifact section is governed by a ledger entry, cite the id inline — e.g., `## Key Decisions` … `Use JWT for session tokens (D-0010)`. The entry points at the artifact via `scope`; the artifact points back via the citation. The supersession cascade and `/decide check`'s stale-citation pass grep for these ids — without citations they are blind.
 - **Capture guarantee, stated honestly.** Capture at the structured moments (approval gates, escalations, debrief backfill) is reliable — it's written into the skills. Ad-hoc conversational capture depends on the `decision-log` model-only skill loading, which is best-effort; `/decide` is the manual recovery path and `/decide check` the periodic net. Do not present conversational capture as guaranteed.
 
@@ -148,6 +166,6 @@ Sequential ids and a single ledger file assume **one writer at a time**. Two con
 
 ## Hygiene
 
-`/decide check` audits: collisions among `accepted` entries using the scope-overlap definition above (the append-time check can miss pairs that predate it), superseded entries still cited by live artifacts (grep for ids), `scope` references to artifacts that no longer exist, prose decision sections never promoted to the ledger, `proposed` entries older than 30 days, `assumption` entries whose `refresh_when` triggers have fired (an invalidated assumption is reconciled like a collision), duplicate-id repair (above), and malformed entries (missing required fields, broken supersession links).
+`/decide check` audits: collisions among `accepted` entries using the scope-overlap definition above (the append-time check can miss pairs that predate it), superseded entries still cited by live artifacts (grep for ids), `scope` references to artifacts that no longer exist, prose decision sections holding a choice that **passes the admission test** and was never promoted (a prose decision that fails the test is correctly placed — don't report it), `proposed` entries older than 30 days, `assumption` entries whose `refresh_when` triggers have fired (an invalidated assumption is reconciled like a collision), duplicate-id repair (above), and malformed entries (missing required fields, broken supersession links).
 
 **Rotation:** when the ledger grows past ~100 entries, `/decide check` offers to move `superseded` and `rejected` entries to `Decisions/archive-<YYYY>.md` (type `decision-log`, status `archived`). Ids stay unique across live ledger and archives. `accepted` and `proposed` entries never rotate. The collision candidate filter greps `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths; only session onboarding is limited to the live ledger.
