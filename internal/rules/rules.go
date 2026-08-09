@@ -52,6 +52,16 @@ type Example struct {
 	// Line, when nonzero, asserts the diagnostic's reported line. Rules whose
 	// line is intrinsically 1 (whole-artifact findings) leave it zero.
 	Line int
+	// Setup, when nonempty, is a sequence of argv commands run in the fixture
+	// root (via exec.Command — never a shell) after Files is written, before
+	// LoadRoot. The evidence rules verify real repository state (a commit
+	// exists, is an ancestor of HEAD, is tracked at HEAD, is not a merge...),
+	// so their examples need an actual git repository: `{"git", "init", "-q"}`,
+	// `{"git", "add", "."}`, `{"git", "commit", ...}`. rules_test.go's
+	// runExample runs these with a fixed author/committer identity and
+	// timestamp, so a commit's resulting SHA is reproducible and can be
+	// hardcoded into an example's Files content.
+	Setup [][]string
 }
 
 // Rule is one diagnostic code's implementation and its evidence.

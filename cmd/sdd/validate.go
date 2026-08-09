@@ -20,7 +20,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
 
 // outDiagnostic's field order matches sdd_validate.py's `json.dumps(...,
@@ -69,18 +68,11 @@ func cmdValidate(args []string) error {
 		return fmt.Errorf("validate: --format must be text or json")
 	}
 
-	resolved := *root
-	if resolved == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("validate: %w", err)
-		}
-		resolved, err = store.FindPlanningRoot(wd)
-		if err != nil {
-			return fmt.Errorf("validate: %w", err)
-		}
+	wd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("validate: %w", err)
 	}
-	resolved, err := filepath.Abs(resolved)
+	resolved, repoRoot, err := resolveRoots(wd, *root)
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
@@ -88,7 +80,7 @@ func cmdValidate(args []string) error {
 		return fmt.Errorf("validate: planning root %q is not a directory", resolved)
 	}
 
-	r, err := rules.LoadRoot(resolved)
+	r, err := rules.LoadRootRepo(resolved, repoRoot)
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
@@ -193,6 +185,91 @@ func printValidateReport(root, scope string, inspected, inScope int, diags []out
 	}
 	if len(diags) == 0 {
 		fmt.Println("Checked structure, frontmatter, paths, identifiers, hierarchy, dependencies, reviews, decisions, and completion-evidence shape.")
+	}
+}
+
+// resolveRoots ports sdd_validate.py's resolve_roots(Path.cwd(), args.root):
+// the planning root and the repository (Python's Validator.repo, the
+// directory a project's own planning-config.json lives beside) are resolved
+// together but are not the same directory in general — a plan's completion
+// evidence targets code that may live outside the planning root entirely
+// (shared/path-resolution.md's Target Repository chain), and repoRoot here is
+// where that resolution starts from (internal/rules.RepoForArtifact walks
+// from it via planning-config.json's `planMapping`).
+func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
+	cwd, err = filepath.Abs(cwd)
+	if err != nil {
+		return "", "", err
+	}
+	vcsRoot := gitRoot(cwd)
+	repo := cwd
+	if vcsRoot != "" {
+		repo = vcsRoot
+	}
+	if explicit != "" {
+		p := explicit
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(cwd, p)
+		}
+		resolved, err := filepath.Abs(p)
+		if err != nil {
+			return "", "", err
+		}
+		return filepath.Clean(resolved), repo, nil
+	}
+	current := cwd
+	for {
+		cfgPath := filepath.Join(current, "planning-config.json")
+		if info, statErr := os.Stat(cfgPath); statErr == nil && !info.IsDir() {
+			raw, readErr := os.ReadFile(cfgPath)
+			if readErr != nil {
+				return "", "", fmt.Errorf("cannot parse %s: %w", cfgPath, readErr)
+			}
+			var cfg struct {
+				PlanningRoot *string `json:"planningRoot"`
+			}
+			if jsonErr := json.Unmarshal(raw, &cfg); jsonErr != nil {
+				return "", "", fmt.Errorf("cannot parse %s: %w", cfgPath, jsonErr)
+			}
+			value := "."
+			if cfg.PlanningRoot != nil {
+				value = *cfg.PlanningRoot
+			}
+			resolvedRoot := value
+			if !filepath.IsAbs(resolvedRoot) {
+				resolvedRoot = filepath.Join(current, resolvedRoot)
+			}
+			resolvedRoot, err = filepath.Abs(resolvedRoot)
+			if err != nil {
+				return "", "", err
+			}
+			repoForConfig := current
+			if vcsRoot != "" {
+				repoForConfig = vcsRoot
+			}
+			return filepath.Clean(resolvedRoot), repoForConfig, nil
+		}
+		if (vcsRoot != "" && current == vcsRoot) || filepath.Dir(current) == current {
+			return repo, repo, nil
+		}
+		current = filepath.Dir(current)
+	}
+}
+
+// gitRoot walks up from start looking for a `.git` entry (file or directory,
+// so a linked worktree's gitdir-pointer file counts), mirroring
+// sdd_validate.py's git_root(). Returns "" when none is found.
+func gitRoot(start string) string {
+	current := start
+	for {
+		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
 	}
 }
 

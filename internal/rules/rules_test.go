@@ -2,7 +2,9 @@ package rules
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -91,16 +93,41 @@ func TestRunIsDeterministic(t *testing.T) {
 	}
 }
 
+// setupEnv is the fixed author/committer identity and timestamp every
+// Example.Setup git command runs under, so a commit's resulting SHA is
+// reproducible across machines and runs and can be hardcoded into an
+// example's Files content instead of computed at test time.
+var setupEnv = []string{
+	"GIT_AUTHOR_NAME=sdd-fixture", "GIT_AUTHOR_EMAIL=sdd-fixture@example.com",
+	"GIT_COMMITTER_NAME=sdd-fixture", "GIT_COMMITTER_EMAIL=sdd-fixture@example.com",
+	"GIT_AUTHOR_DATE=2024-01-01T00:00:00+0000", "GIT_COMMITTER_DATE=2024-01-01T00:00:00+0000",
+	"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+}
+
 func runExample(t *testing.T, ex Example) []Diagnostic {
 	t.Helper()
 	dir := t.TempDir()
 	for rel, content := range ex.Files {
+		// {{REPO}} lets an example reference its own fixture root — needed for
+		// a `Repository:` evidence label, which must equal the exact resolved
+		// target repository root (t.TempDir() is different every run, so this
+		// can't be a hardcoded path the way a commit SHA can be, per Setup's
+		// fixed-identity determinism).
+		content = strings.ReplaceAll(content, "{{REPO}}", dir)
 		p := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
+		}
+	}
+	for _, args := range ex.Setup {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), setupEnv...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup command %v: %v\n%s", args, err, out)
 		}
 	}
 	root, err := LoadRoot(dir)
