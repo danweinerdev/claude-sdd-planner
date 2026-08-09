@@ -59,6 +59,11 @@
       "key": "phase_title",
       "ownership": "author",
       "required": true
+    },
+    {
+      "key": "phase_status",
+      "ownership": "author",
+      "required": false
     }
   ],
   "headings": [

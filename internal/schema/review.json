@@ -55,6 +55,51 @@
       "key": "rev",
       "ownership": "author",
       "required": true
+    },
+    {
+      "key": "findings",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "followups",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "review_scope",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "frozen",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "verdict",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "reviewed_planning_revision",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "review_mode",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "lane_results",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "superseded_by",
+      "ownership": "author",
+      "required": false
     }
   ],
   "headings": [

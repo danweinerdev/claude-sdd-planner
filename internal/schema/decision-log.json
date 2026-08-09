@@ -43,6 +43,11 @@
       "key": "related",
       "ownership": "author",
       "required": false
+    },
+    {
+      "key": "decisions",
+      "ownership": "author",
+      "required": false
     }
   ],
   "headings": [],
