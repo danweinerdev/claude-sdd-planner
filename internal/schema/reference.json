@@ -1,0 +1,58 @@
+{
+  "type": "reference",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "docNote": "Durable reference material \u2014 data flows, invariants, formats.",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "reference"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": false
+    }
+  ],
+  "headings": [],
+  "namespaces": []
+}

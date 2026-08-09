@@ -1,0 +1,145 @@
+{
+  "type": "design",
+  "additionalSections": "allowed",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "design"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "review",
+        "approved",
+        "implemented",
+        "superseded"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "supersedes",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "superseded_by",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "implemented_in",
+      "ownership": "author",
+      "required": false,
+      "aliases": [
+        "implemented_by"
+      ]
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Overview",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Non-Goals",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Architecture",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Components",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Data Flow",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Interfaces",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Design Decisions",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Error Handling",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Testing Strategy",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Structural Verification",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Migration / Rollout",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Open Questions",
+      "depth": 2,
+      "required": false,
+      "freeProse": true
+    }
+  ],
+  "namespaces": []
+}

@@ -1,0 +1,58 @@
+{
+  "type": "notes-index",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "docNote": "Index over a notes/ directory. Sections name the documents it indexes.",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "notes-index"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "in-progress",
+        "complete"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": false
+    }
+  ],
+  "headings": [],
+  "namespaces": []
+}

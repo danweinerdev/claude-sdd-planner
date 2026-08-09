@@ -1,0 +1,58 @@
+{
+  "type": "findings",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "docNote": "Standalone findings document \u2014 investigation output not tied to a review artifact.",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "findings"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "in-progress",
+        "complete"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    }
+  ],
+  "headings": [],
+  "namespaces": []
+}

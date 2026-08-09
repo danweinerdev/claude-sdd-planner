@@ -1,0 +1,110 @@
+{
+  "type": "debrief",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "debrief"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "complete"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "phase",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "phase_title",
+      "ownership": "author",
+      "required": true
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Decisions Made",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Requirements Assessment",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Deviations",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Risks & Issues Encountered",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Lessons Learned",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Impact on Subsequent Phases",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Skill Opportunities",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    }
+  ],
+  "namespaces": []
+}

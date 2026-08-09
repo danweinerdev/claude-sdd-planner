@@ -1,0 +1,95 @@
+{
+  "type": "brainstorm",
+  "additionalSections": "allowed",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "brainstorm"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Problem Statement",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Ideas",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Evaluation",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Comparison Matrix",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Recommendation",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Next Steps",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Open Questions",
+      "depth": 2,
+      "required": false,
+      "freeProse": true
+    }
+  ],
+  "namespaces": []
+}

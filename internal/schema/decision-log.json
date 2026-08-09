@@ -1,0 +1,56 @@
+{
+  "type": "decision-log",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "decision-log"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false
+    }
+  ],
+  "headings": [],
+  "namespaces": [
+    {
+      "name": "D",
+      "prefix": "D",
+      "width": 4
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "type": "review",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "review"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "open",
+        "resolved",
+        "superseded"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "review_of",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "rev",
+      "ownership": "author",
+      "required": true
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Findings",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Resolution Log",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "F",
+      "prefix": "F",
+      "width": 2
+    },
+    {
+      "name": "FU",
+      "prefix": "FU",
+      "width": 2
+    }
+  ]
+}

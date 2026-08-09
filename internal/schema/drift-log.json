@@ -1,0 +1,58 @@
+{
+  "type": "drift-log",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "docNote": "Records where implementation diverged from design/spec, with rationale.",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "drift-log"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "in-progress",
+        "complete"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": false
+    }
+  ],
+  "headings": [],
+  "namespaces": []
+}

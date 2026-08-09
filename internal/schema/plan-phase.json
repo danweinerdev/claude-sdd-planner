@@ -1,0 +1,65 @@
+{
+  "type": "plan-phase",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "docNote": "Legacy phase form (read-only). Modern equivalent is type: phase.",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "plan-phase"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "planned",
+        "in-progress",
+        "complete",
+        "blocked",
+        "deferred"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "phase",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false,
+      "default": "[]"
+    }
+  ],
+  "headings": [],
+  "namespaces": []
+}

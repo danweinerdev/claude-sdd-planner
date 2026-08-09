@@ -1,0 +1,101 @@
+{
+  "type": "research",
+  "additionalSections": "allowed",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "research"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Context",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Findings",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Key Insights",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Sources",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Analysis",
+      "depth": 2,
+      "required": true,
+      "freeProse": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Implications",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Recommendations",
+      "depth": 3,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Open Questions",
+      "depth": 2,
+      "required": false,
+      "freeProse": true
+    }
+  ],
+  "namespaces": []
+}

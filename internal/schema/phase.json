@@ -1,0 +1,86 @@
+{
+  "type": "phase",
+  "additionalSections": "allowed",
+  "frontmatterMode": "preserve",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "phase"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "planned",
+        "in-progress",
+        "complete",
+        "blocked",
+        "deferred"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "plan",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "phase",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "deliverable",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": false
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Overview",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Acceptance Criteria",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Phase Completion Evidence",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "Pending \u2014 not complete."
+    }
+  ],
+  "namespaces": []
+}

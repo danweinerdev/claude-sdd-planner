@@ -1,0 +1,157 @@
+{
+  "type": "spec",
+  "additionalSections": "allowed",
+  "frontmatter": [
+    {
+      "key": "title",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "type",
+      "ownership": "tool",
+      "required": true,
+      "fixed": "spec"
+    },
+    {
+      "key": "status",
+      "ownership": "tool",
+      "required": true,
+      "enum": [
+        "draft",
+        "review",
+        "approved",
+        "implemented",
+        "superseded"
+      ]
+    },
+    {
+      "key": "created",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "updated",
+      "ownership": "tool",
+      "required": true
+    },
+    {
+      "key": "tags",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "related",
+      "ownership": "author",
+      "required": true,
+      "default": "[]"
+    },
+    {
+      "key": "supersedes",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "superseded_by",
+      "ownership": "author",
+      "required": false
+    },
+    {
+      "key": "implemented_in",
+      "ownership": "author",
+      "required": false,
+      "aliases": [
+        "implemented_by"
+      ]
+    }
+  ],
+  "headings": [
+    {
+      "text": "## Overview",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Goals",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Non-Goals",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Requirements",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Functional Requirements",
+      "depth": 3,
+      "required": true,
+      "idNamespace": "FR",
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "### Non-Functional Requirements",
+      "depth": 3,
+      "required": true,
+      "idNamespace": "NFR",
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## User Stories",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Acceptance Criteria",
+      "depth": 2,
+      "required": true,
+      "idNamespace": "AC",
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Constraints",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Dependencies",
+      "depth": 2,
+      "required": true,
+      "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
+    },
+    {
+      "text": "## Open Questions",
+      "depth": 2,
+      "required": false,
+      "freeProse": true
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "FR",
+      "prefix": "FR",
+      "width": 2
+    },
+    {
+      "name": "NFR",
+      "prefix": "NFR",
+      "width": 2
+    },
+    {
+      "name": "AC",
+      "prefix": "AC",
+      "width": 2
+    }
+  ]
+}
