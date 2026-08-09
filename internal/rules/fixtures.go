@@ -80,6 +80,36 @@ None.
 None.
 `
 
+// validBrainstorm returns a minimal, structurally valid brainstorm document
+// whose `## Ideas` section body is the caller-supplied text.
+func validBrainstorm(ideasBody string) string {
+	return `---
+title: Sample Brainstorm
+type: brainstorm
+status: draft
+created: 2024-01-01
+updated: 2024-01-01
+tags: []
+related: []
+---
+
+## Problem Statement
+
+Text.
+
+## Ideas
+
+` + ideasBody + `
+## Evaluation
+
+Text.
+
+## Next Steps
+
+Text.
+`
+}
+
 // validPlan returns a minimal, structurally valid plan README. When legacy is
 // true it also carries a legacy `### ... Evidence Rollup` heading (SDD158).
 func validPlan(legacy bool) string {
