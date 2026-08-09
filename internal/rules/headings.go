@@ -136,7 +136,7 @@ var completedTaskIdentityRe = regexp.MustCompile("^\\s*-\\s+`([^`\\s]+)`: `([^`;
 // == "task"` call from _phase: a complete phase must carry exactly one
 // `### Completed task identities` section whose entries exactly match every
 // completed task's recorded `Revision / checkpoint`, one line each, in the
-// `- \`<task id>\`: \`<checkpoint>\`` shape.
+// "- `<task id>`: `<checkpoint>`" shape.
 func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 	if a.Status() != "complete" {
 		return
