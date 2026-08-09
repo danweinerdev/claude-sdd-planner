@@ -1,0 +1,140 @@
+---
+title: "Compiler Feel Spike"
+type: phase
+plan: "SDD-Toolchain"
+phase: 1
+status: planned
+created: 2026-08-03
+updated: 2026-08-03
+deliverable: "A throwaway Go spike that parses a spec proposal and prints normalized output, plus a written go/no-go assessment of the compiler model"
+tasks:
+  - id: "1.1"
+    title: "Go module skeleton and the spec schema as data"
+    status: planned
+    verification: "`go build ./...` succeeds; the schema loads and round-trips through its own loader; a unit test asserts the schema declares every heading, frontmatter field with ownership, and identifier namespace present in shared/templates/spec.md"
+    justifies: "FR-14 requires each artifact type be declared in exactly one machine-readable schema; without a real schema for one type there is nothing for the parser or apply to be tested against."
+  - id: "1.2"
+    title: "Frontmatter and Markdown parsing into an inspectable model"
+    status: planned
+    verification: "Parsing every existing artifact under a copy of the planning root yields a model with correct source line positions for every heading and frontmatter key, asserted against golden files"
+    justifies: "FR-29 requires line-accurate error messages and FR-19 requires per-section matching; both are impossible without an AST carrying source positions, which is the specific reason the spec names a CommonMark parser with position info as a dependency."
+    depends_on: ["1.1"]
+  - id: "1.3"
+    title: "Section matcher with near-miss normalization and refusal"
+    status: planned
+    verification: "Table-driven tests cover every FR-19 auto-correction and every FR-19 refusal, each asserting the itemized correction list or the refusal message; a deliberately mangled spec produces all violations in one result"
+    justifies: "FR-19 near-miss tolerance is the single largest determinant of whether the compiler is pleasant or infuriating to drive; this task is where that hypothesis is falsifiable."
+    depends_on: ["1.2"]
+  - id: "1.4"
+    title: "apply --dry-run --diff over the round-trip contract"
+    status: planned
+    verification: "On a copied planning root: applying an already-normalized artifact is byte-idempotent with zero corrections; each FR-45 identifier case (preserved, unknown, new, omitted, --retire) produces the specified outcome; nothing is ever written outside the copy"
+    justifies: "FR-45 and FR-24 were both written in response to review findings F-01 and F-03 and have never been executed; the round-trip contract is the compiler operation the plugin will use most and is the likeliest place the design is still wrong."
+    depends_on: ["1.3"]
+  - id: "1.5"
+    title: "Feel assessment and go/no-go on the compiler model"
+    status: planned
+    verification: "A written assessment exists recording: tool-call count and token cost to author one spec via the compiler versus one Write, the measured stripped binary size, measured single-artifact timings, the corrections needed on each existing artifact, and an explicit recommendation to proceed, amend, or abandon"
+    justifies: "Prevents the concrete failure of building Phases 3 through 7 on an unvalidated hypothesis; also supplies the measurements NFR-07 is provisional pending and that finding F-12 flagged as unsourced."
+    depends_on: ["1.4"]
+---
+
+# Phase 1: Compiler Feel Spike
+
+## Overview
+Answers the only question that can invalidate the design before real money is spent:
+does the artifact-compiler model actually feel right to author against? Everything
+here is deliberately throwaway — no parity work, no hooks, no distribution, no
+writes to the real planning root. It exists to produce evidence and a decision,
+not shippable code. FR-33's ordering bars the production compiler until Python is
+gone; that rule protects byte-level differential comparison, which a spike
+operating on a copied tree cannot disturb.
+
+## 1.1: Go module skeleton and the spec schema as data
+
+### Subtasks
+- [ ] Create `go.mod` with the module path `github.com/danweinerdev/claude-sdd-planner` and a declared Go floor
+- [ ] Add `cmd/sdd` with a minimal subcommand dispatcher (stdlib `flag`, no cobra yet)
+- [ ] Declare the `spec` artifact type as data: ordered headings with depth, frontmatter fields with author/tool ownership, identifier namespaces and grammars, free-prose sections
+- [ ] Embed the schema with `go:embed` and add a loader with a table-driven test
+
+### Notes
+Revision boundary: The repository builds as a Go module and can load a declarative schema for the `spec` artifact type.
+
+### Completion Evidence
+
+Pending — not complete.
+
+## 1.2: Frontmatter and Markdown parsing into an inspectable model
+
+### Subtasks
+- [ ] Select and pin the CommonMark and YAML libraries, recording version and as-of date (discharges the pinning obligation the Requirements preamble places on the design)
+- [ ] Parse frontmatter into a node model preserving line, column, and comments
+- [ ] Parse the body into sections keyed by heading, retaining source spans
+- [ ] Golden-file tests over a copied `.plans/` tree
+
+### Notes
+Revision boundary: Any existing SDD artifact parses into a positioned model without loss.
+
+### Completion Evidence
+
+Pending — not complete.
+
+## 1.3: Section matcher with near-miss normalization and refusal
+
+### Subtasks
+- [ ] Fuzzy-match payload headings to schema slots (case, trailing punctuation, emphasis-as-heading, off-by-one depth)
+- [ ] Refuse the unambiguous cases: missing required section, duplicate slot mapping, unknown section
+- [ ] Itemize every auto-correction in the result
+- [ ] Implement the FR-23 lexical identifier check with its code-span, retired-identifier, and free-prose exemptions
+
+### Notes
+Revision boundary: A payload is either normalized with an itemized correction list or refused whole with every violation named.
+
+### Trap
+Making the matcher strict because strictness is easier to implement and test. A matcher that refuses `**Non-Goals**` instead of correcting it will produce retry loops that cost more than the errors they prevent — the spike exists to find where that line actually sits, so both branches must be built.
+
+### Completion Evidence
+
+Pending — not complete.
+
+## 1.4: apply --dry-run --diff over the round-trip contract
+
+### Subtasks
+- [ ] Emit normalized output: LF, canonical heading order, forward-slash frontmatter paths, stamped `updated`
+- [ ] Implement identifier allocation from the FR-20 high-water mark, never filling gaps
+- [ ] Implement the FR-45 assertion semantics including `--retire`
+- [ ] Print the diff, the allocations, and the corrections; write nothing
+
+### Notes
+Revision boundary: A spec proposal can be dry-run compiled end to end, showing exactly what would be written.
+
+### Completion Evidence
+
+Pending — not complete.
+
+## 1.5: Feel assessment and go/no-go on the compiler model
+
+### Subtasks
+- [ ] Author a real spec end to end through the spike and record tool calls and token cost against the Write baseline
+- [ ] Dry-run every artifact in a copied planning root; record refusals and correction counts per artifact (evidence for FR-34)
+- [ ] Measure stripped binary size and single-artifact apply/validate timings on named hardware
+- [ ] Write the assessment with an explicit recommendation, and amend `Specs/SDD-Toolchain` or record new decisions where the spike contradicts it
+
+### Notes
+Revision boundary: A decision with evidence behind it: proceed, amend the spec, or abandon the compiler model.
+
+### Completion Evidence
+
+Pending — not complete.
+
+## Acceptance Criteria
+- [ ] Compiling a spec proposal end to end is demonstrated on a copied planning root, with normalized output, itemized corrections, and allocations shown and nothing written to the real `.plans/`.
+- [ ] Every FR-19 auto-correction and refusal case, and every FR-45 identifier case, has a passing test.
+- [ ] The written feel assessment exists and carries an explicit proceed/amend/abandon recommendation with measurements, not impressions.
+- [ ] The YAML and CommonMark libraries are pinned with version and as-of date, discharging the obligation the spec places on the design.
+- [ ] No file outside the spike tree and the copied planning root is modified.
+
+## Phase Completion Evidence
+
+Pending — not complete.
