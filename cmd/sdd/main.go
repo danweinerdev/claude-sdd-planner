@@ -44,6 +44,12 @@ func main() {
 		err = cmdDoctor(os.Args[2:])
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
+	case "validate":
+		err = cmdValidate(os.Args[2:])
+	case "next":
+		err = cmdNext(os.Args[2:])
+	case "decide":
+		err = cmdDecide(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -64,7 +70,7 @@ func main() {
 	}
 }
 
-var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "help"}
+var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "help"}
 
 func usage() {
 	fmt.Fprint(os.Stderr, `sdd — SDD toolchain (spike)
@@ -80,6 +86,14 @@ func usage() {
                                   [--json] [--expect DIGEST] [--type T]
   sdd doctor [--json]
   sdd migrate <artifact-path> [--dry-run] [--diff] [--json] [--allow-frozen]
+  sdd validate [--root PATH] [--scope PATH] [--format text|json]
+  sdd next [PLAN-PATH] [--json]
+  sdd decide list [--status accepted|proposed|rejected|superseded] [--json]
+  sdd decide search <term> [--json]
+  sdd decide add --statement TEXT [--rationale TEXT] [--rejected "a,b"]
+                 [--scope "p,q"] [--tags "x,y"] [--supersedes D-NNNN]
+                 [--kind decision|assumption] [--reversibility one-way|two-way]
+                 [--accept] [--dry-run] [--json]
 
 apply reads a Markdown proposal on stdin. Without --dry-run it writes the
 compiled artifact atomically. Pass --expect with the digest you read to refuse
@@ -97,6 +111,17 @@ non-compliant structure, which is the reason writes go through a compiler at all
 doctor reports the binary's identity, the resolved planning root, and the
 embedded schema set with per-type artifact counts; it exits 2 if the planning
 root cannot be resolved.
+
+validate is a native, schema-driven validator over a whole planning root.
+Pre-parity: scripts/sdd_validate.py remains authoritative until the
+FR-30/FR-32 gate runs.
+
+next reports current state and the literal next command to run, for one plan
+or every plan under the resolved planning root (FR-25).
+
+decide reads and writes the decision ledger (Decisions/decisions.md):
+list, search, and add — add refuses on a candidate collision with an accepted
+entry unless --supersedes names it (D-0003).
 `)
 }
 
