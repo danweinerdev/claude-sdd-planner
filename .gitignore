@@ -40,3 +40,6 @@ __pycache__/
 # Sandbox-mounted, not this repo's. If real submodules are ever added, drop
 # this line — `.gitmodules` must be committed for submodules to work.
 .gitmodules
+
+# Go build output (built via go build ./cmd/sdd)
+bin/
