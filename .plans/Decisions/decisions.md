@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-07-24
+updated: 2026-08-03
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -55,7 +55,8 @@ decisions:
     reversibility: two-way
   - id: D-0005
     kind: decision
-    status: accepted
+    status: superseded
+    superseded_by: D-0013
     date: 2026-07-13
     decided_by: user
     statement: "The plugin ships a SessionStart hook in v1 (hooks/hooks.json + hooks/load-decisions.sh) that injects accepted ledger entries as additionalContext at session start."
@@ -99,7 +100,8 @@ decisions:
     reversibility: two-way
   - id: D-0009
     kind: decision
-    status: accepted
+    status: superseded
+    superseded_by: D-0012
     date: 2026-07-24
     decided_by: user
     statement: "Deterministic validation ships as scripts/sdd_validate.py and scripts/sdd_decision_validate.py, copied verbatim from the sharpened fork and surfaced as /validate; review-artifact frontmatter uses the stable lane identifiers (review_plan_drift, review_quality, review_spec_compliance, review_blind_spots) mapped to the four reviewer agents, so the validator runs unmodified."
@@ -121,7 +123,8 @@ decisions:
     reversibility: two-way
   - id: D-0011
     kind: decision
-    status: accepted
+    status: superseded
+    superseded_by: D-0014
     date: 2026-07-24
     decided_by: user
     statement: "The read-only guarantee of the seven reviewer/researcher agents is enforced mechanically by a PreToolUse hook (hooks/reviewer-bash-guard.py) that allowlists read-only git/p4 subcommands and denies write- or network-shaped Bash; it fails open for all other agents and covers only plugin-owned agents, not project review lanes."
@@ -129,6 +132,53 @@ decisions:
     rationale: "Reviewers need a shell for diffs and test runs, agent tools: frontmatter cannot express argument patterns, and a prompt-level read-only promise is not a permission boundary; the hook closes the gap without breaking the lanes' validation duties. Defense-in-depth against sloppiness, not adversarial sandboxing."
     scope: []
     tags: [agents, hooks, security, review-lanes]
+    reversibility: two-way
+  - id: D-0012
+    kind: decision
+    status: accepted
+    date: 2026-08-03
+    decided_by: user
+    supersedes: D-0009
+    statement: "Deterministic validation moves to the Go sdd tool. scripts/sdd_validate.py and scripts/sdd_decision_validate.py are deprecated on arrival of the port, retained only as the parity oracle, and deleted once sdd reaches proven parity. The stable review lane identifiers (review_plan_drift, review_quality, review_spec_compliance, review_blind_spots) from D-0009 remain in force unchanged."
+    rejected: [keeping the Python validators as a shipped runtime fallback, rewriting without a differential parity gate, deleting the scripts before parity is proven]
+    rationale: "Python plus PyYAML is a hard runtime dependency across six skill files and the PreToolUse hook, with a documented degradation path when it is missing; a static binary deletes that failure mode rather than mitigating it. Accepted cost: this permanently severs D-0009's fork-sync channel, so validator fixes no longer flow byte-identically between this plugin and the sharpened fork. Deletion is gated on the parity corpus rather than on a date."
+    scope: [Specs/SDD-Toolchain]
+    tags: [validation, golang, migration, tooling]
+    reversibility: one-way
+  - id: D-0013
+    kind: decision
+    status: accepted
+    date: 2026-08-03
+    decided_by: user
+    supersedes: D-0005
+    statement: "SessionStart ledger injection moves from hooks/load-decisions.sh into the Go binary as `sdd hook sessionstart`, removing the plugin's POSIX-shell dependency. It is a silent no-op in two cases: when no ledger exists, and when no sdd binary is yet provisioned."
+    rejected: [keeping the shell script alongside the binary, making the hook a hard error when unprovisioned]
+    rationale: "The shell script never worked on native Windows, so moving it into the binary fixes an existing cross-platform gap rather than only consolidating code. The second no-op case is new and load-bearing: because the binary is built at /setup, a fresh install has no binary, and a hook that errored there would break the session it is meant to enrich. Failing open silently is the correct trade for a context-enrichment hook."
+    scope: [Specs/SDD-Toolchain]
+    tags: [decision-log, hooks, golang, cross-platform]
+    reversibility: two-way
+  - id: D-0014
+    kind: decision
+    status: accepted
+    date: 2026-08-03
+    decided_by: user
+    supersedes: D-0011
+    statement: "The reviewer read-only guard moves into the Go binary as `sdd hook pretooluse`, keeping the git/p4 read-only allowlist and fail-open-for-everyone-else behavior, and gains two duties: denying Write/Edit on schema-recognized artifact paths, and allowlisting sdd's own subcommands so the read-only agents may run sdd validate/show/list/next/version/doctor but never apply, section set, decide add, evidence add, or any lifecycle transition."
+    rejected: [porting the guard without covering sdd's own mutating subcommands, accepting the sdd-mutation path as an acceptable weakening, denying sdd entirely to reviewer agents]
+    rationale: "Introducing a mutating CLI while the guard denies only an enumerated set of command heads would have handed the read-only agents a sanctioned path to rewrite planning artifacts — a larger hole than the Write/Edit denial closes. Allowlisting sdd subcommands the same way git subcommands are already allowlisted keeps the guarantee net-stronger than D-0011's. One residual weakening is accepted and unavoidable: because the binary is built at /setup, no guard runs at all until the plugin is provisioned, where previously it was active from the first session. Still defense-in-depth against sloppiness, not adversarial sandboxing."
+    scope: [Specs/SDD-Toolchain]
+    tags: [agents, hooks, security, golang, review-lanes]
+    reversibility: two-way
+  - id: D-0015
+    kind: decision
+    status: accepted
+    date: 2026-08-03
+    decided_by: user
+    statement: "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v<version>` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`."
+    rejected: [committing prebuilt per-platform binaries to the plugin payload, building from source during /setup, exact plugin-version/binary-version lockstep, /setup installing a Go toolchain via package manager]
+    rationale: "Prebuilt bundling would add roughly 50 MB of incompressible blobs to repository history per release, since Claude Code installs plugins by cloning. Building at /setup removed that cost but made the plugin responsible for toolchain detection, module fetching, and network failure modes it cannot handle well. Delegating to `go install` puts those failures in the user's hands with Go's own diagnostics. The floor rather than lockstep is load-bearing: `go install` yields one unversioned binary per machine, so equality would break every working install on a wording-only plugin release and would prevent two plugin versions from coexisting. The plugin-root copy survives regardless, because hooks.json can interpolate only CLAUDE_PLUGIN_ROOT and hook processes often run without $GOBIN on PATH."
+    scope: [Specs/SDD-Toolchain]
+    tags: [golang, distribution, versioning, setup, hooks]
     reversibility: two-way
 ---
 
