@@ -21,6 +21,21 @@ type Root struct {
 	Dir       string
 	Artifacts []*Artifact
 	ByPath    map[string]*Artifact // Rel -> Artifact, for successfully parsed artifacts only
+
+	// RepoRoot is the repository every artifact targets by default (Python's
+	// Validator.repo): the directory planning-config.json lives beside. Set by
+	// LoadRoot to Dir; LoadRootRepo lets a caller (cmd/sdd) supply the real one
+	// when the planning root and the repository differ.
+	RepoRoot string
+	// PlanRepos maps a plan name to its mapped target repository's absolute
+	// directory, populated by SDD000's CheckRoot from planning-config.json.
+	// RepoForArtifact reads this; a plan absent here targets RepoRoot.
+	PlanRepos map[string]string
+	// ConfigDiagnostics are the SDD000 findings from parsing
+	// RepoRoot/planning-config.json, computed once up front (mirroring
+	// Python's Validator.__init__ calling _configure_repositories
+	// immediately) so every other rule sees a populated PlanRepos.
+	ConfigDiagnostics []Diagnostic
 }
 
 // Artifact mirrors the Python validator's Artifact dataclass plus the parse
@@ -100,9 +115,21 @@ func splitKeepLines(s string) []string {
 }
 
 // LoadRoot walks a planning root's artifact directories and models every
-// `*.md` file found, in Python's _discover order (sorted paths).
+// `*.md` file found, in Python's _discover order (sorted paths). The
+// repository every artifact targets by default (Python's Validator.repo) is
+// dir itself; use LoadRootRepo when the planning root and the repository
+// housing planning-config.json differ.
 func LoadRoot(dir string) (*Root, error) {
-	r := &Root{Dir: dir, ByPath: map[string]*Artifact{}}
+	return LoadRootRepo(dir, dir)
+}
+
+// LoadRootRepo is LoadRoot with an explicit repository directory — the
+// directory planning-config.json lives beside, Python's Validator.repo —
+// distinct from the planning root when a plan's target repository is not the
+// one holding the planning artifacts.
+func LoadRootRepo(dir, repoRoot string) (*Root, error) {
+	r := &Root{Dir: dir, ByPath: map[string]*Artifact{}, RepoRoot: repoRoot}
+	r.PlanRepos, r.ConfigDiagnostics = configureRepositories(repoRoot, dir)
 	var paths []string
 	for _, name := range artifactDirs {
 		base := filepath.Join(dir, name)
@@ -144,6 +171,23 @@ func parseArtifact(path, rel string) *Artifact {
 		a.ParseDetail = err.Error()
 		return a
 	}
+	return parseArtifactBytes(raw, rel, path)
+}
+
+// ParseArtifactBytes builds the same Artifact model LoadRoot produces from a
+// live file, but from raw bytes instead — this is Prerequisite B (historical
+// artifact reconstruction): the evidence rules that verify a phase/plan's
+// completion evidence was committed use a vcs.Repo.FileAt(rev, path) to fetch
+// an artifact's bytes as of a revision, then need to inspect it with exactly
+// the same section/frontmatter helpers a live artifact uses. rel is the
+// planning-root-relative path the historical bytes are being modeled as; no
+// on-disk path exists for a historical artifact, so AbsPath is left empty.
+func ParseArtifactBytes(raw []byte, rel string) *Artifact {
+	return parseArtifactBytes(raw, rel, "")
+}
+
+func parseArtifactBytes(raw []byte, rel, path string) *Artifact {
+	a := &Artifact{Rel: rel, AbsPath: path}
 	if !utf8.Valid(raw) {
 		a.ParseStage = "SDD002"
 		a.ParseDetail = "invalid UTF-8"
