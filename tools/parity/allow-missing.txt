@@ -91,13 +91,6 @@ DLG077
 # Each needs its remaining site(s) ported, then removal from this list.
 #   SDD158  2 sites each, but Go does not fire on the legacy-rollup shape the
 #           SDD059 fixture carries.
-#   SDD173  17 of 19 emission sites ported. The two remaining compare
-#           canonical phase/plan INTENT at the frozen endpoint against HEAD,
-#           catching scope text rewritten after review even when only
-#           lifecycle files changed. They need the lifecycle normalization
-#           stack (YAML source-span excision plus evidence/checkbox
-#           normalization, ~82 lines) which is not ported.
-SDD173
 SDD158
 SDD172
 

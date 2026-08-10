@@ -660,13 +660,63 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 		return
 	}
 
-	// Python continues here with a canonical-intent comparison of each
-	// lifecycle path at the frozen endpoint versus HEAD, catching a phase or
-	// plan whose scope text was rewritten after review even though only
-	// lifecycle files changed. That comparison needs the lifecycle
-	// normalization stack (YAML source-span excision plus evidence/checkbox
-	// normalization), which is not ported; those two branches remain
-	// allowlisted rather than silently dropped.
+	// Lifecycle files may change after the review, but only as bookkeeping.
+	// Compare each governed artifact's canonical INTENT at the frozen endpoint
+	// against HEAD: identical means only status/evidence/checkboxes moved, and
+	// the review still stands. Different means the scope it reviewed was
+	// rewritten underneath it.
+	for _, gov := range phaseLifecycleIntentPaths(r, ctx.Phase, targetRoot) {
+		frozenIntent, frozenErr := gitLifecycleNormalized(repo, endpoint, gov.rel, gov.kind)
+		currentIntent, currentErr := gitLifecycleNormalized(repo, "HEAD", gov.rel, gov.kind)
+		if frozenErr != nil || currentErr != nil {
+			fail("Cannot compare canonical "+gov.kind+" intent for lifecycle path `"+gov.rel+"` across the frozen phase review.",
+				"Keep the governing phase and plan artifacts valid and present at both the frozen endpoint and HEAD, or rerun the full phase review.")
+			return
+		}
+		if frozenIntent != currentIntent {
+			fail("Lifecycle path `"+gov.rel+"` changes canonical "+gov.kind+" intent after the frozen phase review.",
+				"Do not change phase/plan scope, requirements, tasks, or acceptance text after review; rerun the full phase review.")
+			return
+		}
+	}
+}
+
+// governedPath is a lifecycle artifact whose intent must not move after the
+// frozen review, with the artifact kind its normalization needs.
+type governedPath struct {
+	rel  string
+	kind string
+}
+
+// phaseLifecycleIntentPaths ports _git_phase_lifecycle_intent_paths: the phase
+// itself and its plan README, as target-relative paths.
+func phaseLifecycleIntentPaths(r *Root, phase *Artifact, targetRoot string) []governedPath {
+	candidates := []governedPath{{phase.AbsPath, "phase"}}
+	if planName := planNameFor(phase); planName != "" {
+		candidates = append(candidates, governedPath{
+			filepath.Join(r.Dir, "Plans", planName, "README.md"), "plan",
+		})
+	}
+	var out []governedPath
+	for _, c := range candidates {
+		rel, err := filepath.Rel(targetRoot, c.rel)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		out = append(out, governedPath{filepath.ToSlash(rel), c.kind})
+	}
+	return out
+}
+
+// gitLifecycleNormalized loads one revision's bytes for a path and returns its
+// lifecycle-normalized form, or an error when the path is absent there or its
+// lifecycle nodes cannot be excised unambiguously.
+func gitLifecycleNormalized(repo vcs.Repo, revision, rel, kind string) (string, error) {
+	raw, err := repo.FileAt(revision, rel)
+	if err != nil {
+		return "", err
+	}
+	return lifecycleNormalizedArtifact(string(raw), kind)
 }
 
 func init() {
