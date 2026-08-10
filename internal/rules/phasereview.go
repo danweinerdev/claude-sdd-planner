@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -860,4 +861,262 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 				"Move the frozen range base before every completed task evidence revision/checkpoint.")
 		}
 	}
+}
+
+// --- SDD174: the review's planning revision must match current intent ------
+//
+// Ports _verify_phase_review_planning_revision. A phase review records the
+// planning-root commit it reviewed (`reviewed_planning_revision`). This binds
+// that claim to reality: the commit must exist, still be reachable, and the
+// phase and plan README as of that commit must have the same canonical intent
+// they have now. Otherwise the review examined a different plan than the one
+// being closed.
+
+func verifyPhaseReviewPlanningRevision(r *Root, ctx phaseGateContext, review *Artifact, emit func(Diagnostic)) {
+	fail := func(msg, fix string) {
+		emit(Diagnostic{
+			Code: "SDD174", Severity: Error, Path: ctx.Phase.Rel, Line: ctx.Line,
+			Message: msg, Correction: fix,
+		})
+	}
+
+	planName := planNameFor(ctx.Phase)
+	var plan *Artifact
+	if planName != "" {
+		plan = r.ByPath["Plans/"+planName+"/README.md"]
+	}
+	if plan == nil {
+		fail("Phase review cannot validate its plan README at the reviewed planning revision.",
+			"Ensure the reviewed phase belongs to a discoverable plan README before completing the phase.")
+		return
+	}
+
+	repo := vcs.Detect(r.Dir)
+	if !gitCapable(repo) {
+		fail("Phase review requires a Git planning-root lifecycle adapter.",
+			"Keep the phase non-complete until the planning root is a Git worktree.")
+		return
+	}
+
+	revision := metaStr(review.Meta, "reviewed_planning_revision")
+	if !fullHexRe.MatchString(revision) {
+		// SDD167's schema check already reports a malformed value; Python
+		// returns here rather than reporting it twice.
+		return
+	}
+	if ok, err := repo.RevisionExists(revision); err != nil || !ok {
+		fail("Final review `"+review.Rel+"` planning revision `"+revision+"` does not exist in planning Git history.",
+			"Record an existing full planning Git commit in `reviewed_planning_revision`.")
+		return
+	}
+	if ok, err := repo.IsAncestor(revision, "HEAD"); err != nil || !ok {
+		fail("Final review `"+review.Rel+"` planning revision `"+revision+"` is not an ancestor of planning HEAD.",
+			"Use a reviewed planning revision retained by the current planning Git history.")
+		return
+	}
+
+	for _, target := range []struct {
+		artifact *Artifact
+		label    string
+	}{{ctx.Phase, "phase"}, {plan, "plan README"}} {
+		relative, err := filepath.Rel(repo.Root(), target.artifact.AbsPath)
+		if err != nil || strings.HasPrefix(relative, "..") {
+			fail("Final review `"+review.Rel+"` cannot load "+target.label+" outside the planning Git worktree.",
+				"Store phase and plan lifecycle artifacts under the planning root.")
+			continue
+		}
+		historical, err := gitLifecycleNormalized(repo, revision, filepath.ToSlash(relative), target.artifact.Kind())
+		if err != nil {
+			fail("Final review `"+review.Rel+"` cannot load "+target.label+" at planning revision `"+revision+"`.",
+				"Review a planning commit that contains the current phase and plan README.")
+			continue
+		}
+		current, err := lifecycleNormalizedArtifact(target.artifact.Source, target.artifact.Kind())
+		if err != nil {
+			fail("Final review `"+review.Rel+"` cannot normalize current lifecycle "+target.label+" content.",
+				"Use block-style single-line lifecycle fields before completing the phase review.")
+			continue
+		}
+		if historical != current {
+			fail("Final review `"+review.Rel+"` does not match current lifecycle-normalized "+target.label+" content.",
+				"Rerun the four-lane review after changing phase or plan intent.")
+		}
+	}
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD174", Severity: Error, PyFunc: "_verify_phase_review_planning_revision",
+		What: "the review's planning revision is missing, unreachable, or reviewed different intent",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, ctx := range completePhasesWithEvidence(r) {
+				path, _, ok := finalAlignedReviewOf(ctx)
+				if !ok {
+					continue // SDD166
+				}
+				review := resolveRelated(r, path)
+				if review == nil || review.Kind() != "review" {
+					continue // SDD166
+				}
+				verifyPhaseReviewPlanningRevision(r, ctx, review, emit)
+			}
+		},
+		Bad: []Example{{
+			Name:  "planning-revision-absent-from-history",
+			Files: withPlanReadme(phaseGateFiles(true, true)),
+			Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "."},
+				{"git", "commit", "-q", "-m", "all"},
+			},
+		}},
+		Good: []Example{{
+			// A phase with no Phase Completion Evidence section never reaches
+			// the gate at all, which is the cleanest non-finding available:
+			// every other shape trips one branch or another, since the rule's
+			// whole job is to reject reviews it cannot bind to history.
+			Name:  "phase-not-complete",
+			Files: map[string]string{"Plans/Sample/01-One.md": validPhase()},
+		}},
+	})
+}
+
+// --- SDD175: plan checkpoint must descend from every phase checkpoint ------
+//
+// Ports _verify_git_plan_phase_checkpoints. A plan claiming a Git checkpoint
+// asserts that checkpoint contains the work of every phase it completed. This
+// verifies the claim: each completed phase's checkpoint must exist in the same
+// target repository and be an ancestor of the plan's.
+//
+// Without it a plan could record a checkpoint predating its own phases, so the
+// revision it points at would not contain the work it says is done.
+
+func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line int, emit func(Diagnostic)) {
+	fail := func(msg, fix string) {
+		emit(Diagnostic{
+			Code: "SDD175", Severity: Error, Path: plan.Rel, Line: line,
+			Message: msg, Correction: fix,
+		})
+	}
+
+	planVCS := markdownScalar(evidenceValue(body, "VCS"))
+	if planVCS != "git" && planVCS != "git-worktree" {
+		return
+	}
+	repository := r.RepoForArtifact(plan.Rel)
+	if detectedSCM(repository) != "git" {
+		fail("Git plan evidence targets `"+repository+"`, which has no Git identity adapter.",
+			"Record plan Git evidence only for its Git target repository.")
+		return
+	}
+	repo := vcs.Detect(repository)
+	exists := func(rev string) bool {
+		ok, err := repo.RevisionExists(rev)
+		return err == nil && ok
+	}
+
+	planCheckpoint := markdownScalar(evidenceValue(body, "Revision / checkpoint"))
+	if !fullHexRe.MatchString(planCheckpoint) {
+		fail("Git plan completion requires a full native Git `Revision / checkpoint`.",
+			"Record the target repository's exact full native Git revision/checkpoint; a validated integration merge is allowed.")
+		return
+	}
+	if !exists(planCheckpoint) {
+		fail("Plan Git checkpoint `"+planCheckpoint+"` does not exist in target repository `"+repository+"`.",
+			"Record an existing target-repository Git checkpoint.")
+		return
+	}
+
+	for _, p := range asAnyList(plan.Meta["phases"]) {
+		m := planEntry(p)
+		if m == nil || metaStr(m, "status") != "complete" {
+			continue
+		}
+		doc, ok := m["doc"].(string)
+		if !ok || doc == "" {
+			continue
+		}
+		phaseID := metaStr(m, "id")
+		phase := r.ByPath[path.Join(path.Dir(plan.Rel), doc)]
+		if phase == nil {
+			continue
+		}
+		phaseRepository := r.RepoForArtifact(phase.Rel)
+		if phaseRepository != repository {
+			fail("Completed phase `"+phaseID+"` targets `"+phaseRepository+"`, not plan target `"+repository+
+				"`; cross-repository checkpoint ordering is unsupported.",
+				"Keep all completed phase and plan Git checkpoints in one target repository.")
+			continue
+		}
+		phaseBody := sections(phase, 2)["Phase Completion Evidence"].Body
+		phaseVCS := markdownScalar(evidenceValue(phaseBody, "VCS"))
+		phaseCheckpoint := markdownScalar(evidenceValue(phaseBody, "Revision / checkpoint"))
+		if phaseVCS != "git" && phaseVCS != "git-worktree" {
+			display := phaseVCS
+			if display == "" {
+				display = "missing"
+			}
+			fail("Completed phase `"+phaseID+"` VCS `"+display+"` is incompatible with Git plan evidence.",
+				"Record a Git/git-worktree phase checkpoint in the plan target repository.")
+			continue
+		}
+		if !fullHexRe.MatchString(phaseCheckpoint) {
+			fail("Completed phase `"+phaseID+"` lacks a full native Git revision/checkpoint for Git plan evidence.",
+				"Record the phase's exact full native Git revision/checkpoint; a validated integration merge is allowed.")
+			continue
+		}
+		if !exists(phaseCheckpoint) {
+			fail("Completed phase `"+phaseID+"` Git checkpoint `"+phaseCheckpoint+"` does not exist in target repository `"+repository+"`.",
+				"Record an existing phase Git checkpoint in the plan target repository.")
+			continue
+		}
+		if ok, err := repo.IsAncestor(phaseCheckpoint, planCheckpoint); err != nil || !ok {
+			fail("Completed phase `"+phaseID+"` Git checkpoint `"+phaseCheckpoint+
+				"` is not an ancestor of plan checkpoint `"+planCheckpoint+"`.",
+				"Record a plan checkpoint equal to or descending from every completed phase checkpoint.")
+		}
+	}
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD175", Severity: Error, PyFunc: "_verify_git_plan_phase_checkpoints",
+		What: "a plan's Git checkpoint does not descend from every completed phase's checkpoint",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				// Python reaches _verify_git_plan_phase_checkpoints only via
+				// _plan_phase_identities, which _plan calls only for a plan
+				// whose own status is `complete`. An incomplete plan has no
+				// checkpoint to bind its phases to yet.
+				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" {
+					continue
+				}
+				sec, ok := sections(a, 2)["Plan Completion Evidence"]
+				if !ok {
+					continue
+				}
+				verifyGitPlanPhaseCheckpoints(r, a, sec.Body, sec.Line, emit)
+			}
+		},
+		Bad: []Example{{
+			Name: "plan-checkpoint-not-full-hex",
+			Files: map[string]string{
+				"Plans/Sample/README.md": replaceFirst(
+					replaceFirst(validPlan(false), "status: draft", "status: complete"),
+					"## Plan Completion Evidence\n\nPending — not complete.",
+					"## Plan Completion Evidence\n\n- VCS: git\n- Revision / checkpoint: nope\n"),
+			},
+			Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "."},
+				{"git", "commit", "-q", "-m", "all"},
+			},
+		}},
+		Good: []Example{{
+			Name: "non-git-plan-evidence",
+			Files: map[string]string{
+				"Plans/Sample/README.md": validPlan(false),
+			},
+		}},
+	})
 }

@@ -652,3 +652,15 @@ func phaseGateRangeFiles() map[string]string {
 		"", "")
 	return files
 }
+
+// withPlanReadme adds the plan README a phase's gate rules need to resolve,
+// so a fixture exercises the branch under test rather than stopping at the
+// missing-plan check.
+func withPlanReadme(files map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range files {
+		out[k] = v
+	}
+	out["Plans/Sample/README.md"] = validPlan(false)
+	return out
+}
