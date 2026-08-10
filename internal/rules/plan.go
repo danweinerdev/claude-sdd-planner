@@ -218,7 +218,7 @@ func init() {
 					}
 					emit(Diagnostic{
 						Code: "SDD057", Severity: Error, Path: a.Rel, Line: 1,
-						Message:    "Phase `" + id + "` disagrees with `" + doc + "` id `" + got + "`.",
+						Message:    "Phase `" + id + "` disagrees with `" + doc + "` id `" + metaOrNone(target.Meta, "phase") + "`.",
 						Correction: "Make both ids identical.",
 					})
 				}
@@ -452,7 +452,7 @@ func init() {
 				doc, _ := m["doc"].(string)
 				emit(Diagnostic{
 					Code: "SDD151", Severity: Error, Path: plan.Rel, Line: 1,
-					Message:    "Phase `" + metaStr(m, "id") + "` doc `" + doc + "` belongs to plan `" + got + "`.",
+					Message:    "Phase `" + metaStr(m, "id") + "` doc `" + doc + "` belongs to plan `" + metaOrNone(target.Meta, "plan") + "`.",
 					Correction: "Set its `plan` field to `" + planName + "`.",
 				})
 			})
@@ -502,4 +502,21 @@ func init() {
 			"Plans/Sample/01-One.md": phaseDoc("Sample", "1", "One", "planned"),
 		}}},
 	})
+}
+
+// metaOrNone renders a frontmatter value the way Python's f-string
+// interpolation of `meta.get(key)` does: an absent or null key becomes the
+// literal "None", not an empty string. Messages interpolating a possibly
+// missing field must use this, since the oracle compares message text.
+//
+// (Distinct from phase.go's pyRepr, which mimics Python's repr() quoting.)
+func metaOrNone(m map[string]any, key string) string {
+	v, present := m[key]
+	if !present || v == nil {
+		return "None"
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return metaStr(m, key)
 }
