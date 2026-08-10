@@ -91,6 +91,9 @@ SDD143/scope-not-a-list
 SDD144/non-string-scope
 SDD145/unresolved-scope
 SDD146/uncited-scope
+SDD147/same-question-different-answers
+SDD148/chose-what-another-rejected
+SDD149/same-term-different-definitions
 SDD150/doc-not-phase
 SDD151/doc-belongs-elsewhere
 SDD152/title-disagrees

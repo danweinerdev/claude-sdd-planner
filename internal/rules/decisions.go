@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -439,6 +440,341 @@ func init() {
     statement: S
     rationale: R
     scope: []
+`),
+		}}},
+	})
+}
+
+// orderedDecisions returns every decision in the order the ledgers declare
+// them, which repoDecisions' map cannot preserve.
+//
+// Order is load-bearing for the pairwise rules: Python walks accepted[] with
+// an index and compares each entry against those AFTER it, attaching the
+// diagnostic to the earlier one's artifact. Iterating a map instead would
+// attach it to whichever of the pair happened to come first that run, so the
+// reported path would vary between runs of the same input.
+func orderedDecisions(r *Root) []struct {
+	Key    decisionKey
+	Record decisionRecord
+} {
+	var out []struct {
+		Key    decisionKey
+		Record decisionRecord
+	}
+	seen := map[decisionKey]bool{}
+	for _, a := range r.Artifacts {
+		if a.Meta == nil || a.Kind() != "decision-log" {
+			continue
+		}
+		repoKey := r.RepoForArtifact(a.Rel)
+		for _, e := range asAnyList(a.Meta["decisions"]) {
+			m := planEntry(e)
+			if m == nil {
+				continue
+			}
+			id, ok := m["id"].(string)
+			if !ok {
+				continue
+			}
+			k := decisionKey{repoKey, id}
+			if seen[k] {
+				continue // first entry wins, as repoDecisions does
+			}
+			seen[k] = true
+			out = append(out, struct {
+				Key    decisionKey
+				Record decisionRecord
+			}{k, decisionRecord{Artifact: a, Entry: m}})
+		}
+	}
+	return out
+}
+
+// scopesOverlap ports Validator._scopes_overlap. An empty or absent scope on
+// either side means "unscoped", which overlaps everything — so two unscoped
+// decisions are always compared. Beyond literal path containment, two scopes
+// also overlap when the artifacts they name are connected by `related`.
+func scopesOverlap(r *Root, left, right any) bool {
+	leftList, leftOK := left.([]any)
+	rightList, rightOK := right.([]any)
+	if !leftOK || len(leftList) == 0 || !rightOK || len(rightList) == 0 {
+		return true
+	}
+	for _, l := range leftList {
+		leftItem, ok := l.(string)
+		if !ok {
+			continue
+		}
+		for _, rr := range rightList {
+			rightItem, ok := rr.(string)
+			if !ok {
+				continue
+			}
+			leftPath := strings.TrimRight(leftItem, "/")
+			rightPath := strings.TrimRight(rightItem, "/")
+			if leftPath == rightPath ||
+				strings.HasPrefix(leftPath, rightPath+"/") ||
+				strings.HasPrefix(rightPath, leftPath+"/") {
+				return true
+			}
+			leftArtifact := resolveRelated(r, leftItem)
+			rightArtifact := resolveRelated(r, rightItem)
+			if leftArtifact != nil && rightArtifact != nil &&
+				(artifactsConnected(r, leftArtifact, rightArtifact) ||
+					artifactsConnected(r, rightArtifact, leftArtifact)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// chosenRejected ports chosen_rejected(): whether what `chosen` decided is
+// something `rejecting` listed as an option it turned down.
+func chosenRejected(chosen, rejecting map[string]any) bool {
+	statement := normalizedValue(chosen["statement"])
+	for _, item := range asAnyList(rejecting["rejected"]) {
+		s, ok := item.(string)
+		if !ok {
+			continue
+		}
+		n := normalizedValue(s)
+		if n != "" && strings.Contains(statement, n) {
+			return true
+		}
+	}
+	return false
+}
+
+var defineQuestionRe = regexp.MustCompile(`(?:what (?:is|does)|define)\s+(.+?)(?:\?|$)`)
+var defineStatementRe = regexp.MustCompile(`^(.+?)\s+(?:means|is defined as|refers to)\s+`)
+
+// definitionTerm ports definition_term(): the term a `definition` decision
+// defines, read from its question if it asks one, else from its statement.
+func definitionTerm(entry map[string]any) string {
+	if metaStr(entry, "kind") != "definition" {
+		return ""
+	}
+	if question := normalizedValue(entry["question"]); question != "" {
+		if m := defineQuestionRe.FindStringSubmatch(question); m != nil {
+			return strings.Trim(m[1], " `\"'")
+		}
+	}
+	if m := defineStatementRe.FindStringSubmatch(normalizedValue(entry["statement"])); m != nil {
+		return strings.Trim(m[1], " `\"'")
+	}
+	return ""
+}
+
+// acceptedPair is one ordered pair of accepted decisions in the same
+// repository whose scopes overlap — the input every pairwise rule shares.
+type acceptedPair struct {
+	Artifact        *Artifact
+	LeftID, RightID string
+	Left, Right     map[string]any
+}
+
+// overlappingAcceptedPairs yields each unordered pair once, in ledger order,
+// attributed to the earlier decision's artifact exactly as Python does.
+func overlappingAcceptedPairs(r *Root) []acceptedPair {
+	var accepted []struct {
+		Key    decisionKey
+		Record decisionRecord
+	}
+	for _, d := range orderedDecisions(r) {
+		if metaStr(d.Record.Entry, "status") == "accepted" {
+			accepted = append(accepted, d)
+		}
+	}
+	var out []acceptedPair
+	for i, left := range accepted {
+		for _, right := range accepted[i+1:] {
+			if left.Key.repo != right.Key.repo {
+				continue
+			}
+			if !scopesOverlap(r, left.Record.Entry["scope"], right.Record.Entry["scope"]) {
+				continue
+			}
+			out = append(out, acceptedPair{
+				Artifact: left.Record.Artifact,
+				LeftID:   left.Key.id, RightID: right.Key.id,
+				Left: left.Record.Entry, Right: right.Record.Entry,
+			})
+		}
+	}
+	return out
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD147", Severity: Candidate, PyFunc: "_decision_links",
+		What: "two accepted decisions answer the same question differently",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, p := range overlappingAcceptedPairs(r) {
+				leftQ := normalizedValue(p.Left["question"])
+				if leftQ == "" || leftQ != normalizedValue(p.Right["question"]) {
+					continue
+				}
+				if normalizedValue(p.Left["statement"]) == normalizedValue(p.Right["statement"]) {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD147", Severity: Candidate, Path: p.Artifact.Rel, Line: 1,
+					Message:    "`" + p.LeftID + "` and `" + p.RightID + "` answer the same question differently.",
+					Correction: "Judge whether they conflict, refine one another, or have disjoint scope.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "same-question-different-answers", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: answered-question
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    question: Which database?
+    statement: We use Postgres.
+    rationale: R
+  - id: D-0002
+    kind: answered-question
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    question: Which database?
+    statement: We use MySQL.
+    rationale: R
+`),
+		}}},
+		Good: []Example{{Name: "same-question-same-answer", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: answered-question
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    question: Which database?
+    statement: We use Postgres.
+    rationale: R
+  - id: D-0002
+    kind: answered-question
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    question: Which database?
+    statement: We use Postgres.
+    rationale: R
+`),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD148", Severity: Candidate, PyFunc: "_decision_links",
+		What: "one accepted decision chose an option another explicitly rejected",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, p := range overlappingAcceptedPairs(r) {
+				if !chosenRejected(p.Left, p.Right) && !chosenRejected(p.Right, p.Left) {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD148", Severity: Candidate, Path: p.Artifact.Rel, Line: 1,
+					Message:    "`" + p.LeftID + "` and `" + p.RightID + "` choose and reject the same option.",
+					Correction: "Judge whether they conflict or have disjoint scope.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "chose-what-another-rejected", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: decision
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: We use redis for caching.
+    rationale: R
+  - id: D-0002
+    kind: decision
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: We use memcached.
+    rationale: R
+    rejected: ["redis"]
+`),
+		}}},
+		Good: []Example{{Name: "no-rejected-overlap", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: decision
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: We use redis for caching.
+    rationale: R
+  - id: D-0002
+    kind: decision
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: We use memcached.
+    rationale: R
+    rejected: ["hazelcast"]
+`),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD149", Severity: Candidate, PyFunc: "_decision_links",
+		What: "two accepted definitions define the same term differently",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, p := range overlappingAcceptedPairs(r) {
+				leftTerm := definitionTerm(p.Left)
+				if leftTerm == "" || leftTerm != definitionTerm(p.Right) {
+					continue
+				}
+				if normalizedValue(p.Left["statement"]) == normalizedValue(p.Right["statement"]) {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD149", Severity: Candidate, Path: p.Artifact.Rel, Line: 1,
+					Message:    "`" + p.LeftID + "` and `" + p.RightID + "` define `" + leftTerm + "` differently.",
+					Correction: "Judge whether the definitions conflict or have disjoint scope.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "same-term-different-definitions", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: definition
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: A tenant means one paying customer org.
+    rationale: R
+  - id: D-0002
+    kind: definition
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: A tenant means one deployment namespace.
+    rationale: R
+`),
+		}}},
+		Good: []Example{{Name: "distinct-terms", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    kind: definition
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: A tenant means one paying customer org.
+    rationale: R
+  - id: D-0002
+    kind: definition
+    status: accepted
+    date: 2024-01-01
+    decided_by: user
+    statement: A workspace means one project container.
+    rationale: R
 `),
 		}}},
 	})
