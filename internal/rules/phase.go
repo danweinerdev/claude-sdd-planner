@@ -289,6 +289,30 @@ func init() {
 					})
 				}
 			}
+
+			// Python's third SDD067 site (_task_completion_evidence_structure):
+			// a `### Completion Evidence` heading outside any declared task
+			// section. The loop above can only see evidence inside a task, so
+			// without this an orphaned heading — evidence recorded where the
+			// completion machinery will never read it — passed silently.
+			var taskIDs []string
+			for _, t := range asAnyList(a.Meta["tasks"]) {
+				if m := planEntry(t); m != nil {
+					taskIDs = append(taskIDs, metaStr(m, "id"))
+				}
+			}
+			contained := declaredTaskEvidenceLines(a.Body, taskIDs)
+			for i, l := range markdownLines(a.Body) {
+				visible := strings.TrimRight(l.Visible, "\r\n")
+				if !completionEvidenceMarkerRe.MatchString(visible) || contained[i] {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD067", Severity: Error, Path: a.Rel, Line: a.BodyLine + i,
+					Message:    "Visible `### Completion Evidence` is outside a declared task section.",
+					Correction: "Keep Completion Evidence only inside the matching declared `## <task-id>` section.",
+				})
+			}
 		},
 		Bad: []Example{{Name: "missing-notes", Files: map[string]string{
 			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
@@ -687,4 +711,57 @@ func pyRepr(s string) string {
 	}
 	b.WriteByte('\'')
 	return b.String()
+}
+
+var h2HeadingRe = regexp.MustCompile(`^ {0,3}##\s+(.+?)\s*$`)
+var anyH1toH3Re = regexp.MustCompile(`^ {0,3}#{1,3}\s+`)
+var completionEvidenceMarkerRe = regexp.MustCompile(`^ {0,3}###\s+Completion Evidence\s*$`)
+
+// declaredTaskEvidenceLines ports declared_task_completion_evidence_sections()
+// far enough for SDD067's orphan check: it returns the 0-indexed body lines
+// holding a `### Completion Evidence` heading that sits inside an H2 section
+// whose leading id is exactly a declared task id.
+//
+// Everything else is by definition orphaned — evidence recorded somewhere the
+// task-completion machinery will never read it.
+func declaredTaskEvidenceLines(body string, taskIDs []string) map[int]bool {
+	lines := markdownLines(body)
+
+	// Every H2 heading, with the line it starts on.
+	type h2 struct {
+		index int
+		title string
+	}
+	var headings []h2
+	for i, l := range lines {
+		visible := strings.TrimRight(l.Visible, "\r\n")
+		if m := h2HeadingRe.FindStringSubmatch(visible); m != nil {
+			headings = append(headings, h2{index: i, title: m[1]})
+		}
+	}
+
+	contained := map[int]bool{}
+	for pos, h := range headings {
+		declared := false
+		for _, id := range taskIDs {
+			if taskHeadingRe(id).MatchString(h.title) {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			continue
+		}
+		end := len(lines)
+		if pos+1 < len(headings) {
+			end = headings[pos+1].index
+		}
+		for i := h.index + 1; i < end; i++ {
+			visible := strings.TrimRight(lines[i].Visible, "\r\n")
+			if completionEvidenceMarkerRe.MatchString(visible) {
+				contained[i] = true
+			}
+		}
+	}
+	return contained
 }

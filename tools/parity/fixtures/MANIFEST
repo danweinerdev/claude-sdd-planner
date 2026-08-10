@@ -52,7 +52,13 @@ SDD082/followups-not-list
 SDD086/invalid-status
 SDD087/missing-body-section
 SDD088/missing-resolution-entry
+SDD090/duplicate-finding-id
+SDD091/resolved-with-open
+SDD092/followup-missing-summary
+SDD093/short-followup-id
+SDD094/followup-unknown-finding
 SDD095/floating-followup
+SDD097/duplicate-followup-id
 SDD110/decisions-not-a-list
 SDD111/scalar-entry
 SDD112/missing-rationale

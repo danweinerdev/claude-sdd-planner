@@ -216,3 +216,286 @@ func init() {
 		}}},
 	})
 }
+
+// findingIDPattern and followupIDPattern mirror the Python regexes: findings
+// are `F-NN`, follow-ups `FU-NN`, both with at least two digits.
+var followupIDPattern = regexp.MustCompile(`^FU-\d{2,}$`)
+
+// reviewFindings returns a review's findings[] entries that are mappings, and
+// the set of finding ids it declares. The id set is what SDD094 checks a
+// follow-up's `finding` against.
+func reviewFindings(a *Artifact) (entries []map[string]any, ids map[string]bool) {
+	ids = map[string]bool{}
+	raw, ok := a.Meta["findings"].([]any)
+	if !ok {
+		return nil, ids
+	}
+	for _, f := range raw {
+		m := planEntry(f)
+		if m == nil {
+			continue
+		}
+		entries = append(entries, m)
+		ids[metaStr(m, "id")] = true
+	}
+	return entries, ids
+}
+
+// duplicateValues ports duplicates(): the values appearing more than once.
+// Python returns a set, whose iteration order is arbitrary; this returns them
+// sorted so the emitted diagnostics are deterministic. Order does not affect
+// parity, which keys diagnostics by (code, path, line).
+func duplicateValues(values []string) []string {
+	seen, repeated := map[string]bool{}, map[string]bool{}
+	for _, v := range values {
+		if seen[v] {
+			repeated[v] = true
+		}
+		seen[v] = true
+	}
+	out := make([]string, 0, len(repeated))
+	for v := range repeated {
+		out = append(out, v)
+	}
+	sortStrings(out)
+	return out
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD090", Severity: Error, PyFunc: "_review",
+		What: "a review declares the same finding id twice",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			entries, _ := reviewFindings(a)
+			var ids []string
+			for _, m := range entries {
+				ids = append(ids, metaStr(m, "id"))
+			}
+			for _, dup := range duplicateValues(ids) {
+				emit(Diagnostic{
+					Code: "SDD090", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Duplicate finding id `" + dup + "`.",
+					Correction: "Assign a new append-only id.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "duplicate-finding-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n"+
+					"  - id: F-01\n    severity: minor\n    title: Two\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "unique-finding-ids", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n"+
+					"  - id: F-02\n    severity: minor\n    title: Two\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n\n### F-02 — two\n\nText.\n", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD091", Severity: Error, PyFunc: "_review",
+		What: "a review with status `resolved` still carries open findings",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			if metaStr(a.Meta, "status") != "resolved" {
+				return
+			}
+			entries, _ := reviewFindings(a)
+			for _, m := range entries {
+				if metaStr(m, "status") != "open" {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD091", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Resolved review contains open findings.",
+					Correction: "Resolve them or set review status to open.",
+				})
+				return // Python emits once for the review, not once per finding.
+			}
+		},
+		Bad: []Example{{Name: "resolved-with-open", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks("\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+					"", "### F-01 — one\n\nText.\n", ""),
+				"status: open\ncreated:", "status: resolved\ncreated:"),
+		}}},
+		Good: []Example{{Name: "resolved-all-closed", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks("\n  - id: F-01\n    severity: major\n    title: One\n    status: fixed\n",
+					"", "### F-01 — one\n\nText.\n", "### F-01 — fixed\n\n2024-01-01. Done.\n"),
+				"status: open\ncreated:", "status: resolved\ncreated:"),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD092", Severity: Error, PyFunc: "_review",
+		What: "a review follow-up is not a mapping, or omits a required field",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			followups, ok := a.Meta["followups"].([]any)
+			if !ok {
+				return
+			}
+			for _, f := range followups {
+				m := planEntry(f)
+				if m == nil {
+					emit(Diagnostic{
+						Code: "SDD092", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "A follow-up is not a mapping.",
+						Correction: "Add id, finding, summary, and tracked_in.",
+					})
+					continue
+				}
+				// Python tests `field not in followup` — presence only, so an
+				// empty value satisfies this check (SDD095 covers empty
+				// tracked_in separately).
+				for _, field := range [4]string{"id", "finding", "summary", "tracked_in"} {
+					if _, present := m[field]; present {
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD092", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "Follow-up is missing `" + field + "`.",
+						Correction: "Add the `" + field + "` field.",
+					})
+				}
+			}
+		},
+		Bad: []Example{{Name: "followup-missing-summary", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks("",
+				"\n  - id: FU-01\n    finding: F-01\n    tracked_in: \"1.1\"\n", "", ""),
+		}}},
+		Good: []Example{{Name: "complete-followup", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks("",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: Do it later.\n    tracked_in: \"1.1\"\n", "", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD093", Severity: Error, PyFunc: "_review",
+		What: "a review follow-up id is not of the form `FU-NN`",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			followups, ok := a.Meta["followups"].([]any)
+			if !ok {
+				return
+			}
+			for _, f := range followups {
+				m := planEntry(f)
+				if m == nil {
+					continue // SDD092 already reported it.
+				}
+				id := metaStr(m, "id")
+				if followupIDPattern.MatchString(id) {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD093", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Invalid follow-up id `" + id + "`.",
+					Correction: "Use `FU-NN`.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "short-followup-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks("",
+				"\n  - id: FU-1\n    finding: F-01\n    summary: S.\n    tracked_in: \"1.1\"\n", "", ""),
+		}}},
+		Good: []Example{{Name: "well-formed-followup-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks("",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \"1.1\"\n", "", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD094", Severity: Error, PyFunc: "_review",
+		What: "a review follow-up references a finding the review does not declare",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			followups, ok := a.Meta["followups"].([]any)
+			if !ok {
+				return
+			}
+			_, findingIDs := reviewFindings(a)
+			for _, f := range followups {
+				m := planEntry(f)
+				if m == nil {
+					continue
+				}
+				finding := metaStr(m, "finding")
+				if findingIDs[finding] {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD094", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Follow-up `" + metaStr(m, "id") + "` references unknown `" + finding + "`.",
+					Correction: "Reference a finding in this review.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "followup-unknown-finding", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-99\n    summary: S.\n    tracked_in: \"1.1\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "followup-known-finding", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \"1.1\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD097", Severity: Error, PyFunc: "_review",
+		What: "a review declares the same follow-up id twice",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			followups, ok := a.Meta["followups"].([]any)
+			if !ok {
+				return
+			}
+			var ids []string
+			for _, f := range followups {
+				if m := planEntry(f); m != nil {
+					ids = append(ids, metaStr(m, "id"))
+				}
+			}
+			for _, dup := range duplicateValues(ids) {
+				emit(Diagnostic{
+					Code: "SDD097", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Duplicate follow-up id `" + dup + "`.",
+					Correction: "Assign a new append-only id.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "duplicate-followup-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: A.\n    tracked_in: \"1.1\"\n"+
+					"  - id: FU-01\n    finding: F-01\n    summary: B.\n    tracked_in: \"1.1\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "unique-followup-ids", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: A.\n    tracked_in: \"1.1\"\n"+
+					"  - id: FU-02\n    finding: F-01\n    summary: B.\n    tracked_in: \"1.1\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+}

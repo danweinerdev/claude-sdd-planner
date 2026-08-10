@@ -1,12 +1,16 @@
 # Codes the Go validator does not yet implement, or that belong to a
-# different validator entirely. The parity gate tolerates Python
-# reporting these; it fails on any OTHER missing code, and on any extra
-# code Go invents regardless of this list.
+# different validator entirely. The parity gate tolerates Python reporting
+# these; it fails on any OTHER missing code, and on any extra code Go invents
+# regardless of this list.
 #
 # Shrink this file as the port proceeds — an empty allowlist is the goal.
-# Regenerate the SDD half with:
-#   comm -23 <(grep -rhoE 'SDD[0-9]{3}' scripts/*.py | sort -u) \
-#            <(grep -rhoE 'SDD[0-9]{3}' internal/rules/*.go | sort -u)
+# Regenerate the unported half with (note `Code: "SDDxxx"`, matching actual
+# registrations rather than every mention, so a code named only in a comment
+# is not miscounted as ported):
+#
+#   comm -23 <(grep -rhoE 'SDD[0-9]{3}' scripts/sdd_validate.py | sort -u) \
+#            <(grep -rhoE 'Code: *"SDD[0-9]{3}"' internal/rules/*.go \
+#              | grep -oE 'SDD[0-9]{3}' | sort -u)
 
 # --- Not part of the sdd_validate.py port ---------------------------------
 # DLG* come from scripts/sdd_decision_validate.py, a separate validator with
@@ -83,46 +87,43 @@ DLG077
 
 # --- Partially ported: registered in Go, but missing emission sites -------
 # These codes exist in internal/rules yet do not fire everywhere Python fires
-# them, so a rule-count of "ported" overstates them. Found by the fixture
-# corpus, which is the point of having one. Each needs its remaining site(s)
-# ported, then removal from this list.
-#   SDD067  Python emits from 4 sites, Go from 3. Missing: the orphaned
-#           `### Completion Evidence` heading outside any task section
-#           (sdd_validate.py's _phase, the `contained` scan near line 836).
+# them, so a rule count alone overstates them. Found by the fixture corpus.
+# Each needs its remaining site(s) ported, then removal from this list.
 #   SDD158  2 sites each, but Go does not fire on the legacy-rollup shape the
 #           SDD059 fixture carries.
-#   SDD160  1 site in Python, 0 in Go — registered but never emitted.
-#   SDD172  3 sites each; Go misses the unchecked-criteria path.
-SDD067
+#   SDD172  3 sites in Python, 2 emitting in Go. The missing site lives in
+#           _phase_task_git_identities, part of the phase-completion review
+#           gate (_phase_final_review) that is itself unported along with
+#           SDD166/167/168. Port that subsystem as a unit; SDD172 completes
+#           with it rather than on its own.
 SDD158
-SDD160
 SDD172
 
 # --- sdd_validate.py rules not yet ported ---------------------------------
 SDD001
 SDD008
+SDD083
 SDD084
 SDD085
-SDD090
-SDD091
-SDD092
-SDD093
-SDD094
-SDD097
+SDD089
+SDD096
 SDD098
 SDD099
 SDD100
 SDD101
 SDD102
+SDD140
 SDD141
 SDD142
 SDD143
 SDD144
+SDD147
 SDD148
 SDD149
 SDD154
 SDD155
 SDD156
+SDD160
 SDD161
 SDD164
 SDD166
