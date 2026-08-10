@@ -12,8 +12,10 @@ them hides which of the two you have.
 Usage:
     tools/parity/parity.py <root>... [--binary PATH] [--json] [--codes]
 
---binary defaults to build/<goos>-<goarch>/sdd, the layout `make build`
-writes. `make parity ROOTS=<root>` builds the host binary first, so the
+--binary defaults to build/<goos>-<goarch>-debug/sdd, the layout `make build`
+writes. The debug variant is deliberate: a failing comparison is something you
+then attach a debugger to, and the release variant is stripped.
+`make parity PARITY_ROOTS=<root>` builds the host binary first, so the
 comparison never runs against a stale artifact.
 Exit status is 0 only when every root matches on identity.
 """
@@ -28,7 +30,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 def default_binary() -> str:
-    """The host binary `make build` writes: build/<goos>-<goarch>/sdd.
+    """The host binary `make build` writes: build/<goos>-<goarch>-debug/sdd.
 
     Resolved via `go env` rather than Python's platform module, so the tuple
     always matches what the Go toolchain itself would name.
@@ -40,7 +42,7 @@ def default_binary() -> str:
     except (OSError, subprocess.CalledProcessError, ValueError):
         return "build/sdd"
     name = "sdd.exe" if goos == "windows" else "sdd"
-    return str(pathlib.Path("build") / f"{goos}-{goarch}" / name)
+    return str(pathlib.Path("build") / f"{goos}-{goarch}-debug" / name)
 
 
 def run_python(root: str) -> tuple[int, list[dict]]:
