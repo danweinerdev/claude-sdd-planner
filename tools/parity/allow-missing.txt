@@ -91,11 +91,13 @@ DLG077
 # Each needs its remaining site(s) ported, then removal from this list.
 #   SDD158  2 sites each, but Go does not fire on the legacy-rollup shape the
 #           SDD059 fixture carries.
-#   SDD172  3 sites in Python, 2 emitting in Go. The missing site lives in
-#           _phase_task_git_identities, part of the phase-completion review
-#           gate (_phase_final_review) that is itself unported along with
-#           SDD166/167/168. Port that subsystem as a unit; SDD172 completes
-#           with it rather than on its own.
+#   SDD173  17 of 19 emission sites ported. The two remaining compare
+#           canonical phase/plan INTENT at the frozen endpoint against HEAD,
+#           catching scope text rewritten after review even when only
+#           lifecycle files changed. They need the lifecycle normalization
+#           stack (YAML source-span excision plus evidence/checkbox
+#           normalization, ~82 lines) which is not ported.
+SDD173
 SDD158
 SDD172
 
@@ -113,6 +115,5 @@ SDD156
 SDD160
 SDD161
 SDD164
-SDD173
 SDD174
 SDD175

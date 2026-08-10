@@ -454,3 +454,360 @@ func init() {
 		}},
 	})
 }
+
+// --- SDD172 (task identities) and SDD173 (post-review target state) --------
+
+// taskEvidenceBodies returns each task's `### Completion Evidence` block,
+// keyed by task id, using the same extraction evidenceTargets does.
+func taskEvidenceBodies(a *Artifact) map[string]string {
+	out := map[string]string{}
+	secs := sections(a, 2)
+	for _, t := range asAnyList(a.Meta["tasks"]) {
+		m := planEntry(t)
+		if m == nil {
+			continue
+		}
+		id := metaStr(m, "id")
+		heading := taskHeadingFor(secs, id)
+		if heading == "" {
+			continue
+		}
+		blocks := headingBodies(secs[heading].Body, 3, "Completion Evidence")
+		if len(blocks) != 1 {
+			continue
+		}
+		out[id] = blocks[0]
+	}
+	return out
+}
+
+// phaseTaskGitIdentities ports _phase_task_git_identities: the completed-task
+// commits that make up a phase's review range. A completed task whose evidence
+// does not carry a full native Git revision cannot contribute a deterministic
+// identity, and emits SDD172 rather than being silently skipped.
+//
+// This is SDD172's third emission site, the one left behind when the code was
+// first ported — the other two live in the generic evidence path.
+func phaseTaskGitIdentities(r *Root, phase *Artifact, line int, emit func(Diagnostic)) []taskIdentity {
+	var identities []taskIdentity
+	if detectedSCM(r.RepoForArtifact(phase.Rel)) != "git" {
+		return identities
+	}
+	evidence := taskEvidenceBodies(phase)
+	for _, t := range asAnyList(phase.Meta["tasks"]) {
+		m := planEntry(t)
+		if m == nil || metaStr(m, "status") != "complete" {
+			continue
+		}
+		id := metaStr(m, "id")
+		body := evidence[id]
+		vcsVal := markdownScalar(evidenceValue(body, "VCS"))
+		if vcsVal == "" {
+			vcsVal = "missing"
+		}
+		revision := markdownScalar(evidenceValue(body, "Revision / checkpoint"))
+		if revision == "" {
+			revision = "missing"
+		}
+		if (vcsVal == "git" || vcsVal == "git-worktree") && fullHexRe.MatchString(revision) {
+			identities = append(identities, taskIdentity{ID: id, Revision: revision})
+			continue
+		}
+		emit(Diagnostic{
+			Code: "SDD172", Severity: Error, Path: phase.Rel, Line: line,
+			Message: "Git phase review range cannot validate completed task `" + id +
+				"` identity `" + revision + "` with VCS `" + vcsVal +
+				"` because no deterministic task-identity adapter is available.",
+			Correction: "Record a clean full native Git revision/checkpoint in every completed task's evidence, or keep the phase non-complete until a deterministic adapter for the task identity is available.",
+		})
+	}
+	return identities
+}
+
+// taskIdentity is one completed task's native Git revision, kept with its id
+// because every diagnostic about it names the task.
+type taskIdentity struct {
+	ID       string
+	Revision string
+}
+
+// gitFrozenRangeRe accepts only an immutable full Git range for a phase gate.
+var gitFrozenRangeRe = regexp.MustCompile(`^([0-9a-fA-F]{40})\.\.([0-9a-fA-F]{40})$`)
+
+// parseGitFrozenIdentity ports parse_git_frozen_identity.
+func parseGitFrozenIdentity(value string) []string {
+	m := gitFrozenRangeRe.FindStringSubmatch(value)
+	if m == nil {
+		return nil
+	}
+	return []string{m[1], m[2]}
+}
+
+// phaseLifecyclePaths ports _git_phase_lifecycle_paths: the explicit lifecycle
+// artifacts permitted to change after a frozen review, as target-relative
+// paths. Anything else changing is material and voids the review.
+func phaseLifecyclePaths(r *Root, phase, review *Artifact, targetRoot string) map[string]bool {
+	paths := []string{phase.AbsPath, review.AbsPath}
+	if planName := planNameFor(phase); planName != "" {
+		paths = append(paths, filepath.Join(r.Dir, "Plans", planName, "README.md"))
+		for _, a := range r.Artifacts {
+			if a.Meta == nil || a.Kind() != "debrief" {
+				continue
+			}
+			if metaStr(a.Meta, "plan") != planName {
+				continue
+			}
+			if metaStr(a.Meta, "phase") != metaStr(phase.Meta, "phase") {
+				continue
+			}
+			paths = append(paths, a.AbsPath)
+		}
+	}
+	allowed := map[string]bool{}
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		rel, err := filepath.Rel(targetRoot, p)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		allowed[filepath.ToSlash(rel)] = true
+	}
+	return allowed
+}
+
+// verifyGitPhasePostReviewState ports _verify_git_phase_post_review_state,
+// less its final canonical-intent comparison (see the note in the rule).
+func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifact, endpoint string, emit func(Diagnostic)) {
+	fail := func(msg, fix string) {
+		emit(Diagnostic{
+			Code: "SDD173", Severity: Error, Path: ctx.Phase.Rel, Line: ctx.Line,
+			Message: msg, Correction: fix,
+		})
+	}
+
+	repository := r.RepoForArtifact(ctx.Phase.Rel)
+	repo := vcs.Detect(repository)
+	if !gitCapable(repo) {
+		fail("Git phase completion target `"+repository+"` is not a Git worktree.",
+			"Use a target Git worktree for phase completion.")
+		return
+	}
+	targetRoot := repo.Root()
+
+	clean, _, err := repo.Clean()
+	if err != nil || !clean {
+		fail("Git phase completion requires the current target worktree to be clean after review.",
+			"Commit only permitted lifecycle records, remove uncommitted changes, and rerun the full phase review after material changes.")
+		return
+	}
+
+	current, err := repo.Head()
+	if err != nil || current == "" {
+		fail("Git phase completion target `"+targetRoot+"` has no current HEAD.",
+			"Use a target worktree with the reviewed endpoint checked into history.")
+		return
+	}
+
+	allowed := phaseLifecyclePaths(r, ctx.Phase, review, targetRoot)
+	if len(allowed) == 0 {
+		if current != endpoint {
+			fail("Phase lifecycle files are outside the target repository, so target HEAD must remain the reviewed endpoint.",
+				"Keep target HEAD at the frozen review endpoint or rerun the full phase review after target changes.")
+		}
+		return
+	}
+	if current == endpoint {
+		return
+	}
+
+	if ok, err := repo.IsAncestor(endpoint, "HEAD"); err != nil || !ok {
+		fail("Reviewed endpoint `"+endpoint+"` is not an ancestor of current target HEAD.",
+			"Check out a descendant of the reviewed endpoint or rerun the full phase review.")
+		return
+	}
+
+	commits, err := repo.RevisionsAfter(endpoint)
+	if err != nil {
+		fail("Cannot inspect committed target changes after the frozen phase review.",
+			"Repair the target Git worktree and rerun phase completion validation.")
+		return
+	}
+	changed := map[string]bool{}
+	for _, commit := range commits {
+		paths, err := repo.ChangedPaths(commit)
+		if err != nil {
+			fail("Cannot inspect every committed target change after the frozen phase review.",
+				"Repair the target Git worktree and rerun phase completion validation.")
+			return
+		}
+		for _, p := range paths {
+			changed[p] = true
+		}
+	}
+	var material []string
+	for p := range changed {
+		if !allowed[p] {
+			material = append(material, p)
+		}
+	}
+	if len(material) > 0 {
+		sortStrings(material)
+		fail("Committed target paths changed after the frozen phase review are not lifecycle-only: "+
+			strings.Join(material, ", ")+".",
+			"Rerun the full phase review after source, test, configuration, or other material changes.")
+		return
+	}
+
+	// Python continues here with a canonical-intent comparison of each
+	// lifecycle path at the frozen endpoint versus HEAD, catching a phase or
+	// plan whose scope text was rewritten after review even though only
+	// lifecycle files changed. That comparison needs the lifecycle
+	// normalization stack (YAML source-span excision plus evidence/checkbox
+	// normalization), which is not ported; those two branches remain
+	// allowlisted rather than silently dropped.
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD173", Severity: Error, PyFunc: "_phase_final_review",
+		What: "the frozen phase review identity or the post-review target state is invalid",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, ctx := range completePhasesWithEvidence(r) {
+				path, frozen, ok := finalAlignedReviewOf(ctx)
+				if !ok {
+					continue // SDD166
+				}
+				review := resolveRelated(r, path)
+				if review == nil || review.Kind() != "review" {
+					continue // SDD166
+				}
+				// Python runs both halves only when the target repository is
+				// git; the missing-adapter case is SDD172's.
+				if detectedSCM(r.RepoForArtifact(ctx.Phase.Rel)) != "git" {
+					continue
+				}
+				// The task identities are collected first, because the range
+				// check below asserts the frozen range contains each of them.
+				// SDD172 owns the diagnostics for tasks that yield none.
+				tasks := phaseTaskGitIdentities(r, ctx.Phase, ctx.Line, func(Diagnostic) {})
+				verifyPhaseReviewIdentity(r, ctx, frozen, tasks, emit)
+
+				// The post-review state gate runs only once the frozen range
+				// is a real range whose commits exist, matching Python's guard
+				// in _phase_final_review.
+				identities := parseGitFrozenIdentity(frozen)
+				if len(identities) == 0 {
+					continue
+				}
+				repo := vcs.Detect(r.RepoForArtifact(ctx.Phase.Rel))
+				allExist := true
+				for _, id := range identities {
+					if ok, err := repo.RevisionExists(id); err != nil || !ok {
+						allExist = false
+						break
+					}
+				}
+				if !allExist {
+					continue
+				}
+				verifyGitPhasePostReviewState(r, ctx, review, identities[len(identities)-1], emit)
+			}
+		},
+		Bad: []Example{{
+			Name:  "dirty-target-after-review",
+			Files: phaseGateRangeFiles(),
+			Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "code.txt"},
+				{"git", "commit", "-q", "-m", "base"},
+				{"git", "add", "."},
+				{"git", "commit", "-q", "-m", "rest"},
+			},
+		}},
+		Good: []Example{{
+			Name:  "non-git-target",
+			Files: phaseGateFiles(true, true),
+		}},
+	})
+}
+
+// verifyPhaseReviewIdentity ports _verify_phase_review_identity: the frozen
+// range must be a real, forward, non-degenerate Git range whose endpoint is
+// the phase's recorded checkpoint, and which actually contains every completed
+// task's revision.
+//
+// This is what makes the frozen identity meaningful. A range that omits a
+// completed task's commit did not review that task, however Aligned the review
+// claims to be.
+func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tasks []taskIdentity, emit func(Diagnostic)) {
+	fail := func(msg, fix string) {
+		emit(Diagnostic{
+			Code: "SDD173", Severity: Error, Path: ctx.Phase.Rel, Line: ctx.Line,
+			Message: msg, Correction: fix,
+		})
+	}
+	repository := r.RepoForArtifact(ctx.Phase.Rel)
+	repo := vcs.Detect(repository)
+	exists := func(rev string) bool {
+		ok, err := repo.RevisionExists(rev)
+		return err == nil && ok
+	}
+
+	checkpoint := markdownScalar(evidenceValue(ctx.Body, "Revision / checkpoint"))
+	if !fullHexRe.MatchString(checkpoint) {
+		fail("Git phase completion requires `Revision / checkpoint` to be one clean full native Git revision/checkpoint.",
+			"Record the exact full native Git revision/checkpoint as `Revision / checkpoint`; a validated integration merge is allowed, but do not use a dirty or fallback identity.")
+		return
+	}
+	identities := parseGitFrozenIdentity(frozen)
+	if len(identities) == 0 {
+		fail("Git phase review identity `"+frozen+"` is not an exact `<full40>..<full40>` range.",
+			"Use an immutable full-commit range in both review `rev` and `frozen:`.")
+		return
+	}
+	if identities[0] == identities[1] {
+		fail("Git phase review range has identical base and endpoint commits.",
+			"Use distinct full commits that bound the reviewed phase diff.")
+		return
+	}
+	endpoint := identities[len(identities)-1]
+	if endpoint != checkpoint {
+		fail("Git phase review endpoint `"+endpoint+"` does not equal phase `Revision / checkpoint` `"+checkpoint+"`.",
+			"Review the final phase revision/checkpoint or use a range whose endpoint is that exact checkpoint; a validated integration merge is allowed.")
+	}
+	allExist := true
+	for _, id := range identities {
+		if exists(id) {
+			continue
+		}
+		allExist = false
+		fail("Git phase review identity commit `"+id+"` does not exist in target repository `"+repository+"`.",
+			"Use only full commits that exist in the target repository.")
+	}
+	if !allExist {
+		return
+	}
+	if ok, err := repo.IsAncestor(identities[0], identities[1]); err != nil || !ok {
+		fail("Git phase review range base `"+identities[0]+"` is not an ancestor of endpoint `"+identities[1]+"`.",
+			"Use a forward reviewed range whose base is an ancestor of the phase checkpoint.")
+		return
+	}
+	for _, t := range tasks {
+		if !exists(t.Revision) {
+			fail("Completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` does not exist in target repository `"+repository+"`.",
+				"Record an existing clean full native Git revision/checkpoint in the completed task's evidence before completing the phase.")
+			continue
+		}
+		if ok, err := repo.IsAncestor(t.Revision, identities[1]); err != nil || !ok {
+			fail("Git phase review range `"+frozen+"` omits completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` because it is not an ancestor of the endpoint.",
+				"Use a frozen range whose endpoint descends from every completed task evidence revision/checkpoint.")
+			continue
+		}
+		if ok, err := repo.IsAncestor(t.Revision, identities[0]); err == nil && ok {
+			fail("Git phase review range `"+frozen+"` omits completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` because it is at or before the range base.",
+				"Move the frozen range base before every completed task evidence revision/checkpoint.")
+		}
+	}
+}

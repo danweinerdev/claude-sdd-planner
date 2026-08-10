@@ -618,3 +618,37 @@ func phaseGateFiles(revMatches, aligned bool) map[string]string {
 		"Retro/phase-review.md":  phaseGateReview(rev, aligned),
 	}
 }
+
+// fixtureBaseCommit is the SHA of a first commit containing only code.txt,
+// under rules_test.go's fixed author/committer identity and timestamp. It is
+// reproducible because its content does not depend on any file that embeds a
+// SHA — which is why the range fixture below freezes on this commit rather
+// than on one containing the phase documents.
+const fixtureBaseCommit = "84cbb4f2f837120e7d06649764d28e51b60faa2b"
+
+// phaseGateRangeFiles is phaseGateFiles whose frozen identity is a full 40-hex
+// Git range, which parseGitFrozenIdentity requires before the post-review
+// state gate (SDD173) engages at all.
+//
+// It carries a non-lifecycle file (code.txt) so that a later commit touching
+// it is material rather than permitted lifecycle bookkeeping.
+func phaseGateRangeFiles() map[string]string {
+	rangeID := fixtureBaseCommit + ".." + fixtureBaseCommit
+	files := map[string]string{
+		"code.txt":              "code\n",
+		"Retro/phase-review.md": phaseGateReview(rangeID, true),
+	}
+	files["Plans/Sample/01-One.md"] = replaceFirst(
+		replaceFirst(
+			checkedPhase("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+			"## Phase Completion Evidence\n\nPending — not complete.",
+			"## Phase Completion Evidence\n\n- Final aligned review: Retro/phase-review.md; frozen: "+rangeID+"\n"),
+		"", "")
+	return files
+}

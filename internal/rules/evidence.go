@@ -1055,8 +1055,18 @@ func init() {
 
 	Register(&Rule{
 		Code: "SDD172", Severity: Error, PyFunc: "_evidence",
-		What:      "a complete entity's VCS has no validated native identity adapter",
-		CheckRoot: evidenceCheckRoot("SDD172"),
+		What: "a complete entity's VCS has no validated native identity adapter",
+		// Two emission sites. The generic evidence path covers a complete
+		// entity whose own VCS has no adapter; phaseTaskGitIdentities covers a
+		// completed TASK whose evidence carries no deterministic Git identity,
+		// which is what a phase's review range is assembled from. The second
+		// was missed when this code was first ported.
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			evidenceCheckRoot("SDD172")(r, emit)
+			for _, ctx := range completePhasesWithEvidence(r) {
+				phaseTaskGitIdentities(r, ctx.Phase, ctx.Line, emit)
+			}
+		},
 		Bad: []Example{{Name: "no-adapter-for-none-vcs", Files: map[string]string{
 			"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
 - Repository: {{REPO}}
