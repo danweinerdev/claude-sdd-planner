@@ -1,8 +1,11 @@
 package rules
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
 )
 
 // Family: Validator._phase_final_review — the durable, frozen all-lane review
@@ -340,5 +343,114 @@ func init() {
 			}},
 		},
 		Good: []Example{{Name: "review-aligned", Files: phaseGateFiles(true, true)}},
+	})
+}
+
+// --- SDD170: the cited review must be the committed bytes at HEAD ----------
+//
+// Ports Validator._verify_git_phase_review_committed. The gate above checks
+// what the review says; this checks that those exact bytes are in history. A
+// review that is correct only in the working tree proves nothing durable: it
+// can be edited or deleted with no trace, so the phase it closed would rest on
+// evidence that no longer exists.
+//
+// This dispatches on the PLANNING ROOT's SCM, because the question is whether
+// the lifecycle record was committed, and lifecycle bookkeeping lives in the
+// planning root.
+
+// verifyGitPhaseReviewCommitted emits SDD170 unless the review artifact is
+// tracked at HEAD, byte-identical to what is on disk, and still establishes
+// the frozen review state when re-parsed from its committed bytes.
+func verifyGitPhaseReviewCommitted(r *Root, ctx phaseGateContext, review *Artifact, frozen string, emit func(Diagnostic)) {
+	fail := func(msg, fix string) {
+		emit(Diagnostic{
+			Code: "SDD170", Severity: Error, Path: ctx.Phase.Rel, Line: ctx.Line,
+			Message: msg, Correction: fix,
+		})
+	}
+
+	repo := vcs.Detect(r.Dir)
+	if !gitCapable(repo) {
+		fail("Final aligned review cannot be checked because the Git planning root is not a worktree.",
+			"Use a Git worktree and commit the phase review before phase completion.")
+		return
+	}
+
+	relative, err := filepath.Rel(repo.Root(), review.AbsPath)
+	if err != nil || strings.HasPrefix(relative, "..") {
+		fail("Final aligned review `"+review.Rel+"` is outside the Git planning worktree.",
+			"Store and commit the phase review in the planning root before phase completion.")
+		return
+	}
+	relative = filepath.ToSlash(relative)
+
+	committedBytes, err := repo.FileAt("HEAD", relative)
+	if err != nil {
+		fail("Final aligned review `"+review.Rel+"` is not committed at HEAD.",
+			"Commit the exact final review artifact in the Git lifecycle record before phase completion.")
+		return
+	}
+	if string(committedBytes) != review.Source {
+		fail("Final aligned review `"+review.Rel+"` differs from its committed bytes at HEAD.",
+			"Commit the exact reviewed artifact bytes, including its frontmatter, before phase completion.")
+		return
+	}
+
+	// Re-parse the committed bytes rather than trusting the working-tree
+	// artifact: they are equal here, but Python re-derives the frontmatter so
+	// a malformed commit is reported as such.
+	committed := parseArtifactBytes(committedBytes, review.Rel, review.AbsPath)
+	if committed == nil || committed.Meta == nil {
+		fail("Committed final aligned review `"+review.Rel+"` has malformed frontmatter.",
+			"Commit a valid resolved frozen Aligned review artifact at HEAD.")
+		return
+	}
+	if !isValidPhaseReview(committed, ctx.Phase) || metaStr(committed.Meta, "rev") != frozen {
+		fail("Committed final aligned review `"+review.Rel+"` does not establish resolved frozen Aligned four-lane review state for `"+frozen+"`.",
+			"Commit frontmatter with review_of, rev, review_scope: phase, frozen: true, verdict: Aligned, all four lanes, and status: resolved.")
+	}
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD170", Severity: Error, PyFunc: "_verify_git_phase_review_committed",
+		What: "the cited final review is not committed at HEAD as the exact reviewed bytes",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			// Python guards this behind `self._planning_root_scm() == "git"`,
+			// so a non-git planning root reports nothing here; SDD171 already
+			// covers the missing-adapter case.
+			if detectedSCM(r.Dir) != "git" {
+				return
+			}
+			for _, ctx := range completePhasesWithEvidence(r) {
+				path, frozen, ok := finalAlignedReviewOf(ctx)
+				if !ok {
+					continue // SDD166
+				}
+				review := resolveRelated(r, path)
+				if review == nil || review.Kind() != "review" {
+					continue // SDD166
+				}
+				verifyGitPhaseReviewCommitted(r, ctx, review, frozen, emit)
+			}
+		},
+		Bad: []Example{{
+			Name:  "review-not-committed",
+			Files: phaseGateFiles(true, true),
+			Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "Plans"},
+				{"git", "commit", "-q", "-m", "plan"},
+			},
+		}},
+		Good: []Example{{
+			Name:  "review-committed",
+			Files: phaseGateFiles(true, true),
+			Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "."},
+				{"git", "commit", "-q", "-m", "all"},
+			},
+		}},
 	})
 }
