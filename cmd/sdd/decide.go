@@ -18,7 +18,6 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/compile"
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
-	"github.com/danweinerdev/claude-sdd-planner/internal/ymlite"
 )
 
 func cmdDecide(args []string) error {
@@ -57,7 +56,7 @@ type decisionEntry struct {
 	Reversibility string   `json:"reversibility,omitempty"`
 }
 
-func entryFromItem(it ymlite.Item) decisionEntry {
+func entryFromItem(it fmItem) decisionEntry {
 	return decisionEntry{
 		ID: it.Str("id"), Kind: it.Str("kind"), Status: it.Str("status"),
 		Date: it.Str("date"), DecidedBy: it.Str("decided_by"),
@@ -98,12 +97,8 @@ func loadLedger() (*artifact.Doc, string, error) {
 }
 
 func loadEntries(doc *artifact.Doc) []decisionEntry {
-	start, end, found := ymlite.Block(doc.FrontmatterRaw, "decisions")
-	if !found {
-		return nil
-	}
 	var out []decisionEntry
-	for _, it := range ymlite.Items(doc.FrontmatterRaw[start:end]) {
+	for _, it := range fmSequence(doc.FrontmatterRaw, "decisions") {
 		out = append(out, entryFromItem(it))
 	}
 	return out
@@ -280,7 +275,10 @@ func cmdDecideAdd(args []string) error {
 		Reversibility: *reversibility,
 	})
 
-	out := applyLedgerEdits(doc, today, newLines, *supersedes, newID)
+	out, err := applyLedgerEdits(doc, today, newLines, *supersedes, newID)
+	if err != nil {
+		return err
+	}
 
 	if *jsonOut {
 		res := struct {
@@ -463,10 +461,10 @@ func flowList(items []string) string {
 // at the end of the decisions[] block, and — when supersedes names an
 // existing entry — flips that entry's status and appends its superseded_by
 // line. Everything else in FrontmatterRaw survives byte-for-byte.
-func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supersedes, newID string) string {
+func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supersedes, newID string) (string, error) {
 	fm := compile.RestampFrontmatter(doc, today)
 
-	start, end, found := ymlite.Block(fm, "decisions")
+	start, end, found := fmBlockBounds(fm, "decisions")
 	if !found {
 		// No decisions[] yet: append the key and the block at the end.
 		fm = append(fm, "decisions:")
@@ -474,7 +472,11 @@ func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supers
 	} else if supersedes == "" {
 		fm = insertAt(fm, end, newLines)
 	} else {
-		fm, end = markSuperseded(fm, start, end, supersedes, newID)
+		var ok bool
+		fm, end, ok = markSuperseded(fm, start, end, supersedes, newID)
+		if !ok {
+			return "", fmt.Errorf("decision %s not found in the ledger: refusing to add %s, which claims to supersede it", supersedes, newID)
+		}
 		fm = insertAt(fm, end, newLines)
 	}
 
@@ -494,7 +496,7 @@ func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supers
 		}
 	}
 	out := b.String()
-	return strings.TrimRight(out, "\n") + "\n"
+	return strings.TrimRight(out, "\n") + "\n", nil
 }
 
 func insertAt(lines []string, at int, ins []string) []string {
@@ -505,42 +507,108 @@ func insertAt(lines []string, at int, ins []string) []string {
 	return out
 }
 
-// markSuperseded finds the named entry's item within [start,end) of the
-// decisions[] block and sets its status to superseded plus a superseded_by
-// line — the only mutation an accepted entry permits. Returns the edited
-// lines and the (possibly shifted) block end.
-func markSuperseded(fm []string, start, end int, id, supersededBy string) ([]string, int) {
-	for i := start; i < end; i++ {
-		trimmed := strings.TrimSpace(fm[i])
-		if trimmed != fmt.Sprintf("- id: %s", id) {
+// markSuperseded sets the named entry's status to superseded and appends its
+// superseded_by line — the only mutation an accepted entry permits. It returns
+// the edited lines, the (possibly shifted) block end, and whether the entry was
+// found.
+//
+// The entry is located by decoding the block and matching the `id` field,
+// rather than by matching the text "- id: <id>" on a dash line. Those are not
+// the same test: YAML puts no significance on which key an author writes first,
+// so a ledger whose entries begin with `kind:` would never match textually. The
+// earlier version returned silently in that case, leaving the superseded entry
+// still `accepted` while the new entry claimed to supersede it — two
+// contradictory accepted entries, which is precisely the state the ledger's
+// collision rule exists to prevent.
+//
+// Line edits are still applied textually, so every byte the author wrote
+// outside the two touched lines survives.
+func markSuperseded(fm []string, start, end int, id, supersededBy string) ([]string, int, bool) {
+	idx := entryLineIndex(fm, start, end, id)
+	if idx < 0 {
+		return fm, end, false
+	}
+
+	// This item's extent runs to the next dash line at the same indent, or the
+	// block end.
+	indent := leadingSpaceCount(fm[idx])
+	itemEnd := end
+	for j := idx + 1; j < end; j++ {
+		if strings.TrimSpace(fm[j]) == "" {
 			continue
 		}
-		// Find this item's extent: from this dash line to the next dash line
-		// (or the block end) at the same indent.
-		indent := leadingSpaceCount(fm[i])
-		itemEnd := end
-		for j := i + 1; j < end; j++ {
-			if strings.TrimSpace(fm[j]) == "" {
-				continue
-			}
-			if leadingSpaceCount(fm[j]) == indent && strings.HasPrefix(strings.TrimSpace(fm[j]), "- ") {
-				itemEnd = j
-				break
-			}
+		if leadingSpaceCount(fm[j]) == indent && strings.HasPrefix(strings.TrimSpace(fm[j]), "- ") {
+			itemEnd = j
+			break
 		}
-		for j := i; j < itemEnd; j++ {
-			if strings.HasPrefix(strings.TrimSpace(fm[j]), "status:") {
-				fieldIndent := leadingSpaceCount(fm[j])
-				fm[j] = strings.Repeat(" ", fieldIndent) + "status: superseded"
-				break
-			}
-		}
-		fieldIndent := indent + 2
-		supersededLine := strings.Repeat(" ", fieldIndent) + "superseded_by: " + supersededBy
-		fm = insertAt(fm, itemEnd, []string{supersededLine})
-		return fm, end + 1
 	}
-	return fm, end
+
+	fieldIndent := indent + 2
+	statusSet := false
+	for j := idx; j < itemEnd; j++ {
+		trimmed := strings.TrimSpace(fm[j])
+		if !strings.HasPrefix(trimmed, "status:") && !strings.HasPrefix(trimmed, "- status:") {
+			continue
+		}
+		lead := leadingSpaceCount(fm[j])
+		if strings.HasPrefix(trimmed, "- ") {
+			// `- status: accepted` — the field shares the dash line, so the
+			// dash has to be preserved.
+			fm[j] = strings.Repeat(" ", lead) + "- status: superseded"
+		} else {
+			fm[j] = strings.Repeat(" ", lead) + "status: superseded"
+			fieldIndent = lead
+		}
+		statusSet = true
+		break
+	}
+	if !statusSet {
+		// No status line to rewrite: add one rather than silently skipping it.
+		fm = insertAt(fm, itemEnd, []string{strings.Repeat(" ", fieldIndent) + "status: superseded"})
+		itemEnd++
+		end++
+	}
+
+	supersededLine := strings.Repeat(" ", fieldIndent) + "superseded_by: " + supersededBy
+	fm = insertAt(fm, itemEnd, []string{supersededLine})
+	return fm, end + 1, true
+}
+
+// entryLineIndex returns the index of the line beginning the entry whose `id`
+// is id, searching [start, end). It decodes the block so the match does not
+// depend on field order or formatting, then maps the Nth entry back to its
+// line by counting dash lines at the sequence's indent.
+func entryLineIndex(fm []string, start, end int, id string) int {
+	ordinal := -1
+	for i, it := range fmSequenceBlock(fm[start:end]) {
+		if it.Str("id") == id {
+			ordinal = i
+			break
+		}
+	}
+	if ordinal < 0 {
+		return -1
+	}
+	dashIndent := -1
+	seen := 0
+	for i := start; i < end; i++ {
+		trimmed := strings.TrimSpace(fm[i])
+		if !strings.HasPrefix(trimmed, "- ") && trimmed != "-" {
+			continue
+		}
+		lead := leadingSpaceCount(fm[i])
+		if dashIndent == -1 {
+			dashIndent = lead
+		}
+		if lead != dashIndent {
+			continue // a nested sequence inside an entry, not a new entry
+		}
+		if seen == ordinal {
+			return i
+		}
+		seen++
+	}
+	return -1
 }
 
 func leadingSpaceCount(s string) int {

@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/ymlite"
+	"gopkg.in/yaml.v3"
 )
 
 // artifactDirs mirrors sdd_validate.py's ARTIFACT_DIRS: the top-level
@@ -241,307 +242,122 @@ func parseArtifactBytes(raw []byte, rel, path string) *Artifact {
 	return a
 }
 
-var topKeyRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*):(.*)$`)
-
-// parseFrontmatter decodes the bounded YAML subset this repo's frontmatter
-// uses (see internal/ymlite's package doc) into a generic map. It returns a
-// nil map with no error when the frontmatter is empty or is not a mapping
-// (SDD007's trigger); it returns an error string and the 0-indexed line
-// within lines that caused it when the content cannot be modeled at all
-// (SDD006's trigger).
+// parseFrontmatter decodes an artifact's frontmatter into a generic map using
+// a real YAML parser (gopkg.in/yaml.v3).
+//
+// The three-way return is the contract the caller's diagnostics depend on:
+//   - (map, "", 0)  — parsed as a mapping.
+//   - (nil, "", 0)  — valid YAML that is empty or is not a mapping (SDD007).
+//   - (nil, msg, n) — malformed YAML; n is the 0-indexed line within lines
+//     that caused it (SDD006).
+//
+// Values are normalized to the shapes the rules expect: scalars as strings
+// (except bools, which stay bool), sequences as []any, and nested mappings as
+// map[string]any. Scalar-to-string normalization matters because rules compare
+// against string literals ("2024-01-01", "1"), and YAML would otherwise hand
+// back time.Time and int for those.
 func parseFrontmatter(lines []string) (map[string]any, string, int) {
-	meta := map[string]any{}
-	sawAnyKey := false
-	sawNonMapping := false
-	i := 0
-	for i < len(lines) {
-		line := lines[i]
-		trimmed := strings.TrimRight(line, "\r")
-		stripped := strings.TrimSpace(trimmed)
-		if stripped == "" || strings.HasPrefix(stripped, "#") {
-			i++
-			continue
-		}
-		if leadingSpaces(trimmed) > 0 {
-			// An indented line at a position we didn't expect (e.g. stray
-			// continuation). Best-effort: skip it rather than fail outright.
-			i++
-			continue
-		}
-		if strings.HasPrefix(stripped, "-") {
-			sawNonMapping = true
-			i++
-			continue
-		}
-		m := topKeyRe.FindStringSubmatch(trimmed)
-		if m == nil {
-			return nil, "could not parse frontmatter line: " + trimmed, i
-		}
-		key, rest := m[1], strings.TrimSpace(m[2])
-		sawAnyKey = true
-		if rest == "" {
-			// Either a block sequence follows, or the value is empty.
-			j := i + 1
-			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
-				j++
-			}
-			if j < len(lines) && leadingSpaces(lines[j]) > 0 {
-				start, end, found := ymlite.Block(lines, key)
-				if found {
-					items, errMsg, errOffset := parseBlockSequence(lines[start:end])
-					if errMsg != "" {
-						return nil, errMsg, start + errOffset
-					}
-					meta[key] = items
-					i = end
-					continue
-				}
-			}
-			meta[key] = ""
-			i++
-			continue
-		}
-		if strings.HasPrefix(rest, "[") {
-			it := ymlite.Item{key: rest}
-			list := it.List(key)
-			out := make([]any, len(list))
-			for k, v := range list {
-				out[k] = v
-			}
-			meta[key] = out
-			i++
-			continue
-		}
-		if !quotedScalarOK(rest) {
-			return nil, "could not parse frontmatter line: " + trimmed, i
-		}
-		meta[key] = unquoteScalar(rest)
-		i++
+	src := strings.Join(lines, "\n")
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &root); err != nil {
+		return nil, yamlErrMessage(err), yamlErrLine(err)
 	}
-	if sawNonMapping && !sawAnyKey {
-		return nil, "", 0 // signalled via nil map below
-	}
-	if !sawAnyKey {
+	// An empty document yields a Node with no content.
+	if root.Kind == 0 || len(root.Content) == 0 {
 		return nil, "", 0
 	}
-	return meta, "", 0
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return nil, "", 0 // valid YAML, but not a mapping — SDD007's trigger.
+	}
+	m, ok := nodeToAny(doc).(map[string]any)
+	if !ok {
+		return nil, "", 0
+	}
+	return m, "", 0
 }
 
-var blockKVRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*):\s?(.*)$`)
-
-// parseBlockSequence decodes a block sequence's raw lines (as ymlite.Block
-// bounds them) into a slice whose elements are either map[string]any (a
-// mapping entry, e.g. one phases[]/tasks[]/decisions[] item) or string (a
-// bare scalar entry, e.g. `- some-string`). ymlite.Items always models an
-// entry as a flat map and silently drops a dash line that isn't `key:
-// value` shaped, which is right for this repo's structured sequences but
-// wrong for detecting the "not a mapping" case rules like SDD053 need.
-func parseBlockSequence(block []string) ([]any, string, int) {
-	var items []any
-	var cur map[string]string
-	var curScalar string
-	curIsMap := false
-	haveCur := false
-	fieldIndent := -1
-	errMsg := ""
-	errOffset := 0
-
-	flush := func() {
-		if !haveCur {
-			return
+// nodeToAny converts a yaml.Node tree into the generic shapes the rules
+// consume. Scalars become strings so that dates, numbers, and versions compare
+// as written, with booleans kept as bool since rules test them as such.
+func nodeToAny(n *yaml.Node) any {
+	switch n.Kind {
+	case yaml.DocumentNode:
+		if len(n.Content) == 0 {
+			return nil
 		}
-		if curIsMap {
-			items = append(items, itemToMap(ymlite.Item(cur)))
-		} else {
-			items = append(items, curScalar)
+		return nodeToAny(n.Content[0])
+	case yaml.MappingNode:
+		out := make(map[string]any, len(n.Content)/2)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			out[n.Content[i].Value] = nodeToAny(n.Content[i+1])
 		}
-		cur, curScalar, curIsMap, haveCur = nil, "", false, false
-	}
-
-	for lineIdx, line := range block {
-		if errMsg != "" {
-			break
+		return out
+	case yaml.SequenceNode:
+		out := make([]any, 0, len(n.Content))
+		for _, c := range n.Content {
+			out = append(out, nodeToAny(c))
 		}
-		if strings.TrimSpace(line) == "" {
-			continue
+		return out
+	case yaml.AliasNode:
+		if n.Alias != nil {
+			return nodeToAny(n.Alias)
 		}
-		indent := leadingSpaces(line)
-		rest := line[indent:]
-		if strings.HasPrefix(rest, "- ") || rest == "-" {
-			flush()
-			cur = map[string]string{}
-			haveCur = true
-			if fieldIndent == -1 {
-				fieldIndent = indent + 2
-			}
-			content := strings.TrimPrefix(strings.TrimPrefix(rest, "-"), " ")
-			if content != "" {
-				if strings.HasPrefix(content, "{") && strings.HasSuffix(strings.TrimSpace(content), "}") {
-					cur = parseFlowMapping(content)
-					curIsMap = true
-				} else if m := blockKVRe.FindStringSubmatch(content); m != nil {
-					v := strings.TrimRight(m[2], " \t")
-					if !quotedScalarOK(v) {
-						errMsg = "could not parse frontmatter line: " + strings.TrimRight(line, " \t")
-						errOffset = lineIdx
-						continue
-					}
-					cur[m[1]] = v
-					curIsMap = true
-				} else {
-					curScalar = unquoteScalar(content)
-				}
-			}
-			continue
-		}
-		if haveCur && indent >= fieldIndent {
-			if m := blockKVRe.FindStringSubmatch(rest); m != nil {
-				v := strings.TrimRight(m[2], " \t")
-				if !quotedScalarOK(v) {
-					errMsg = "could not parse frontmatter line: " + strings.TrimRight(line, " \t")
-					errOffset = lineIdx
-					continue
-				}
-				cur[m[1]] = v
-				curIsMap = true
-			}
-		}
-	}
-	flush()
-	return items, errMsg, errOffset
-}
-
-// parseFlowMapping decodes a single-line YAML flow mapping (`{ k: v, k2: v2
-// }`), which this repo's frontmatter uses for compact `phases:` entries. It
-// does not support nested flow collections as a value — none of this
-// codebase's frontmatter needs them.
-func parseFlowMapping(s string) map[string]string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "{")
-	s = strings.TrimSuffix(s, "}")
-	out := map[string]string{}
-	for _, field := range splitFlowFields(s) {
-		field = strings.TrimSpace(field)
-		if field == "" {
-			continue
-		}
-		k, v, ok := strings.Cut(field, ":")
-		if !ok {
-			continue
-		}
-		out[strings.TrimSpace(k)] = unquoteScalar(strings.TrimSpace(v))
-	}
-	return out
-}
-
-// splitFlowFields splits a flow mapping's inner content on top-level commas,
-// treating commas inside a quoted scalar as literal.
-func splitFlowFields(s string) []string {
-	var out []string
-	start := 0
-	var quote byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if quote != 0 {
-			if c == '\\' && quote == '"' && i+1 < len(s) {
-				i++
-				continue
-			}
-			if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		if c == '"' || c == '\'' {
-			quote = c
-			continue
-		}
-		if c == ',' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	out = append(out, s[start:])
-	return out
-}
-
-// quotedScalarOK reports whether a frontmatter scalar that begins with a
-// quote character is a well-formed YAML quoted scalar: the quote is closed
-// (with backslash escapes for double-quoted, doubled quotes for
-// single-quoted) and nothing but trailing whitespace or a comment follows the
-// close. A scalar that doesn't start with a quote is always fine — this only
-// guards the "unescaped internal quote" shape PyYAML refuses (SDD006).
-func quotedScalarOK(s string) bool {
-	if s == "" {
-		return true
-	}
-	switch s[0] {
-	case '"':
-		i := 1
-		for i < len(s) {
-			if s[i] == '\\' && i+1 < len(s) {
-				i += 2
-				continue
-			}
-			if s[i] == '"' {
-				break
-			}
-			i++
-		}
-		if i >= len(s) {
-			return false // unterminated
-		}
-		trailing := strings.TrimSpace(s[i+1:])
-		return trailing == "" || strings.HasPrefix(trailing, "#")
-	case '\'':
-		i := 1
-		for i < len(s) {
-			if s[i] == '\'' {
-				if i+1 < len(s) && s[i+1] == '\'' {
-					i += 2
-					continue
-				}
-				break
-			}
-			i++
-		}
-		if i >= len(s) {
-			return false // unterminated
-		}
-		trailing := strings.TrimSpace(s[i+1:])
-		return trailing == "" || strings.HasPrefix(trailing, "#")
-	default:
-		return true
+		return ""
+	default: // scalar
+		return scalarToAny(n)
 	}
 }
 
-// itemToMap converts one ymlite.Item (a flat map of raw field text) into a
-// map[string]any whose values are strings or []string, matching the shapes
-// rules over phases[]/tasks[]/decisions[]/findings[] expect.
-func itemToMap(it ymlite.Item) map[string]any {
-	out := map[string]any{}
-	for k, raw := range it {
-		v := strings.TrimSpace(raw)
-		if strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]") {
-			list := it.List(k)
-			vals := make([]any, len(list))
-			for i, s := range list {
-				vals[i] = s
-			}
-			out[k] = vals
-			continue
-		}
-		if v == "true" {
-			out[k] = true
-			continue
-		}
-		if v == "false" {
-			out[k] = false
-			continue
-		}
-		out[k] = it.Str(k)
+// scalarToAny maps a scalar node to bool for an unquoted YAML boolean, the
+// empty string for null, and the literal source text otherwise.
+func scalarToAny(n *yaml.Node) any {
+	// A quoted scalar is always a string, even if it reads like a bool.
+	if n.Style == yaml.SingleQuotedStyle || n.Style == yaml.DoubleQuotedStyle {
+		return n.Value
 	}
-	return out
+	switch n.Tag {
+	case "!!bool":
+		var b bool
+		if err := n.Decode(&b); err == nil {
+			return b
+		}
+	case "!!null":
+		return ""
+	}
+	return n.Value
+}
+
+var yamlLineRe = regexp.MustCompile(`^yaml: line (\d+): `)
+
+// yamlErrMessage renders a parse failure using the wording the validator has
+// always used, so the diagnostic text stays stable.
+func yamlErrMessage(err error) string {
+	msg := err.Error()
+	if len(msg) > 0 {
+		msg = yamlLineRe.ReplaceAllString(msg, "")
+		msg = strings.TrimPrefix(msg, "yaml: ")
+	}
+	return "could not parse frontmatter: " + msg
+}
+
+// yamlErrLine extracts the 0-indexed line yaml.v3 blames, defaulting to the
+// first line when the error carries no position.
+func yamlErrLine(err error) int {
+	if m := yamlLineRe.FindStringSubmatch(err.Error()); m != nil {
+		if n, convErr := strconv.Atoi(m[1]); convErr == nil && n > 0 {
+			return n - 1
+		}
+	}
+	if te, ok := err.(*yaml.TypeError); ok && len(te.Errors) > 0 {
+		if m := yamlLineRe.FindStringSubmatch(te.Errors[0]); m != nil {
+			if n, convErr := strconv.Atoi(m[1]); convErr == nil && n > 0 {
+				return n - 1
+			}
+		}
+	}
+	return 0
 }
 
 func unquoteScalar(v string) string {

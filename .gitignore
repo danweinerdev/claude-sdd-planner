@@ -43,3 +43,5 @@ __pycache__/
 
 # Go build output (built via go build ./cmd/sdd)
 bin/
+# `go build ./cmd/sdd` with no -o drops the binary in the repo root.
+/sdd

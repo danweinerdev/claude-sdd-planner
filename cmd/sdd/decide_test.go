@@ -246,3 +246,46 @@ func TestDecideAdd_DefaultsToProposed(t *testing.T) {
 		t.Errorf("new entry did not default to status: proposed:\n%s", b)
 	}
 }
+
+// TestDecideAdd_SupersedesIgnoresFieldOrder: an author may write an entry's
+// keys in any order — YAML gives `id` no positional significance. An earlier
+// implementation located the entry by matching the literal text "- id: <id>"
+// on the dash line, so a ledger whose entries began with `kind:` silently
+// failed to mark the superseding target: the tool reported success, the old
+// entry stayed `accepted`, and the ledger was left holding two contradictory
+// accepted entries.
+func TestDecideAdd_SupersedesIgnoresFieldOrder(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, `  - kind: decision
+    id: D-0001
+    status: accepted
+    date: 2026-07-01
+    decided_by: user
+    statement: "The old approach, written kind-first."
+    rejected: []
+    rationale: "Because."
+    scope: []
+    tags: []
+    reversibility: two-way`)
+
+	if err := cmdDecide([]string{"add", "--statement", "The new approach.",
+		"--supersedes", "D-0001", "--accept"}); err != nil {
+		t.Fatalf("decide add: %v", err)
+	}
+
+	path, _ := ledgerPath()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(b)
+	if !strings.Contains(content, "status: superseded") {
+		t.Errorf("kind-first entry was not marked superseded:\n%s", content)
+	}
+	if !strings.Contains(content, "superseded_by: D-0002") {
+		t.Errorf("kind-first entry missing superseded_by: D-0002:\n%s", content)
+	}
+	if strings.Contains(content, "status: accepted\n    date: 2026-07-01") {
+		t.Errorf("old entry is still accepted — the ledger now holds two contradictory truths:\n%s", content)
+	}
+}

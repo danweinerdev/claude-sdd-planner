@@ -15,7 +15,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
-	"github.com/danweinerdev/claude-sdd-planner/internal/ymlite"
 )
 
 // nextEntry is the most advanced actionable point in one plan.
@@ -196,12 +195,8 @@ func loadPhaseDoc(path string) (*artifact.Doc, error) {
 	return artifact.Parse(art.Source), nil
 }
 
-func loadPhases(doc *artifact.Doc) []ymlite.Item {
-	start, end, found := ymlite.Block(doc.FrontmatterRaw, "phases")
-	if !found {
-		return nil
-	}
-	items := ymlite.Items(doc.FrontmatterRaw[start:end])
+func loadPhases(doc *artifact.Doc) []fmItem {
+	items := fmSequence(doc.FrontmatterRaw, "phases")
 	sort.SliceStable(items, func(i, j int) bool {
 		a, _ := strconv.Atoi(items[i].Str("id"))
 		b, _ := strconv.Atoi(items[j].Str("id"))
@@ -210,12 +205,8 @@ func loadPhases(doc *artifact.Doc) []ymlite.Item {
 	return items
 }
 
-func loadTasks(doc *artifact.Doc) []ymlite.Item {
-	start, end, found := ymlite.Block(doc.FrontmatterRaw, "tasks")
-	if !found {
-		return nil
-	}
-	items := ymlite.Items(doc.FrontmatterRaw[start:end])
+func loadTasks(doc *artifact.Doc) []fmItem {
+	items := fmSequence(doc.FrontmatterRaw, "tasks")
 	sort.SliceStable(items, func(i, j int) bool {
 		return taskLess(items[i].Str("id"), items[j].Str("id"))
 	})
@@ -245,7 +236,7 @@ func taskLess(a, b string) bool {
 	return ma[3] < mb[3]
 }
 
-func lowestPhaseWithStatus(phases []ymlite.Item, status string) *ymlite.Item {
+func lowestPhaseWithStatus(phases []fmItem, status string) *fmItem {
 	for i := range phases {
 		if phases[i].Str("status") == status {
 			return &phases[i]
@@ -254,7 +245,7 @@ func lowestPhaseWithStatus(phases []ymlite.Item, status string) *ymlite.Item {
 	return nil
 }
 
-func lowestTaskWithStatus(tasks []ymlite.Item, status string) *ymlite.Item {
+func lowestTaskWithStatus(tasks []fmItem, status string) *fmItem {
 	for i := range tasks {
 		if tasks[i].Str("status") == status {
 			return &tasks[i]
@@ -263,7 +254,7 @@ func lowestTaskWithStatus(tasks []ymlite.Item, status string) *ymlite.Item {
 	return nil
 }
 
-func allTasksComplete(tasks []ymlite.Item) bool {
+func allTasksComplete(tasks []fmItem) bool {
 	if len(tasks) == 0 {
 		return false
 	}
@@ -275,7 +266,7 @@ func allTasksComplete(tasks []ymlite.Item) bool {
 	return true
 }
 
-func allPhasesComplete(phases []ymlite.Item) bool {
+func allPhasesComplete(phases []fmItem) bool {
 	if len(phases) == 0 {
 		return false
 	}

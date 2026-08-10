@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -40,7 +41,83 @@ type Field struct {
 	// mechanical, so an alias whose semantics differ (a relationship pointing the
 	// other way, for instance) must be reported for a human instead.
 	Aliases []string `json:"aliases,omitempty"`
+	// Entry declares the shape of one element when this field holds a block
+	// sequence (decisions[], phases[], tasks[], findings[]). Nil means the field
+	// is a scalar or an unmodeled list.
+	//
+	// Declaring the shape here makes it one fact rather than three: the
+	// validator's per-entry rules are generated from it, and the writers check
+	// against it instead of pattern-matching raw lines.
+	Entry *Entry `json:"entry,omitempty"`
 }
+
+// Entry is the declared shape of one block-sequence element.
+type Entry struct {
+	Fields []EntryField `json:"fields"`
+}
+
+// Field returns the named entry field, or nil.
+func (e *Entry) Field(key string) *EntryField {
+	for i := range e.Fields {
+		if e.Fields[i].Key == key {
+			return &e.Fields[i]
+		}
+	}
+	return nil
+}
+
+// EntryField is one key within a block-sequence element.
+type EntryField struct {
+	Key string `json:"key"`
+	// Required fields must be present and nonempty.
+	Required bool `json:"required"`
+	// Enum, when set, is the closed set of permitted values.
+	Enum []string `json:"enum,omitempty"`
+	// Pattern, when set, is a regular expression the value must fully match.
+	Pattern string `json:"pattern,omitempty"`
+	// RequiredWhen makes this field required only when a sibling field holds a
+	// given value — e.g. a decision's `question` is required only when `kind`
+	// is "answered-question".
+	RequiredWhen *Condition `json:"requiredWhen,omitempty"`
+	// ForbiddenWhen refuses a value combination — e.g. `decided_by: agent` is
+	// permitted only while `status` is "proposed".
+	ForbiddenWhen *Condition `json:"forbiddenWhen,omitempty"`
+
+	// compiled is Pattern, anchored, built once at Load so a malformed pattern
+	// is a schema error rather than a panic at first use.
+	compiled *regexp.Regexp
+}
+
+// Condition names a sibling field and the values that trigger a rule. When
+// Not is true the condition holds while the sibling is NOT one of Values.
+type Condition struct {
+	Field  string   `json:"field"`
+	Values []string `json:"values"`
+	Not    bool     `json:"not,omitempty"`
+	// Value, when set, additionally scopes the condition to this field holding
+	// that value.
+	Value string `json:"value,omitempty"`
+}
+
+// Holds reports whether the condition is satisfied by an entry.
+func (c *Condition) Holds(get func(string) string) bool {
+	actual := get(c.Field)
+	in := false
+	for _, v := range c.Values {
+		if actual == v {
+			in = true
+			break
+		}
+	}
+	if c.Not {
+		return !in
+	}
+	return in
+}
+
+// CompiledPattern returns the field's Pattern as an anchored regexp, or nil
+// when the field declares none.
+func (f *EntryField) CompiledPattern() *regexp.Regexp { return f.compiled }
 
 func (f Field) Ownership() Ownership { return Ownership(f.OwnerRaw) }
 
@@ -173,13 +250,62 @@ func (s *Schema) validate() error {
 		}
 	}
 	fields := map[string]bool{}
-	for _, f := range s.Frontmatter {
+	for i := range s.Frontmatter {
+		f := &s.Frontmatter[i]
 		if fields[f.Key] {
 			return fmt.Errorf("duplicate frontmatter key %q", f.Key)
 		}
 		fields[f.Key] = true
 		if f.Ownership() != Author && f.Ownership() != Tool {
 			return fmt.Errorf("frontmatter %q has invalid ownership %q", f.Key, f.OwnerRaw)
+		}
+		if err := f.Entry.validate(f.Key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validate checks a declared entry shape and compiles its patterns, so a
+// malformed schema fails at Load rather than panicking mid-validation.
+func (e *Entry) validate(fieldKey string) error {
+	if e == nil {
+		return nil
+	}
+	if len(e.Fields) == 0 {
+		return fmt.Errorf("frontmatter %q declares an entry with no fields", fieldKey)
+	}
+	seen := map[string]bool{}
+	for i := range e.Fields {
+		ef := &e.Fields[i]
+		if ef.Key == "" {
+			return fmt.Errorf("frontmatter %q entry has a field with no key", fieldKey)
+		}
+		if seen[ef.Key] {
+			return fmt.Errorf("frontmatter %q entry has duplicate field %q", fieldKey, ef.Key)
+		}
+		seen[ef.Key] = true
+		if ef.Pattern != "" {
+			re, err := regexp.Compile(`^(?:` + ef.Pattern + `)$`)
+			if err != nil {
+				return fmt.Errorf("frontmatter %q entry field %q has invalid pattern: %w", fieldKey, ef.Key, err)
+			}
+			ef.compiled = re
+		}
+	}
+	// Conditions must name a field the entry actually declares, so a typo is a
+	// schema error rather than a rule that silently never fires.
+	for _, ef := range e.Fields {
+		for _, c := range []*Condition{ef.RequiredWhen, ef.ForbiddenWhen} {
+			if c == nil {
+				continue
+			}
+			if c.Field == "" || !seen[c.Field] {
+				return fmt.Errorf("frontmatter %q entry field %q references undeclared field %q", fieldKey, ef.Key, c.Field)
+			}
+			if len(c.Values) == 0 {
+				return fmt.Errorf("frontmatter %q entry field %q declares a condition with no values", fieldKey, ef.Key)
+			}
 		}
 	}
 	return nil

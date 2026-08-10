@@ -47,7 +47,57 @@
     {
       "key": "decisions",
       "ownership": "author",
-      "required": false
+      "required": false,
+      "entry": {
+        "fields": [
+          {
+            "key": "id",
+            "required": true,
+            "pattern": "D-\\d{4,}"
+          },
+          {
+            "key": "kind",
+            "required": true,
+            "enum": ["decision", "definition", "answered-question", "assumption"]
+          },
+          {
+            "key": "status",
+            "required": true,
+            "enum": ["proposed", "accepted", "rejected", "superseded"]
+          },
+          {
+            "key": "date",
+            "required": true
+          },
+          {
+            "key": "decided_by",
+            "required": true,
+            "enum": ["agent", "user", "user-approved"],
+            "forbiddenWhen": {
+              "field": "status",
+              "values": ["proposed"],
+              "not": true,
+              "value": "agent"
+            }
+          },
+          {
+            "key": "statement",
+            "required": true
+          },
+          {
+            "key": "rationale",
+            "required": true
+          },
+          {
+            "key": "question",
+            "required": false,
+            "requiredWhen": {
+              "field": "kind",
+              "values": ["answered-question"]
+            }
+          }
+        ]
+      }
     }
   ],
   "headings": [],
