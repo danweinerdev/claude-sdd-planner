@@ -10,7 +10,11 @@ diagnostic and a differently-worded one are different failures, and conflating
 them hides which of the two you have.
 
 Usage:
-    tools/parity/parity.py <root>... [--binary bin/sdd] [--json] [--codes]
+    tools/parity/parity.py <root>... [--binary PATH] [--json] [--codes]
+
+--binary defaults to build/<goos>-<goarch>/sdd, the layout `make build`
+writes. `make parity ROOTS=<root>` builds the host binary first, so the
+comparison never runs against a stale artifact.
 Exit status is 0 only when every root matches on identity.
 """
 import argparse
@@ -21,6 +25,22 @@ import sys
 from collections import Counter
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+
+
+def default_binary() -> str:
+    """The host binary `make build` writes: build/<goos>-<goarch>/sdd.
+
+    Resolved via `go env` rather than Python's platform module, so the tuple
+    always matches what the Go toolchain itself would name.
+    """
+    try:
+        env = subprocess.run(["go", "env", "GOOS", "GOARCH"],
+                             capture_output=True, text=True, check=True)
+        goos, goarch = env.stdout.split()
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return "build/sdd"
+    name = "sdd.exe" if goos == "windows" else "sdd"
+    return str(pathlib.Path("build") / f"{goos}-{goarch}" / name)
 
 
 def run_python(root: str) -> tuple[int, list[dict]]:
@@ -98,7 +118,8 @@ def compare(py: list[dict], go: list[dict]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="+")
-    ap.add_argument("--binary", default="bin/sdd")
+    ap.add_argument("--binary", default=default_binary(),
+                    help="path to the sdd binary (default: %(default)s)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--codes", action="store_true", help="summarize gaps by code")
     a = ap.parse_args()

@@ -41,7 +41,14 @@ __pycache__/
 # this line — `.gitmodules` must be committed for submodules to work.
 .gitmodules
 
-# Go build output (built via go build ./cmd/sdd)
+# Go compilation output: `make build` writes build/<goos>-<goarch>/sdd, and
+# `make build-all` fills one directory per release platform.
+build/
+# Deployment location, not build output: /setup copies the resolved binary to
+# ${CLAUDE_PLUGIN_ROOT}/bin/sdd[.exe] because hooks.json can only interpolate
+# ${CLAUDE_PLUGIN_ROOT} and cannot resolve PATH (FR-37, which requires this be
+# git-ignored). Distinct from build/ — do not merge the two.
 bin/
 # `go build ./cmd/sdd` with no -o drops the binary in the repo root.
 /sdd
+/sdd.exe
