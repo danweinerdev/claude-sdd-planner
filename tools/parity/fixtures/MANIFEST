@@ -84,6 +84,11 @@ SDD134/self-task-dep
 SDD135/task-cycle
 SDD136/depends-on-scalar
 SDD137/depends-on-nested
+SDD140/superseded-without-link
+SDD141/supersedes-unknown
+SDD142/unreciprocated-supersedes
+SDD143/scope-not-a-list
+SDD144/non-string-scope
 SDD145/unresolved-scope
 SDD146/uncited-scope
 SDD150/doc-not-phase
