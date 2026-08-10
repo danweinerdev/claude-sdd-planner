@@ -1,0 +1,134 @@
+# Codes the Go validator does not yet implement, or that belong to a
+# different validator entirely. The parity gate tolerates Python
+# reporting these; it fails on any OTHER missing code, and on any extra
+# code Go invents regardless of this list.
+#
+# Shrink this file as the port proceeds — an empty allowlist is the goal.
+# Regenerate the SDD half with:
+#   comm -23 <(grep -rhoE 'SDD[0-9]{3}' scripts/*.py | sort -u) \
+#            <(grep -rhoE 'SDD[0-9]{3}' internal/rules/*.go | sort -u)
+
+# --- Not part of the sdd_validate.py port ---------------------------------
+# DLG* come from scripts/sdd_decision_validate.py, a separate validator with
+# its own rule set that has not been scheduled for porting.
+DLG001
+DLG002
+DLG003
+DLG004
+DLG005
+DLG006
+DLG010
+DLG011
+DLG012
+DLG013
+DLG014
+DLG015
+DLG016
+DLG017
+DLG018
+DLG019
+DLG020
+DLG021
+DLG022
+DLG023
+DLG024
+DLG025
+DLG026
+DLG027
+DLG028
+DLG029
+DLG030
+DLG031
+DLG032
+DLG033
+DLG034
+DLG035
+DLG036
+DLG037
+DLG038
+DLG039
+DLG040
+DLG041
+DLG042
+DLG043
+DLG044
+DLG045
+DLG050
+DLG051
+DLG052
+DLG053
+DLG054
+DLG055
+DLG056
+DLG057
+DLG058
+DLG059
+DLG060
+DLG061
+DLG062
+DLG063
+DLG064
+DLG065
+DLG066
+DLG067
+DLG068
+DLG070
+DLG071
+DLG072
+DLG073
+DLG074
+DLG075
+DLG076
+DLG077
+
+# --- Partially ported: registered in Go, but missing emission sites -------
+# These codes exist in internal/rules yet do not fire everywhere Python fires
+# them, so a rule-count of "ported" overstates them. Found by the fixture
+# corpus, which is the point of having one. Each needs its remaining site(s)
+# ported, then removal from this list.
+#   SDD067  Python emits from 4 sites, Go from 3. Missing: the orphaned
+#           `### Completion Evidence` heading outside any task section
+#           (sdd_validate.py's _phase, the `contained` scan near line 836).
+#   SDD158  2 sites each, but Go does not fire on the legacy-rollup shape the
+#           SDD059 fixture carries.
+#   SDD160  1 site in Python, 0 in Go — registered but never emitted.
+#   SDD172  3 sites each; Go misses the unchecked-criteria path.
+SDD067
+SDD158
+SDD160
+SDD172
+
+# --- sdd_validate.py rules not yet ported ---------------------------------
+SDD001
+SDD008
+SDD084
+SDD085
+SDD090
+SDD091
+SDD092
+SDD093
+SDD094
+SDD097
+SDD098
+SDD099
+SDD100
+SDD101
+SDD102
+SDD141
+SDD142
+SDD143
+SDD144
+SDD148
+SDD149
+SDD154
+SDD155
+SDD156
+SDD161
+SDD164
+SDD166
+SDD167
+SDD168
+SDD170
+SDD173
+SDD174
+SDD175

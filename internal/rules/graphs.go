@@ -2,7 +2,6 @@ package rules
 
 import (
 	"path"
-	"strings"
 )
 
 // Family (g): Validator._graphs — SDD130 through SDD135, plus SDD136/SDD137
@@ -24,11 +23,18 @@ func depsOf(entry map[string]any) []string {
 
 // depsMalformed reports whether an entry's `depends_on` (if present) is not a
 // list (SDD136), or is a list containing a non-scalar element (SDD137).
-// True non-scalar detection (a nested list/mapping inside the flow list)
-// needs a real YAML parser: this repo's bounded frontmatter model already
-// collapses everything inside `[...]` to strings, so the practical signal
-// that survives is a leftover `[` or `{` in an element — the shape a nested
-// structure leaves behind once naively split on commas.
+//
+// Python's test is `isinstance(item, (str, int))`, and the frontmatter is now
+// decoded by a real YAML parser, so a nested list or mapping arrives as []any
+// or map[string]any and the type check answers this directly.
+//
+// An earlier version additionally flagged any element containing "[]{}"
+// characters. That was a workaround for the hand-rolled parser this package
+// used to depend on, which collapsed everything inside a flow list to strings
+// and left bracket characters as the only surviving trace of nesting. Against
+// a real parser the heuristic is not merely redundant but wrong: it made a
+// legitimate id like "nested[bad]" — a string to YAML and to Python — report
+// SDD137 that Python never emits.
 func depsMalformed(entry map[string]any) (notList, nonScalar bool) {
 	v, present := entry["depends_on"]
 	if !present || v == nil {
@@ -39,8 +45,11 @@ func depsMalformed(entry map[string]any) (notList, nonScalar bool) {
 		return true, false
 	}
 	for _, d := range list {
-		s, ok := d.(string)
-		if !ok || strings.ContainsAny(s, "[]{}") {
+		switch d.(type) {
+		case string, int, int64, float64, bool:
+			// Scalars. YAML integers decode through the node walker as
+			// strings, so `- 1` is a string here and passes either way.
+		default:
 			nonScalar = true
 		}
 	}
@@ -543,13 +552,16 @@ func init() {
 				}
 			}
 		},
+		// A genuinely nested element. It has to be real nesting, not an id that
+		// merely contains bracket characters: "nested[bad]" is a plain string
+		// to YAML, so Python does not flag it and neither should this.
 		Bad: []Example{{Name: "depends-on-nested", Files: map[string]string{
 			"Plans/Sample/README.md": planWithPhasesRaw(`phases:
   - id: "1"
     title: One
     status: planned
     doc: 01-One.md
-    depends_on: ["nested[bad]"]
+    depends_on: [["nested"]]
 `),
 		}}},
 		Good: []Example{{Name: "depends-on-scalars", Files: map[string]string{

@@ -516,3 +516,10 @@ None.
 None.
 `
 }
+
+// AnchorArtifact is a minimal artifact known to produce no diagnostics, used
+// by tools/genfixtures to make a generated fixture root discoverable. It is
+// the same document the rules' own Good examples use, exported rather than
+// copied so a schema change cannot leave the parity corpus anchored to a
+// document that no longer validates clean.
+const AnchorArtifact = validResearch

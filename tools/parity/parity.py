@@ -90,7 +90,26 @@ def key(d: dict) -> tuple:
     return (d["code"], d["path"], d["line"])
 
 
-def compare(py: list[dict], go: list[dict]) -> dict:
+def load_allowlist(path: str | None) -> set[str]:
+    """Codes Python may report that Go is not expected to, yet.
+
+    The port is incremental, so a strict gate would be red for reasons that are
+    already known and tracked. The allowlist names those codes explicitly:
+    anything NOT in it that goes missing is a regression and fails the build.
+    `extra` is never allowlisted — Go inventing a diagnostic Python does not
+    emit is always a defect, whatever the port's state.
+    """
+    if not path:
+        return set()
+    codes = set()
+    for line in pathlib.Path(path).read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            codes.add(line)
+    return codes
+
+
+def compare(py: list[dict], go: list[dict], allow: set[str] = frozenset()) -> dict:
     pk, gk = Counter(map(key, py)), Counter(map(key, go))
     missing = pk - gk   # Python found it, Go did not
     extra = gk - pk     # Go invented it
@@ -113,28 +132,54 @@ def compare(py: list[dict], go: list[dict]) -> dict:
         "message_diffs": text_diffs,
         "severity_diffs": sev_diffs,
         "identity_parity": not missing and not extra,
+        # Gating verdict: unexpected misses and ANY extra. A miss whose code is
+        # allowlisted is known, tracked work rather than a regression.
+        "unexpected_missing": [{"key": list(k), "n": n}
+                               for k, n in sorted(missing.items()) if k[0] not in allow],
+        "gate_ok": not extra and not any(k[0] not in allow for k in missing),
         "full_parity": not missing and not extra and not text_diffs and not sev_diffs,
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("roots", nargs="+")
+    ap.add_argument("roots", nargs="*")
+    ap.add_argument("--manifest", help="file listing one planning root per line "
+                                       "(blank lines and # comments ignored)")
     ap.add_argument("--binary", default=default_binary(),
                     help="path to the sdd binary (default: %(default)s)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--codes", action="store_true", help="summarize gaps by code")
+    ap.add_argument("--allow", help="file listing diagnostic codes Python may "
+                                    "report that Go need not (one per line); "
+                                    "`extra` is never allowlisted")
     a = ap.parse_args()
 
+    allow = load_allowlist(a.allow)
+    roots = list(a.roots)
+    if a.manifest:
+        base = pathlib.Path(a.manifest).resolve().parent
+        for line in pathlib.Path(a.manifest).read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Manifest entries are relative to the manifest's own directory,
+            # so the corpus can be regenerated anywhere and still compare byte
+            # for byte. Resolve against that directory, not the cwd.
+            p = pathlib.Path(line)
+            roots.append(str(p if p.is_absolute() else (base / p)))
+    if not roots:
+        ap.error("no roots given: pass paths, --manifest, or both")
+
     overall, results = True, {}
-    for root in a.roots:
+    for root in roots:
         prc, py = run_python(root)
         grc, go = run_go(root, a.binary)
-        r = compare(py, go)
+        r = compare(py, go, allow)
         r["python_exit"], r["go_exit"] = prc, grc
         r["exit_match"] = prc == grc
         results[root] = r
-        overall &= r["identity_parity"] and r["exit_match"]
+        overall &= r["gate_ok"] and r["exit_match"]
 
         if a.json:
             continue

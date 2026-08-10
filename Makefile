@@ -1,5 +1,5 @@
 .PHONY: bump-patch bump-minor bump-major test venv clean-venv \
-        build build-release build-all parity clean-build
+        build build-release build-all parity gen-fixtures check-fixtures clean-build
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -96,9 +96,35 @@ build-all:
 # it first so the comparison never runs against a stale artifact. Override the
 # roots with `make parity PARITY_ROOTS="path1 path2"`. Exits non-zero on a
 # mismatch, which is what makes it usable as a CI gate.
+#
+# The fixture corpus is the input that gives the gate teeth: run against a
+# healthy planning root alone, both validators agree on zero diagnostics and
+# the comparison exercises none of the ported rules.
+PARITY_FIXTURES := tools/parity/fixtures
+PARITY_MANIFEST := $(PARITY_FIXTURES)/MANIFEST
 PARITY_ROOTS ?= .plans
+
+PARITY_ALLOW := tools/parity/allow-missing.txt
+
 parity: build $(STAMP)
-	@$(PYTHON) tools/parity/parity.py $(PARITY_ROOTS) --binary $(SDD)
+	@$(PYTHON) tools/parity/parity.py $(PARITY_ROOTS) \
+		--manifest $(PARITY_MANIFEST) --allow $(PARITY_ALLOW) --binary $(SDD)
+
+# gen-fixtures regenerates the corpus from the rules' own Bad examples. Run it
+# after adding or changing a rule; the result is committed.
+gen-fixtures:
+	@go run ./tools/genfixtures -out $(PARITY_FIXTURES)
+
+# check-fixtures fails when the committed corpus no longer matches what the
+# rules would generate — the drift that would otherwise let a rule change slip
+# past a gate still comparing yesterday's fixtures.
+check-fixtures:
+	@go run ./tools/genfixtures -out $(PARITY_FIXTURES).check >/dev/null
+	@diff -r $(PARITY_FIXTURES) $(PARITY_FIXTURES).check >/dev/null 2>&1 \
+		&& { rm -rf $(PARITY_FIXTURES).check; echo "fixtures up to date"; } \
+		|| { rm -rf $(PARITY_FIXTURES).check; \
+		     echo "ERROR: committed fixtures differ from the rules' examples."; \
+		     echo "Run 'make gen-fixtures' and commit the result."; exit 1; }
 
 clean-build:
 	@rm -rf $(BUILD_DIR)
