@@ -1,13 +1,24 @@
 package rules
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
-// Family (i cont'd): Validator._review's finding/follow-up shape checks not
-// yet ported by specific.go's SDD080/081/082 — SDD086 (a finding's `status`
-// is not an allowed value), SDD087 (a finding has no `### F-NN` body
-// section), SDD088 (a terminal finding has no Resolution Log entry), and
-// SDD095 (a follow-up has no `tracked_in`, i.e. is floating). SDD083-085,
-// SDD089-094, SDD096-098 are out of scope for this pass.
+// Family (i cont'd): Validator._review and _review_supersession, beyond the
+// SDD080/081/082 shape checks in specific.go.
+//
+// Findings:    SDD086 (status not allowed), SDD087 (no `### F-NN` body),
+//              SDD088 (terminal finding with no Resolution Log entry),
+//              SDD090 (duplicate id), SDD091 (resolved review, open findings),
+//              SDD098 (deferred finding neither tracked nor citing a task).
+// Follow-ups:  SDD092 (not a mapping / missing field), SDD093 (bad id),
+//              SDD094 (unknown finding), SDD095 (floating), SDD097 (dup id).
+// Supersession: SDD099 (status/link disagree), SDD100 (does not resolve),
+//              SDD101 (not reciprocated), SDD102 (different target, or the
+//              replaced review is not superseded).
+//
+// Still out of scope: SDD083-085, SDD089, SDD096.
 
 var findingStatusValues = map[string]bool{"open": true, "fixed": true, "deferred": true, "rejected": true, "answered": true}
 
@@ -496,6 +507,443 @@ func init() {
 				"\n  - id: FU-01\n    finding: F-01\n    summary: A.\n    tracked_in: \"1.1\"\n"+
 					"  - id: FU-02\n    finding: F-01\n    summary: B.\n    tracked_in: \"1.1\"\n",
 				"### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+}
+
+// normalizedValue ports normalized(): lowercase, with runs of whitespace
+// collapsed to single spaces and the ends trimmed. SDD102 compares two
+// reviews' `review_of` through it, so "Specs/Sample/README.md" and
+// "specs/sample/readme.md" name the same target.
+func normalizedValue(v any) string {
+	s, _ := v.(string)
+	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
+}
+
+// supersessionFields is Python's (field, reverse) pairing: each link must be
+// answered by its opposite on the target.
+var supersessionFields = [2][2]string{
+	{"supersedes", "superseded_by"},
+	{"superseded_by", "supersedes"},
+}
+
+// reciprocates reports whether target's `reverse` field points back at src.
+// Python accepts the path with or without its `.md` suffix, so a ledger that
+// writes "Retro/old-review" and one that writes "Retro/old-review.md" are both
+// valid back-links.
+func reciprocates(target *Artifact, reverse, srcRel string) bool {
+	got := metaStr(target.Meta, reverse)
+	return got == srcRel || got == strings.TrimSuffix(srcRel, ".md")
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD099", Severity: Error, PyFunc: "_review_supersession",
+		What: "a review's `superseded_by` and its status disagree",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			status := metaStr(a.Meta, "status")
+			supersededBy := metaStr(a.Meta, "superseded_by")
+			if status == "superseded" && supersededBy == "" {
+				emit(Diagnostic{
+					Code: "SDD099", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Superseded review lacks `superseded_by`.",
+					Correction: "Link the replacing review.",
+				})
+			}
+			if supersededBy != "" && status != "superseded" {
+				emit(Diagnostic{
+					Code: "SDD099", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Review with `superseded_by` has status `" + status + "`.",
+					Correction: "Set its artifact status to `superseded`.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "superseded-without-link", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"status: open\ncreated:", "status: superseded\ncreated:"),
+		}}},
+		Good: []Example{{Name: "open-review", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks("", "", "", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD100", Severity: Error, PyFunc: "_review_supersession",
+		What: "a review's `supersedes`/`superseded_by` does not resolve to a review",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "review" {
+					continue
+				}
+				for _, pair := range supersessionFields {
+					field := pair[0]
+					value := metaStr(a.Meta, field)
+					if value == "" {
+						continue
+					}
+					target := resolveRelated(r, value)
+					if target != nil && target.Kind() == "review" {
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD100", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "Review `" + field + "` `" + value + "` does not resolve.",
+						Correction: "Point it at an existing review.",
+					})
+				}
+			}
+		},
+		Bad: []Example{{Name: "unresolved-supersedes", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/nope.md\""),
+		}}},
+		Good: []Example{{Name: "resolved-supersedes", Files: map[string]string{
+			"Retro/new-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/old-review.md\""),
+			"Retro/old-review.md": replaceFirst(
+				replaceFirst(reviewWithBlocks("", "", "", ""),
+					"status: open\ncreated:", "status: superseded\ncreated:"),
+				"rev: 1", "rev: 1\nsuperseded_by: \"Retro/new-review.md\""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD101", Severity: Error, PyFunc: "_review_supersession",
+		What: "a review supersession link is not reciprocated by its target",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "review" {
+					continue
+				}
+				for _, pair := range supersessionFields {
+					field, reverse := pair[0], pair[1]
+					value := metaStr(a.Meta, field)
+					if value == "" {
+						continue
+					}
+					target := resolveRelated(r, value)
+					// Python's elif chain: SDD100 having fired suppresses this.
+					if target == nil || target.Kind() != "review" {
+						continue
+					}
+					if reciprocates(target, reverse, a.Rel) {
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD101", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "Review `" + field + "` link is not reciprocated.",
+						Correction: "Add matching `" + reverse + "`.",
+					})
+				}
+			}
+		},
+		Bad: []Example{{Name: "unreciprocated-link", Files: map[string]string{
+			"Retro/new-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/old-review.md\""),
+			"Retro/old-review.md": replaceFirst(reviewWithBlocks("", "", "", ""),
+				"status: open\ncreated:", "status: superseded\ncreated:"),
+		}}},
+		Good: []Example{{Name: "reciprocated-link", Files: map[string]string{
+			"Retro/new-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/old-review.md\""),
+			"Retro/old-review.md": replaceFirst(
+				replaceFirst(reviewWithBlocks("", "", "", ""),
+					"status: open\ncreated:", "status: superseded\ncreated:"),
+				"rev: 1", "rev: 1\nsuperseded_by: \"Retro/new-review.md\""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD102", Severity: Error, PyFunc: "_review_supersession",
+		What: "a review supersession links a different target, or leaves the replaced review non-superseded",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "review" {
+					continue
+				}
+				for _, pair := range supersessionFields {
+					field, reverse := pair[0], pair[1]
+					value := metaStr(a.Meta, field)
+					if value == "" {
+						continue
+					}
+					target := resolveRelated(r, value)
+					if target == nil || target.Kind() != "review" {
+						continue // SDD100
+					}
+					if !reciprocates(target, reverse, a.Rel) {
+						continue // SDD101
+					}
+					if normalizedValue(target.Meta["review_of"]) != normalizedValue(a.Meta["review_of"]) {
+						emit(Diagnostic{
+							Code: "SDD102", Severity: Error, Path: a.Rel, Line: 1,
+							Message:    "Review `" + field + "` links reviews of different targets.",
+							Correction: "Link only reviews of the same normalized `review_of` target.",
+						})
+						continue
+					}
+					// Only the forward direction carries this check: a review
+					// that claims to supersede another asserts that the other
+					// is retired, and Python verifies the claim.
+					if field != "supersedes" {
+						continue
+					}
+					if targetStatus := metaStr(target.Meta, "status"); targetStatus != "superseded" {
+						emit(Diagnostic{
+							Code: "SDD102", Severity: Error, Path: a.Rel, Line: 1,
+							Message:    "Superseded review `" + value + "` still has status `" + targetStatus + "`.",
+							Correction: "Set the replaced review status to `superseded`.",
+						})
+					}
+				}
+			}
+		},
+		Bad: []Example{{Name: "supersedes-different-target", Files: map[string]string{
+			"Retro/new-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/old-review.md\""),
+			"Retro/old-review.md": replaceFirst(
+				replaceFirst(
+					replaceFirst(reviewWithBlocks("", "", "", ""),
+						"status: open\ncreated:", "status: superseded\ncreated:"),
+					"rev: 1", "rev: 1\nsuperseded_by: \"Retro/new-review.md\""),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Specs/Other/README.md"`),
+		}}},
+		Good: []Example{{Name: "supersedes-same-target", Files: map[string]string{
+			"Retro/new-review.md": replaceFirst(
+				reviewWithBlocks("", "", "", ""),
+				"rev: 1", "rev: 1\nsupersedes: \"Retro/old-review.md\""),
+			"Retro/old-review.md": replaceFirst(
+				replaceFirst(reviewWithBlocks("", "", "", ""),
+					"status: open\ncreated:", "status: superseded\ncreated:"),
+				"rev: 1", "rev: 1\nsuperseded_by: \"Retro/new-review.md\""),
+		}}},
+	})
+}
+
+// artifactsConnected ports Validator._artifacts_connected: a breadth-first
+// walk over `related` links from left, bounded to depth 2, asking whether
+// right is reachable. The bound is Python's and is load-bearing — it keeps a
+// densely cross-linked planning root from making every artifact "related" to
+// every other.
+func artifactsConnected(r *Root, left, right *Artifact) bool {
+	type step struct {
+		a     *Artifact
+		depth int
+	}
+	frontier := []step{{left, 0}}
+	seen := map[string]bool{left.Rel: true}
+	for len(frontier) > 0 {
+		current := frontier[0]
+		frontier = frontier[1:]
+		if current.a.Rel == right.Rel {
+			return true
+		}
+		if current.depth >= 2 {
+			continue
+		}
+		if current.a.Meta == nil {
+			continue
+		}
+		for _, ref := range asAnyList(current.a.Meta["related"]) {
+			s, ok := ref.(string)
+			if !ok {
+				continue
+			}
+			target := resolveRelated(r, s)
+			if target == nil || seen[target.Rel] {
+				continue
+			}
+			seen[target.Rel] = true
+			frontier = append(frontier, step{target, current.depth + 1})
+		}
+	}
+	return false
+}
+
+// candidatePlanNames ports Validator._candidate_plan_names: the plans an
+// artifact might belong to. A direct name wins outright; otherwise every plan
+// connected to what this artifact reviews or relates to is a candidate.
+//
+// Returning a set rather than one name is deliberate — an ambiguous answer is
+// what SDD096 reports, so collapsing it early would hide the defect.
+func candidatePlanNames(r *Root, a *Artifact) map[string]bool {
+	if direct := planNameFor(a); direct != "" {
+		return map[string]bool{direct: true}
+	}
+	var targets []*Artifact
+	if reviewOf, ok := a.Meta["review_of"].(string); ok {
+		if t := resolveRelated(r, reviewOf); t != nil {
+			targets = append(targets, t)
+		}
+	}
+	for _, ref := range asAnyList(a.Meta["related"]) {
+		if s, ok := ref.(string); ok {
+			if t := resolveRelated(r, s); t != nil {
+				targets = append(targets, t)
+			}
+		}
+	}
+	out := map[string]bool{}
+	for _, plan := range r.Artifacts {
+		if plan.Meta == nil || plan.Kind() != "plan" {
+			continue
+		}
+		name := planNameFor(plan)
+		if name == "" {
+			continue
+		}
+		for _, t := range targets {
+			if plan.Rel == t.Rel || artifactsConnected(r, plan, t) || artifactsConnected(r, t, plan) {
+				out[name] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+// tasksByPlan indexes every phase's declared tasks by (plan name, task id),
+// mirroring how Validator.tasks is populated: from each phase's own `plan`
+// field, first writer winning a collision (SDD031 reports the duplicate).
+func tasksByPlan(r *Root) map[[2]string]bool {
+	out := map[[2]string]bool{}
+	for _, a := range r.Artifacts {
+		if a.Meta == nil || a.Kind() != "phase" {
+			continue
+		}
+		planName := metaStr(a.Meta, "plan")
+		for _, t := range asAnyList(a.Meta["tasks"]) {
+			m := planEntry(t)
+			if m == nil {
+				continue
+			}
+			id, ok := m["id"].(string)
+			if !ok {
+				continue
+			}
+			out[[2]string{planName, id}] = true
+		}
+	}
+	return out
+}
+
+// taskCitationRe matches a bare `N.N` task reference in a resolution entry.
+var taskCitationRe = regexp.MustCompile(`\b\d+\.\d+\b`)
+
+// resolutionEntryFor ports resolution_entry(): the Resolution Log text from a
+// finding's `### F-NN` heading up to the next `### F-NN`, or the end.
+func resolutionEntryFor(log, findingID string) string {
+	head := regexp.MustCompile(`(?m)^###\s+` + regexp.QuoteMeta(findingID) + `\b.*$`)
+	loc := head.FindStringIndex(log)
+	if loc == nil {
+		return ""
+	}
+	rest := log[loc[1]:]
+	if next := regexp.MustCompile(`(?m)^###\s+F-\d+\b`).FindStringIndex(rest); next != nil {
+		return log[loc[0] : loc[1]+next[0]]
+	}
+	return log[loc[0]:]
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD098", Severity: Error, PyFunc: "_review",
+		What: "a deferred finding is neither tracked by a follow-up nor cites an existing task",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			tasks := tasksByPlan(r)
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "review" {
+					continue
+				}
+				entries, _ := reviewFindings(a)
+				if len(entries) == 0 {
+					continue
+				}
+				planNames := candidatePlanNames(r, a)
+
+				// A follow-up whose tracked_in names a real task in a
+				// candidate plan discharges its finding. Python only counts a
+				// follow-up that resolved unambiguously (exactly one match).
+				tracked := map[string]bool{}
+				for _, f := range asAnyList(a.Meta["followups"]) {
+					m := planEntry(f)
+					if m == nil {
+						continue
+					}
+					trackedIn := metaStr(m, "tracked_in")
+					if trackedIn == "" {
+						continue
+					}
+					matches := 0
+					for plan := range planNames {
+						if tasks[[2]string{plan, trackedIn}] {
+							matches++
+						}
+					}
+					if matches == 1 {
+						tracked[metaStr(m, "finding")] = true
+					}
+				}
+
+				resolution := sections(a, 2)["Resolution Log"].Body
+				for _, m := range entries {
+					id := metaStr(m, "id")
+					if metaStr(m, "status") != "deferred" || tracked[id] {
+						continue
+					}
+					entry := resolutionEntryFor(resolution, id)
+					cited := false
+					for _, taskID := range taskCitationRe.FindAllString(entry, -1) {
+						for plan := range planNames {
+							if tasks[[2]string{plan, taskID}] {
+								cited = true
+								break
+							}
+						}
+						if cited {
+							break
+						}
+					}
+					if cited {
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD098", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "Deferred finding `" + id + "` is untracked.",
+						Correction: "Cite an existing task in the reviewed plan or add a tracked follow-up.",
+					})
+				}
+			}
+		},
+		Bad: []Example{{Name: "untracked-deferred-finding", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: deferred\n",
+				"", "### F-01 — one\n\nText.\n", "### F-01 — deferred\n\n2024-01-01. Later.\n"),
+		}}},
+		Good: []Example{{Name: "deferred-finding-cites-task", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: deferred\n",
+					"", "### F-01 — one\n\nText.\n",
+					"### F-01 — deferred\n\n2024-01-01. Tracked as 1.1.\n"),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md": validPlan(false),
+			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: x
+    justifies: FR-01
+`, false, true),
 		}}},
 	})
 }

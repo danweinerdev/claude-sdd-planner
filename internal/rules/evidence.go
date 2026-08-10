@@ -657,9 +657,12 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 	}
 }
 
-// planNameFor ports Validator._plan_name for the plan-cross-reference case
-// _verify_git_evidence_committed needs (a phase names its plan directly, or
-// its path lives under Plans/<name>/).
+// planNameFor ports Validator._plan_name: a phase names its plan directly, or
+// the artifact's own path lives under Plans/<name>/, or — for an artifact that
+// reviews something — the reviewed path does.
+//
+// The third branch matters for reviews, whose own path is under Retro/ but
+// which belong to the plan they review.
 func planNameFor(a *Artifact) string {
 	if a.Kind() == "phase" {
 		if plan, ok := a.Meta["plan"].(string); ok && plan != "" {
@@ -669,6 +672,12 @@ func planNameFor(a *Artifact) string {
 	parts := strings.Split(a.Rel, "/")
 	if len(parts) >= 2 && parts[0] == "Plans" {
 		return parts[1]
+	}
+	if reviewOf, ok := a.Meta["review_of"].(string); ok {
+		reviewParts := strings.Split(reviewOf, "/")
+		if len(reviewParts) >= 2 && reviewParts[0] == "Plans" {
+			return reviewParts[1]
+		}
 	}
 	return ""
 }

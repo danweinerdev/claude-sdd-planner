@@ -59,6 +59,11 @@ SDD093/short-followup-id
 SDD094/followup-unknown-finding
 SDD095/floating-followup
 SDD097/duplicate-followup-id
+SDD098/untracked-deferred-finding
+SDD099/superseded-without-link
+SDD100/unresolved-supersedes
+SDD101/unreciprocated-link
+SDD102/supersedes-different-target
 SDD110/decisions-not-a-list
 SDD111/scalar-entry
 SDD112/missing-rationale
