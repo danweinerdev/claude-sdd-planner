@@ -523,3 +523,98 @@ None.
 // copied so a schema change cannot leave the parity corpus anchored to a
 // document that no longer validates clean.
 const AnchorArtifact = validResearch
+
+// --- phase-completion review gate fixtures ---------------------------------
+//
+// The gate only runs on a phase that is `complete` and carries a Phase
+// Completion Evidence section, so these build that state. They deliberately do
+// not try to satisfy every other evidence rule: the parity oracle compares
+// per-code, so unrelated diagnostics from the same fixture are matched on both
+// sides and do not obscure the code under test.
+
+// completePhaseNoReview is a complete phase whose evidence section carries no
+// `Final aligned review` entry at all.
+func completePhaseNoReview() string {
+	return replaceFirst(
+		checkedPhase("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+		"## Phase Completion Evidence\n\nPending — not complete.",
+		"## Phase Completion Evidence\n\n- Reviewed by: someone\n")
+}
+
+// phaseGateReview returns a phase-completion review artifact. aligned=false
+// flips `verdict` so the review stops satisfying the four-lane gate while
+// still resolving as a review artifact.
+func phaseGateReview(rev string, aligned bool) string {
+	verdict := "Aligned"
+	if !aligned {
+		verdict = "Diverged"
+	}
+	lane := func(name string) string {
+		return `
+  - lane: ` + name + `
+    result: PASS/Aligned
+    reviewed_identity: "` + rev + `"
+    evidence: Checked the migration ordering in store/atomic.go.`
+	}
+	return `---
+title: Phase Review
+type: review
+status: resolved
+created: 2024-01-01
+updated: 2024-01-01
+review_of: "Plans/Sample/01-One.md"
+review_scope: phase
+frozen: true
+verdict: ` + verdict + `
+rev: "` + rev + `"
+reviewed_planning_revision: "1111111111111111111111111111111111111111"
+review_mode: independent
+lane_results:` + lane("review_plan_drift") + lane("review_quality") +
+		lane("review_spec_compliance") + lane("review_blind_spots") + `
+findings: []
+followups: []
+tags: []
+related: []
+---
+
+## Findings
+
+None.
+
+## Resolution Log
+
+None.
+`
+}
+
+// phaseGateFiles builds a complete phase plus its final review.
+// revMatches=false makes the evidence entry's `frozen:` disagree with the
+// review's `rev` (SDD168); aligned=false makes the review fail the four-lane
+// gate (SDD167).
+func phaseGateFiles(revMatches, aligned bool) map[string]string {
+	const rev = "r-2024-01-01-01"
+	frozen := rev
+	if !revMatches {
+		frozen = "r-9999-12-31-99"
+	}
+	phase := replaceFirst(
+		checkedPhase("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+		"## Phase Completion Evidence\n\nPending — not complete.",
+		"## Phase Completion Evidence\n\n- Final aligned review: Retro/phase-review.md; frozen: "+frozen+"\n")
+	return map[string]string{
+		"Plans/Sample/01-One.md": phase,
+		"Retro/phase-review.md":  phaseGateReview(rev, aligned),
+	}
+}
