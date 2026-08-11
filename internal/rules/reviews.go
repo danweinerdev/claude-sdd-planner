@@ -947,3 +947,262 @@ func init() {
 		}}},
 	})
 }
+
+var findingIDPattern = regexp.MustCompile(`^F-\d{2,}$`)
+
+var findingSeverities = map[string]bool{
+	"critical": true, "major": true, "minor": true, "question": true,
+}
+
+// requiredFindingFields is Python's tuple, in order: SDD083 emits one
+// diagnostic per missing field, so the order is the output order.
+var requiredFindingFields = [4]string{"id", "severity", "title", "status"}
+
+// pyStrList renders a []string the way Python renders a list in an f-string:
+// ['a', 'b']. SDD096's ambiguity message interpolates one directly, and the
+// oracle compares message text.
+func pyStrList(items []string) string {
+	quoted := make([]string, 0, len(items))
+	for _, s := range items {
+		quoted = append(quoted, "'"+strings.ReplaceAll(s, "'", "\\'")+"'")
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD083", Severity: Error, PyFunc: "_review",
+		What: "a review finding is not a mapping, or omits a required field",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			findings, ok := a.Meta["findings"].([]any)
+			if !ok {
+				return
+			}
+			for _, f := range findings {
+				m := planEntry(f)
+				if m == nil {
+					emit(Diagnostic{
+						Code: "SDD083", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "A finding is not a mapping.",
+						Correction: "Add id, severity, title, and status.",
+					})
+					continue
+				}
+				for _, field := range requiredFindingFields {
+					// Python's `in (None, "")`: present-but-empty counts as
+					// missing, other falsy values do not.
+					if v, present := m[field]; present && v != nil && v != "" {
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD083", Severity: Error, Path: a.Rel, Line: 1,
+						Message:    "Finding is missing `" + field + "`.",
+						Correction: "Add a nonempty `" + field + "`.",
+					})
+				}
+			}
+		},
+		Bad: []Example{{Name: "finding-missing-title", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "complete-finding", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD084", Severity: Error, PyFunc: "_review",
+		What: "a review finding id is not of the form `F-NN`",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			entries, _ := reviewFindings(a)
+			for _, m := range entries {
+				id := metaStr(m, "id")
+				if findingIDPattern.MatchString(id) {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD084", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Invalid finding id `" + id + "`.",
+					Correction: "Use `F-NN`.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "short-finding-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-1\n    severity: major\n    title: One\n    status: open\n",
+				"", "### F-1 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "well-formed-finding-id", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD085", Severity: Error, PyFunc: "_review",
+		What: "a review finding's `severity` is not an allowed value",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			entries, _ := reviewFindings(a)
+			for _, m := range entries {
+				if findingSeverities[metaStr(m, "severity")] {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD085", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Finding `" + metaStr(m, "id") + "` has invalid severity.",
+					Correction: "Use critical, major, minor, or question.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "unknown-severity", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: catastrophic\n    title: One\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+		Good: []Example{{Name: "allowed-severity", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"", "### F-01 — one\n\nText.\n", ""),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD089", Severity: Error, PyFunc: "_review",
+		What: "a terminal finding's status disagrees with its Resolution Log disposition",
+		Check: func(a *Artifact, emit func(Diagnostic)) {
+			if a.Meta == nil || a.Kind() != "review" {
+				return
+			}
+			resolution := sections(a, 2)["Resolution Log"].Body
+			entries, _ := reviewFindings(a)
+			for _, m := range entries {
+				status := metaStr(m, "status")
+				if status == "open" {
+					continue
+				}
+				id := metaStr(m, "id")
+				match := resolutionEntryRe(id).FindStringSubmatch(resolution)
+				if match == nil {
+					continue // SDD088 owns the missing-entry case.
+				}
+				if match[1] == status {
+					continue
+				}
+				emit(Diagnostic{
+					Code: "SDD089", Severity: Error, Path: a.Rel, Line: 1,
+					Message:    "Finding `" + id + "` status disagrees with its resolution.",
+					Correction: "Make both dispositions agree.",
+				})
+			}
+		},
+		Bad: []Example{{Name: "status-disagrees-with-resolution", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: fixed\n",
+				"", "### F-01 — one\n\nText.\n", "### F-01 — rejected\n\n2024-01-01. Nope.\n"),
+		}}},
+		Good: []Example{{Name: "status-agrees-with-resolution", Files: map[string]string{
+			"Retro/sample-review.md": reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: fixed\n",
+				"", "### F-01 — one\n\nText.\n", "### F-01 — fixed\n\n2024-01-01. Done.\n"),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD096", Severity: Error, PyFunc: "_review",
+		What: "a follow-up's `tracked_in` names no task, or an ambiguous one across plans",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			tasks := tasksByPlan(r)
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "review" {
+					continue
+				}
+				followups, ok := a.Meta["followups"].([]any)
+				if !ok {
+					continue
+				}
+				planNames := candidatePlanNames(r, a)
+				for _, f := range followups {
+					m := planEntry(f)
+					if m == nil {
+						continue
+					}
+					tracked := metaStr(m, "tracked_in")
+					if tracked == "" {
+						continue // SDD095 owns the floating case.
+					}
+					var matches []string
+					for plan := range planNames {
+						if tasks[[2]string{plan, tracked}] {
+							matches = append(matches, plan)
+						}
+					}
+					id := metaStr(m, "id")
+					switch {
+					case len(matches) == 0:
+						emit(Diagnostic{
+							Code: "SDD096", Severity: Error, Path: a.Rel, Line: 1,
+							Message:    "Follow-up `" + id + "` points to unknown task `" + tracked + "`.",
+							Correction: "Reference an existing task in a related plan.",
+						})
+					case len(matches) > 1:
+						// Python interpolates the list built by iterating
+						// plan_names, a set. Sorting makes the rendering
+						// deterministic; a set's order is arbitrary anyway.
+						sortStrings(matches)
+						emit(Diagnostic{
+							Code: "SDD096", Severity: Error, Path: a.Rel, Line: 1,
+							Message:    "Follow-up `" + id + "` task `" + tracked + "` is ambiguous across plans " + pyStrList(matches) + ".",
+							Correction: "Link the review to one plan or use an unambiguous tracked task.",
+						})
+					}
+				}
+			}
+		},
+		Bad: []Example{{Name: "followup-unknown-task", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+					"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \"9.9\"\n",
+					"### F-01 — one\n\nText.\n", ""),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md": validPlan(false),
+			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: x
+    justifies: FR-01
+`, false, true),
+		}}},
+		Good: []Example{{Name: "followup-known-task", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+					"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \"1.1\"\n",
+					"### F-01 — one\n\nText.\n", ""),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md": validPlan(false),
+			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: x
+    justifies: FR-01
+`, false, true),
+		}}},
+	})
+}
