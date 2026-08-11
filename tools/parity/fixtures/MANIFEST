@@ -104,11 +104,15 @@ SDD150/doc-not-phase
 SDD151/doc-belongs-elsewhere
 SDD152/title-disagrees
 SDD153/blocking-question
+SDD154/spec-elements-removed
+SDD155/phase-ids-removed
+SDD156/task-ids-removed
 SDD157/legacy-rollup
 SDD157/missing-completed-task-identities
 SDD158/legacy-rollup
 SDD162/uncited-ac
 SDD163/unlisted-phase
+SDD164/artifact-deleted
 SDD166/missing-final-aligned-review
 SDD167/phase-review-bad-schema
 SDD167/review-not-aligned

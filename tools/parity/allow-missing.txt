@@ -97,9 +97,5 @@ SDD172
 # --- sdd_validate.py rules not yet ported ---------------------------------
 SDD001
 SDD008
-SDD154
-SDD155
-SDD156
 SDD160
 SDD161
-SDD164

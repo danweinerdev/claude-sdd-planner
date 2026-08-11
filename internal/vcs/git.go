@@ -126,6 +126,32 @@ func (g *gitRepo) FileAt(rev, relPath string) ([]byte, error) {
 	return out, nil
 }
 
+// TrackedPaths lists paths recorded at rev under the given prefixes.
+func (g *gitRepo) TrackedPaths(rev string, prefixes []string) ([]string, error) {
+	args := []string{"ls-tree", "-r", "--name-only", "-z", rev, "--"}
+	args = append(args, prefixes...)
+	out, err := runGit(g.root, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, rev)
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
+// FileInIndex returns a path's staged contents.
+func (g *gitRepo) FileInIndex(relPath string) ([]byte, error) {
+	out, err := runGit(g.root, "show", ":"+relPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: :%s", ErrNotFound, relPath)
+	}
+	return out, nil
+}
+
 func (g *gitRepo) ChangedPaths(rev string) ([]string, error) {
 	out, err := runGit(g.root, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "-m", "-z", rev)
 	if err != nil {

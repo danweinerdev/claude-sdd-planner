@@ -101,6 +101,18 @@ func (p *p4Repo) FileAt(rev, relPath string) ([]byte, error) {
 	return out, nil
 }
 
+// TrackedPaths and FileInIndex have no Perforce equivalent the append-only
+// rules could rely on: p4 has no staged-index state, and enumerating a
+// changelist's tree is not the same question. Returning ErrUnsupported makes
+// the rules report an operational condition rather than a false finding.
+func (p *p4Repo) TrackedPaths(string, []string) ([]string, error) {
+	return nil, ErrUnsupported
+}
+
+func (p *p4Repo) FileInIndex(string) ([]byte, error) {
+	return nil, ErrUnsupported
+}
+
 func (p *p4Repo) ChangedPaths(rev string) ([]string, error) {
 	if !p.RevisionSyntaxValid(rev) {
 		return nil, fmt.Errorf("%w: not a changelist number: %s", ErrUnsupported, rev)

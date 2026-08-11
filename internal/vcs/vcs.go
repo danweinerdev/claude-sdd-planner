@@ -98,6 +98,18 @@ type Repo interface {
 	// including untracked files. The second return names what was dirty, for the
 	// diagnostic.
 	Clean() (bool, []string, error)
+
+	// TrackedPaths lists repository-relative paths recorded at a revision under
+	// any of the given prefixes. Append-only rules need it to ask what the
+	// repository USED to contain, which no working-tree walk can answer: a
+	// deleted artifact is exactly what they are looking for.
+	TrackedPaths(rev string, prefixes []string) ([]string, error)
+
+	// FileInIndex returns a path's staged contents. The index is a third state
+	// alongside the worktree and a commit, and an identifier deleted only there
+	// is still a deletion — so a rule that checked the worktree alone would
+	// pass a staged removal.
+	FileInIndex(relPath string) ([]byte, error)
 }
 
 // Detect identifies the VCS owning dir and returns an adapter for it. It never
@@ -150,6 +162,14 @@ func (n NoRepo) ChangedPaths(string) ([]string, error) {
 func (n NoRepo) RevisionsAfter(string) ([]string, error) {
 	return nil, fmt.Errorf("%w: no VCS detected at %s", ErrUnsupported, n.Dir)
 }
+func (n NoRepo) TrackedPaths(string, []string) ([]string, error) {
+	return nil, ErrUnsupported
+}
+
+func (n NoRepo) FileInIndex(string) ([]byte, error) {
+	return nil, ErrUnsupported
+}
+
 func (n NoRepo) Clean() (bool, []string, error) {
 	return false, nil, fmt.Errorf("%w: no VCS detected at %s", ErrUnsupported, n.Dir)
 }
