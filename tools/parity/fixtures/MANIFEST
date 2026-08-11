@@ -40,6 +40,7 @@ SDD068/incomplete-task
 SDD069/unchecked-criteria
 SDD070/complete-but-pending
 SDD071/missing-labels
+SDD072/invalid-vcs
 SDD073/stray-fail
 SDD074/fallback-reason
 SDD075/recheck-no-timestamp
@@ -107,3 +108,10 @@ SDD166/missing-final-aligned-review
 SDD167/phase-review-bad-schema
 SDD167/review-not-aligned
 SDD168/frozen-rev-mismatch
+SDD169/missing-review-labels
+SDD170/review-not-committed
+SDD171/no-git-planning-root
+SDD172/no-adapter-for-none-vcs
+SDD173/dirty-target-after-review
+SDD174/planning-revision-absent-from-history
+SDD175/plan-checkpoint-not-full-hex

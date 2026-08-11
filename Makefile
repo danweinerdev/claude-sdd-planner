@@ -105,10 +105,12 @@ PARITY_MANIFEST := $(PARITY_FIXTURES)/MANIFEST
 PARITY_ROOTS ?= .plans
 
 PARITY_ALLOW := tools/parity/allow-missing.txt
+PARITY_ALLOW_TEXT := tools/parity/allow-message-drift.txt
 
 parity: build $(STAMP)
 	@$(PYTHON) tools/parity/parity.py $(PARITY_ROOTS) \
-		--manifest $(PARITY_MANIFEST) --allow $(PARITY_ALLOW) --binary $(SDD)
+		--manifest $(PARITY_MANIFEST) --allow $(PARITY_ALLOW) \
+		--allow-message-drift $(PARITY_ALLOW_TEXT) --binary $(SDD)
 
 # gen-fixtures regenerates the corpus from the rules' own Bad examples. Run it
 # after adding or changing a rule; the result is committed.

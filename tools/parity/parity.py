@@ -21,9 +21,12 @@ Exit status is 0 only when every root matches on identity.
 """
 import argparse
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -43,6 +46,70 @@ def default_binary() -> str:
         return "build/sdd"
     name = "sdd.exe" if goos == "windows" else "sdd"
     return str(pathlib.Path("build") / f"{goos}-{goarch}-debug" / name)
+
+
+# Setup replay runs with a fixed identity and timestamp so a fixture commit's
+# SHA is reproducible, matching internal/rules/rules_test.go's runExample. A
+# fixture may hardcode a SHA only because of this.
+SETUP_ENV = {
+    "GIT_AUTHOR_NAME": "sdd-fixture",
+    "GIT_AUTHOR_EMAIL": "sdd-fixture@example.com",
+    "GIT_COMMITTER_NAME": "sdd-fixture",
+    "GIT_COMMITTER_EMAIL": "sdd-fixture@example.com",
+    "GIT_AUTHOR_DATE": "2024-01-01T00:00:00+0000",
+    "GIT_COMMITTER_DATE": "2024-01-01T00:00:00+0000",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+}
+
+
+def prepare(root: str, scratch: str) -> str:
+    """Return a root ready to validate, materializing it when it needs run-time work.
+
+    A fixture that carries a SETUP script or a {{REPO}} placeholder cannot be
+    validated where it sits: the first needs a real git repository, and the
+    second needs the absolute path of the directory it ends up in. Both are
+    resolved by copying the root to a scratch directory and finishing it there,
+    which leaves the committed corpus untouched and keeps these rules — every
+    git-verifying one — inside the comparison instead of outside it.
+    """
+    source = pathlib.Path(root)
+    setup = source / "SETUP"
+    needs_repo = any(
+        "{{REPO}}" in p.read_text(encoding="utf-8", errors="replace")
+        for p in source.rglob("*.md")
+    )
+    if not setup.is_file() and not needs_repo:
+        return root
+
+    target = pathlib.Path(scratch) / source.name
+    shutil.copytree(source, target)
+    prepared_setup = target / "SETUP"
+    commands = []
+    if prepared_setup.is_file():
+        for line in prepared_setup.read_text().splitlines():
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            commands.append(line.split("\t"))
+        # SETUP is harness metadata, not part of the planning root.
+        prepared_setup.unlink()
+
+    if needs_repo:
+        for path in target.rglob("*.md"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "{{REPO}}" in text:
+                path.write_text(text.replace("{{REPO}}", str(target)))
+
+    env = {**os.environ, **SETUP_ENV}
+    for argv in commands:
+        result = subprocess.run(argv, cwd=target, capture_output=True, env=env)
+        if result.returncode != 0:
+            raise SystemExit(
+                f"parity: setup {argv} failed in {target}:\n"
+                + result.stderr.decode("utf-8", errors="replace")
+            )
+    return str(target)
 
 
 def run_python(root: str) -> tuple[int, list[dict]]:
@@ -109,7 +176,8 @@ def load_allowlist(path: str | None) -> set[str]:
     return codes
 
 
-def compare(py: list[dict], go: list[dict], allow: set[str] = frozenset()) -> dict:
+def compare(py: list[dict], go: list[dict], allow: set[str] = frozenset(),
+            allow_text: set[str] = frozenset()) -> dict:
     pk, gk = Counter(map(key, py)), Counter(map(key, go))
     missing = pk - gk   # Python found it, Go did not
     extra = gk - pk     # Go invented it
@@ -132,11 +200,20 @@ def compare(py: list[dict], go: list[dict], allow: set[str] = frozenset()) -> di
         "message_diffs": text_diffs,
         "severity_diffs": sev_diffs,
         "identity_parity": not missing and not extra,
-        # Gating verdict: unexpected misses and ANY extra. A miss whose code is
-        # allowlisted is known, tracked work rather than a regression.
+        # Gating verdict: unexpected misses, ANY extra, and unexpected message
+        # drift. A miss or drift whose code is allowlisted is known, tracked
+        # work rather than a regression.
+        #
+        # Message text gates because a diagnostic can be right about WHERE and
+        # wrong about WHY: a rule that falls through to a later branch still
+        # reports the same (code, path, line), so identity comparison alone
+        # calls it a match. A validator that misdiagnoses a defect is a defect.
         "unexpected_missing": [{"key": list(k), "n": n}
                                for k, n in sorted(missing.items()) if k[0] not in allow],
-        "gate_ok": not extra and not any(k[0] not in allow for k in missing),
+        "unexpected_message_diffs": [t for t in text_diffs if t["key"][0] not in allow_text],
+        "gate_ok": (not extra
+                    and not any(k[0] not in allow for k in missing)
+                    and not any(t["key"][0] not in allow_text for t in text_diffs)),
         "full_parity": not missing and not extra and not text_diffs and not sev_diffs,
     }
 
@@ -153,9 +230,13 @@ def main() -> int:
     ap.add_argument("--allow", help="file listing diagnostic codes Python may "
                                     "report that Go need not (one per line); "
                                     "`extra` is never allowlisted")
+    ap.add_argument("--allow-message-drift", help="file listing codes whose "
+                                                  "MESSAGE text may differ; their "
+                                                  "identity is still gated")
     a = ap.parse_args()
 
     allow = load_allowlist(a.allow)
+    allow_text = load_allowlist(a.allow_message_drift)
     roots = list(a.roots)
     if a.manifest:
         base = pathlib.Path(a.manifest).resolve().parent
@@ -172,10 +253,21 @@ def main() -> int:
         ap.error("no roots given: pass paths, --manifest, or both")
 
     overall, results = True, {}
+    scratch = tempfile.mkdtemp(prefix="sdd-parity-")
+    try:
+        overall, results = compare_roots(roots, a, allow, allow_text, scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    return report_results(overall, results, a)
+
+
+def compare_roots(roots, a, allow, allow_text, scratch):
+    overall, results = True, {}
     for root in roots:
-        prc, py = run_python(root)
-        grc, go = run_go(root, a.binary)
-        r = compare(py, go, allow)
+        prepared = prepare(root, scratch)
+        prc, py = run_python(prepared)
+        grc, go = run_go(prepared, a.binary)
+        r = compare(py, go, allow, allow_text)
         r["python_exit"], r["go_exit"] = prc, grc
         r["exit_match"] = prc == grc
         results[root] = r
@@ -206,6 +298,10 @@ def main() -> int:
             "identity parity, message drift" if r["identity_parity"] else "NOT AT PARITY")
         print(f"  {verdict}")
 
+    return overall, results
+
+
+def report_results(overall, results, a) -> int:
     if a.json:
         print(json.dumps(results, indent=2))
     return 0 if overall else 1

@@ -1,0 +1,10 @@
+# Codes whose MESSAGE text may differ between the two validators. Their
+# identity (code, path, line) and severity are still gated like every other
+# code: this file exempts wording only.
+#
+# Both entries interpolate another runtime's exception text — CPython's
+# UnicodeDecodeError and PyYAML's parser message. Reproducing those verbatim
+# would mean hardcoding CPython and PyYAML internals into Go, which would be
+# worse than the divergence.
+SDD002
+SDD006
