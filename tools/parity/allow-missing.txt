@@ -91,9 +91,5 @@ DLG077
 # Each needs its remaining site(s) ported, then removal from this list.
 #   SDD158  2 sites each, but Go does not fire on the legacy-rollup shape the
 #           SDD059 fixture carries.
-SDD158
-SDD172
 
 # --- sdd_validate.py rules not yet ported ---------------------------------
-SDD001
-SDD008

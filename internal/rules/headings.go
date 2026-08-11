@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"path"
 	"regexp"
 	"strings"
 )
@@ -62,27 +63,47 @@ func init() {
 	})
 
 	Register(&Rule{
+		// SDD158 is Python's code for two unrelated checks, the plan-side
+		// mirror of SDD157: a legacy Evidence Rollup heading (_headings), and
+		// a complete plan's `### Completed phase identities` section
+		// (_completed_identities). Both folded into this one registration,
+		// since one code is one rule.
 		Code: "SDD158", Severity: Error, PyFunc: "_headings",
-		What: "a plan carries a legacy `### ... Evidence Rollup` heading",
-		Check: func(a *Artifact, emit func(Diagnostic)) {
-			if a.Meta == nil || a.Kind() != "plan" {
-				return
+		What: "a plan carries a legacy `### ... Evidence Rollup` heading, or a complete plan's `### Completed phase identities` section is missing or wrong",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "plan" {
+					continue
+				}
+				visible := visibleMarkdown(a.Body)
+				if loc := legacyEvidenceRollupRe.FindStringIndex(visible); loc != nil {
+					line := a.BodyLine + strings.Count(visible[:loc[0]], "\n")
+					emit(Diagnostic{
+						Code: "SDD158", Severity: Error, Path: a.Rel, Line: line,
+						Message:    "Legacy `Evidence Rollup` headings are not permitted.",
+						Correction: "Replace the rollup with the required concise completed-identity section.",
+					})
+				}
+				completedPhaseIdentitiesCheck(r, a, emit)
 			}
-			visible := visibleMarkdown(a.Body)
-			loc := legacyEvidenceRollupRe.FindStringIndex(visible)
-			if loc == nil {
-				return
-			}
-			line := a.BodyLine + strings.Count(visible[:loc[0]], "\n")
-			emit(Diagnostic{
-				Code: "SDD158", Severity: Error, Path: a.Rel, Line: line,
-				Message:    "Legacy `Evidence Rollup` headings are not permitted.",
-				Correction: "Replace the rollup with the required concise completed-identity section.",
-			})
 		},
-		Bad: []Example{{Name: "legacy-rollup", Files: map[string]string{
-			"Plans/Sample/README.md": validPlan(true),
-		}}},
+		Bad: []Example{
+			{Name: "legacy-rollup", Files: map[string]string{
+				"Plans/Sample/README.md": validPlan(true),
+			}},
+			{Name: "missing-completed-phase-identities", Files: map[string]string{
+				"Plans/Sample/README.md": replaceFirst(
+					replaceFirst(planWithPhasesRaw(`phases:
+  - id: "1"
+    title: One
+    status: complete
+    doc: 01-One.md
+`), "status: draft", "status: complete"),
+					"## Plan Completion Evidence\n\nPending — not complete.",
+					"## Plan Completion Evidence\n\n- Verified: 2024-01-01\n"),
+				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", " []"),
+			}},
+		},
 		Good: []Example{{Name: "no-legacy-heading", Files: map[string]string{
 			"Plans/Sample/README.md": validPlan(false),
 		}}},
@@ -204,6 +225,95 @@ func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 			Code: "SDD157", Severity: Error, Path: a.Rel, Line: phaseEvidence.Line,
 			Message:    "Completed task identities must contain one exact identity entry for every completed task.",
 			Correction: "Use exactly one `### Completed task identities` section with each completed task's checkpoint.",
+		})
+	}
+}
+
+// completedPhaseIdentityRe is the phase form of the identity line: a phase
+// records both its checkpoint and the final review that closed it, where a
+// task records only a checkpoint.
+var completedPhaseIdentityRe = regexp.MustCompile(
+	"^\\s*-\\s+`([^`\\s]+)`: `([^`;]+)`; review: `([^`;]+)`\\s*$")
+
+// completedPhaseIdentitiesCheck is SDD158's second emission site, the plan-side
+// analogue of completedTaskIdentitiesCheck. Python reaches both through one
+// _completed_identities helper and picks the code from `kind`; here they are
+// two functions because the expected values differ in shape — a phase's entry
+// is (checkpoint, review path), a task's is a checkpoint alone.
+func completedPhaseIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) {
+	if a.Status() != "complete" {
+		return
+	}
+	phases, ok := a.Meta["phases"].([]any)
+	if !ok {
+		return
+	}
+	planEvidence, ok := sections(a, 2)["Plan Completion Evidence"]
+	if !ok {
+		return
+	}
+
+	type phaseIdentity struct{ checkpoint, review string }
+	expected := map[string]phaseIdentity{}
+	for _, p := range phases {
+		m := planEntry(p)
+		if m == nil || metaStr(m, "status") != "complete" {
+			continue
+		}
+		doc, ok := m["doc"].(string)
+		if !ok {
+			continue
+		}
+		target := r.ByPath[path.Join(path.Dir(a.Rel), doc)]
+		if target == nil {
+			continue
+		}
+		body := sections(target, 2)["Phase Completion Evidence"].Body
+		review := ""
+		if reviewPath, _, ok := parseFinalAlignedReview(
+			markdownScalar(evidenceValue(body, "Final aligned review")), true); ok {
+			review = reviewPath
+		}
+		expected[metaStr(m, "id")] = phaseIdentity{
+			checkpoint: markdownScalar(evidenceValue(body, "Revision / checkpoint")),
+			review:     review,
+		}
+	}
+
+	blocks := headingBodies(planEvidence.Body, 3, "Completed phase identities")
+	invalid := len(blocks) != 1
+	entries := map[string]phaseIdentity{}
+	if len(blocks) == 1 {
+		for _, line := range strings.Split(blocks[0], "\n") {
+			m := completedPhaseIdentityRe.FindStringSubmatch(line)
+			if m == nil {
+				invalid = true
+				continue
+			}
+			if _, dup := entries[m[1]]; dup {
+				invalid = true
+			}
+			entries[m[1]] = phaseIdentity{checkpoint: m[2], review: m[3]}
+		}
+	}
+	if len(entries) != len(expected) {
+		invalid = true
+	}
+	for id := range entries {
+		if _, ok := expected[id]; !ok {
+			invalid = true
+		}
+	}
+	for id, v := range expected {
+		if entries[id] != v {
+			invalid = true
+		}
+	}
+	if invalid {
+		emit(Diagnostic{
+			Code: "SDD158", Severity: Error, Path: a.Rel, Line: planEvidence.Line,
+			Message:    "Completed phase identities must contain one exact identity entry for every completed phase.",
+			Correction: "Use exactly one `### Completed phase identities` section with each completed phase's checkpoint and final review path.",
 		})
 	}
 }

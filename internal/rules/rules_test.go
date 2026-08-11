@@ -16,6 +16,14 @@ import (
 func TestEveryRuleHasGoodAndBadExamples(t *testing.T) {
 	for _, r := range All() {
 		t.Run(r.Code, func(t *testing.T) {
+			if r.UnexampledReason != "" {
+				// Exempt, but the reason must say what covers it instead.
+				if !strings.Contains(r.UnexampledReason, "Test") {
+					t.Errorf("%s is unexampled but its reason names no covering test: %q",
+						r.Code, r.UnexampledReason)
+				}
+				return
+			}
 			if len(r.Bad) == 0 {
 				t.Errorf("%s has no Bad example: nothing proves it ever fires", r.Code)
 			}

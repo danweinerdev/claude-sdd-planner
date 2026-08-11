@@ -77,6 +77,17 @@ type Rule struct {
 	Good []Example
 	// Bad examples must each produce at least one diagnostic of this code.
 	Bad []Example
+	// UnexampledReason, when nonempty, exempts a rule from carrying examples
+	// and records WHY in the registry itself. It exists for exactly one shape
+	// of rule: one whose failing condition the example harness cannot
+	// construct, because the harness always materializes a real directory to
+	// hold Files. A rule using this must be covered by a direct unit test
+	// instead, named in the reason.
+	//
+	// This is deliberately narrow. Anything that can be expressed as files —
+	// including anything needing a git repository, which SETUP scripts now
+	// cover — must carry examples like every other rule.
+	UnexampledReason string
 	// Check appends diagnostics for a single artifact. Rules that need the whole
 	// root (graphs, citations across documents) use CheckRoot instead.
 	Check func(a *Artifact, emit func(Diagnostic))

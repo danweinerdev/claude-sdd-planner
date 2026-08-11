@@ -7,6 +7,7 @@ SDD004/no-frontmatter
 SDD005/unclosed
 SDD006/unparsable-line
 SDD007/list-frontmatter
+SDD008/legacy-status-subfolder
 SDD010/missing-title
 SDD011/bad-type
 SDD012/bad-status
@@ -110,6 +111,7 @@ SDD156/task-ids-removed
 SDD157/legacy-rollup
 SDD157/missing-completed-task-identities
 SDD158/legacy-rollup
+SDD158/missing-completed-phase-identities
 SDD160/uncited-requirement
 SDD161/design-omits-requirement
 SDD162/uncited-ac
