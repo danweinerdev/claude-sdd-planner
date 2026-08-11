@@ -174,3 +174,21 @@ func Explain() string {
 	}
 	return b.String()
 }
+
+// SortDiagnostics orders diagnostics by (path, line, code, message), the order
+// sdd_validate.py emits and the parity oracle expects. Run applies it to its
+// own output; a caller that appends more must reapply it.
+func SortDiagnostics(d []Diagnostic) {
+	sort.SliceStable(d, func(i, j int) bool {
+		if d[i].Path != d[j].Path {
+			return d[i].Path < d[j].Path
+		}
+		if d[i].Line != d[j].Line {
+			return d[i].Line < d[j].Line
+		}
+		if d[i].Code != d[j].Code {
+			return d[i].Code < d[j].Code
+		}
+		return d[i].Message < d[j].Message
+	})
+}

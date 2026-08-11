@@ -89,6 +89,10 @@ func cmdValidate(args []string) error {
 	}
 
 	diags := rules.Run(r)
+	// The decision-ledger validator (DLG*) runs alongside the artifact rules,
+	// as sdd_validate.py folds in _focused_decision_logs.
+	diags = append(diags, rules.FocusedDecisionLogs(r, false)...)
+	rules.SortDiagnostics(diags)
 
 	artifactsInScope := make([]string, 0, len(r.Artifacts))
 	for _, a := range r.Artifacts {
