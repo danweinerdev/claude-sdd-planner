@@ -664,3 +664,67 @@ func withPlanReadme(files map[string]string) map[string]string {
 	out["Plans/Sample/README.md"] = validPlan(false)
 	return out
 }
+
+// validDesign returns a structurally valid design document whose Architecture
+// body is the caller's text, which is what the design-side traceability
+// search reads.
+func validDesign(architecture string) string {
+	return `---
+title: Sample Design
+type: design
+status: draft
+created: 2024-01-01
+updated: 2024-01-01
+tags: []
+related: []
+---
+
+## Overview
+
+Text.
+
+## Non-Goals
+
+None.
+
+## Architecture
+
+` + architecture + `
+
+### Components
+
+Text.
+
+### Data Flow
+
+Text.
+
+### Interfaces
+
+Text.
+
+## Design Decisions
+
+Text.
+
+## Error Handling
+
+Text.
+
+## Testing Strategy
+
+Text.
+
+### Structural Verification
+
+Text.
+
+## Migration / Rollout
+
+Text.
+
+## Open Questions
+
+None.
+`
+}

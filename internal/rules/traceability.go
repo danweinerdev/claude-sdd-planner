@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"encoding/json"
+	"fmt"
 	"path"
 	"regexp"
 	"sort"
@@ -52,90 +54,157 @@ func sortedSetSlice(set map[string]bool) []string {
 	return out
 }
 
-func init() {
-	Register(&Rule{
-		Code: "SDD162", Severity: Error, PyFunc: "_traceability",
-		What: "a plan hierarchy never cites an `AC-NN` id from a related spec",
-		CheckRoot: func(r *Root, emit func(Diagnostic)) {
-			for _, plan := range r.Artifacts {
-				if plan.Meta == nil || plan.Kind() != "plan" {
+// traceabilityFinding is one uncited identifier, before filtering to a code.
+type traceabilityFinding struct {
+	Code       string
+	Plan       string
+	Message    string
+	Correction string
+	Implicated []string
+}
+
+// traceabilityScan ports the identifier-coverage half of Validator._traceability:
+// every FR/NFR/AC a related spec defines must be cited somewhere in the plan
+// hierarchy (SDD160/162), and every FR/NFR must additionally be cited by a
+// related design when the plan declares one (SDD161).
+//
+// The three codes come from one scan so they agree on what "the plan text"
+// and "the design text" are. Splitting them would let the plan-side and
+// design-side rules disagree about which phases they read.
+func traceabilityScan(r *Root) []traceabilityFinding {
+	var out []traceabilityFinding
+	for _, plan := range r.Artifacts {
+		if plan.Meta == nil || plan.Kind() != "plan" {
+			continue
+		}
+		status := plan.Status()
+		if status != "approved" && status != "active" && status != "complete" {
+			continue
+		}
+		specs := relatedSpecs(r, plan)
+		if len(specs) == 0 {
+			continue
+		}
+		var designs []*Artifact
+		if related, ok := plan.Meta["related"].([]any); ok {
+			for _, ref := range related {
+				s, ok := ref.(string)
+				if !ok {
 					continue
 				}
-				status := plan.Status()
-				if status != "approved" && status != "active" && status != "complete" {
+				target := resolveRelated(r, s)
+				if target != nil && target.Kind() == "design" {
+					designs = append(designs, target)
+				}
+			}
+		}
+		var planTextParts []string
+		for _, p := range asAnyList(plan.Meta["phases"]) {
+			m := planEntry(p)
+			if m == nil {
+				continue
+			}
+			doc, ok := m["doc"].(string)
+			if !ok {
+				continue
+			}
+			target, ok := r.ByPath[path.Join(path.Dir(plan.Rel), doc)]
+			if !ok {
+				continue
+			}
+			for _, t := range asAnyList(target.Meta["tasks"]) {
+				tm := planEntry(t)
+				if tm == nil {
 					continue
 				}
-				specs := relatedSpecs(r, plan)
-				if len(specs) == 0 {
-					continue
+				if v, ok := tm["verification"].(string); ok {
+					planTextParts = append(planTextParts, v)
 				}
-				var designs []*Artifact
-				if related, ok := plan.Meta["related"].([]any); ok {
-					for _, ref := range related {
-						s, ok := ref.(string)
-						if !ok {
-							continue
-						}
-						target := resolveRelated(r, s)
-						if target != nil && target.Kind() == "design" {
-							designs = append(designs, target)
-						}
-					}
+			}
+			secs := sections(target, 2)
+			if acc, ok := secs["Acceptance Criteria"]; ok {
+				planTextParts = append(planTextParts, acc.Body)
+			}
+			for heading, info := range secs {
+				if acTaskHeadingRe.MatchString(heading) {
+					planTextParts = append(planTextParts, stripCompletionEvidence(info.Body))
 				}
-				var planTextParts []string
-				for _, p := range asAnyList(plan.Meta["phases"]) {
-					m := planEntry(p)
-					if m == nil {
-						continue
-					}
-					doc, ok := m["doc"].(string)
-					if !ok {
-						continue
-					}
-					target, ok := r.ByPath[path.Join(path.Dir(plan.Rel), doc)]
-					if !ok {
-						continue
-					}
-					for _, t := range asAnyList(target.Meta["tasks"]) {
-						tm := planEntry(t)
-						if tm == nil {
-							continue
-						}
-						if v, ok := tm["verification"].(string); ok {
-							planTextParts = append(planTextParts, v)
-						}
-					}
-					secs := sections(target, 2)
-					if acc, ok := secs["Acceptance Criteria"]; ok {
-						planTextParts = append(planTextParts, acc.Body)
-					}
-					for heading, info := range secs {
-						if acTaskHeadingRe.MatchString(heading) {
-							planTextParts = append(planTextParts, stripCompletionEvidence(info.Body))
-						}
-					}
-				}
-				planText := strings.Join(planTextParts, "\n")
-				for _, spec := range specs {
-					implicatedSet := map[string]bool{spec.Rel: true}
-					for _, d := range designs {
-						implicatedSet[d.Rel] = true
-					}
-					implicated := sortedSetSlice(implicatedSet)
-					for _, id := range sortedSetSlice(specDefinedIDs(spec)["AC"]) {
-						if strings.Contains(planText, id) {
-							continue
-						}
-						emit(Diagnostic{
-							Code: "SDD162", Severity: Error, Path: plan.Rel, Line: 1,
+			}
+		}
+		planText := strings.Join(planTextParts, "\n")
+
+		// Python joins each design's comment-stripped body with a JSON dump of
+		// its frontmatter, so a requirement cited only in a design's metadata
+		// still counts as covered.
+		var designParts []string
+		for _, d := range designs {
+			designParts = append(designParts, noComments(d.Body)+"\n"+metaJSONText(d.Meta))
+		}
+		designText := strings.Join(designParts, "\n")
+
+		for _, spec := range specs {
+			implicatedSet := map[string]bool{spec.Rel: true}
+			for _, d := range designs {
+				implicatedSet[d.Rel] = true
+			}
+			implicated := sortedSetSlice(implicatedSet)
+			ids := specDefinedIDs(spec)
+			for _, family := range []string{"FR", "NFR"} {
+				for _, id := range sortedSetSlice(ids[family]) {
+					if !strings.Contains(planText, id) {
+						out = append(out, traceabilityFinding{
+							Code: "SDD160", Plan: plan.Rel,
 							Message:    "Plan hierarchy never cites `" + id + "` from `" + spec.Rel + "`.",
-							Correction: "Cite the acceptance criterion in task verification/detail or phase acceptance criteria.",
+							Correction: "Cite the requirement in task verification/detail or phase acceptance criteria, or explicitly narrow the related specifications.",
+							Implicated: implicated,
+						})
+					}
+					if len(designs) > 0 && !strings.Contains(designText, id) {
+						out = append(out, traceabilityFinding{
+							Code: "SDD161", Plan: plan.Rel,
+							Message:    "Related designs never cite `" + id + "` from `" + spec.Rel + "`.",
+							Correction: "Cite the requirement in a realizing design or remove an incorrect design relationship.",
 							Implicated: implicated,
 						})
 					}
 				}
 			}
-		},
+			for _, id := range sortedSetSlice(ids["AC"]) {
+				if strings.Contains(planText, id) {
+					continue
+				}
+				out = append(out, traceabilityFinding{
+					Code: "SDD162", Plan: plan.Rel,
+					Message:    "Plan hierarchy never cites `" + id + "` from `" + spec.Rel + "`.",
+					Correction: "Cite the acceptance criterion in task verification/detail or phase acceptance criteria.",
+					Implicated: implicated,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// traceabilityCheckRoot runs the shared scan and keeps one code.
+func traceabilityCheckRoot(code string) func(*Root, func(Diagnostic)) {
+	return func(r *Root, emit func(Diagnostic)) {
+		for _, f := range traceabilityScan(r) {
+			if f.Code != code {
+				continue
+			}
+			emit(Diagnostic{
+				Code: f.Code, Severity: Error, Path: f.Plan, Line: 1,
+				Message: f.Message, Correction: f.Correction, Implicated: f.Implicated,
+			})
+		}
+	}
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD162", Severity: Error, PyFunc: "_traceability",
+		What:      "a plan hierarchy never cites an `AC-NN` id from a related spec",
+		CheckRoot: traceabilityCheckRoot("SDD162"),
 		Bad: []Example{{Name: "uncited-ac", Files: map[string]string{
 			"Plans/Sample/README.md": strings.Replace(
 				strings.Replace(planWithPhase(map[string]string{
@@ -165,6 +234,105 @@ func init() {
     justifies: FR-01
 `),
 			"Specs/Sample/README.md": validSpecTemplate,
+		}}},
+	})
+}
+
+// metaJSONText renders frontmatter the way Python's
+// json.dumps(meta, default=str) does, for the design-side coverage search.
+//
+// Only substring containment of an identifier is ever asked of the result, so
+// key order does not matter; what matters is that every value appears. Go's
+// encoder sorts map keys, which makes the output deterministic — a difference
+// from Python that cannot change any answer here.
+func metaJSONText(meta map[string]any) string {
+	b, err := json.Marshal(jsonSafe(meta))
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// jsonSafe converts values the encoder would reject into strings, the role
+// json.dumps's `default=str` plays.
+func jsonSafe(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = jsonSafe(val)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(t))
+		for _, val := range t {
+			out = append(out, jsonSafe(val))
+		}
+		return out
+	case string, bool, float64, int, nil:
+		return t
+	default:
+		return fmt.Sprint(t)
+	}
+}
+
+// tracePlan builds an approved plan related to the sample spec, plus any
+// extra related references the example needs.
+func tracePlan(extraRelated string) string {
+	related := `related: ["Specs/Sample"` + extraRelated + `]`
+	return replaceFirst(
+		replaceFirst(planWithPhase(map[string]string{
+			"id": "1", "title": "One", "status": "planned", "doc": "01-One.md",
+		}), "status: draft", "status: approved"),
+		"related: []", related)
+}
+
+// tracePhase is a phase whose task verification cites the given text, which is
+// what the plan-side coverage search reads.
+func tracePhase(verification string) string {
+	return phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: `+verification+`
+    justifies: FR-01
+`)
+}
+
+func init() {
+	Register(&Rule{
+		Code: "SDD160", Severity: Error, PyFunc: "_traceability",
+		What:      "a plan hierarchy never cites an `FR-NN`/`NFR-NN` id from a related spec",
+		CheckRoot: traceabilityCheckRoot("SDD160"),
+		Bad: []Example{{Name: "uncited-requirement", Files: map[string]string{
+			"Plans/Sample/README.md": tracePlan(""),
+			"Plans/Sample/01-One.md": tracePhase("Does the thing."),
+			"Specs/Sample/README.md": validSpecTemplate,
+		}}},
+		Good: []Example{{Name: "cited-requirement", Files: map[string]string{
+			"Plans/Sample/README.md": tracePlan(""),
+			"Plans/Sample/01-One.md": tracePhase("Covers FR-01 and NFR-01."),
+			"Specs/Sample/README.md": validSpecTemplate,
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD161", Severity: Error, PyFunc: "_traceability",
+		What:      "a related design never cites an `FR-NN`/`NFR-NN` id from a related spec",
+		CheckRoot: traceabilityCheckRoot("SDD161"),
+		// SDD161 fires only when the plan declares a design, so both examples
+		// carry one; they differ in whether that design cites the ids.
+		Bad: []Example{{Name: "design-omits-requirement", Files: map[string]string{
+			"Plans/Sample/README.md":   tracePlan(`, "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Designs/Sample/README.md": validDesign("Text."),
+		}}},
+		Good: []Example{{Name: "design-cites-requirement", Files: map[string]string{
+			"Plans/Sample/README.md":   tracePlan(`, "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Designs/Sample/README.md": validDesign("Realizes FR-01 and NFR-01."),
 		}}},
 	})
 }
