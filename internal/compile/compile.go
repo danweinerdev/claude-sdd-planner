@@ -122,9 +122,15 @@ func Compile(s *schema.Schema, payload string, opts Options) *Result {
 		return res
 	}
 	if s.Preserves() {
-		fmLines := preserveFrontmatter(doc, opts.Today)
+		fmLines, ok := renderFrontmatter(doc, opts.Today)
+		if !ok {
+			res.refuse("FM01", 1,
+				"frontmatter cannot be modeled as YAML, so it cannot be rewritten safely",
+				"Correct the frontmatter syntax; a `{{PLACEHOLDER}}` value must be quoted.")
+			return res
+		}
 		if opts.Upgrade {
-			fmLines = preserveFrontmatterUpgraded(s, doc, opts.Today, res)
+			fmLines = upgradeFrontmatter(s, doc, fmLines, res)
 		}
 		res.Output = emitPreserved(s, fmLines, doc, ordered, canonical)
 	} else {
@@ -142,11 +148,11 @@ func CheckFrozen(existing *artifact.Doc, allowFrozen bool) []Refusal {
 	return res.Refusals
 }
 
-// RestampFrontmatter exposes the preserve-mode frontmatter renderer — the
+// RestampFrontmatter exposes the frontmatter renderer — the
 // block copied verbatim except `updated` — for callers that edit an artifact
 // without going through the flat field model, e.g. `sdd section set`.
-func RestampFrontmatter(doc *artifact.Doc, today string) []string {
-	return preserveFrontmatter(doc, today)
+func RestampFrontmatter(doc *artifact.Doc, today string) ([]string, bool) {
+	return renderFrontmatter(doc, today)
 }
 
 // checkDuplicateKeys refuses an artifact declaring the same top-level
@@ -412,14 +418,12 @@ func compileFrontmatter(s *schema.Schema, doc *artifact.Doc, opts Options, res *
 	return append(out, carried...)
 }
 
-// preserveFrontmatter emits the payload's frontmatter block verbatim, restamping
-// only `updated`. Undeclared keys are permitted and untouched: nested structures
-// this tool does not model (phases[], tasks[], findings[]) must survive a write
-// byte-for-byte, and refusing them would make those artifact types unwritable.
-// Tool-owned flat keys are still verified by compileFrontmatter, so `status`
-// cannot drift through this path either.
-func preserveFrontmatterUpgraded(s *schema.Schema, doc *artifact.Doc, today string, res *Result) []string {
-	out := preserveFrontmatter(doc, today)
+// upgradeFrontmatter adds each required author field the upgrade path can fill
+// in from its declared default. Undeclared keys are left alone: nested
+// structures (phases[], tasks[], findings[]) are carried by the marshaled node
+// tree, and tool-owned flat keys are still verified by compileFrontmatter, so
+// `status` cannot drift through this path either.
+func upgradeFrontmatter(s *schema.Schema, doc *artifact.Doc, out []string, res *Result) []string {
 	for _, f := range s.Frontmatter {
 		if !f.Required || f.Ownership() != schema.Author || f.Default == "" {
 			continue
@@ -427,22 +431,8 @@ func preserveFrontmatterUpgraded(s *schema.Schema, doc *artifact.Doc, today stri
 		if _, ok := doc.FM(f.Key); ok {
 			continue
 		}
-		out = append(out, f.Key+": "+f.Default)
+		out = appendDefaults(out, f.Key, f.Default)
 		res.Added = append(res.Added, fmt.Sprintf("frontmatter %s: %s", f.Key, f.Default))
-	}
-	return out
-}
-
-func preserveFrontmatter(doc *artifact.Doc, today string) []string {
-	out := make([]string, 0, len(doc.FrontmatterRaw))
-	stamped := false
-	for _, l := range doc.FrontmatterRaw {
-		if !stamped && strings.HasPrefix(l, "updated:") {
-			out = append(out, "updated: "+today)
-			stamped = true
-			continue
-		}
-		out = append(out, l)
 	}
 	return out
 }

@@ -460,9 +460,16 @@ func flowList(items []string) string {
 // applyLedgerEdits restamps `updated` to today, inserts the new entry's lines
 // at the end of the decisions[] block, and — when supersedes names an
 // existing entry — flips that entry's status and appends its superseded_by
-// line. Everything else in FrontmatterRaw survives byte-for-byte.
+// line.
+//
+// The frontmatter is re-rendered from its parsed form rather than copied, so
+// the splice below operates on canonical YAML: a hand-written ledger and a
+// tool-written one present the same shape to fmBlockBounds.
 func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supersedes, newID string) (string, error) {
-	fm := compile.RestampFrontmatter(doc, today)
+	fm, ok := compile.RestampFrontmatter(doc, today)
+	if !ok {
+		return "", fmt.Errorf("decision ledger frontmatter cannot be modeled as YAML, so it cannot be rewritten safely")
+	}
 
 	start, end, found := fmBlockBounds(fm, "decisions")
 	if !found {

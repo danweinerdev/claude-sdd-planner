@@ -195,9 +195,18 @@ func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today str
 		return "", refs
 	}
 
+	fmLines, ok := compile.RestampFrontmatter(doc, today)
+	if !ok {
+		return "", []compile.Refusal{{
+			Code: "FM01", Line: 1,
+			Message:    "frontmatter cannot be modeled as YAML, so it cannot be rewritten safely",
+			Correction: "Correct the frontmatter syntax; a `{{PLACEHOLDER}}` value must be quoted.",
+		}}
+	}
+
 	var b strings.Builder
 	b.WriteString("---\n")
-	for _, l := range compile.RestampFrontmatter(doc, today) {
+	for _, l := range fmLines {
 		b.WriteString(l + "\n")
 	}
 	b.WriteString("---\n")
