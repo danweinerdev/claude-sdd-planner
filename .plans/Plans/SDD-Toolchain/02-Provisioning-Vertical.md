@@ -5,7 +5,7 @@ plan: "SDD-Toolchain"
 phase: 2
 status: planned
 created: 2026-08-03
-updated: 2026-08-03
+updated: 2026-08-11
 deliverable: "A real `sdd` binary users install with go install, discovered by skills and hooks, with /setup reworked to verify rather than build"
 tasks:
   - id: "2.1"
@@ -56,9 +56,9 @@ before any rule is ported. Nothing here depends on the FR-30 parity gate.
 ## 2.1: Version single source and make bump wiring
 
 ### Subtasks
-- [ ] Add `minSddVersion` to `.claude-plugin/plugin.json`
-- [ ] Extend `bump-version.py` to write the generated version source; wire into all three bump targets
-- [ ] Add the drift check and the floor-exceeds-version check to `make test`
+- [x] Add `minSddVersion` to `.claude-plugin/plugin.json`
+- [x] Extend `bump-version.py` to write the generated version source; wire into all three bump targets
+- [x] Add the drift check and the floor-exceeds-version check to `make test`
 
 ### Notes
 Revision boundary: The binary reports a correct version under every build path, and release tooling keeps it in lockstep.
@@ -68,88 +68,154 @@ Injecting the version with `-ldflags`. It is the obvious approach and it silentl
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Focused review: `git show e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `python3 bump-version.py patch && grep 'const Version' internal/version/version.go` | `.` | PASS (`exit 0`) | `regenerated internal/version/version.go to 1.16.1 from plugin.json, then restored` |
 
 ## 2.2: Executable resolution with caching and floor admission
 
 ### Subtasks
-- [ ] Implement the two-candidate ordered resolution with floor admission
-- [ ] Cache the resolution per session and expose it for reporting
-- [ ] Probe PATH candidates with a fixed argument-free invocation and bounded timeout
-- [ ] Document the algorithm once in `shared/path-resolution.md` so no skill re-derives it
+- [x] Implement the two-candidate ordered resolution with floor admission
+- [x] Cache the resolution per session and expose it for reporting
+- [x] Probe PATH candidates with a fixed argument-free invocation and bounded timeout
+- [x] Document the algorithm once in `shared/path-resolution.md` so no skill re-derives it
 
 ### Notes
 Revision boundary: Any caller can resolve an admitted binary once, cheaply, with rejection reasons available.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Focused review: `git show e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/provision/` | `.` | PASS (`exit 0`) | `ok internal/provision; plugin-copy preference, floor rejection, and write-nothing-on-failure all pass` |
 
 ## 2.3: sdd doctor
 
 ### Subtasks
-- [ ] Report each candidate path with presence, version, and admission verdict
-- [ ] Report the hook static path as a distinct checked item naming `/sdd-planner:setup` when absent
-- [ ] Add `--json` output
+- [x] Report each candidate path with presence, version, and admission verdict
+- [x] Report the hook static path as a distinct checked item naming `/sdd-planner:setup` when absent
+- [x] Add `--json` output
 
 ### Notes
 Revision boundary: A user can diagnose any provisioning state from one command.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `996610b148354ef56136801c17b8b3fe987116fe`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `996610b148354ef56136801c17b8b3fe987116fe`
+- Focused review: `git show 996610b148354ef56136801c17b8b3fe987116fe`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `996610b148354ef56136801c17b8b3fe987116fe`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd doctor` | `.` | PASS (`exit 0`) | `reports hook binary absent with the fix, and (OK) when present` |
 
 ## 2.4: Hooks moved into the binary
 
 ### Subtasks
-- [ ] Freeze parity fixtures for reviewer-bash-guard.py before porting any logic
-- [ ] Implement `sdd hook pretooluse` preserving the git/p4 allowlist and denial behavior exactly
-- [ ] Implement `sdd hook sessionstart` emitting accepted ledger entries
-- [ ] Register both platform entries in hooks.json; delete the Python and shell hooks
+- [x] Freeze parity fixtures for reviewer-bash-guard.py before porting any logic
+- [x] Implement `sdd hook pretooluse` preserving the git/p4 allowlist and denial behavior exactly
+- [x] Implement `sdd hook sessionstart` emitting accepted ledger entries
+- [x] Register both platform entries in hooks.json; delete the Python and shell hooks
 
 ### Notes
 Revision boundary: Both plugin hooks run from the binary, with the old behavior proven preserved.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Focused review: `git show cd34c9a84ceb87cae9130fb2b3c586adf2650d48`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/hook/` | `.` | PASS (`exit 0`) | `ok internal/hook; 87 guard commands match the Python oracle, 0 skipped` |
 
 ## 2.5: sdd allowlist in the reviewer guard
 
 ### Subtasks
-- [ ] Add the read-only sdd subcommand allowlist to the guard
-- [ ] Deny every mutating subcommand for the seven agents
-- [ ] Add the enumeration test that fails when a new mutating subcommand lacks a guard entry
+- [x] Add the read-only sdd subcommand allowlist to the guard
+- [x] Deny every mutating subcommand for the seven agents
+- [x] Add the enumeration test that fails when a new mutating subcommand lacks a guard entry
 
 ### Notes
 Revision boundary: The read-only agents can query through sdd but cannot mutate through it.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Focused review: `git show cd34c9a84ceb87cae9130fb2b3c586adf2650d48`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/hook/ -run AllowlistCovers` | `.` | PASS (`exit 0`) | `ok; every sdd subcommand classified, mutating ones denied` |
 
 ## 2.6: /setup reworked to verify and copy
 
 ### Subtasks
-- [ ] Move the provisioning check ahead of all filesystem mutation
-- [ ] Place or refresh the plugin-root copy on every run along every non-stopping branch
-- [ ] Verify through the plugin-root path via `sdd version` and `sdd doctor`
-- [ ] Emit distinguishable not-found and below-floor stop messages with the exact go install command
-- [ ] Update the setup skill, README, and CLAUDE files
+- [x] Move the provisioning check ahead of all filesystem mutation
+- [x] Place or refresh the plugin-root copy on every run along every non-stopping branch
+- [x] Verify through the plugin-root path via `sdd version` and `sdd doctor`
+- [x] Emit distinguishable not-found and below-floor stop messages with the exact go install command
+- [x] Update the setup skill, README, and CLAUDE files
 
 ### Notes
 Revision boundary: A user can go install, run /setup, and have working skills and hooks — or be told precisely what to fix.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `996610b148354ef56136801c17b8b3fe987116fe`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `996610b148354ef56136801c17b8b3fe987116fe`
+- Focused review: `git show 996610b148354ef56136801c17b8b3fe987116fe`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `996610b148354ef56136801c17b8b3fe987116fe`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd provision --plugin-root /tmp/setup-verify` | `.` | PASS (`exit 0`) | `resolved sdd 1.16.0, refreshed the plugin copy, version and doctor ran through it` |
 
 ## Acceptance Criteria
-- [ ] A user with a Go toolchain can `go install`, run `/setup`, and both hooks execute.
-- [ ] Every provisioning failure state is distinguishable, actionable, and mutates nothing.
-- [ ] `sdd doctor` makes the dead-hook state from finding F-02 visible.
-- [ ] The Python and shell hook files are deleted, with the bash guard proven byte-comparable on parity fixtures.
-- [ ] Reviewer agents can run read-only sdd subcommands and are denied every mutating one.
+- [x] A user with a Go toolchain can `go install`, run `/setup`, and both hooks execute.
+- [x] Every provisioning failure state is distinguishable, actionable, and mutates nothing.
+- [x] `sdd doctor` makes the dead-hook state from finding F-02 visible.
+- [x] The Python and shell hook files are deleted, with the bash guard proven byte-comparable on parity fixtures.
+- [x] Reviewer agents can run read-only sdd subcommands and are denied every mutating one.
 
 ## Phase Completion Evidence
 
