@@ -219,4 +219,22 @@ Revision boundary: A user can go install, run /setup, and have working skills an
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `996610b148354ef56136801c17b8b3fe987116fe`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `996610b148354ef56136801c17b8b3fe987116fe`
+- Final aligned review: Retro/02-Provisioning-Vertical-review.md; frozen: 85f019ec021636fe7cee094c717178ed19db5bac..996610b148354ef56136801c17b8b3fe987116fe
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./...` | `.` | PASS (`exit 0`) | `all 10 packages ok at the frozen endpoint` |
+
+### Completed task identities
+
+- `2.1`: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- `2.2`: `e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9`
+- `2.3`: `996610b148354ef56136801c17b8b3fe987116fe`
+- `2.4`: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- `2.5`: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- `2.6`: `996610b148354ef56136801c17b8b3fe987116fe`
