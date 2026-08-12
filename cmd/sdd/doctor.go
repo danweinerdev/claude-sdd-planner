@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
 	"path/filepath"
 
@@ -42,7 +43,7 @@ func cmdDoctor(args []string) error {
 		return fmt.Errorf("doctor: %w", err)
 	}
 
-	rep := doctorReport{Version: version}
+	rep := doctorReport{Version: version.Version}
 	if exe, err := os.Executable(); err == nil {
 		if abs, err2 := filepath.Abs(exe); err2 == nil {
 			rep.BinaryPath = abs

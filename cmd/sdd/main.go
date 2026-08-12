@@ -9,13 +9,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
-
-const version = "0.0.0-spike"
 
 // idDeclRe matches an identifier declaration in a list item, capturing the
 // strikethrough markers that denote retirement.
@@ -29,7 +28,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "version":
-		fmt.Printf("sdd %s\n", version)
+		fmt.Printf("sdd %s\n", version.Version)
 	case "schema":
 		err = cmdSchema(os.Args[2:])
 	case "apply":
@@ -44,6 +43,8 @@ func main() {
 		err = cmdDoctor(os.Args[2:])
 	case "hook":
 		err = cmdHook(os.Args[2:])
+	case "provision":
+		err = cmdProvision(os.Args[2:])
 	case "evidence":
 		err = cmdEvidence(os.Args[2:])
 	case "task", "phase", "plan":
@@ -76,7 +77,7 @@ func main() {
 	}
 }
 
-var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "help"}
+var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "evidence", "task", "phase", "plan", "help"}
 
 func usage() {
 	fmt.Fprint(os.Stderr, `sdd — SDD toolchain (spike)
@@ -91,6 +92,7 @@ func usage() {
   sdd section set <artifact-path> --heading "## Overview" [--dry-run] [--diff]
                                   [--json] [--expect DIGEST] [--type T]
   sdd doctor [--json]
+  sdd provision [--plugin-root PATH] [--check] [--json]
   sdd hook pretooluse | sessionstart   (reads a hook payload on stdin)
   sdd evidence add <artifact-path> --task ID|--phase|--plan
                    --verified-by CMD --result TEXT [--working-dir PATH]

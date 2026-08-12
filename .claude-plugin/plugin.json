@@ -1,6 +1,7 @@
 {
   "name": "sdd-planner",
   "version": "1.16.0",
+  "minSddVersion": "1.16.0",
   "description": "Spec-driven development planning: lifecycle skills and review agents for structured plans, specs, designs, and research",
   "author": {
     "name": "Daniel Weiner"
