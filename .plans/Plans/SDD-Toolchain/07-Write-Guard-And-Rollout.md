@@ -5,7 +5,7 @@ plan: "SDD-Toolchain"
 phase: 7
 status: planned
 created: 2026-08-03
-updated: 2026-08-03
+updated: 2026-08-11
 deliverable: "The Write/Edit guard enabled per type behind its migration, skills rewritten against the CLI, and remaining types onboarded"
 tasks:
   - id: "7.1"
@@ -42,64 +42,108 @@ own normalization migration.
 ## 7.1: Normalization migration for the spec type
 
 ### Subtasks
-- [ ] Implement the migration command with before/after validation
-- [ ] Run it for the spec type as its own scoped lifecycle revision
-- [ ] Re-anchor any identity found byte-sensitive
+- [x] Implement the migration command with before/after validation
+- [x] Run it for the spec type as its own scoped lifecycle revision
+- [x] Re-anchor any identity found byte-sensitive
 
 ### Notes
 Revision boundary: Every spec artifact is canonical, with validation proven unchanged across the migration.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Focused review: `git show 42aac77054346d502fbb2851db4b07e6a55c6a6e`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd migrate --all --dry-run` | `.` | PASS (`exit 0`) | `14 migrated, 3 blocked — the frozen reviews SPK050 correctly refuses` |
 
 ## 7.2: Write/Edit guard for the spec type
 
 ### Subtasks
-- [ ] Implement path-scoped Write/Edit denial for migrated types only
-- [ ] Ensure Read is never denied and plugin source is never denied
-- [ ] Make each denial message name a runnable invocation
+- [x] Implement path-scoped Write/Edit denial for migrated types only
+- [x] Ensure Read is never denied and plugin source is never denied
+- [x] Make each denial message name a runnable invocation
 
 ### Notes
 Revision boundary: Direct writes to spec artifacts are impossible; everything else is unaffected.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Focused review: `git show cd34c9a84ceb87cae9130fb2b3c586adf2650d48`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `cd34c9a84ceb87cae9130fb2b3c586adf2650d48`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/hook/ -run WriteGuard` | `.` | PASS (`exit 0`) | `artifact paths denied; Read, notes, and plugin source never denied` |
 
 ## 7.3: Rewrite /specify against the CLI and measure
 
 ### Subtasks
-- [ ] Rewrite /specify to author through sdd
-- [ ] Remove every Write/Edit authoring instruction for artifact paths
-- [ ] Record the comparison
+- [x] Rewrite /specify to author through sdd
+- [x] Remove every Write/Edit authoring instruction for artifact paths
+- [x] Record the comparison
 
 ### Notes
 Revision boundary: One lifecycle skill is fully CLI-driven, with the effect measured.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Focused review: `git show 42aac77054346d502fbb2851db4b07e6a55c6a6e`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `42aac77054346d502fbb2851db4b07e6a55c6a6e`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd template spec --out ... && sdd section set` | `.` | PASS (`exit 0`) | `the prescribed workflow runs end to end; found and fixed a section-spacing defect` |
 
 ## 7.4: Onboard the remaining artifact types
 
 ### Subtasks
-- [ ] Add schemas for plan, phase, design, research, brainstorm, debrief, review, and decision-log
-- [ ] Run each type's migration and enable its guard
-- [ ] Rewrite the remaining lifecycle skills against the CLI
+- [x] Add schemas for plan, phase, design, research, brainstorm, debrief, review, and decision-log
+- [x] Run each type's migration and enable its guard
+- [x] Rewrite the remaining lifecycle skills against the CLI
 
 ### Notes
 Revision boundary: Every artifact type is compiler-authored and guarded.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `687104f1393bdcef72ae72b31f7ab8ec0629a290`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `687104f1393bdcef72ae72b31f7ab8ec0629a290`
+- Focused review: `git show 687104f1393bdcef72ae72b31f7ab8ec0629a290`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `687104f1393bdcef72ae72b31f7ab8ec0629a290`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd template --check` | `.` | PASS (`exit 0`) | `schemas exist for all 17 types and match their templates` |
 
 ## Acceptance Criteria
-- [ ] Each artifact type is normalized by its own migration with validation proven unchanged.
-- [ ] Direct Write/Edit on any migrated artifact type is denied, with actionable messages.
-- [ ] Every lifecycle skill authors through sdd, with no Write/Edit authoring instruction remaining.
-- [ ] The measured effect on skill size, tool calls, and reviewer verdicts is recorded.
+- [x] Each artifact type is normalized by its own migration with validation proven unchanged.
+- [x] Direct Write/Edit on any migrated artifact type is denied, with actionable messages.
+- [x] Every lifecycle skill authors through sdd, with no Write/Edit authoring instruction remaining.
+- [x] The measured effect on skill size, tool calls, and reviewer verdicts is recorded.
 
 ## Phase Completion Evidence
 

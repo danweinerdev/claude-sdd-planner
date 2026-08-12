@@ -5,7 +5,7 @@ plan: "SDD-Toolchain"
 phase: 5
 status: planned
 created: 2026-08-03
-updated: 2026-08-03
+updated: 2026-08-11
 deliverable: "Python and PyYAML gone from every user-facing path, with the frozen corpus retained as the regression suite"
 tasks:
   - id: "5.1"
@@ -44,52 +44,85 @@ the parity gates depend on.
 ## 5.1: Delete the Python validators and their bootstrap
 
 ### Subtasks
-- [ ] Delete both scripts, `requirements.txt`, and the virtualenv test bootstrap
-- [ ] Retain frozen oracle outputs and black-box fixtures as the authoritative regression suite
-- [ ] Update every skill, shared convention, template, agent, Make target, and maintenance document that named them
+- [x] Delete both scripts, `requirements.txt`, and the virtualenv test bootstrap
+- [x] Retain frozen oracle outputs and black-box fixtures as the authoritative regression suite
+- [x] Update every skill, shared convention, template, agent, Make target, and maintenance document that named them
 
 ### Notes
 Revision boundary: No user-facing path invokes Python, and the regression suite still proves the rules.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `539432de2ea8745eb48e9cf4885c6174cde8c01d`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `539432de2ea8745eb48e9cf4885c6174cde8c01d`
+- Focused review: `git show 539432de2ea8745eb48e9cf4885c6174cde8c01d`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `539432de2ea8745eb48e9cf4885c6174cde8c01d`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make parity` | `.` | PASS (`exit 0`) | `scripts/, tests/, requirements.txt deleted; corpus still 491 matched` |
 
 ## 5.2: Reconcile the decision ledger and maintenance rules
 
 ### Subtasks
-- [ ] Update the maintenance rules for the Go toolchain and the schema-generated templates
-- [ ] Verify every superseded ledger entry links correctly to its successor
-- [ ] Refresh command and agent tables in README, CLAUDE.md, and both templates
+- [x] Update the maintenance rules for the Go toolchain and the schema-generated templates
+- [x] Verify every superseded ledger entry links correctly to its successor
+- [x] Refresh command and agent tables in README, CLAUDE.md, and both templates
 
 ### Notes
 Revision boundary: Documentation and ledger match the shipped system.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `d547943485e68923a3812ea981961966d7f8f366`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `d547943485e68923a3812ea981961966d7f8f366`
+- Focused review: `git show d547943485e68923a3812ea981961966d7f8f366`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `d547943485e68923a3812ea981961966d7f8f366`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd decide validate` | `.` | PASS (`exit 0`) | `ledger supersession links clean; maintenance rules updated for the Go toolchain` |
 
 ## 5.3: Measure and replace the provisional bounds
 
 ### Subtasks
-- [ ] Benchmark single-artifact apply and validate on named hardware
-- [ ] Record stripped binary size
-- [ ] Amend the spec with measured figures
+- [x] Benchmark single-artifact apply and validate on named hardware
+- [x] Record stripped binary size
+- [x] Amend the spec with measured figures
 
 ### Notes
 Revision boundary: Every quantitative bound in the spec traces to a measurement.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `d547943485e68923a3812ea981961966d7f8f366`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `d547943485e68923a3812ea981961966d7f8f366`
+- Focused review: `git show d547943485e68923a3812ea981961966d7f8f366`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `d547943485e68923a3812ea981961966d7f8f366`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd validate --root tools/parity/fixtures/SDD113/short-id` | `.` | PASS (`exit 0`) | `median 20ms on Threadripper 9970X; NFR-07 bound set to 50ms from a provisional 300ms` |
 
 ## 5.4: Re-evaluate prebuilt distribution against the measured binary size
 
 ### Subtasks
-- [ ] Build all five NFR-03 targets with the real CommonMark and YAML dependencies linked and record each stripped size
-- [ ] Compute the actual per-release payload and history growth against the recorded figure
-- [ ] Correct the unsourced estimate in the spec's Open Questions to the measured value
-- [ ] Write the determination: either reaffirm D-0015 or open a superseding decision entry, which stops for user reconciliation per D-0003
+- [x] Build all five NFR-03 targets with the real CommonMark and YAML dependencies linked and record each stripped size
+- [x] Compute the actual per-release payload and history growth against the recorded figure
+- [x] Correct the unsourced estimate in the spec's Open Questions to the measured value
+- [x] Write the determination: either reaffirm D-0015 or open a superseding decision entry, which stops for user reconciliation per D-0003
 
 ### Notes
 Revision boundary: a recorded measurement and an explicit determination on prebuilt distribution, replacing the estimate the original decision cited.
@@ -99,13 +132,24 @@ Treating the smaller measurement as automatically reopening D-0015. That decisio
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `d547943485e68923a3812ea981961966d7f8f366`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `d547943485e68923a3812ea981961966d7f8f366`
+- Focused review: `git show d547943485e68923a3812ea981961966d7f8f366`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `d547943485e68923a3812ea981961966d7f8f366`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make build-all VARIANTS=release` | `.` | PASS (`exit 0`) | `21.9 MB across five targets vs the spec's ~50 MB estimate; D-0015 reaffirmed` |
 
 ## Acceptance Criteria
-- [ ] `make test` passes from a clean checkout with no Python and no PyYAML.
-- [ ] The frozen corpus remains the authoritative regression suite after deletion.
-- [ ] No document references a removed entry point, and the ledger supersession chain is intact.
-- [ ] Every quantitative bound in the spec is measured rather than estimated.
+- [x] `make test` passes from a clean checkout with no Python and no PyYAML.
+- [x] The frozen corpus remains the authoritative regression suite after deletion.
+- [x] No document references a removed entry point, and the ledger supersession chain is intact.
+- [x] Every quantitative bound in the spec is measured rather than estimated.
 
 ## Phase Completion Evidence
 

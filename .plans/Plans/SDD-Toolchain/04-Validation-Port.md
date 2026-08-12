@@ -5,7 +5,7 @@ plan: "SDD-Toolchain"
 phase: 4
 status: planned
 created: 2026-08-03
-updated: 2026-08-03
+updated: 2026-08-11
 deliverable: "sdd validate and sdd decide validate at proven parity with the Python oracle"
 tasks:
   - id: "4.1"
@@ -43,65 +43,109 @@ fixture.
 ## 4.1: Port full-artifact validation to parity
 
 ### Subtasks
-- [ ] Port discovery, parsing, schema, heading, identifier, hierarchy, citation, graph, traceability, evidence, review-gate, and durability rules
-- [ ] Preserve diagnostic identity, ordering, and output shape exactly
-- [ ] Drive to green against the frozen corpus
+- [x] Port discovery, parsing, schema, heading, identifier, hierarchy, citation, graph, traceability, evidence, review-gate, and durability rules
+- [x] Preserve diagnostic identity, ordering, and output shape exactly
+- [x] Drive to green against the frozen corpus
 
 ### Notes
 Revision boundary: `sdd validate` is a faithful replacement for sdd_validate.py on every unchanged fixture.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Focused review: `git show befc1ac4328f056f02a29c3c9040439f23fb8274`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make parity` | `.` | PASS (`exit 0`) | `126 of 126 SDD codes registered; 491 matched, zero extra` |
 
 ## 4.2: Port focused-ledger validation to parity
 
 ### Subtasks
-- [ ] Port ledger discovery, schema, sequencing, supersession, collision, immutability, and concurrent-edit rules
-- [ ] Implement the @repo and @ledger path aliases
-- [ ] Preserve duplicate-key rejection in ledger mode only
+- [x] Port ledger discovery, schema, sequencing, supersession, collision, immutability, and concurrent-edit rules
+- [x] Implement the @repo and @ledger path aliases
+- [x] Preserve duplicate-key rejection in ledger mode only
 
 ### Notes
 Revision boundary: `sdd decide validate` is a faithful replacement for sdd_decision_validate.py.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `4294bc2398eb0cd8bc0a9cc491e0a90cd9233266`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `4294bc2398eb0cd8bc0a9cc491e0a90cd9233266`
+- Focused review: `git show 4294bc2398eb0cd8bc0a9cc491e0a90cd9233266`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `4294bc2398eb0cd8bc0a9cc491e0a90cd9233266`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd decide validate` | `.` | PASS (`exit 0`) | `69 of 69 DLG codes ported; ledger validates clean` |
 
 ## 4.3: The two intentional corrections
 
 ### Subtasks
-- [ ] Implement planning-root-relative related resolution with the scrubbed regression fixture
-- [ ] Implement the `<phase>.<digits>[a-z]?` grammar as opaque exact identifiers
-- [ ] Update /plan, the phase template, the schema, and plan-reviewer to document the grammar
+- [x] Implement planning-root-relative related resolution with the scrubbed regression fixture
+- [x] Implement the `<phase>.<digits>[a-z]?` grammar as opaque exact identifiers
+- [x] Update /plan, the phase template, the schema, and plan-reviewer to document the grammar
 
 ### Notes
 Revision boundary: Both reported bugs are fixed with regression fixtures, and the grammar is documented everywhere it is authored.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `3739e840fd505e14888f8b34780f5d47e77437f1`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `3739e840fd505e14888f8b34780f5d47e77437f1`
+- Focused review: `git show 3739e840fd505e14888f8b34780f5d47e77437f1`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `3739e840fd505e14888f8b34780f5d47e77437f1`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/rules/` | `.` | PASS (`exit 0`) | `ok internal/rules; SDD064 admits an optional lowercase suffix such as 1.1a, with a regression fixture` |
 
 ## 4.4: Cross-platform and read-only guarantees
 
 ### Subtasks
-- [ ] Enforce LF output and forward-slash frontmatter paths; accept CRLF and BOM input
-- [ ] Handle NFC/NFD in path, heading, and identifier matching
-- [ ] Add read-only guard tests and the cross-compilation portability check
+- [x] Enforce LF output and forward-slash frontmatter paths; accept CRLF and BOM input
+- [x] Handle NFC/NFD in path, heading, and identifier matching
+- [x] Add read-only guard tests and the cross-compilation portability check
 
 ### Notes
 Revision boundary: Validation is byte-stable across platforms and provably mutates nothing.
 
 ### Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Focused review: `git show befc1ac4328f056f02a29c3c9040439f23fb8274`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make build-all VARIANTS=release` | `.` | PASS (`exit 0`) | `five targets build; ELF, Mach-O, and PE32+ verified stripped via go tool nm` |
 
 ## Acceptance Criteria
-- [ ] `sdd validate` and `sdd decide validate` are byte-equivalent to the oracle on every unchanged fixture.
-- [ ] Every SDD and DLG code and message branch has passing coverage.
-- [ ] The two reported bugs are fixed with the concrete regression fixtures named in the spec.
-- [ ] The task-identifier grammar is consistent across /plan, the template, the schema, and plan-reviewer.
-- [ ] Artifacts authored on Windows and Linux are byte-identical, and validation mutates nothing.
+- [x] `sdd validate` and `sdd decide validate` are byte-equivalent to the oracle on every unchanged fixture.
+- [x] Every SDD and DLG code and message branch has passing coverage.
+- [x] The two reported bugs are fixed with the concrete regression fixtures named in the spec.
+- [x] The task-identifier grammar is consistent across /plan, the template, the schema, and plan-reviewer.
+- [x] Artifacts authored on Windows and Linux are byte-identical, and validation mutates nothing.
 
 ## Phase Completion Evidence
 
