@@ -1,8 +1,8 @@
 .PHONY: bump-patch bump-minor bump-major test \
-        build build-release build-all parity gen-fixtures check-fixtures check-templates clean-build
+        build build-release build-all regression gen-fixtures check-fixtures check-templates clean-build
 
-# The parity harness is stdlib-only Python: it drives the `sdd` binary and
-# compares against tools/parity/frozen-expectations.json. PyYAML and the
+# The regression suite is Go: it drives the `sdd` binary and compares against
+# tools/regression/expectations.json. PyYAML and the
 # virtualenv bootstrap left with the Python validators (task 5.1).
 PYTHON := python3
 
@@ -42,7 +42,7 @@ RELEASE_LDFLAGS := -s -w
 RELEASE_FLAGS := -trimpath -ldflags="$(RELEASE_LDFLAGS)"
 
 # The host binaries, one per variant. SDD names the debug build: it is the one
-# day-to-day work and the parity harness use, since a failing comparison is
+# day-to-day work and the regression suite use, since a failing comparison is
 # something you then go and debug.
 SDD := $(BUILD_DIR)/$(HOST_TUPLE)-debug/sdd
 SDD_RELEASE := $(BUILD_DIR)/$(HOST_TUPLE)-release/sdd
@@ -93,47 +93,47 @@ build-all:
 		done; \
 	done
 
-# parity runs the differential oracle against the host debug binary, building
-# it first so the comparison never runs against a stale artifact. Override the
-# roots with `make parity PARITY_ROOTS="path1 path2"`. Exits non-zero on a
-# mismatch, which is what makes it usable as a CI gate.
+# regression asserts `sdd validate` still produces exactly the diagnostics the
+# committed corpus records, building the binary first so the check never runs
+# against a stale artifact. Exits non-zero on any drift, which is what makes it
+# usable as a CI gate.
 #
-# The fixture corpus is the input that gives the gate teeth: run against a
-# healthy planning root alone, both validators agree on zero diagnostics and
-# the comparison exercises none of the ported rules.
+# This was a differential oracle against scripts/sdd_validate.py until that
+# Python was deleted in task 5.1. With no second implementation to agree with,
+# what remains is a regression corpus: 128 fixture roots generated from the
+# rules' own Bad examples, with 705 recorded diagnostics. Its value is breadth
+# — it spans rule interactions no unit test covers, so a change to one rule
+# that perturbs another's output fails here.
 #
-# --frozen is now the only mode: the Python oracle was deleted in task 5.1, so
-# the comparison is against tools/parity/frozen-expectations.json — its last
-# recorded verdict. That file is never regenerated; changing it would change
-# what "correct" means, which is what freezing exists to prevent.
-PARITY_FIXTURES := tools/parity/fixtures
-PARITY_MANIFEST := $(PARITY_FIXTURES)/MANIFEST
-# In frozen mode the corpus IS the input: an ad-hoc root has no recorded
-# expectation to compare against. Pass extra roots explicitly only alongside a
-# freeze that covers them.
-PARITY_ROOTS ?=
+# tools/regression/expectations.json is never regenerated wholesale; changing
+# it would change what "correct" means rather than test against it. When a rule
+# change legitimately alters output, regenerate the fixtures with
+# `make gen-fixtures` and edit the expectation as a reviewed diff.
+REGRESSION_DIR := tools/regression
+REGRESSION_FIXTURES := $(REGRESSION_DIR)/fixtures
+REGRESSION_MANIFEST := $(REGRESSION_FIXTURES)/MANIFEST
+REGRESSION_EXPECTATIONS := $(REGRESSION_DIR)/expectations.json
 
-PARITY_ALLOW := tools/parity/allow-missing.txt
-PARITY_ALLOW_TEXT := tools/parity/allow-message-drift.txt
-
-parity: build
-	@$(PYTHON) tools/parity/parity.py $(PARITY_ROOTS) \
-		--manifest $(PARITY_MANIFEST) --allow $(PARITY_ALLOW) \
-		--allow-message-drift $(PARITY_ALLOW_TEXT) --frozen --binary $(SDD)
+regression: build
+	@go run ./tools/regression \
+		-manifest $(REGRESSION_MANIFEST) \
+		-frozen $(REGRESSION_EXPECTATIONS) \
+		-fixtures $(REGRESSION_FIXTURES) \
+		-binary $(SDD)
 
 # gen-fixtures regenerates the corpus from the rules' own Bad examples. Run it
 # after adding or changing a rule; the result is committed.
 gen-fixtures:
-	@go run ./tools/genfixtures -out $(PARITY_FIXTURES)
+	@go run ./tools/genfixtures -out $(REGRESSION_FIXTURES)
 
 # check-fixtures fails when the committed corpus no longer matches what the
 # rules would generate — the drift that would otherwise let a rule change slip
 # past a gate still comparing yesterday's fixtures.
 check-fixtures:
-	@go run ./tools/genfixtures -out $(PARITY_FIXTURES).check >/dev/null
-	@diff -r $(PARITY_FIXTURES) $(PARITY_FIXTURES).check >/dev/null 2>&1 \
-		&& { rm -rf $(PARITY_FIXTURES).check; echo "fixtures up to date"; } \
-		|| { rm -rf $(PARITY_FIXTURES).check; \
+	@go run ./tools/genfixtures -out $(REGRESSION_FIXTURES).check >/dev/null
+	@diff -r $(REGRESSION_FIXTURES) $(REGRESSION_FIXTURES).check >/dev/null 2>&1 \
+		&& { rm -rf $(REGRESSION_FIXTURES).check; echo "fixtures up to date"; } \
+		|| { rm -rf $(REGRESSION_FIXTURES).check; \
 		     echo "ERROR: committed fixtures differ from the rules' examples."; \
 		     echo "Run 'make gen-fixtures' and commit the result."; exit 1; }
 
@@ -153,7 +153,7 @@ clean-build:
 # ordering check to be machine-enforced rather than trusted, so `make test`
 # runs the corpus: SDD154/155/156 fire against real git history built by each
 # fixture's SETUP script, and a regression there fails the build.
-test: parity check-templates
+test: regression check-templates
 	@go test ./...
 
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so
