@@ -75,6 +75,13 @@ func cmdTransition(kind string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
 	}
+	// SDD070-075 are evaluated against the COMMITTED copy at HEAD, so a
+	// completion gate that only fails because the transition itself is not yet
+	// committed is not a real refusal — no sequence of commands could satisfy
+	// it, since the status must be committed to be seen and must pass to be
+	// written. Those are reported as a required follow-up instead.
+	blocking, pending := splitCommitPending(blocking)
+
 	if len(blocking) > 0 {
 		var b strings.Builder
 		fmt.Fprintf(&b, "%s complete: refused — the completion gate is not met:\n", kind)
@@ -93,7 +100,25 @@ func cmdTransition(kind string, args []string) error {
 		return fmt.Errorf("%s complete: %w", kind, err)
 	}
 	fmt.Printf("marked %s complete in %s\n", describeTarget(kind, *id, path), path)
+	if len(pending) > 0 {
+		fmt.Printf("  next: commit this change; %d evidence check(s) verify the "+
+			"committed copy at HEAD and stay unmet until then\n", len(pending))
+	}
 	return nil
+}
+
+// splitCommitPending separates genuine refusals from the checks that inspect
+// the committed copy at HEAD and therefore cannot pass before the transition
+// is committed.
+func splitCommitPending(all []rules.Diagnostic) (blocking, pending []rules.Diagnostic) {
+	for _, d := range all {
+		if strings.Contains(d.Message, "is not committed at HEAD") {
+			pending = append(pending, d)
+			continue
+		}
+		blocking = append(blocking, d)
+	}
+	return
 }
 
 func describeTarget(kind, id, path string) string {

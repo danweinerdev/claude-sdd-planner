@@ -10,30 +10,30 @@ deliverable: "A throwaway Go spike that parses a spec proposal and prints normal
 tasks:
   - id: "1.1"
     title: "Go module skeleton and the spec schema as data"
-    status: planned
+    status: complete
     verification: "`go build ./...` succeeds; the schema loads and round-trips through its own loader; a unit test asserts the schema declares every heading, frontmatter field with ownership, and identifier namespace present in shared/templates/spec.md"
     justifies: "FR-14 requires each artifact type be declared in exactly one machine-readable schema; without a real schema for one type there is nothing for the parser or apply to be tested against."
   - id: "1.2"
     title: "Frontmatter and Markdown parsing into an inspectable model"
-    status: planned
+    status: complete
     verification: "Parsing every existing artifact under a copy of the planning root yields a model with correct source line positions for every heading and frontmatter key, asserted against golden files"
     justifies: "FR-29 requires line-accurate error messages and FR-19 requires per-section matching; both are impossible without an AST carrying source positions, which is the specific reason the spec names a CommonMark parser with position info as a dependency."
     depends_on: ["1.1"]
   - id: "1.3"
     title: "Section matcher with near-miss normalization and refusal"
-    status: planned
+    status: complete
     verification: "Table-driven tests cover every FR-19 auto-correction and every FR-19 refusal, each asserting the itemized correction list or the refusal message; a deliberately mangled spec produces all violations in one result"
     justifies: "FR-19 near-miss tolerance is the single largest determinant of whether the compiler is pleasant or infuriating to drive; this task is where that hypothesis is falsifiable."
     depends_on: ["1.2"]
   - id: "1.4"
     title: "apply --dry-run --diff over the round-trip contract"
-    status: planned
+    status: complete
     verification: "On a copied planning root: applying an already-normalized artifact is byte-idempotent with zero corrections; each FR-45 identifier case (preserved, unknown, new, omitted, --retire) produces the specified outcome; nothing is ever written outside the copy"
     justifies: "FR-45 and FR-24 were both written in response to review findings F-01 and F-03 and have never been executed; the round-trip contract is the compiler operation the plugin will use most and is the likeliest place the design is still wrong."
     depends_on: ["1.3"]
   - id: "1.5"
     title: "Feel assessment and go/no-go on the compiler model"
-    status: planned
+    status: complete
     verification: "A written assessment exists recording: tool-call count and token cost to author one spec via the compiler versus one Write, the measured stripped binary size, measured single-artifact timings, the corrections needed on each existing artifact, and an explicit recommendation to proceed, amend, or abandon"
     justifies: "Prevents the concrete failure of building Phases 3 through 7 on an unvalidated hypothesis; also supplies the measurements NFR-07 is provisional pending and that finding F-12 flagged as unsourced."
     depends_on: ["1.4"]
