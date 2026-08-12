@@ -164,7 +164,7 @@ Treating the smaller measurement as automatically reopening D-0015. That decisio
 - VCS: `git`
 - Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
 - Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
-- Final aligned review: Retro/05-Python-Removal-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
+- Final aligned review: Retro/05-Python-Removal-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..a0f56ce60f506b21e203eee569f9992a2a5ad6a1
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|

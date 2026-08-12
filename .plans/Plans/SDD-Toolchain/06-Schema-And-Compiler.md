@@ -231,7 +231,7 @@ Revision boundary: Every refusal names the constraint and the correct form.
 - VCS: `git`
 - Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
 - Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
-- Final aligned review: Retro/06-Schema-And-Compiler-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
+- Final aligned review: Retro/06-Schema-And-Compiler-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..a0f56ce60f506b21e203eee569f9992a2a5ad6a1
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
