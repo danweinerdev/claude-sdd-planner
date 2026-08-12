@@ -37,6 +37,21 @@ graph LR
 
 ## Quick Start
 
+### Prerequisite: install the `sdd` binary
+
+The plugin's skills and hooks drive one cross-platform Go binary. The plugin
+does not ship or build it — install it once per machine:
+
+```bash
+go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
+```
+
+The Go toolchain and network access are prerequisites at *install* time only;
+neither is needed when the plugin runs. `/setup` verifies the binary before it
+touches anything, copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` so the hooks can
+find it, and stops with the exact command to run if it is missing or older
+than the plugin's `minSddVersion`.
+
 ### From any repo
 
 ```bash

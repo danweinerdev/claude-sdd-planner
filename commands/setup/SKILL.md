@@ -20,10 +20,51 @@ What setup does **not** do: resolve paths (user-given paths are stored verbatim 
 
 ## Process
 
-### 1. Target and VCS
+### 1. Verify Provisioning — before any filesystem mutation
+
+The plugin's skills and hooks all drive the `sdd` binary, so setup verifies it
+**first** and **stops the entire setup** when it can't. This ordering is the
+point: a half-configured repo whose hooks silently fail open is worse than a
+repo setup refused to touch.
+
+Run, with `${CLAUDE_PLUGIN_ROOT}` set to the plugin directory:
+
+```
+sdd provision --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+```
+
+This resolves a binary (plugin-root copy first, then `PATH`), admits it only
+at or above the plugin's `minSddVersion`, and places or refreshes
+`${CLAUDE_PLUGIN_ROOT}/bin/sdd[.exe]` on **every** run — including when the
+resolved binary was already on `PATH`. `hooks.json` can interpolate only
+`${CLAUDE_PLUGIN_ROOT}` and cannot resolve `PATH`, so without that copy the
+hooks fail open silently while every skill keeps working: a failure with no
+symptom.
+
+Then verify through the plugin-root path specifically, not through `PATH`:
+
+```
+"${CLAUDE_PLUGIN_ROOT}/bin/sdd" version
+"${CLAUDE_PLUGIN_ROOT}/bin/sdd" doctor
+```
+
+**Setup never compiles, downloads, or installs anything.** If `sdd provision`
+fails, stop and relay its message verbatim — it already names every candidate
+considered, the required floor, and the exact command that fixes it. The two
+cases are distinguishable and neither is setup's to repair:
+
+- **Not found** — no binary at the plugin root or on `PATH`. The user runs the
+  `go install …@v<floor>` command the error names.
+- **Below the floor** — a binary exists but predates a schema or CLI contract
+  change, so it would silently apply the wrong rules. The error names the
+  detected version and the required floor.
+
+Report the resolved source path and version, then continue.
+
+### 2. Target and VCS
 Determine the target directory (see Arguments; verify it exists). Detect its VCS per `shared/vcs-detection.md`: `git`, `git-worktree`, `git-bare`, `perforce`, or `none`. For `git-bare`, **stop**: "This is a bare git repository. Run setup on individual worktrees instead." Everything else proceeds; the VCS only affects the ignore-file step.
 
-### 2. Resolve Planning Root
+### 3. Resolve Planning Root
 Priority order — the chosen value is stored **verbatim**, never resolved to absolute:
 1. `--planning-root` flag.
 2. Existing `<target>/planning-config.json` — reuse its `planningRoot` and report `planning-config.json: OK (existing planningRoot preserved)`.
@@ -32,20 +73,20 @@ Priority order — the chosen value is stored **verbatim**, never resolved to ab
 
 Also ask about the dashboard opt-in unless `--dashboard` was passed or inherited.
 
-### 3. Write planning-config.json
+### 4. Write planning-config.json
 ```json
 { "planningRoot": "<verbatim>" }
 ```
 With the dashboard opt-in, also include `"dashboard": true`, `"title"`, and `"description"` (read by the companion `sdd-dashboard` plugin; ignored otherwise). Overwrite only when `planningRoot` differs from an existing config — but still add/update `dashboard` when explicitly requested.
 
-### 4. Bootstrap Planning Directories
+### 5. Bootstrap Planning Directories
 Resolve the planning root for this step only (relative → joined with target; absolute → as-is) and `mkdir -p`:
 ```
 Plans/  Research/  Brainstorm/  Specs/  Designs/  Decisions/
 ```
 Plan lifecycle is tracked in each plan README's frontmatter `status` — `Plans/` stays flat. Report created vs already-existing.
 
-### 5. Write Launcher Scripts
+### 6. Write Launcher Scripts
 Create both launchers in the target unconditionally, passing the `planningRoot` value through verbatim (`claude --add-dir` accepts relative and absolute paths).
 
 `claude.sh` (make executable):
@@ -61,13 +102,13 @@ exec claude --add-dir="<planning-root verbatim>" "$@"
 claude --add-dir="<planning-root verbatim>" %*
 ```
 
-### 6. Ignore File
+### 7. Ignore File
 `git`/`git-worktree` → `.gitignore`; `perforce` → `.p4ignore` (its syntax: one path per line, no leading slash); `none` → skip. Ensure these entries exist without duplicating: `Dashboard/` (generated HTML, harmless if the dashboard plugin isn't installed) and `planning-config.local.json` (local filesystem paths).
 
-### 7. Offer CLAUDE.md Guidance (optional)
+### 8. Offer CLAUDE.md Guidance (optional)
 Ask before writing anything. For a dedicated planning-only repo, instantiate `shared/templates/claude-md-full.md`; for an existing project, append `shared/templates/claude-md-snippet.md`. Skip silently if declined.
 
-### 8. Report
+### 9. Report
 Summarize: target path (as given), detected VCS, planning root (verbatim, noting relative/absolute), dashboard flag, files created/updated (config, directories, launchers, ignore file, CLAUDE.md guidance created/appended/skipped), and the next step: `cd <target> && ./claude.sh`.
 
 ## Context

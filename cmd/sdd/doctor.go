@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
@@ -30,6 +32,8 @@ type doctorReport struct {
 	PlanningRoot      string       `json:"planning_root,omitempty"`
 	PlanningRootError string       `json:"planning_root_error,omitempty"`
 	Schemas           []schemaInfo `json:"schemas"`
+	HookBinary        string       `json:"hook_binary,omitempty"`
+	HookBinaryError   string       `json:"hook_binary_error,omitempty"`
 }
 
 // cmdDoctor reports the binary's own identity, the resolved planning root (or
@@ -44,6 +48,7 @@ func cmdDoctor(args []string) error {
 	}
 
 	rep := doctorReport{Version: version.Version}
+	rep.HookBinary, rep.HookBinaryError = checkHookBinary()
 	if exe, err := os.Executable(); err == nil {
 		if abs, err2 := filepath.Abs(exe); err2 == nil {
 			rep.BinaryPath = abs
@@ -102,6 +107,13 @@ func cmdDoctor(args []string) error {
 
 func printDoctorReport(r doctorReport) {
 	fmt.Printf("sdd %s\n  binary: %s\n", r.Version, r.BinaryPath)
+	// The hook binary is reported even when healthy: its absence is the one
+	// failure with no other symptom, so silence here would be ambiguous.
+	if r.HookBinaryError != "" {
+		fmt.Printf("  hook binary: %s — %s\n", r.HookBinary, r.HookBinaryError)
+	} else if r.HookBinary != "" {
+		fmt.Printf("  hook binary: %s (OK)\n", r.HookBinary)
+	}
 	if r.PlanningRootError != "" {
 		fmt.Printf("  planning root: ERROR: %s\n", r.PlanningRootError)
 	} else {
@@ -119,4 +131,31 @@ func printDoctorReport(r doctorReport) {
 		}
 		fmt.Printf("    %-10s %2d sections  mode=%-8s %s\n", s.Type, s.Sections, s.FrontmatterMode, count)
 	}
+}
+
+// checkHookBinary reports whether ${CLAUDE_PLUGIN_ROOT}/bin/sdd exists and
+// runs — the path hooks.json executes.
+//
+// This is the dead-hook state F-02 identified: hooks.json can interpolate only
+// ${CLAUDE_PLUGIN_ROOT} and cannot resolve PATH, so a user whose binary lives
+// only on PATH has working skills and silently dead hooks. Nothing else
+// surfaces that, because every skill keeps working — the failure has no
+// symptom until a guard that should have denied something doesn't.
+func checkHookBinary() (path, problem string) {
+	root := os.Getenv("CLAUDE_PLUGIN_ROOT")
+	if root == "" {
+		return "", "CLAUDE_PLUGIN_ROOT is unset; cannot check the hook binary path"
+	}
+	name := "sdd"
+	if runtime.GOOS == "windows" {
+		name = "sdd.exe"
+	}
+	p := filepath.Join(root, "bin", name)
+	if _, err := os.Stat(p); err != nil {
+		return p, "absent — hooks.json points here and will fail open silently; run `sdd provision`"
+	}
+	if err := exec.Command(p, "version").Run(); err != nil {
+		return p, "present but not executable: " + err.Error()
+	}
+	return p, ""
 }

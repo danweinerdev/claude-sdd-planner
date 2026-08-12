@@ -10,9 +10,7 @@ sdd-planner/                      # Repository root = plugin root
 │   └── plugin.json               # Plugin manifest (name: "sdd-planner")
 ├── CLAUDE.md                     # This file
 ├── hooks/
-│   ├── hooks.json                # Plugin hooks — SessionStart ledger injection + PreToolUse Bash guard
-│   ├── load-decisions.sh         # Emits accepted ledger entries as additionalContext
-│   └── reviewer-bash-guard.py    # Denies write/network-shaped Bash from the read-only agents
+│   └── hooks.json                # Plugin hooks — SessionStart + PreToolUse, both served by `sdd hook`
 ├── Makefile                      # make bump-patch / bump-minor / bump-major
 ├── planning-config.json          # Planning configuration
 ├── .gitignore
@@ -20,7 +18,9 @@ sdd-planner/                      # Repository root = plugin root
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
 │   └── <lang>-specifications/    # Per-language structural verification (cpp, rust, go, python, typescript, java, swift)
 ├── agents/                       # Subagent definitions
-├── scripts/                      # Deterministic validators (read-only; PyYAML per requirements.txt)
+├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, provisioning
+├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs)
+├── scripts/                      # Legacy Python validators, retained as the differential parity oracle
 │   ├── sdd_validate.py           # Full artifact validator — structure, graph, evidence, ledger
 │   └── sdd_decision_validate.py  # Focused decision-ledger validator
 ├── requirements.txt              # Python deps for scripts/ (PyYAML)
@@ -190,7 +190,7 @@ Agents fall into two groups based on how they handle MCP servers:
 - `spec-compliance` — diff + specs/designs only. Reading the plan via tickets would muddy what counts as "the spec."
 - `blind-spot-finder` — diff only. Any external context erodes the diff-only adversarial guarantee.
 
-The allowlists block MCP/Write/Edit, but the lanes keep `Bash` because the diff is their input — only a shell can run `git diff`/`p4 diff2` and the tests/linters their validation duties require. Bash is not inherently read-only, so it is guarded twice: behaviorally (each lane's prompt forbids writes and out-of-lane reads, and the orchestrator curates inputs) and mechanically, by the `hooks/reviewer-bash-guard.py` PreToolUse hook — for the seven read-only agents (`drift-detector`, `spec-compliance`, `blind-spot-finder`, `quality-scanner`, `researcher`, `plan-reviewer`, `spec-reviewer`) it allowlists read-only `git`/`p4` subcommands and denies write- or network-shaped commands (`rm`, `sed -i`, redirection outside `/dev/null`, `curl`, package installs, `git commit/push/checkout/...`). Test and lint runs still pass through, since reviewers are required to run them. The guard fails open for every other agent and the main session, and it covers only the plugin's own agents — project-supplied review lanes remain protected by the trust gate, not the guard. Intent isolation (what a lane is *given*) remains behavioral either way.
+The allowlists block MCP/Write/Edit, but the lanes keep `Bash` because the diff is their input — only a shell can run `git diff`/`p4 diff2` and the tests/linters their validation duties require. Bash is not inherently read-only, so it is guarded twice: behaviorally (each lane's prompt forbids writes and out-of-lane reads, and the orchestrator curates inputs) and mechanically, by the `sdd hook pretooluse` PreToolUse hook — for the seven read-only agents (`drift-detector`, `spec-compliance`, `blind-spot-finder`, `quality-scanner`, `researcher`, `plan-reviewer`, `spec-reviewer`) it allowlists read-only `git`/`p4` subcommands and denies write- or network-shaped commands (`rm`, `sed -i`, redirection outside `/dev/null`, `curl`, package installs, `git commit/push/checkout/...`). Test and lint runs still pass through, since reviewers are required to run them. The guard fails open for every other agent and the main session, and it covers only the plugin's own agents — project-supplied review lanes remain protected by the trust gate, not the guard. Intent isolation (what a lane is *given*) remains behavioral either way.
 
 The inheriting agents carry behavioral guardrails in their bodies (`researcher`, `quality-scanner`, `plan-reviewer`, and `spec-reviewer` are read-only even though they could technically inherit Write/Edit and write-shaped MCP calls from the session). Projects that want stricter guarantees can drop overrides into `.claude/agents/<name>.md` at the project level — those take precedence over plugin-provided agents.
 
@@ -214,6 +214,20 @@ Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:d
 | diagram (legacy) | `draft`, `active`, `archived` |
 | debrief | `draft`, `complete` |
 | retro (legacy) | `draft`, `complete` |
+
+## The `sdd` Binary
+
+Every skill and both hooks drive one cross-platform Go binary. The plugin does
+not ship or build it — install it once per machine:
+
+```bash
+go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
+```
+
+`/setup` verifies it before touching anything, copies it to
+`${CLAUDE_PLUGIN_ROOT}/bin/` (hooks.json can interpolate only
+`${CLAUDE_PLUGIN_ROOT}`, never `PATH`), and stops with the exact `go install`
+command when the binary is missing or below `minSddVersion`.
 
 ## Configuration
 
