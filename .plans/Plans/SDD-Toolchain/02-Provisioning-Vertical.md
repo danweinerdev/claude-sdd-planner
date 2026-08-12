@@ -3,7 +3,7 @@ title: "Provisioning Vertical"
 type: phase
 plan: "SDD-Toolchain"
 phase: 2
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "A real `sdd` binary users install with go install, discovered by skills and hooks, with /setup reworked to verify rather than build"

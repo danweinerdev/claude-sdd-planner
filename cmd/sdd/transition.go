@@ -75,11 +75,19 @@ func cmdTransition(kind string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
 	}
-	// SDD070-075 are evaluated against the COMMITTED copy at HEAD, so a
-	// completion gate that only fails because the transition itself is not yet
-	// committed is not a real refusal — no sequence of commands could satisfy
-	// it, since the status must be committed to be seen and must pass to be
-	// written. Those are reported as a required follow-up instead.
+	// Two families cannot be satisfied while the transition is being checked,
+	// and both are reported as follow-ups rather than refusals.
+	//
+	// SDD070-075 read the COMMITTED copy at HEAD, so a status that is not yet
+	// committed can never satisfy them — it must be committed to be seen and
+	// pass to be written.
+	//
+	// SDD173's clean-worktree branch is self-inflicted: gateDiagnostics writes
+	// the candidate to disk so the real rules can evaluate it, which dirties
+	// the very tree that check inspects. Refusing on that would make the verb
+	// permanently unusable on a phase whose worktree is otherwise clean —
+	// exactly the case it exists for. `sdd validate` still reports both after
+	// the write lands, so neither is suppressed, only deferred.
 	blocking, pending := splitCommitPending(blocking)
 
 	if len(blocking) > 0 {
@@ -112,7 +120,8 @@ func cmdTransition(kind string, args []string) error {
 // is committed.
 func splitCommitPending(all []rules.Diagnostic) (blocking, pending []rules.Diagnostic) {
 	for _, d := range all {
-		if strings.Contains(d.Message, "is not committed at HEAD") {
+		if strings.Contains(d.Message, "is not committed at HEAD") ||
+			strings.Contains(d.Message, "requires the current target worktree to be clean") {
 			pending = append(pending, d)
 			continue
 		}

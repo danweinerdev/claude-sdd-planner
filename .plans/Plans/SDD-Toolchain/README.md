@@ -14,7 +14,7 @@ phases:
     depends_on: []
   - id: 2
     title: "Provisioning Vertical"
-    status: planned
+    status: complete
     doc: "02-Provisioning-Vertical.md"
     depends_on: [1]
   - id: 3
