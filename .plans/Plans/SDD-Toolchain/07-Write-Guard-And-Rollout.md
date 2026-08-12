@@ -41,6 +41,8 @@ own normalization migration.
 
 ## 7.1: Normalization migration for the spec type
 
+Implements `FR-46`, `FR-47`, `D-0008`, `AC-43`.
+
 ### Subtasks
 - [x] Implement the migration command with before/after validation
 - [x] Run it for the spec type as its own scoped lifecycle revision
@@ -65,6 +67,8 @@ Revision boundary: Every spec artifact is canonical, with validation proven unch
 | `sdd migrate --all --dry-run` | `.` | PASS (`exit 0`) | `14 migrated, 3 blocked — the frozen reviews SPK050 correctly refuses` |
 
 ## 7.2: Write/Edit guard for the spec type
+
+Implements `FR-28`, `FR-36`, `AC-24`.
 
 ### Subtasks
 - [x] Implement path-scoped Write/Edit denial for migrated types only
@@ -91,6 +95,8 @@ Revision boundary: Direct writes to spec artifacts are impossible; everything el
 
 ## 7.3: Rewrite /specify against the CLI and measure
 
+Implements `FR-35`, `AC-27`.
+
 ### Subtasks
 - [x] Rewrite /specify to author through sdd
 - [x] Remove every Write/Edit authoring instruction for artifact paths
@@ -115,6 +121,8 @@ Revision boundary: One lifecycle skill is fully CLI-driven, with the effect meas
 | `sdd template spec --out ... && sdd section set` | `.` | PASS (`exit 0`) | `the prescribed workflow runs end to end; found and fixed a section-spacing defect` |
 
 ## 7.4: Onboard the remaining artifact types
+
+Implements `FR-36`, `FR-34`, `AC-28`, `AC-46`.
 
 ### Subtasks
 - [x] Add schemas for plan, phase, design, research, brainstorm, debrief, review, and decision-log

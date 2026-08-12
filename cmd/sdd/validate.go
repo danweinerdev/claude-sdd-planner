@@ -52,6 +52,10 @@ func cmdValidate(args []string) error {
 	root := fs2.String("root", "", "planning root (default: resolved from planning-config.json)")
 	scope := fs2.String("scope", "", "limit findings to an artifact/path and paths it directly relates to")
 	format := fs2.String("format", "text", "output format: text|json")
+	// FR-04 requires --json on every subcommand. validate predates that and
+	// spells it --format json; the alias makes the uniform flag work without
+	// breaking the existing spelling or the callers that use it.
+	asJSON := fs2.Bool("json", false, "shorthand for --format json")
 
 	flags, positional := splitArgs(args, map[string]bool{
 		"-root": true, "--root": true,
@@ -63,6 +67,9 @@ func cmdValidate(args []string) error {
 	}
 	if len(positional) > 0 {
 		return fmt.Errorf("validate: unexpected extra argument %q", positional[0])
+	}
+	if *asJSON {
+		*format = "json"
 	}
 	if *format != "text" && *format != "json" {
 		return fmt.Errorf("validate: --format must be text or json")

@@ -42,6 +42,8 @@ fixture.
 
 ## 4.1: Port full-artifact validation to parity
 
+Implements `FR-06`, `FR-08`, `FR-09`, `FR-10`, `AC-03`, `AC-04`, `AC-07`.
+
 ### Subtasks
 - [x] Port discovery, parsing, schema, heading, identifier, hierarchy, citation, graph, traceability, evidence, review-gate, and durability rules
 - [x] Preserve diagnostic identity, ordering, and output shape exactly
@@ -66,6 +68,8 @@ Revision boundary: `sdd validate` is a faithful replacement for sdd_validate.py 
 | `make parity` | `.` | PASS (`exit 0`) | `126 of 126 SDD codes registered; 491 matched, zero extra` |
 
 ## 4.2: Port focused-ledger validation to parity
+
+Implements `FR-07`, `FR-08`, `FR-09`, `FR-10`, `AC-03`, `AC-10`.
 
 ### Subtasks
 - [x] Port ledger discovery, schema, sequencing, supersession, collision, immutability, and concurrent-edit rules
@@ -92,6 +96,8 @@ Revision boundary: `sdd decide validate` is a faithful replacement for sdd_decis
 
 ## 4.3: The two intentional corrections
 
+Implements `FR-11`, `FR-12`, `FR-13`, `FR-18`, `AC-11`, `AC-12`.
+
 ### Subtasks
 - [x] Implement planning-root-relative related resolution with the scrubbed regression fixture
 - [x] Implement the `<phase>.<digits>[a-z]?` grammar as opaque exact identifiers
@@ -116,6 +122,8 @@ Revision boundary: Both reported bugs are fixed with regression fixtures, and th
 | `go test ./internal/rules/` | `.` | PASS (`exit 0`) | `ok internal/rules; SDD064 admits an optional lowercase suffix such as 1.1a, with a regression fixture` |
 
 ## 4.4: Cross-platform and read-only guarantees
+
+Implements `NFR-02`, `NFR-05`, `NFR-06`, `AC-29`, `AC-30`, `AC-36`.
 
 ### Subtasks
 - [x] Enforce LF output and forward-slash frontmatter paths; accept CRLF and BOM input

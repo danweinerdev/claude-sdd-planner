@@ -55,6 +55,8 @@ before any rule is ported. Nothing here depends on the FR-30 parity gate.
 
 ## 2.1: Version single source and make bump wiring
 
+Implements `FR-38`, `FR-39`, `AC-02`, `AC-32`, `FR-38`.
+
 ### Subtasks
 - [x] Add `minSddVersion` to `.claude-plugin/plugin.json`
 - [x] Extend `bump-version.py` to write the generated version source; wire into all three bump targets
@@ -83,6 +85,8 @@ Injecting the version with `-ldflags`. It is the obvious approach and it silentl
 
 ## 2.2: Executable resolution with caching and floor admission
 
+Implements `FR-05`, `FR-49`, `FR-38`, `AC-01`, `AC-35`, `AC-45`, `NFR-07`.
+
 ### Subtasks
 - [x] Implement the two-candidate ordered resolution with floor admission
 - [x] Cache the resolution per session and expose it for reporting
@@ -109,6 +113,8 @@ Revision boundary: Any caller can resolve an admitted binary once, cheaply, with
 
 ## 2.3: sdd doctor
 
+Implements `FR-42`, `AC-34`, `AC-41`.
+
 ### Subtasks
 - [x] Report each candidate path with presence, version, and admission verdict
 - [x] Report the hook static path as a distinct checked item naming `/sdd-planner:setup` when absent
@@ -133,6 +139,8 @@ Revision boundary: A user can diagnose any provisioning state from one command.
 | `sdd doctor` | `.` | PASS (`exit 0`) | `reports hook binary absent with the fix, and (OK) when present` |
 
 ## 2.4: Hooks moved into the binary
+
+Implements `FR-27`, `D-0013`, `D-0014`, `AC-23`, `AC-25`.
 
 ### Subtasks
 - [x] Freeze parity fixtures for reviewer-bash-guard.py before porting any logic
@@ -160,6 +168,8 @@ Revision boundary: Both plugin hooks run from the binary, with the old behavior 
 
 ## 2.5: sdd allowlist in the reviewer guard
 
+Implements `FR-44`, `D-0014`, `AC-39`.
+
 ### Subtasks
 - [x] Add the read-only sdd subcommand allowlist to the guard
 - [x] Deny every mutating subcommand for the seven agents
@@ -184,6 +194,8 @@ Revision boundary: The read-only agents can query through sdd but cannot mutate 
 | `go test ./internal/hook/ -run AllowlistCovers` | `.` | PASS (`exit 0`) | `ok; every sdd subcommand classified, mutating ones denied` |
 
 ## 2.6: /setup reworked to verify and copy
+
+Implements `FR-37`, `FR-40`, `FR-43`, `D-0015`, `AC-33`, `AC-38`, `NFR-08`.
 
 ### Subtasks
 - [x] Move the provisioning check ahead of all filesystem mutation

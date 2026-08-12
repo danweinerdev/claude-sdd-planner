@@ -52,6 +52,8 @@ operating on a copied tree cannot disturb.
 
 ## 1.1: Go module skeleton and the spec schema as data
 
+Implements `FR-14`, `FR-01`.
+
 ### Subtasks
 - [x] Create `go.mod` with the module path `github.com/danweinerdev/claude-sdd-planner` and a declared Go floor
 - [x] Add `cmd/sdd` with a minimal subcommand dispatcher (stdlib `flag`, no cobra yet)
@@ -78,6 +80,8 @@ Revision boundary: The repository builds as a Go module and can load a declarati
 
 ## 1.2: Frontmatter and Markdown parsing into an inspectable model
 
+Implements `FR-29`, `FR-19`.
+
 ### Subtasks
 - [x] Select and pin the CommonMark and YAML libraries, recording version and as-of date (discharges the pinning obligation the Requirements preamble places on the design)
 - [x] Parse frontmatter into a node model preserving line, column, and comments
@@ -103,6 +107,8 @@ Revision boundary: Any existing SDD artifact parses into a positioned model with
 | `go test ./internal/artifact/` | `.` | PASS (`exit 0`) | `ok internal/artifact; frontmatter and sections parse with positions` |
 
 ## 1.3: Section matcher with near-miss normalization and refusal
+
+Implements `FR-19`.
 
 ### Subtasks
 - [x] Fuzzy-match payload headings to schema slots (case, trailing punctuation, emphasis-as-heading, off-by-one depth)
@@ -133,6 +139,8 @@ Making the matcher strict because strictness is easier to implement and test. A 
 
 ## 1.4: apply --dry-run --diff over the round-trip contract
 
+Implements `FR-45`, `FR-24`.
+
 ### Subtasks
 - [x] Emit normalized output: LF, canonical heading order, forward-slash frontmatter paths, stamped `updated`
 - [x] Implement identifier allocation from the FR-20 high-water mark, never filling gaps
@@ -158,6 +166,8 @@ Revision boundary: A spec proposal can be dry-run compiled end to end, showing e
 | `go test ./internal/store/` | `.` | PASS (`exit 0`) | `ok internal/store; atomic write and digest round-trip hold` |
 
 ## 1.5: Feel assessment and go/no-go on the compiler model
+
+Implements `NFR-07`.
 
 ### Subtasks
 - [x] Author a real spec end to end through the spike and record tool calls and token cost against the Write baseline

@@ -27,7 +27,9 @@ import (
 // is always a real finding with an artifact path and line, exactly as FR-21
 // requires.
 
-const transitionUsage = `sdd task complete <phase-path> --id ID
+const transitionUsage = `sdd plan approve <plan-path>
+sdd plan activate <plan-path>
+sdd task complete <phase-path> --id ID
 sdd phase complete <phase-path>
 sdd plan complete <plan-path>
 
@@ -36,8 +38,22 @@ same rules sdd validate runs. Pass --dry-run to see the verdict without
 writing.`
 
 func cmdTransition(kind string, args []string) error {
-	if len(args) == 0 || args[0] != "complete" {
-		return fmt.Errorf("%s: expected `complete`\n\n%s", kind, transitionUsage)
+	if len(args) == 0 {
+		return fmt.Errorf("%s: expected a transition verb\n\n%s", kind, transitionUsage)
+	}
+	verb := args[0]
+	// `approve` and `activate` move a plan through the lifecycle before work
+	// starts. They are separate verbs rather than flags because each gates on
+	// something different, and because a plan that jumps straight to
+	// `complete` leaves no record that it was ever reviewed or started.
+	if verb == "approve" || verb == "activate" {
+		if kind != "plan" {
+			return fmt.Errorf("%s: `%s` applies to a plan, not a %s", kind, verb, kind)
+		}
+		return planLifecycle(verb, args[1:])
+	}
+	if verb != "complete" {
+		return fmt.Errorf("%s: unknown verb %q\n\n%s", kind, verb, transitionUsage)
 	}
 	fs := flag.NewFlagSet(kind+" complete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -234,3 +250,82 @@ func diagKey(d rules.Diagnostic) string {
 }
 
 var _ = artifact.Parse
+
+// planLifecycle implements `sdd plan approve` and `sdd plan activate`.
+//
+// Each enforces the one precondition that makes the transition meaningful:
+// approving a plan requires it to validate (an invalid plan has not been
+// reviewed, whatever a human says), and activating requires it to have been
+// approved first. Neither invents a gate the schema does not declare.
+func planLifecycle(verb string, args []string) error {
+	fs := flag.NewFlagSet("plan "+verb, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
+	flags, positional := splitArgs(args, map[string]bool{})
+	if err := fs.Parse(append(flags, positional...)); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("plan %s: expected exactly one plan path", verb)
+	}
+	path := fs.Arg(0)
+
+	art, err := store.Read(path)
+	if err != nil {
+		return fmt.Errorf("plan %s: %w", verb, err)
+	}
+	if !art.Exists {
+		return fmt.Errorf("plan %s: %s does not exist", verb, path)
+	}
+	doc := artifact.Parse(art.Source)
+	current, _ := doc.FM("status")
+	current = strings.Trim(current, `"'`)
+
+	want, from := "approved", "draft"
+	if verb == "activate" {
+		want, from = "active", "approved"
+	}
+	if current == want {
+		fmt.Printf("plan %s: already %s\n", verb, want)
+		return nil
+	}
+	if current != from {
+		return fmt.Errorf("plan %s: plan is %q; %s moves a plan from %q to %q. "+
+			"A plan that skips a state leaves no record it was ever in it",
+			verb, current, verb, from, want)
+	}
+
+	today := time.Now().Format("2006-01-02")
+	lines := strings.Split(art.Source, "\n")
+	if !setTopLevelStatus(lines, want) {
+		return fmt.Errorf("plan %s: no top-level `status:` field to advance", verb)
+	}
+	updated := restampUpdated(strings.Join(lines, "\n"), today)
+
+	// Approving asserts the plan is fit to build from, so it must validate.
+	if verb == "approve" {
+		blocking, err := gateDiagnostics(path, updated)
+		if err != nil {
+			return fmt.Errorf("plan approve: %w", err)
+		}
+		blocking, _ = splitCommitPending(blocking)
+		if len(blocking) > 0 {
+			var b strings.Builder
+			b.WriteString("plan approve: refused — the plan does not validate:\n")
+			for _, d := range blocking {
+				fmt.Fprintf(&b, "  %s %s:%d: %s\n", d.Code, d.Path, d.Line, d.Message)
+			}
+			return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+		}
+	}
+
+	if *dryRun {
+		fmt.Printf("plan %s: would move %s from %s to %s\n", verb, path, current, want)
+		return nil
+	}
+	if err := store.WriteAtomic(path, updated); err != nil {
+		return fmt.Errorf("plan %s: %w", verb, err)
+	}
+	fmt.Printf("plan %s: %s is now %s\n", verb, path, want)
+	return nil
+}

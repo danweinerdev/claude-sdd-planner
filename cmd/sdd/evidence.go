@@ -143,12 +143,26 @@ func cmdEvidence(args []string) error {
 		identities = completedTaskIdentities(doc)
 	}
 
+	// A plan's evidence carries the same roll-up one level up: one line per
+	// completed phase naming its checkpoint AND the review that closed it
+	// (SDD158). Like the task roll-up, it is read from each phase's own
+	// recorded evidence rather than typed, so the two cannot disagree.
+	var phaseIdentities []phaseIdentityLine
+	if *plan {
+		var err error
+		phaseIdentities, err = completedPhaseIdentities(path, doc)
+		if err != nil {
+			return fmt.Errorf("evidence add: %w", err)
+		}
+	}
+
 	section := renderEvidence(evidenceInput{
 		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: rev,
 		VerifiedBy: *verifiedBy, WorkingDir: *workingDir, Result: *result,
 		Tool: *tool, ToolContext: *toolContext, ToolResult: *toolResult,
 		Focused: *focused, IsTask: *task != "",
 		FinalReview: *finalReview, TaskIdentities: identities,
+		PhaseIdentities: phaseIdentities,
 	})
 
 	if *dryRun {
@@ -181,11 +195,91 @@ type evidenceInput struct {
 	Focused, FinalReview            string
 	IsTask                          bool
 	TaskIdentities                  []taskIdentityLine
+	PhaseIdentities                 []phaseIdentityLine
 }
 
 // taskIdentityLine is one completed task and the revision its own evidence
 // records, for the phase's `### Completed task identities` section.
 type taskIdentityLine struct{ ID, Revision string }
+
+// phaseIdentityLine is one completed phase, the checkpoint its evidence
+// records, and the review that closed it.
+type phaseIdentityLine struct{ ID, Revision, Review string }
+
+// completedPhaseIdentities reads each completed phase's checkpoint and final
+// review out of that phase's own evidence section.
+//
+// Both values are derived rather than supplied for the same reason the task
+// roll-up is: SDD158 requires the plan's summary to match the phases exactly,
+// and a hand-typed roll-up across seven phases is a transcription error
+// waiting to happen.
+func completedPhaseIdentities(planPath string, doc *artifact.Doc) ([]phaseIdentityLine, error) {
+	var meta struct {
+		Phases []struct {
+			ID     any    `yaml:"id"`
+			Status string `yaml:"status"`
+			Doc    string `yaml:"doc"`
+		} `yaml:"phases"`
+	}
+	if err := yaml.Unmarshal([]byte(strings.Join(doc.FrontmatterRaw, "\n")), &meta); err != nil {
+		return nil, fmt.Errorf("cannot read the plan's phases[]: %w", err)
+	}
+
+	dir := filepath.Dir(planPath)
+	var out []phaseIdentityLine
+	for _, ph := range meta.Phases {
+		if ph.Status != "complete" || ph.Doc == "" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, ph.Doc))
+		if err != nil {
+			return nil, fmt.Errorf("phase %v: cannot read %s: %w", ph.ID, ph.Doc, err)
+		}
+		body := docBody(artifact.Parse(string(raw)))
+		section := phaseEvidenceSection(body)
+		rev := labelValue(section, "- Revision / checkpoint:")
+		review := reviewPathFrom(labelValue(section, "- Final aligned review:"))
+		if rev == "" || review == "" {
+			return nil, fmt.Errorf("phase %v has no recorded checkpoint or final review; "+
+				"complete the phase before closing the plan", ph.ID)
+		}
+		out = append(out, phaseIdentityLine{ID: fmt.Sprint(ph.ID), Revision: rev, Review: review})
+	}
+	return out, nil
+}
+
+// phaseEvidenceSection returns the `## Phase Completion Evidence` body.
+func phaseEvidenceSection(body string) string {
+	start := strings.Index(body, "## Phase Completion Evidence")
+	if start < 0 {
+		return ""
+	}
+	rest := body[start:]
+	if next := strings.Index(rest[3:], "\n## "); next >= 0 {
+		rest = rest[:next+3]
+	}
+	return rest
+}
+
+// labelValue pulls a `- Label: value` line's value, unquoted.
+func labelValue(section, label string) string {
+	for _, line := range strings.Split(section, "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, label) {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(strings.TrimPrefix(t, label)), "`")
+	}
+	return ""
+}
+
+// reviewPathFrom takes the path half of `<path>; frozen: <identity>`.
+func reviewPathFrom(entry string) string {
+	if i := strings.Index(entry, ";"); i >= 0 {
+		return strings.TrimSpace(entry[:i])
+	}
+	return strings.TrimSpace(entry)
+}
 
 // completedTaskIdentities reads each completed task's recorded revision out of
 // that task's own evidence, so the phase's roll-up cannot drift from the tasks
@@ -267,6 +361,12 @@ func renderEvidence(in evidenceInput) string {
 	b.WriteString("|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| `%s` | `%s` | PASS (`exit 0`) | `%s` |\n",
 		in.VerifiedBy, in.WorkingDir, in.Result)
+	if len(in.PhaseIdentities) > 0 {
+		b.WriteString("\n### Completed phase identities\n\n")
+		for _, p := range in.PhaseIdentities {
+			fmt.Fprintf(&b, "- `%s`: `%s`; review: `%s`\n", p.ID, p.Revision, p.Review)
+		}
+	}
 	if len(in.TaskIdentities) > 0 {
 		b.WriteString("\n### Completed task identities\n\n")
 		for _, t := range in.TaskIdentities {

@@ -43,6 +43,8 @@ the parity gates depend on.
 
 ## 5.1: Delete the Python validators and their bootstrap
 
+Implements `FR-33`, `FR-35`, `D-0012`, `AC-27`, `NFR-01`, `NFR-04`.
+
 ### Subtasks
 - [x] Delete both scripts, `requirements.txt`, and the virtualenv test bootstrap
 - [x] Retain frozen oracle outputs and black-box fixtures as the authoritative regression suite
@@ -68,6 +70,8 @@ Revision boundary: No user-facing path invokes Python, and the regression suite 
 
 ## 5.2: Reconcile the decision ledger and maintenance rules
 
+Implements `FR-35`, `D-0012`, `D-0013`, `D-0014`, `D-0015`.
+
 ### Subtasks
 - [x] Update the maintenance rules for the Go toolchain and the schema-generated templates
 - [x] Verify every superseded ledger entry links correctly to its successor
@@ -92,6 +96,8 @@ Revision boundary: Documentation and ledger match the shipped system.
 | `sdd decide validate` | `.` | PASS (`exit 0`) | `ledger supersession links clean; maintenance rules updated for the Go toolchain` |
 
 ## 5.3: Measure and replace the provisional bounds
+
+Implements `NFR-07`, `AC-31`.
 
 ### Subtasks
 - [x] Benchmark single-artifact apply and validate on named hardware

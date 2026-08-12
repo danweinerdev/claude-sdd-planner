@@ -43,6 +43,8 @@ boundary.
 
 ## 3.1: Freeze the Python oracle sources and test inventory
 
+Implements `FR-31`, `AC-06`.
+
 ### Subtasks
 - [x] Freeze the six test files as non-executable oracle sources with checksums
 - [x] Complete `current-test-coverage.csv` with one row per Python test method
@@ -67,6 +69,8 @@ Revision boundary: Every current Python test is inventoried and its source froze
 | `python3 tools/parity/freeze.py` | `.` | PASS (`exit 0`) | `froze 128 roots, 705 diagnostics to frozen-expectations.json` |
 
 ## 3.2: Source-derived diagnostic branch manifest
+
+Implements `FR-30`, `AC-04`, `AC-05`.
 
 ### Subtasks
 - [x] Scan both validators and assign branch identifiers by file, function, code, and callsite ordinal
@@ -94,6 +98,8 @@ Revision boundary: Every diagnostic branch in the Python validators has frozen e
 
 ## 3.3: Differential runner and compatibility corpora
 
+Implements `FR-32`, `AC-03`, `AC-08`, `AC-09`, `AC-10`.
+
 ### Subtasks
 - [x] Build the differential runner over shared black-box fixtures
 - [x] Build the YAML, Markdown-visibility, CLI-output, path-safety, Git-history, evidence, review, ledger-archive, case-sensitivity, and non-ASCII corpora
@@ -118,6 +124,8 @@ Revision boundary: Python and Go can be run side by side over a shared corpus wi
 | `make parity` | `.` | PASS (`exit 0`) | `128 roots, 491 matched, zero extra in both live and frozen modes` |
 
 ## 3.4: History-aware migration gate
+
+Implements `FR-30`, `AC-05`.
 
 ### Subtasks
 - [x] Implement the history-aware boundary check

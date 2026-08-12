@@ -53,6 +53,8 @@ The production compiler, informed by whatever Phase 1 learned. Scoped to the
 
 ## 6.1: Production schema loader with project overrides
 
+Implements `FR-14`, `FR-16`, `AC-14`, `FR-28`.
+
 ### Subtasks
 - [x] Promote the spike schema to production with the full field set
 - [x] Implement override layering with the prohibition set
@@ -77,6 +79,8 @@ Revision boundary: Schemas load from embedded defaults plus safe project overrid
 | `go test ./internal/schema/` | `.` | PASS (`exit 0`) | `17 artifact types load and validate from embedded JSON` |
 
 ## 6.2: Generate templates from schema
+
+Implements `FR-15`, `AC-13`.
 
 ### Subtasks
 - [x] Implement the generator
@@ -106,6 +110,8 @@ Improving a template while implementing the generator. The first pass must repro
 
 ## 6.3: apply with the round-trip contract
 
+Implements `FR-17`, `FR-18`, `FR-19`, `FR-20`, `FR-22`, `FR-23`, `FR-24`, `FR-45`.
+
 ### Subtasks
 - [x] Implement the compile pipeline through atomic write
 - [x] Implement FR-45 assertion semantics and `--retire`
@@ -132,6 +138,8 @@ Revision boundary: A spec can be created and revised entirely through the compil
 
 ## 6.4: Isolation for every mutating subcommand
 
+Implements `FR-48`, `AC-44`, `FR-50`, `AC-48`.
+
 ### Subtasks
 - [x] Capture a read-time digest and verify at write time
 - [x] Emit a distinct re-read-and-retry diagnostic
@@ -157,6 +165,8 @@ Revision boundary: Concurrent mutation fails loudly instead of losing data.
 
 ## 6.5: Lifecycle verbs and gates
 
+Implements `FR-21`, `FR-25`, `FR-26`, `FR-46`, `D-0008`, `AC-20`, `AC-21`, `AC-22`, `AC-42`.
+
 ### Subtasks
 - [x] Implement the transition verbs reusing the validator rule implementations
 - [x] Implement evidence add, decide add with the collision check, next, show, list
@@ -181,6 +191,8 @@ Revision boundary: Status transitions and ledger appends enforce their gates in 
 | `sdd phase complete --dry-run` | `.` | PASS (`exit 0`) | `gates evaluated by the same rules sdd validate runs; refusals cite artifact and line` |
 
 ## 6.6: Error messages as the primary interface
+
+Implements `FR-29`, `AC-26`, `FR-04`.
 
 ### Subtasks
 - [x] Implement did-you-mean for unknown flags
