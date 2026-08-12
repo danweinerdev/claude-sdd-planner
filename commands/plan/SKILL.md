@@ -96,7 +96,7 @@ Shallow tasks with no subtasks or notes are not acceptable output — they're th
 
 ### 5. Review
 
-- Run the deterministic validator first: `python3 <plugin-dir>/scripts/sdd_validate.py --scope Plans/<PlanName> --format json` (see `/validate`). Fix structural diagnostics before dispatching the reviewer — don't spend a review cycle on findings a script catches.
+- Run the deterministic validator first: `sdd validate --scope Plans/<PlanName> --format json` (see `/validate`). Fix structural diagnostics before dispatching the reviewer — don't spend a review cycle on findings a script catches.
 - Invoke the `sdd-planner:plan-reviewer` agent to review the complete plan.
 - Address any issues raised by the reviewer.
 - Treat a task that cannot land as a clean, complete, bisectable native SCM revision/checkpoint as a plan-structure defect, not an implementation detail — split or reorder it into smaller complete dependency-ordered units before approval.

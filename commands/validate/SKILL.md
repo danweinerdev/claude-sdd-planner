@@ -18,14 +18,14 @@ Before implementation, before any completion transition, before handoff, or in C
 From the target repository root:
 
 ```bash
-python3 <plugin-dir>/scripts/sdd_validate.py --format json
+sdd validate --format json
 ```
 
 Pass `--scope <planning-root-relative-path-or-artifact-name>` when the user named a narrower scope. Scoped validation includes every discoverable artifact selected by that path/name and follows transitive explicit `related` links — a plan scope covers all plan-owned artifacts plus its governing related graph even when the scope names its README or one phase. Bare names that match multiple artifact roots are rejected as ambiguous; use the reported planning-root-relative path. JSON output lists the exact successfully parsed `artifacts_in_scope`; diagnostics for malformed files under the requested scope remain visible. Unresolved references remain diagnostics on the artifact that cites them; an existing but undiscoverable file is never claimed as validated.
 
-PyYAML is a declared plugin dependency in `<plugin-dir>/requirements.txt`; if it is unavailable, report the validator's dependency error and stop rather than silently replacing deterministic checks with model judgment. Exit `0` means scripted checks passed, exit `1` means the JSON diagnostics are authoritative findings, and exit `2` means validation could not run. Never execute artifact-recorded evidence commands as part of validation.
+If `sdd` is unavailable, report the error and stop rather than silently replacing deterministic checks with model judgment. Exit `0` means scripted checks passed, exit `1` means the JSON diagnostics are authoritative findings, and exit `2` means validation could not run. Never execute artifact-recorded evidence commands as part of validation.
 
-For a direct decision-ledger write or focused ledger audit, `scripts/sdd_decision_validate.py <resolved-ledger> --format json` provides the stricter standalone format, archive, supersession, structural-candidate, and Git-backed immutability checks required by `shared/decision-log.md`. The full validator remains authoritative for cross-artifact scope resolution, citations, and related-graph checks.
+For a direct decision-ledger write or focused ledger audit, `sdd decide validate <resolved-ledger> --format json` provides the stricter standalone format, archive, supersession, structural-candidate, and Git-backed immutability checks required by `shared/decision-log.md`. The full validator remains authoritative for cross-artifact scope resolution, citations, and related-graph checks.
 
 Identity mode defaults to `auto`, which performs current target-worktree and governing lifecycle-content checks for every populated evidence section. Use the equivalent explicit `--identity-mode current` immediately before a completion transition. Use `--identity-mode historical` only for a confirmed historical audit where later legitimate work makes current-source comparison inappropriate.
 
@@ -55,7 +55,7 @@ The script proves citation presence, not semantic conformance. Never report the 
 Open with `Valid` or `Invalid`. For every finding include severity, artifact and section/line, violated rule, and the exact required correction. Include the files and checks inspected so absence claims have a search trail. A valid result names the scope and confirms each check class — it is not a generic "looks good."
 
 ## Context
-- Validator: `scripts/sdd_validate.py` (deterministic layer; read-only)
-- Ledger validator: `scripts/sdd_decision_validate.py`
+- Validator: `sdd validate` (deterministic layer; read-only)
+- Ledger validator: `sdd decide validate`
 - Conventions enforced: `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, `shared/review-artifacts.md`, `shared/decision-log.md`
 - Path resolution: `shared/path-resolution.md`

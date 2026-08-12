@@ -20,10 +20,6 @@ sdd-planner/                      # Repository root = plugin root
 ├── agents/                       # Subagent definitions
 ├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, provisioning
 ├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs)
-├── scripts/                      # Legacy Python validators, retained as the differential parity oracle
-│   ├── sdd_validate.py           # Full artifact validator — structure, graph, evidence, ledger
-│   └── sdd_decision_validate.py  # Focused decision-ledger validator
-├── requirements.txt              # Python deps for scripts/ (PyYAML)
 ├── shared/
 │   ├── frontmatter-schema.md     # Single source of truth for artifact metadata
 │   ├── completion-evidence.md    # Evidence-gated completion — what `complete` requires, per level
@@ -70,7 +66,7 @@ Every context this plugin runs in — primary-context skills and all agents, on 
 ### Sourced Necessity (the scope counterweight)
 Every gap-detection mechanism in the plugin is additive — `plan-reviewer`'s Completeness and Gap lenses hunt for what's *missing*, and "don't downscope by human effort" correctly disables cost as a reason to cut. Sourced necessity is the counterweight that keeps plans from growing monotonically. It is deliberately **not** "keep it simple", which backfires by inviting cuts to correctness.
 
-The rule is traceability, not size: **every task carries the demand that motivates it, or it is cut** — the same discipline the plugin already applies to facts ("no source, no number"). Operationally: task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`D-NNNN` ids it serves, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses to create unsourced tasks and can now *retire* tasks in Revise mode; `plan-reviewer` carries a Scope lens; and plans and designs carry `## Non-Goals` so a spec's boundaries survive downstream. `scripts/sdd_validate.py` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo).
+The rule is traceability, not size: **every task carries the demand that motivates it, or it is cut** — the same discipline the plugin already applies to facts ("no source, no number"). Operationally: task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`D-NNNN` ids it serves, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses to create unsourced tasks and can now *retire* tasks in Revise mode; `plan-reviewer` carries a Scope lens; and plans and designs carry `## Non-Goals` so a spec's boundaries survive downstream. `sdd validate` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo).
 
 The counterweight starts earlier, at `/brainstorm`, where the cheapest scope decision is available: **Idea 0 is always "do nothing / status quo"**, scored in the same matrix columns as every other option. It is the baseline the rest must beat, `aim for 3-5` is a range rather than a quota, and "do nothing" is a legitimate recommendation — a brainstorm that concludes the problem isn't worth solving yet has succeeded. Because a brainstorm is exploratory, a missing baseline is a `candidate` diagnostic (SDD078), surfaced without blocking; omitting it is legitimate when inaction is impossible (hard deadline, compliance obligation, active outage), but the omission must be deliberate and stated, never silent.
 
@@ -95,7 +91,7 @@ Plan (README.md)       <- like a Jira Project
 | task | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 
 ### Completion Evidence
-`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence (`### Completion Evidence` per task, `## Phase Completion Evidence`, `## Plan Completion Evidence`) records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. A task, phase, or plan may not transition to `complete` while its evidence section is pending or nonconforming. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `scripts/sdd_validate.py` (surfaced as `/validate`) enforces it deterministically.
+`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence (`### Completion Evidence` per task, `## Phase Completion Evidence`, `## Plan Completion Evidence`) records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. A task, phase, or plan may not transition to `complete` while its evidence section is pending or nonconforming. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically.
 
 ### Plan Lifecycle
 Plans live flat under `Plans/<PlanName>/`. Lifecycle is tracked in the plan README's frontmatter `status` field (`draft`, `approved`, `active`, `complete`, `archived`) — not by moving directories. Commands update `status` as plans progress:
@@ -257,9 +253,9 @@ When adding, removing, or renaming skills (`commands/`), agents (`agents/`), or 
 - **`CLAUDE.md`** — skill table, agent table, workflow lifecycle
 - **`shared/templates/claude-md-full.md`** — full CLAUDE.md template for a planning-only repo (skill table, agent table, workflow lifecycle)
 - **`shared/templates/claude-md-snippet.md`** — embeddable section to drop into an existing project's CLAUDE.md (skill table only)
-- **Templates ↔ schema ↔ validator** — when changing any template, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md`, verify every template still satisfies the schema AND `scripts/sdd_validate.py`'s contract (required fields and exact headings present, statuses valid, evidence labels intact). The validator is the enforcement layer; docs and script must not drift apart
+- **Templates ↔ schema ↔ validator** — when changing any template, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md`, verify every template still satisfies the schema AND `sdd validate`'s contract (required fields and exact headings present, statuses valid, evidence labels intact). The validator is the enforcement layer; docs and script must not drift apart
 - **`shared/decision-framework.md` ↔ agents** — when changing the framework, update the canonical agent block in that file and re-sync the identical `## Decision Framework` section in all eight `agents/*.md`
-- **Run `make test` after touching templates, `shared/frontmatter-schema.md`, or `scripts/sdd_validate.py`** — `tests/test_plan_scope_validation.py` builds a planning root from the real templates and asserts it validates clean, so template↔validator drift fails the suite instead of reaching users. Reuse `tests/fixtures.py` (`PlanningRoot`) for new artifact-level tests rather than hand-rolling fixture documents
+- **Run `make test` after touching templates, `shared/frontmatter-schema.md`, or the validator** — `tests/test_plan_scope_validation.py` builds a planning root from the real templates and asserts it validates clean, so template↔validator drift fails the suite instead of reaching users. Reuse `tests/fixtures.py` (`PlanningRoot`) for new artifact-level tests rather than hand-rolling fixture documents
 
 ## Versioning
 

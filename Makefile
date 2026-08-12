@@ -1,9 +1,10 @@
-.PHONY: bump-patch bump-minor bump-major test venv clean-venv \
+.PHONY: bump-patch bump-minor bump-major test \
         build build-release build-all parity gen-fixtures check-fixtures clean-build
 
-VENV := .venv
-PYTHON := $(VENV)/bin/python
-STAMP := $(VENV)/.requirements-installed
+# The parity harness is stdlib-only Python: it drives the `sdd` binary and
+# compares against tools/parity/frozen-expectations.json. PyYAML and the
+# virtualenv bootstrap left with the Python validators (task 5.1).
+PYTHON := python3
 
 # --- Go toolchain -----------------------------------------------------------
 #
@@ -100,17 +101,25 @@ build-all:
 # The fixture corpus is the input that gives the gate teeth: run against a
 # healthy planning root alone, both validators agree on zero diagnostics and
 # the comparison exercises none of the ported rules.
+#
+# --frozen is now the only mode: the Python oracle was deleted in task 5.1, so
+# the comparison is against tools/parity/frozen-expectations.json — its last
+# recorded verdict. That file is never regenerated; changing it would change
+# what "correct" means, which is what freezing exists to prevent.
 PARITY_FIXTURES := tools/parity/fixtures
 PARITY_MANIFEST := $(PARITY_FIXTURES)/MANIFEST
-PARITY_ROOTS ?= .plans
+# In frozen mode the corpus IS the input: an ad-hoc root has no recorded
+# expectation to compare against. Pass extra roots explicitly only alongside a
+# freeze that covers them.
+PARITY_ROOTS ?=
 
 PARITY_ALLOW := tools/parity/allow-missing.txt
 PARITY_ALLOW_TEXT := tools/parity/allow-message-drift.txt
 
-parity: build $(STAMP)
+parity: build
 	@$(PYTHON) tools/parity/parity.py $(PARITY_ROOTS) \
 		--manifest $(PARITY_MANIFEST) --allow $(PARITY_ALLOW) \
-		--allow-message-drift $(PARITY_ALLOW_TEXT) --binary $(SDD)
+		--allow-message-drift $(PARITY_ALLOW_TEXT) --frozen --binary $(SDD)
 
 # gen-fixtures regenerates the corpus from the rules' own Bad examples. Run it
 # after adding or changing a rule; the result is committed.
@@ -132,23 +141,10 @@ clean-build:
 	@rm -rf $(BUILD_DIR)
 	@echo "Removed $(BUILD_DIR)"
 
-# Create the virtualenv and install requirements. The stamp file is keyed to
-# requirements.txt, so edits to the deps trigger a reinstall on the next run.
-$(STAMP): requirements.txt
-	@test -d $(VENV) || { echo "Creating virtualenv in $(VENV)..."; python3 -m venv $(VENV); }
-	@$(PYTHON) -m pip install --quiet --upgrade pip
-	@$(PYTHON) -m pip install --quiet -r requirements.txt
-	@touch $(STAMP)
-	@echo "Dependencies installed in $(VENV)"
-
-venv: $(STAMP)
-
-test: $(STAMP)
-	@$(PYTHON) -m unittest discover -s tests -v
-
-clean-venv:
-	@rm -rf $(VENV)
-	@echo "Removed $(VENV)"
+# The Go suite is the test suite. The Python unittest tree tested the deleted
+# validators; its behavioral coverage lives on in the parity corpus.
+test:
+	@go test ./...
 
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so
 # a failing suite aborts before bump-version.py or any git write happens.

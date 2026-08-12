@@ -61,7 +61,7 @@ Before trusting or mutating a resolved ledger, and again after every mutation,
 run the bundled read-only validator:
 
 ```bash
-python3 <plugin-dir>/scripts/sdd_decision_validate.py <resolved-ledger> --format json
+sdd decide validate <resolved-ledger> --format json
 ```
 
 The validator discovers `archive-*.md` siblings and checks UTF-8/LF and YAML
@@ -73,9 +73,8 @@ entries, and Git-backed immutability of previously accepted entries. It is
 read-only. Exit `0` means no deterministic error was found, but the JSON may
 still contain `severity: candidate` diagnostics requiring the judgment pass
 below. Exit `1` means error diagnostics are authoritative structural findings,
-and exit `2` means the validator could not run. PyYAML is declared in the
-plugin's `requirements.txt`; a dependency or operational failure is a stop, not
-permission to substitute model parsing.
+and exit `2` means the validator could not run. A dependency or operational
+failure is a stop, not permission to substitute model parsing.
 
 `--no-history` disables only the Git-backed immutability comparison and is for
 unversioned fixtures or an explicitly historical/non-worktree inspection. Do

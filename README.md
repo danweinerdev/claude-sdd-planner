@@ -379,10 +379,6 @@ sdd-planner/                       # The plugin itself (not your project)
 │   ├── hooks.json                # Plugin hooks — SessionStart ledger injection + PreToolUse Bash guard
 │   ├── load-decisions.sh         # Emits accepted ledger entries as additionalContext
 │   └── reviewer-bash-guard.py    # Denies write/network-shaped Bash from the read-only agents
-├── scripts/
-│   ├── sdd_validate.py           # Deterministic artifact validator (read-only)
-│   └── sdd_decision_validate.py  # Focused decision-ledger validator (read-only)
-├── requirements.txt              # PyYAML — needed by scripts/
 ├── shared/
 │   ├── frontmatter-schema.md     # Artifact metadata schema (single source of truth)
 │   ├── completion-evidence.md    # Evidence-gated completion contract
@@ -405,5 +401,5 @@ sdd-planner/                       # The plugin itself (not your project)
 ## Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Python 3 with PyYAML (`pip install -r requirements.txt`) for `/sdd-planner:validate` and the completion gates in `/implement` and `/code-review` — the deterministic validator is a hard dependency of those checks, not optional tooling
+- The `sdd` binary for `/sdd-planner:validate` and the completion gates in `/implement` and `/code-review` — the deterministic validator is a hard dependency of those checks, not optional tooling
 - The companion `sdd-dashboard` plugin also uses Python 3 if installed
