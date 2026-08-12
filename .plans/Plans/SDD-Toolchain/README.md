@@ -9,7 +9,7 @@ related: [Specs/SDD-Toolchain]
 phases:
   - id: 1
     title: "Compiler Feel Spike"
-    status: planned
+    status: complete
     doc: "01-Compiler-Feel-Spike.md"
     depends_on: []
   - id: 2
@@ -19,27 +19,27 @@ phases:
     depends_on: [1]
   - id: 3
     title: "Parity Harness"
-    status: planned
+    status: complete
     doc: "03-Parity-Harness.md"
     depends_on: [2]
   - id: 4
     title: "Validation Port"
-    status: planned
+    status: complete
     doc: "04-Validation-Port.md"
     depends_on: [3]
   - id: 5
     title: "Python Removal"
-    status: planned
+    status: complete
     doc: "05-Python-Removal.md"
     depends_on: [4]
   - id: 6
     title: "Schema And Compiler"
-    status: planned
+    status: complete
     doc: "06-Schema-And-Compiler.md"
     depends_on: [5]
   - id: 7
     title: "Write Guard And Rollout"
-    status: planned
+    status: complete
     doc: "07-Write-Guard-And-Rollout.md"
     depends_on: [6]
 ---

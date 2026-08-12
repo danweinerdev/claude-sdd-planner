@@ -3,7 +3,7 @@ title: "Compiler Feel Spike"
 type: phase
 plan: "SDD-Toolchain"
 phase: 1
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "A throwaway Go spike that parses a spec proposal and prints normalized output, plus a written go/no-go assessment of the compiler model"

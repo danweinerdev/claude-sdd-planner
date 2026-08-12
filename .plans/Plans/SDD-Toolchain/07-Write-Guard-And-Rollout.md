@@ -3,7 +3,7 @@ title: "Write Guard And Rollout"
 type: phase
 plan: "SDD-Toolchain"
 phase: 7
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "The Write/Edit guard enabled per type behind its migration, skills rewritten against the CLI, and remaining types onboarded"

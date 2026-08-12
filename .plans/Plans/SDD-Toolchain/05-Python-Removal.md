@@ -3,7 +3,7 @@ title: "Python Removal"
 type: phase
 plan: "SDD-Toolchain"
 phase: 5
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "Python and PyYAML gone from every user-facing path, with the frozen corpus retained as the regression suite"

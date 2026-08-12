@@ -3,7 +3,7 @@ title: "Schema And Compiler"
 type: phase
 plan: "SDD-Toolchain"
 phase: 6
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "Schema-as-data for the spec type, generated templates, and a production apply with the round-trip contract and isolation"

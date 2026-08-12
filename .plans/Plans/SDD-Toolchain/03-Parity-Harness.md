@@ -3,7 +3,7 @@ title: "Parity Harness"
 type: phase
 plan: "SDD-Toolchain"
 phase: 3
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "The frozen oracle corpus, branch manifest, and differential runner — all in place before any validation rule is ported"

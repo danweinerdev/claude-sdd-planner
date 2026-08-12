@@ -3,7 +3,7 @@ title: "Validation Port"
 type: phase
 plan: "SDD-Toolchain"
 phase: 4
-status: planned
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 deliverable: "sdd validate and sdd decide validate at proven parity with the Python oracle"
