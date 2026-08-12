@@ -20,11 +20,19 @@ import (
 // Ports lifecycle_normalized_artifact() and its helpers. The normalization
 // removes exactly four things and preserves every other byte:
 //
-//   - top-level `updated:` and `status:` entries
+//   - top-level `updated:`, `status:`, and `waivers:` entries
 //   - each phases[]/tasks[] entry's own `status:`
 //   - the body of every completion-evidence section (replaced by the pending
 //     marker, since retrospective evidence is written after the review)
 //   - checkbox state under Subtasks and Acceptance Criteria
+//
+// `waivers` joins the stripped set for the same reason `status` is in it: an
+// accepted exception is a judgment about a finding, not a change to what the
+// phase is trying to do, and it is necessarily written after the review that
+// surfaced the finding. Leaving it in would make declaring an exception
+// invalidate the very review that justifies it — a rule that fires on its own
+// remedy. What a waiver cannot do is hide a scope edit smuggled into the same
+// commit: every other byte is still compared.
 //
 // errUnsupportedLifecycleNode mirrors Python raising ValueError: a flow-style
 // or multiline lifecycle node cannot be excised by source span, so the
@@ -152,7 +160,7 @@ func isFlow(n *yaml.Node) bool { return n.Style == yaml.FlowStyle }
 // lifecycleFrontmatterSpans ports lifecycle_frontmatter_spans.
 func lifecycleFrontmatterSpans(payload string, offsets []int, root *yaml.Node, kind string) ([]span, error) {
 	var spans []span
-	for _, name := range [2]string{"updated", "status"} {
+	for _, name := range [3]string{"updated", "status", "waivers"} {
 		for _, kv := range mappingEntries(root, name) {
 			s, err := lifecycleEntrySpan(payload, offsets, kv[0], kv[1], isFlow(root))
 			if err != nil {
