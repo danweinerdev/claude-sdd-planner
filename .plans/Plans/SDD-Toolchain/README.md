@@ -9,7 +9,7 @@ related: [Specs/SDD-Toolchain]
 phases:
   - id: 1
     title: "Compiler Feel Spike"
-    status: planned
+    status: complete
     doc: "01-Compiler-Feel-Spike.md"
     depends_on: []
   - id: 2
