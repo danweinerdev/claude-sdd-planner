@@ -29,6 +29,12 @@ type Severity string
 const (
 	Error     Severity = "error"
 	Candidate Severity = "candidate"
+	// Waived is an error a human explicitly excepted in the artifact's
+	// frontmatter. It is reported like any other finding and does not make a
+	// root invalid. It is a distinct severity rather than a dropped diagnostic
+	// so that "nothing was found" and "something was found and excused" can
+	// never look the same to a reader or to a consumer of the JSON.
+	Waived Severity = "waived"
 )
 
 // Diagnostic is one finding. Field names and JSON keys match the Python
@@ -41,6 +47,11 @@ type Diagnostic struct {
 	Message    string   `json:"message"`
 	Correction string   `json:"correction"`
 	Implicated []string `json:"implicated,omitempty"`
+	// WaivedReason is the rationale from the accepted exception that excused
+	// this finding, set only when Severity is Waived. It travels with the
+	// diagnostic so a report never shows an excused finding without the
+	// argument for excusing it.
+	WaivedReason string `json:"waived_reason,omitempty"`
 }
 
 // Example is a fixture proving a rule's behavior. Files maps
@@ -73,6 +84,11 @@ type Rule struct {
 	// PyFunc names the enclosing function in sdd_validate.py this was ported
 	// from, so a parity failure can be traced back to its source.
 	PyFunc string
+	// Native marks a rule with no Python ancestor — authored for this
+	// validator rather than ported. It is mutually exclusive with PyFunc, and
+	// exists so the parity corpus can tell "this rule postdates the oracle"
+	// apart from "this rule forgot to record where it came from".
+	Native bool
 	// Good examples must produce NO diagnostic of this code.
 	Good []Example
 	// Bad examples must each produce at least one diagnostic of this code.
@@ -134,6 +150,11 @@ func Codes() []string {
 
 // Run evaluates every rule over a root and returns diagnostics in the Python
 // validator's deterministic order: path, then line, then code.
+//
+// Run is the strict form: it ignores accepted exceptions entirely. The parity
+// oracle and every internal caller that asks "what does this root actually
+// violate?" wants this. Use RunWithWaivers for the reporting path, where a
+// human's declared exceptions apply.
 func Run(r *Root) []Diagnostic {
 	var out []Diagnostic
 	emit := func(d Diagnostic) { out = append(out, d) }
@@ -162,6 +183,24 @@ func Run(r *Root) []Diagnostic {
 		return out[i].Message < out[j].Message
 	})
 	return out
+}
+
+// RunWithWaivers evaluates every rule, then applies the accepted exceptions
+// declared in artifact frontmatter: matched errors are re-tagged Waived (still
+// reported, no longer invalidating), and the waivers themselves are checked,
+// yielding SDD176 for malformed ones and SDD177 for stale ones.
+//
+// Waiver bookkeeping runs here rather than inside individual rules so no rule
+// can forget to honor an exception, and so the set of waivable codes is decided
+// in one place.
+func RunWithWaivers(r *Root) []Diagnostic {
+	// runBare rather than Run: Run includes the SDD176/177 rules, which compute
+	// the same bookkeeping internally, so using it here would report every
+	// waiver problem twice.
+	diags := runBare(r)
+	diags = append(diags, applyWaivers(r, diags)...)
+	SortDiagnostics(diags)
+	return diags
 }
 
 // Explain renders the implemented-rule table, so `sdd validate --explain` can

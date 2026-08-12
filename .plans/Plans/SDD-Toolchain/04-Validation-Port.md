@@ -31,6 +31,10 @@ tasks:
     verification: "AC-29, AC-30, AC-36 pass: read-only guard tests show no byte, index, worktree, or config change; Windows and Linux authoring produce byte-identical artifacts; all five targets compile"
     justifies: "NFR-02, NFR-05, NFR-06, AC-29, AC-30, AC-36. Prevents the cross-platform diff churn that would destroy the semantic-diff benefit, and proves the read-only claim that the reviewer agents depend on."
     depends_on: ["4.3"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 4: Validation Port

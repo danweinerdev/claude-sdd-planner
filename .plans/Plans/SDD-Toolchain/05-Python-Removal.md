@@ -31,6 +31,10 @@ tasks:
     verification: "A measurement of the real dependency-linked binary across all five NFR-03 targets is recorded, and a written determination either reaffirms D-0015 or opens a superseding decision for user reconciliation"
     justifies: "Review 02 finding F-05 and FU-01: the ~50 MB estimate behind rejecting prebuilt bundling measured 4x high at 2.40 MB per stdlib-only target, so the payload arithmetic in the spec's Open Questions is unsourced and wrong."
     depends_on: ["5.3"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 5: Python Removal

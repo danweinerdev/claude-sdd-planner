@@ -43,6 +43,10 @@ tasks:
     verification: "AC-26 passes: golden tests prove nearest-match flag suggestions, available-identifier lists on unresolved references, and expected-heading-plus-payload-line on schema mismatch"
     justifies: "FR-29, AC-26. A refusal an automated caller cannot act on converts a one-turn correction into a hallucinated workaround; these messages are what make construction-time refusal cheaper than post-hoc detection."
     depends_on: ["6.5"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 6: Schema And Compiler

@@ -33,8 +33,17 @@ func TestEveryRuleHasGoodAndBadExamples(t *testing.T) {
 			if r.What == "" {
 				t.Errorf("%s has no What description", r.Code)
 			}
-			if r.PyFunc == "" {
-				t.Errorf("%s does not name the sdd_validate.py function it was ported from", r.Code)
+			// PyFunc traces a rule back to the Python oracle it was ported
+			// from, so a parity failure can be diagnosed at its source. Rules
+			// authored natively have no such ancestor and declare Native
+			// instead; requiring a PyFunc from them would mean inventing a
+			// citation to a function that never existed.
+			if r.PyFunc == "" && !r.Native {
+				t.Errorf("%s names neither the sdd_validate.py function it was ported from "+
+					"nor Native: true", r.Code)
+			}
+			if r.PyFunc != "" && r.Native {
+				t.Errorf("%s claims both a Python origin (%q) and Native", r.Code, r.PyFunc)
 			}
 			if r.Severity != Error && r.Severity != Candidate {
 				t.Errorf("%s has invalid severity %q", r.Code, r.Severity)

@@ -43,6 +43,10 @@ tasks:
     verification: "AC-33, AC-38, AC-41 pass: an admitted PATH binary yields a working plugin-root copy; absent and below-floor each stop with distinguishable actionable messages; a filesystem snapshot proves no mutation on the stop paths; a second run is a no-op"
     justifies: "FR-37, FR-40, FR-43, D-0015, AC-33, AC-38. Finding F-02 proved that conditional placement leaves both hooks silently dead forever, so unconditional placement is what makes the failure unreachable rather than merely unlikely."
     depends_on: ["2.3", "2.5"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 2: Provisioning Vertical

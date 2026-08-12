@@ -34,6 +34,10 @@ type outDiagnostic struct {
 	Message    string   `json:"message"`
 	Path       string   `json:"path"`
 	Severity   string   `json:"severity"`
+	// WaivedReason is present only on waived findings, so a consumer reading
+	// the JSON can always see why an error was excused without cross-checking
+	// the artifact.
+	WaivedReason string `json:"waived_reason,omitempty"`
 }
 
 // outDoc mirrors main()'s successful-run JSON dict, field order alphabetical
@@ -44,6 +48,10 @@ type outDoc struct {
 	Diagnostics        []outDiagnostic `json:"diagnostics"`
 	PlanningRoot       string          `json:"planning_root"`
 	Valid              bool            `json:"valid"`
+	// Waived counts findings excused by accepted exceptions. It is reported
+	// separately from Valid so a green run that rests on waivers is
+	// distinguishable, in one field, from a green run that does not.
+	Waived int `json:"waived"`
 }
 
 func cmdValidate(args []string) error {
@@ -56,6 +64,11 @@ func cmdValidate(args []string) error {
 	// spells it --format json; the alias makes the uniform flag work without
 	// breaking the existing spelling or the callers that use it.
 	asJSON := fs2.Bool("json", false, "shorthand for --format json")
+	// Accepted exceptions are a property of the artifacts, so the default is to
+	// honor them. --no-waivers asks the opposite question — what does this root
+	// violate with nothing excused — which is what a release gate or an audit
+	// wants, and what makes the mechanism auditable rather than load-bearing.
+	noWaivers := fs2.Bool("no-waivers", false, "ignore accepted exceptions and report every finding as an error")
 
 	flags, positional := splitArgs(args, map[string]bool{
 		"-root": true, "--root": true,
@@ -95,7 +108,10 @@ func cmdValidate(args []string) error {
 		return fmt.Errorf("validate: planning root contains no discoverable SDD artifacts")
 	}
 
-	diags := rules.Run(r)
+	diags := rules.RunWithWaivers(r)
+	if *noWaivers {
+		diags = rules.Run(r)
+	}
 	// The decision-ledger validator (DLG*) runs alongside the artifact rules,
 	// as sdd_validate.py folds in _focused_decision_logs.
 	diags = append(diags, rules.FocusedDecisionLogs(r, false)...)
@@ -112,10 +128,13 @@ func cmdValidate(args []string) error {
 	sort.Strings(artifactsInScope)
 
 	valid := true
+	waived := 0
 	for _, d := range diags {
 		if d.Severity == rules.Error {
 			valid = false
-			break
+		}
+		if d.Severity == rules.Waived {
+			waived++
 		}
 	}
 
@@ -128,6 +147,7 @@ func cmdValidate(args []string) error {
 		out[i] = outDiagnostic{
 			Code: d.Code, Correction: d.Correction, Implicated: implicated,
 			Line: d.Line, Message: d.Message, Path: d.Path, Severity: string(d.Severity),
+			WaivedReason: d.WaivedReason,
 		}
 	}
 
@@ -138,12 +158,13 @@ func cmdValidate(args []string) error {
 			Diagnostics:        out,
 			PlanningRoot:       resolved,
 			Valid:              valid,
+			Waived:             waived,
 		}
 		if err := printJSON(doc); err != nil {
 			return err
 		}
 	} else {
-		printValidateReport(resolved, *scope, len(r.Artifacts), len(artifactsInScope), out, valid)
+		printValidateReport(resolved, *scope, len(r.Artifacts), len(artifactsInScope), out, valid, waived)
 	}
 
 	if !valid {
@@ -180,7 +201,7 @@ func countErrorsOut(ds []outDiagnostic) int {
 // printValidateReport mirrors main()'s text-format branch exactly: a one-line
 // summary, then one two-line block per diagnostic, then (only when there were
 // none) a closing "Checked ..." line.
-func printValidateReport(root, scope string, inspected, inScope int, diags []outDiagnostic, valid bool) {
+func printValidateReport(root, scope string, inspected, inScope int, diags []outDiagnostic, valid bool, waived int) {
 	status := "Valid"
 	if !valid {
 		status = "Invalid"
@@ -189,9 +210,22 @@ func printValidateReport(root, scope string, inspected, inScope int, diags []out
 	if scope != "" {
 		scopeSummary = fmt.Sprintf(", %d in scope", inScope)
 	}
-	fmt.Printf("%s: %s (%d artifacts inspected%s)\n", status, root, inspected, scopeSummary)
+	// A valid-with-waivers run says so on the headline. Anyone reading only the
+	// first line of output should not come away believing the root passed
+	// cleanly when part of that pass was granted rather than earned.
+	waivedSummary := ""
+	if waived > 0 {
+		waivedSummary = fmt.Sprintf(", %d waived", waived)
+	}
+	fmt.Printf("%s: %s (%d artifacts inspected%s%s)\n", status, root, inspected, scopeSummary, waivedSummary)
 	for _, d := range diags {
 		fmt.Printf("%s %s %s:%d: %s\n", strings.ToUpper(d.Severity), d.Code, d.Path, d.Line, d.Message)
+		if d.Severity == string(rules.Waived) {
+			// The rationale replaces the correction: the finding stands, and
+			// what a reader needs is the argument for accepting it.
+			fmt.Printf("  Accepted exception: %s\n", d.WaivedReason)
+			continue
+		}
 		fmt.Printf("  Required correction: %s\n", d.Correction)
 	}
 	if len(diags) == 0 {

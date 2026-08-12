@@ -31,6 +31,10 @@ tasks:
     verification: "The gate verifies, from SCM history, that the manifest, frozen corpus, source scan, and tests all passed in the first parent of the first revision adding Go validation logic, and fails when that boundary is violated"
     justifies: "FR-30, AC-05. Without a history check the ordering requirement is honor-system, and the whole parity argument depends on the corpus predating the port rather than being written to match it."
     depends_on: ["3.3"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 3: Parity Harness

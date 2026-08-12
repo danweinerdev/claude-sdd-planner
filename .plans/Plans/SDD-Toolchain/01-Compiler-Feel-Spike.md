@@ -37,6 +37,10 @@ tasks:
     verification: "A written assessment exists recording: tool-call count and token cost to author one spec via the compiler versus one Write, the measured stripped binary size, measured single-artifact timings, the corrections needed on each existing artifact, and an explicit recommendation to proceed, amend, or abandon"
     justifies: "Prevents the concrete failure of building Phases 3 through 7 on an unvalidated hypothesis; also supplies the measurements NFR-07 is provisional pending and that finding F-12 flagged as unsourced."
     depends_on: ["1.4"]
+waivers:
+  - code: SDD173
+    reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
+    accepted: "2026-08-12"
 ---
 
 # Phase 1: Compiler Feel Spike

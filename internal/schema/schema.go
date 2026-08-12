@@ -49,6 +49,11 @@ type Field struct {
 	// validator's per-entry rules are generated from it, and the writers check
 	// against it instead of pattern-matching raw lines.
 	Entry *Entry `json:"entry,omitempty"`
+	// Doc is a one-paragraph human explanation of the field, for schemas whose
+	// meaning is not obvious from the key. It is documentation only — nothing
+	// validates against it — but it lives here so the explanation sits with the
+	// declaration instead of drifting in a separate document.
+	Doc string `json:"doc,omitempty"`
 }
 
 // Entry is the declared shape of one block-sequence element.
