@@ -1,0 +1,4871 @@
+{
+  "SDD000/missing-target-repository": {
+    "diagnostics": [],
+    "exit": 0
+  },
+  "SDD002/invalid-utf8": {
+    "diagnostics": [
+      {
+        "code": "SDD002",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD003/crlf": {
+    "diagnostics": [
+      {
+        "code": "SDD003",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD004/no-frontmatter": {
+    "diagnostics": [
+      {
+        "code": "SDD004",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD005/unclosed": {
+    "diagnostics": [
+      {
+        "code": "SDD005",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD006/unparsable-line": {
+    "diagnostics": [
+      {
+        "code": "SDD006",
+        "line": 3,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD007/list-frontmatter": {
+    "diagnostics": [
+      {
+        "code": "SDD007",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD008/legacy-status-subfolder": {
+    "diagnostics": [
+      {
+        "code": "SDD008",
+        "line": 1,
+        "path": "Plans/active",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD010/missing-title": {
+    "diagnostics": [
+      {
+        "code": "SDD010",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD011/bad-type": {
+    "diagnostics": [
+      {
+        "code": "SDD011",
+        "line": 3,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD012/bad-status": {
+    "diagnostics": [
+      {
+        "code": "SDD012",
+        "line": 4,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD013/bad-date": {
+    "diagnostics": [
+      {
+        "code": "SDD013",
+        "line": 5,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD014/tags-not-list": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 7,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD020/missing-section": {
+    "diagnostics": [
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD030/duplicate-fr": {
+    "diagnostics": [
+      {
+        "code": "SDD030",
+        "line": 25,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD031/duplicate-task-id": {
+    "diagnostics": [
+      {
+        "code": "SDD031",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD032/duplicate-decision-id": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG030",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG030",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG071",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG071",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG071",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG071",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG077",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD032",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG050",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD040/empty-entry": {
+    "diagnostics": [
+      {
+        "code": "SDD040",
+        "line": 1,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD041/unresolved-path": {
+    "diagnostics": [
+      {
+        "code": "SDD041",
+        "line": 8,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD050/no-requirements": {
+    "diagnostics": [
+      {
+        "code": "SDD050",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD051/debrief-missing-phase": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-debrief.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-debrief.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD051",
+        "line": 1,
+        "path": "Retro/sample-debrief.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD052/phases-not-list": {
+    "diagnostics": [
+      {
+        "code": "SDD052",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD053/phase-not-mapping": {
+    "diagnostics": [
+      {
+        "code": "SDD053",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD054/missing-title": {
+    "diagnostics": [
+      {
+        "code": "SDD054",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD055/bad-status": {
+    "diagnostics": [
+      {
+        "code": "SDD055",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD056/doc-missing": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD057/id-mismatch": {
+    "diagnostics": [
+      {
+        "code": "SDD057",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD058/status-mismatch": {
+    "diagnostics": [
+      {
+        "code": "SDD069",
+        "line": 17,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 21,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 21,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 21,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD058",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD059/incomplete-phase": {
+    "diagnostics": [
+      {
+        "code": "SDD059",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD158",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD060/duplicate-id": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD060",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD061/tasks-not-list": {
+    "diagnostics": [
+      {
+        "code": "SDD061",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD062/task-not-mapping": {
+    "diagnostics": [
+      {
+        "code": "SDD062",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD063/missing-verification": {
+    "diagnostics": [
+      {
+        "code": "SDD063",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 14,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD064/wrong-phase-prefix": {
+    "diagnostics": [
+      {
+        "code": "SDD064",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD066",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD067",
+        "line": 37,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD065/bad-task-status": {
+    "diagnostics": [
+      {
+        "code": "SDD065",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD066/no-body-section": {
+    "diagnostics": [
+      {
+        "code": "SDD066",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD067/missing-notes": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD067",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD068/incomplete-task": {
+    "diagnostics": [
+      {
+        "code": "SDD068",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD069",
+        "line": 23,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD069/unchecked-criteria": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD069",
+        "line": 23,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD069",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD070/complete-but-pending": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD071/missing-labels": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD072/invalid-vcs": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD169",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD171",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD073/stray-fail": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD073",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD074/fallback-reason": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD074",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD075/recheck-no-timestamp": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD076/placeholder-justification": {
+    "diagnostics": [
+      {
+        "code": "SDD076",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD077/echoes-title": {
+    "diagnostics": [
+      {
+        "code": "SDD077",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD078/no-baseline": {
+    "diagnostics": [
+      {
+        "code": "SDD078",
+        "line": 15,
+        "path": "Brainstorm/sample.md",
+        "severity": "candidate"
+      }
+    ],
+    "exit": 0
+  },
+  "SDD080/unresolved-review-of": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD081/findings-not-list": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD081",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD082/followups-not-list": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD082",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD083/finding-missing-title": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD083",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD084/short-finding-id": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD084",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD085/unknown-severity": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD085",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD086/invalid-status": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD086",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD087",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD088",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD087/missing-body-section": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD087",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD088/missing-resolution-entry": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD088",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD089/status-disagrees-with-resolution": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD089",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD090/duplicate-finding-id": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD090",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD091/resolved-with-open": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD091",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD092/followup-missing-summary": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD092",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD094",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD093/short-followup-id": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD093",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD094",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD094/followup-unknown-finding": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD094",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD095/floating-followup": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD094",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD095",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD096/followup-unknown-task": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD067",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD097/duplicate-followup-id": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD096",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD097",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD098/untracked-deferred-finding": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD098",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD099/superseded-without-link": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD099",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD100/unresolved-supersedes": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD100",
+        "line": 1,
+        "path": "Retro/sample-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD101/unreciprocated-link": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD101",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD099",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD102/supersedes-different-target": {
+    "diagnostics": [
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD102",
+        "line": 1,
+        "path": "Retro/new-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD102",
+        "line": 1,
+        "path": "Retro/old-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD110/decisions-not-a-list": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD110",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG020",
+        "line": 7,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD111/scalar-entry": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD111",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG021",
+        "line": 7,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD112/missing-rationale": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD113/short-id": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD113",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG023",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD114/unknown-kind": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 9,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD115/unknown-status": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD115",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG025",
+        "line": 4,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD116/answered-without-question": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD116",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG031",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD117/unknown-decided-by": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 12,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD118/agent-accepted": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD118",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG041",
+        "line": 12,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD120/unresolved-decision": {
+    "diagnostics": [
+      {
+        "code": "SDD120",
+        "line": 13,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD121/cites-rejected": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG030",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD121",
+        "line": 13,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD122/unresolved-fr": {
+    "diagnostics": [
+      {
+        "code": "SDD122",
+        "line": 13,
+        "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD130/unknown-phase-dep": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD130",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD131/self-dep": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD131",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD132",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD132/phase-cycle": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD132",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD133/unknown-task-dep": {
+    "diagnostics": [
+      {
+        "code": "SDD133",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD134/self-task-dep": {
+    "diagnostics": [
+      {
+        "code": "SDD134",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD135",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD135/task-cycle": {
+    "diagnostics": [
+      {
+        "code": "SDD066",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD135",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD136/depends-on-scalar": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD136",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD137/depends-on-nested": {
+    "diagnostics": [
+      {
+        "code": "SDD056",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD137",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD140/superseded-without-link": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD140",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG051",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG066",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD141/supersedes-unknown": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD141",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG055",
+        "line": 15,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD142/unreciprocated-supersedes": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD140",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD142",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG051",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG066",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG056",
+        "line": 22,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD143/scope-not-a-list": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD143",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 15,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD144/non-string-scope": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD144",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG028",
+        "line": 15,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD145/unresolved-scope": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG030",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD145",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD146/uncited-scope": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG024",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG026",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG029",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG030",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD112",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD114",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD117",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG022",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD146",
+        "line": 1,
+        "path": "Research/ok.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD147/same-question-different-answers": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD147",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      },
+      {
+        "code": "DLG060",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD148/chose-what-another-rejected": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD148",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      },
+      {
+        "code": "DLG061",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD149/same-term-different-definitions": {
+    "diagnostics": [
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG010",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "DLG027",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD014",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD149",
+        "line": 1,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      },
+      {
+        "code": "DLG062",
+        "line": 8,
+        "path": "Decisions/decisions.md",
+        "severity": "candidate"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD150/doc-not-phase": {
+    "diagnostics": [
+      {
+        "code": "SDD057",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD058",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD150",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD151",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD151/doc-belongs-elsewhere": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD151",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD152/title-disagrees": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD153/blocking-question": {
+    "diagnostics": [
+      {
+        "code": "SDD153",
+        "line": 43,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD154/spec-elements-removed": {
+    "diagnostics": [
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD155/phase-ids-removed": {
+    "diagnostics": [
+      {
+        "code": "SDD155",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD155",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/task-ids-removed": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD157/legacy-rollup": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 21,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD157/missing-completed-task-identities": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD158/legacy-rollup": {
+    "diagnostics": [
+      {
+        "code": "SDD158",
+        "line": 28,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD158/missing-completed-phase-identities": {
+    "diagnostics": [
+      {
+        "code": "SDD067",
+        "line": 31,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD058",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD059",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD158",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 36,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD160/uncited-requirement": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD160",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD160",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD161/design-omits-requirement": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD162/uncited-ac": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD160",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD160",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD163/unlisted-phase": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/artifact-deleted": {
+    "diagnostics": [
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD154",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD166/missing-final-aligned-review": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD167/phase-review-bad-schema": {
+    "diagnostics": [
+      {
+        "code": "SDD080",
+        "line": 1,
+        "path": "Retro/phase-review.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD167",
+        "line": 1,
+        "path": "Retro/phase-review.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD167/review-not-aligned": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD167",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD170",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD173",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD174",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD168/frozen-rev-mismatch": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD168",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD170",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD173",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD174",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD169/missing-review-labels": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD169",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD171",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD170/review-not-committed": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD170",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD173",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD174",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD171/no-git-planning-root": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD169",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD171",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD172/no-adapter-for-none-vcs": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD169",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD171",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD173/dirty-target-after-review": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD173",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD174",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD174/planning-revision-absent-from-history": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 27,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD172",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD173",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD174",
+        "line": 41,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD175/plan-checkpoint-not-full-hex": {
+    "diagnostics": [
+      {
+        "code": "SDD071",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD158",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD175",
+        "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  }
+}

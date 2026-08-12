@@ -120,14 +120,25 @@ func init() {
 	})
 
 	Register(&Rule{
+		// INTENTIONAL DIVERGENCE from sdd_validate.py (task 4.3).
+		//
+		// Python accepts only `<phase>.<digits>`, which makes it impossible to
+		// insert a task between 1.2 and 1.3 without renumbering every later
+		// task — and renumbering breaks the append-only identity the evidence
+		// and review artifacts depend on. The grammar admits an optional
+		// lowercase letter suffix so `1.2a` can be appended in place.
+		//
+		// Ids remain OPAQUE: the suffix orders and identifies, it carries no
+		// meaning. tools/parity/allow-message-drift.txt does not cover this,
+		// so the divergence is visible in the corpus rather than hidden.
 		Code: "SDD064", Severity: Error, PyFunc: "_phase",
-		What: "a task id is not `<phase>.N`",
+		What: "a task id is not `<phase>.N` or `<phase>.Na`",
 		Check: func(a *Artifact, emit func(Diagnostic)) {
 			if a.Meta == nil || a.Kind() != "phase" {
 				return
 			}
 			phaseID := metaStr(a.Meta, "phase")
-			re := regexp.MustCompile(`^` + regexp.QuoteMeta(phaseID) + `\.\d+$`)
+			re := regexp.MustCompile(`^` + regexp.QuoteMeta(phaseID) + `\.\d+[a-z]?$`)
 			for _, t := range asAnyList(a.Meta["tasks"]) {
 				m := planEntry(t)
 				if m == nil {
@@ -140,7 +151,7 @@ func init() {
 				emit(Diagnostic{
 					Code: "SDD064", Severity: Error, Path: a.Rel, Line: 1,
 					Message:    "Task id `" + id + "` is not in phase `" + phaseID + "`.",
-					Correction: "Use `" + phaseID + ".N`.",
+					Correction: "Use `" + phaseID + ".N` or `" + phaseID + ".Na` for an inserted task.",
 				})
 			}
 		},
@@ -153,15 +164,33 @@ func init() {
     justifies: FR-01
 `),
 		}}},
-		Good: []Example{{Name: "matching-prefix", Files: map[string]string{
-			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+		Good: []Example{
+			{Name: "matching-prefix", Files: map[string]string{
+				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
   - id: "1.1"
     title: First
     status: planned
     verification: x
     justifies: FR-01
 `),
-		}}},
+			}},
+			// The regression fixture for task 4.3: an inserted task keeps the
+			// ids around it stable instead of forcing a renumber.
+			{Name: "inserted-task-suffix", Files: map[string]string{
+				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: x
+    justifies: FR-01
+  - id: "1.1a"
+    title: Inserted after 1.1
+    status: planned
+    verification: x
+    justifies: FR-01
+`),
+			}},
+		},
 	})
 
 	Register(&Rule{

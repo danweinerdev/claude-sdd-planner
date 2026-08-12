@@ -9,7 +9,7 @@ updated: {{DATE}}
 deliverable: "{{DELIVERABLE}}"
 tasks: []
 # Each task entry should include:
-#   id: "X.Y"
+#   id: "X.Y"            # or "X.Ya" to insert without renumbering later tasks
 #   title: "Task title"
 #   status: planned
 #   verification: "How we know this complete, bisectable task revision passes"

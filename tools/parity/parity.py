@@ -112,6 +112,39 @@ def prepare(root: str, scratch: str) -> str:
     return str(target)
 
 
+FROZEN_PATH = REPO / "tools" / "parity" / "frozen-expectations.json"
+_frozen_cache: dict | None = None
+
+
+def frozen_expectation(root: str) -> tuple[int, list[dict]] | None:
+    """Return the recorded oracle verdict for a fixture root, or None.
+
+    Roots are keyed by their manifest-relative path, so a frozen run works
+    from any working directory and against the prepared copy of a root whose
+    absolute path differs every time.
+    """
+    global _frozen_cache
+    if _frozen_cache is None:
+        if not FROZEN_PATH.is_file():
+            raise SystemExit(
+                "parity: --frozen needs tools/parity/frozen-expectations.json; "
+                "run tools/parity/freeze.py while the Python oracle still exists"
+            )
+        _frozen_cache = json.loads(FROZEN_PATH.read_text())
+    # Key on the manifest-relative path exactly. An earlier version fell back
+    # to matching by basename, which silently collided: several rules use the
+    # same example name (`missing-title`, `bad-status`), so a root could be
+    # compared against another rule's expectation and report phantom `extra`
+    # diagnostics.
+    fixtures = (REPO / "tools" / "parity" / "fixtures").resolve()
+    try:
+        key = pathlib.Path(root).resolve().relative_to(fixtures).as_posix()
+    except ValueError:
+        return None
+    value = _frozen_cache.get(key)
+    return (value["exit"], value["diagnostics"]) if value else None
+
+
 def run_python(root: str) -> tuple[int, list[dict]]:
     py = REPO / ".venv/bin/python3"
     if not py.exists():
@@ -187,6 +220,12 @@ def compare(py: list[dict], go: list[dict], allow: set[str] = frozenset(),
     gmsg = {key(d): d for d in go}
     text_diffs, sev_diffs = [], []
     for k in sorted(shared):
+        # A frozen expectation records identity and severity but not message
+        # text: two codes interpolate CPython and PyYAML exception strings and
+        # diverge deliberately, so freezing text would bake in a difference we
+        # chose to keep. Skip the text comparison when it is absent.
+        if "message" not in pmsg[k]:
+            continue
         if pmsg[k]["message"] != gmsg[k]["message"]:
             text_diffs.append({"key": list(k), "python": pmsg[k]["message"], "go": gmsg[k]["message"]})
         if pmsg[k]["severity"] != gmsg[k]["severity"]:
@@ -233,6 +272,10 @@ def main() -> int:
     ap.add_argument("--allow-message-drift", help="file listing codes whose "
                                                   "MESSAGE text may differ; their "
                                                   "identity is still gated")
+    ap.add_argument("--frozen", action="store_true",
+                    help="compare against tools/parity/frozen-expectations.json "
+                         "instead of running the Python oracle live; the only "
+                         "mode available once scripts/ is deleted")
     a = ap.parse_args()
 
     allow = load_allowlist(a.allow)
@@ -265,7 +308,13 @@ def compare_roots(roots, a, allow, allow_text, scratch):
     overall, results = True, {}
     for root in roots:
         prepared = prepare(root, scratch)
-        prc, py = run_python(prepared)
+        if a.frozen:
+            recorded = frozen_expectation(root)
+            if recorded is None:
+                raise SystemExit(f"parity: no frozen expectation for {root}")
+            prc, py = recorded
+        else:
+            prc, py = run_python(prepared)
         grc, go = run_go(prepared, a.binary)
         r = compare(py, go, allow, allow_text)
         r["python_exit"], r["go_exit"] = prc, grc

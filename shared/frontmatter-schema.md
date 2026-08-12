@@ -107,7 +107,7 @@ tasks:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | yes | Task identifier (e.g., "1.1") |
+| `id` | yes | Task identifier: `<phase>.<digits>` with an optional single lowercase letter suffix — `1.1`, `1.12`, `1.2a`. The suffix exists so a task can be inserted between `1.2` and `1.3` without renumbering the tasks after it; renumbering would break the append-only identity that completion evidence, completed-task-identity roll-ups, and frozen reviews all cite. Ids are **opaque**: the suffix orders and identifies, it carries no meaning, and `1.2a` is not "a sub-part of 1.2" |
 | `title` | yes | Human-readable task title |
 | `status` | yes | Task status (see status values above) |
 | `depends_on` | no | List of task IDs this task depends on |
