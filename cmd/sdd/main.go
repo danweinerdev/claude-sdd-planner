@@ -42,6 +42,8 @@ func main() {
 		err = cmdSection(os.Args[2:])
 	case "doctor":
 		err = cmdDoctor(os.Args[2:])
+	case "hook":
+		err = cmdHook(os.Args[2:])
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
 	case "validate":
@@ -85,6 +87,7 @@ func usage() {
   sdd section set <artifact-path> --heading "## Overview" [--dry-run] [--diff]
                                   [--json] [--expect DIGEST] [--type T]
   sdd doctor [--json]
+  sdd hook pretooluse | sessionstart   (reads a hook payload on stdin)
   sdd migrate <artifact-path> [--dry-run] [--diff] [--json] [--allow-frozen]
   sdd validate [--root PATH] [--scope PATH] [--format text|json]
   sdd next [PLAN-PATH] [--json]

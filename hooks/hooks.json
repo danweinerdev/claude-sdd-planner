@@ -6,7 +6,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/load-decisions.sh\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd\" hook sessionstart",
+            "timeout": 10,
+            "statusMessage": "Loading decision ledger..."
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd.exe\" hook sessionstart",
             "timeout": 10,
             "statusMessage": "Loading decision ledger..."
           }
@@ -15,11 +21,16 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Write|Edit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/reviewer-bash-guard.py\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd\" hook pretooluse",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd.exe\" hook pretooluse",
             "timeout": 10
           }
         ]
