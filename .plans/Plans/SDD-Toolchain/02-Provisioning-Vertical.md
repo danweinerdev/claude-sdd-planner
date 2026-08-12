@@ -10,36 +10,36 @@ deliverable: "A real `sdd` binary users install with go install, discovered by s
 tasks:
   - id: "2.1"
     title: "Version single source and make bump wiring"
-    status: planned
+    status: complete
     verification: "`sdd version --json` reports correctly from both `go build` and `go install` builds; `make bump-patch` advances version and the generated file in one commit and tag while leaving minSddVersion untouched; `make test` fails on a stale generated file and when minSddVersion exceeds version"
     justifies: "FR-38, FR-39, AC-02, AC-32. Without a version the binary reports under `go install`, the FR-38 floor check cannot function at all, and the floor is the only thing preventing a wrong-schema binary from being used silently."
   - id: "2.2"
     title: "Executable resolution with caching and floor admission"
-    status: planned
+    status: complete
     verification: "AC-01 and AC-45 pass: ordering, floor rejection at and below the boundary, single cached probe per session, bounded timeout against a hanging fake `sdd`, and no PATH probe while the plugin-root location resolves"
     justifies: "FR-05, FR-49, FR-38, AC-01, AC-35, AC-45. This is the mechanism every skill and both hooks depend on, and finding F-09 established that an uncached resolver spawning probes per call defeats NFR-07 outright."
     depends_on: ["2.1"]
   - id: "2.3"
     title: "sdd doctor"
-    status: planned
+    status: complete
     verification: "AC-34 and AC-41 pass: every FR-05 candidate reported with presence, version, and admitted-or-why-rejected; the hook static path reported as its own item; a deleted plugin-root copy reported as a named defect while PATH still resolves"
     justifies: "FR-42, AC-34, AC-41. Finding F-02 showed a fully dead hook layer can coexist with a healthy candidate list, so reporting the hook path separately is the only thing that makes that state visible."
     depends_on: ["2.2"]
   - id: "2.4"
     title: "Hooks moved into the binary"
-    status: planned
+    status: complete
     verification: "AC-23 and AC-25 pass: bash-guard parity fixtures byte-comparable to reviewer-bash-guard.py across the allowlist, denials, test/lint passthrough, the seven agents, and fail-open for everyone else; sessionstart emits the same context as load-decisions.sh; both hooks.json entries registered with the absent one failing open"
     justifies: "FR-27, D-0013, D-0014, AC-23, AC-25. Removes the Python and POSIX-shell runtime dependencies and fixes an existing defect — load-decisions.sh has never worked on native Windows."
     depends_on: ["2.2"]
   - id: "2.5"
     title: "sdd allowlist in the reviewer guard"
-    status: planned
+    status: complete
     verification: "AC-39 passes: for each of the seven read-only agents every read-only sdd subcommand is permitted and every mutating one denied, proven per subcommand; a test enumerates the binary's actual mutating subcommands and fails when one lacks a guard entry"
     justifies: "FR-44, D-0014, AC-39. Prevents the concrete regression that introducing a mutating CLI would otherwise cause: the guard permits unrecognized command heads, so the read-only agents would gain a sanctioned path to rewrite planning artifacts."
     depends_on: ["2.4"]
   - id: "2.6"
     title: "/setup reworked to verify and copy"
-    status: planned
+    status: complete
     verification: "AC-33, AC-38, AC-41 pass: an admitted PATH binary yields a working plugin-root copy; absent and below-floor each stop with distinguishable actionable messages; a filesystem snapshot proves no mutation on the stop paths; a second run is a no-op"
     justifies: "FR-37, FR-40, FR-43, D-0015, AC-33, AC-38. Finding F-02 proved that conditional placement leaves both hooks silently dead forever, so unconditional placement is what makes the failure unreachable rather than merely unlikely."
     depends_on: ["2.3", "2.5"]
