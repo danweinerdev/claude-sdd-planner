@@ -141,9 +141,11 @@ clean-build:
 	@rm -rf $(BUILD_DIR)
 	@echo "Removed $(BUILD_DIR)"
 
-# The Go suite is the test suite. The Python unittest tree tested the deleted
-# validators; its behavioral coverage lives on in the parity corpus.
-test:
+# The Go suite plus the differential gate. Task 3.4 requires the append-only
+# ordering check to be machine-enforced rather than trusted, so `make test`
+# runs the corpus: SDD154/155/156 fire against real git history built by each
+# fixture's SETUP script, and a regression there fails the build.
+test: parity
 	@go test ./...
 
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so
