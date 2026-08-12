@@ -10,36 +10,36 @@ deliverable: "Schema-as-data for the spec type, generated templates, and a produ
 tasks:
   - id: "6.1"
     title: "Production schema loader with project overrides"
-    status: planned
+    status: complete
     verification: "AC-14 passes: an override adding an optional section loads, while overrides removing a required heading, relaxing a grammar, weakening a gate, claiming a tool-owned field, or altering path recognition each fail at load naming the rejected rule"
     justifies: "FR-14, FR-16, AC-14. Finding F-13 established that override-able path recognition would let a project disable the FR-28 write guard by configuration."
   - id: "6.2"
     title: "Generate templates from schema"
-    status: planned
+    status: complete
     verification: "AC-13 passes: every committed file in shared/templates/ is byte-identical to its schema-generated form, and a deliberate divergence in either direction fails `make test`"
     justifies: "FR-15, AC-13. Collapses the templates/schema/validator/CLAUDE.md sync burden the repository maintenance rules currently carry by hand."
     depends_on: ["6.1"]
   - id: "6.3"
     title: "apply with the round-trip contract"
-    status: planned
+    status: complete
     verification: "AC-15, AC-16, AC-17, AC-18, AC-19, AC-40, AC-47 pass, including byte-idempotence, whole-payload refusal, and every FR-45 identifier case"
     justifies: "FR-17, FR-18, FR-19, FR-20, FR-22, FR-23, FR-24, FR-45. Revision, not creation, is the dominant operation, and review finding F-01 showed the original spec could not express it at all."
     depends_on: ["6.2"]
   - id: "6.4"
     title: "Isolation for every mutating subcommand"
-    status: planned
+    status: complete
     verification: "AC-44 passes: two interleaved concurrent mutations produce a refusal with the re-read-and-retry diagnostic rather than a lost update, proven for both apply and evidence add against one phase document"
     justifies: "FR-48, AC-44. /implement launches concurrent code-implementer agents, which are not read-only, so lost updates are the expected case; atomicity alone permits silent evidence loss."
     depends_on: ["6.3"]
   - id: "6.5"
     title: "Lifecycle verbs and gates"
-    status: planned
+    status: complete
     verification: "AC-20, AC-21, AC-22, AC-42 pass: each gate refuses with the unmet gate named, gate verdicts match sdd validate, ledger collisions refuse and leave bytes unchanged, next returns runnable invocations, and complete/frozen artifacts are refused by apply"
     justifies: "FR-21, FR-25, FR-26, FR-46, D-0008, AC-20, AC-21, AC-22, AC-42. Makes evidence gating and the ledger collision rule mechanical rather than behavioral."
     depends_on: ["6.4"]
   - id: "6.6"
     title: "Error messages as the primary interface"
-    status: planned
+    status: complete
     verification: "AC-26 passes: golden tests prove nearest-match flag suggestions, available-identifier lists on unresolved references, and expected-heading-plus-payload-line on schema mismatch"
     justifies: "FR-29, AC-26. A refusal an automated caller cannot act on converts a one-turn correction into a hallucinated workaround; these messages are what make construction-time refusal cheaper than post-hoc detection."
     depends_on: ["6.5"]

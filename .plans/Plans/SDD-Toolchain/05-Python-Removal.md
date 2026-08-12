@@ -10,24 +10,24 @@ deliverable: "Python and PyYAML gone from every user-facing path, with the froze
 tasks:
   - id: "5.1"
     title: "Delete the Python validators and their bootstrap"
-    status: planned
+    status: complete
     verification: "AC-27 passes: `make test` green from a clean checkout with both scripts, PyYAML, and the virtualenv bootstrap removed; repository search finds no Python validator invocation and no PyYAML dependency"
     justifies: "FR-33, FR-35, D-0012, AC-27. Removes a hard runtime dependency that currently has a documented degradation path in the validate skill, and deletes the second implementation of the same rules."
   - id: "5.2"
     title: "Reconcile the decision ledger and maintenance rules"
-    status: planned
+    status: complete
     verification: "`sdd decide validate` passes; CLAUDE.md, README.md, and both claude-md templates describe the Go toolchain accurately; no document instructs a removed entry point"
     justifies: "FR-35, D-0012, D-0013, D-0014, D-0015. Prevents the documentation drift the repository maintenance rules exist to catch, now that four accepted decisions have changed mechanism."
     depends_on: ["5.1"]
   - id: "5.3"
     title: "Measure and replace the provisional bounds"
-    status: planned
+    status: complete
     verification: "NFR-07 carries a measured figure on named hardware rather than a provisional target, and the recorded binary size replaces the unsourced estimate"
     justifies: "NFR-07, AC-31, and review finding F-12. Prevents an unsourced target from hardening into a requirement nobody has checked."
     depends_on: ["5.1"]
   - id: "5.4"
     title: "Re-evaluate prebuilt distribution against the measured binary size"
-    status: planned
+    status: complete
     verification: "A measurement of the real dependency-linked binary across all five NFR-03 targets is recorded, and a written determination either reaffirms D-0015 or opens a superseding decision for user reconciliation"
     justifies: "Review 02 finding F-05 and FU-01: the ~50 MB estimate behind rejecting prebuilt bundling measured 4x high at 2.40 MB per stdlib-only target, so the payload arithmetic in the spec's Open Questions is unsourced and wrong."
     depends_on: ["5.3"]

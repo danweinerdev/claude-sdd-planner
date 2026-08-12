@@ -10,24 +10,24 @@ deliverable: "The Write/Edit guard enabled per type behind its migration, skills
 tasks:
   - id: "7.1"
     title: "Normalization migration for the spec type"
-    status: planned
+    status: complete
     verification: "AC-43 passes: identical sdd validate diagnostic sets before and after, one revision touching no content, byte-idempotence under a second apply, and a deliberately introduced difference stopping the migration"
     justifies: "FR-46, FR-47, D-0008, AC-43. Review finding F-03 showed an incidental first apply would rewrite completed artifacts whose recorded revision identity is load-bearing."
   - id: "7.2"
     title: "Write/Edit guard for the spec type"
-    status: planned
+    status: complete
     verification: "AC-24 passes: Write denied on a spec artifact path, Read permitted, notes/ and planning-root README permitted, plugin source permitted, fail-open when the planning root cannot be resolved, and the denial message's suggested invocation succeeds when run"
     justifies: "FR-28, FR-36, AC-24. Without the mechanical guard the compiler is the polite path and Edit is the fast path, which makes every invariant advisory."
     depends_on: ["7.1"]
   - id: "7.3"
     title: "Rewrite /specify against the CLI and measure"
-    status: planned
+    status: complete
     verification: "AC-27 passes for authoring instructions; a recorded comparison shows skill line count and tool calls per artifact before and after, and spec-reviewer verdicts on a compiler-authored spec versus a hand-authored one"
     justifies: "FR-35, AC-27, and the spec goal that skills carry role and judgment instead of transcribed formatting procedure. Also tests whether the shorter skill actually produces equal or better artifacts."
     depends_on: ["7.2"]
   - id: "7.4"
     title: "Onboard the remaining artifact types"
-    status: planned
+    status: complete
     verification: "AC-28 and AC-46 pass: every artifact of every type dry-runs with normalization deltas only, each type behind its own completed migration and guard enablement"
     justifies: "FR-36, FR-34, AC-28, AC-46. Completes the rollout so no artifact type is left with two writers, which would leave the invariants advisory for that type."
     depends_on: ["7.3"]

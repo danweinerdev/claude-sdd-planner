@@ -10,24 +10,24 @@ deliverable: "The frozen oracle corpus, branch manifest, and differential runner
 tasks:
   - id: "3.1"
     title: "Freeze the Python oracle sources and test inventory"
-    status: planned
+    status: complete
     verification: "AC-06 passes: the parity manifest accounts for all 74 Python test methods exactly once with no duplicates or gaps, the six test files are frozen with SHA-256 checksums, and the AST inventory check fails on a missing test, changed checksum, duplicate mapping, or omitted subtest input"
     justifies: "FR-31, AC-06. Prevents a rewrite from silently dropping validation behavior; the existing 74 tests are the only executable record of current intent."
   - id: "3.2"
     title: "Source-derived diagnostic branch manifest"
-    status: planned
+    status: complete
     verification: "AC-05 passes: every diagnostic callsite, message variant, and predicate boundary appears in the manifest with frozen oracle output; the gate fails on an unlisted emission, stale exemption, or duplicate row"
     justifies: "FR-30, AC-04, AC-05. The baseline is insufficient on its own — most parsing, schema, graph, completion, review, Git, scope, and ledger branches have no direct test, so parity without this manifest would be parity in name only."
     depends_on: ["3.1"]
   - id: "3.3"
     title: "Differential runner and compatibility corpora"
-    status: planned
+    status: complete
     verification: "AC-03 passes for the corpora that exist; the runner compares exit code, stdout, stderr, parsed JSON, order, line, path, multiplicity, severity, message, correction, and implicated paths, and permits a difference only where a fixture cites an FR-07 delta with both results frozen"
     justifies: "FR-32, AC-03, AC-08, AC-09, AC-10. Byte-level comparison against the oracle is the mechanism that turns a belief that the port is faithful into a checkable claim."
     depends_on: ["3.2"]
   - id: "3.4"
     title: "History-aware migration gate"
-    status: planned
+    status: complete
     verification: "The gate verifies, from SCM history, that the manifest, frozen corpus, source scan, and tests all passed in the first parent of the first revision adding Go validation logic, and fails when that boundary is violated"
     justifies: "FR-30, AC-05. Without a history check the ordering requirement is honor-system, and the whole parity argument depends on the corpus predating the port rather than being written to match it."
     depends_on: ["3.3"]

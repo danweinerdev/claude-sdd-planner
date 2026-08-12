@@ -10,24 +10,24 @@ deliverable: "sdd validate and sdd decide validate at proven parity with the Pyt
 tasks:
   - id: "4.1"
     title: "Port full-artifact validation to parity"
-    status: planned
+    status: complete
     verification: "AC-03, AC-04, AC-07 pass: byte-equivalent stdout/stderr and identical exit codes against the oracle for every unchanged fixture, with every SDD code and message branch covered"
     justifies: "FR-06, FR-08, FR-09, FR-10, AC-03, AC-04, AC-07. Delivers the deterministic layer that six skill files and the completion gates depend on, without Python."
   - id: "4.2"
     title: "Port focused-ledger validation to parity"
-    status: planned
+    status: complete
     verification: "AC-03 and AC-10 pass for the ledger mode, including the per-mode duplicate-key difference and all four diagnostic path alias forms with no machine-specific absolute path"
     justifies: "FR-07, FR-08, FR-09, FR-10, AC-03, AC-10. The ledger validator has no direct test coverage today, so parity here is entirely dependent on the Phase 3 corpora."
     depends_on: ["4.1"]
   - id: "4.3"
     title: "The two intentional corrections"
-    status: planned
+    status: complete
     verification: "AC-11 and AC-12 pass: the four Resources paths validate without SDD041 from every planning-root form, and the suffixed task identifier grammar accepts 3.1/3.1a/3.2b while rejecting the four named invalid forms with updated correction text"
     justifies: "FR-11, FR-12, FR-13, FR-18, AC-11, AC-12. Fixes four reproducible false positives that make existing artifacts appear invalid, and unblocks splitting a task into independently verifiable parts."
     depends_on: ["4.2"]
   - id: "4.4"
     title: "Cross-platform and read-only guarantees"
-    status: planned
+    status: complete
     verification: "AC-29, AC-30, AC-36 pass: read-only guard tests show no byte, index, worktree, or config change; Windows and Linux authoring produce byte-identical artifacts; all five targets compile"
     justifies: "NFR-02, NFR-05, NFR-06, AC-29, AC-30, AC-36. Prevents the cross-platform diff churn that would destroy the semantic-diff benefit, and proves the read-only claim that the reviewer agents depend on."
     depends_on: ["4.3"]
