@@ -48,11 +48,13 @@ func cmdEvidence(args []string) error {
 	toolResult := fs.String("tool-result", "", "observable evidence for the tool row")
 	focused := fs.String("focused-review", "", "exact focused-review command (tasks only)")
 	date := fs.String("date", "", "verification date (default: today)")
+	revision := fs.String("revision", "", "the task's own implementation commit (default: HEAD)")
 	dryRun := fs.Bool("dry-run", false, "print the section without writing")
 	valueFlags := map[string]bool{
 		"--task": true, "--verified-by": true, "--working-dir": true,
 		"--result": true, "--tool": true, "--tool-context": true,
 		"--tool-result": true, "--focused-review": true, "--date": true,
+		"--revision": true, "-revision": true,
 		"-task": true, "-verified-by": true, "-working-dir": true, "-result": true,
 		"-tool": true, "-tool-context": true, "-tool-result": true,
 		"-focused-review": true, "-date": true,
@@ -95,20 +97,40 @@ func cmdEvidence(args []string) error {
 
 	repoDir := evidenceRepoDir(path)
 	repo := vcs.Detect(repoDir)
-	revision, revErr := repo.Head()
-	if revErr != nil || revision == "" {
-		return fmt.Errorf("evidence add: cannot read the target repository's current revision from %s; "+
-			"completion evidence must carry a real native identity", repoDir)
-	}
-	clean, dirty, _ := repo.Clean()
-	if !clean {
-		return fmt.Errorf("evidence add: the target repository has uncommitted changes (%s); "+
-			"commit the task's work before recording its identity, or the recorded "+
-			"revision will not describe what was verified", strings.Join(dirty, ", "))
+
+	// The identity is the entity's OWN implementation commit, not whatever
+	// HEAD happens to be — shared/completion-evidence.md § Git adapter. When
+	// one is named, it is verified to exist rather than trusted; when it is
+	// not, HEAD is used and the worktree must be clean, because otherwise the
+	// recorded revision would not describe what was verified.
+	rev := *revision
+	if rev == "" {
+		head, err := repo.Head()
+		if err != nil || head == "" {
+			return fmt.Errorf("evidence add: cannot read the current revision from %s; "+
+				"completion evidence must carry a real native identity", repoDir)
+		}
+		clean, dirty, _ := repo.Clean()
+		if !clean {
+			return fmt.Errorf("evidence add: the target repository has uncommitted changes (%s).\n"+
+				"Commit the work first, or pass --revision <full40> naming the commit this "+
+				"entity was actually verified at; a recorded revision that does not describe "+
+				"what was tested is false evidence, not incomplete evidence",
+				strings.Join(dirty, ", "))
+		}
+		rev = head
+	} else {
+		if !repo.RevisionSyntaxValid(rev) {
+			return fmt.Errorf("evidence add: %q is not a full native revision identifier for this SCM", rev)
+		}
+		exists, err := repo.RevisionExists(rev)
+		if err != nil || !exists {
+			return fmt.Errorf("evidence add: revision %s does not exist in %s", rev, repoDir)
+		}
 	}
 
 	section := renderEvidence(evidenceInput{
-		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: revision,
+		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: rev,
 		VerifiedBy: *verifiedBy, WorkingDir: *workingDir, Result: *result,
 		Tool: *tool, ToolContext: *toolContext, ToolResult: *toolResult,
 		Focused: *focused, IsTask: *task != "",
@@ -133,7 +155,7 @@ func cmdEvidence(args []string) error {
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
-	fmt.Printf("recorded %s in %s (revision %s)\n", strings.TrimPrefix(heading, "#"), path, short(revision))
+	fmt.Printf("recorded %s in %s (revision %s)\n", strings.TrimSpace(strings.TrimPrefix(heading, "##")), path, short(rev))
 	return nil
 }
 
@@ -156,9 +178,14 @@ func renderEvidence(in evidenceInput) string {
 	fmt.Fprintf(&b, "- Identity recheck: `%s` at %s matched `%s`\n",
 		"git rev-parse HEAD", in.Date+" 00:00", in.Revision)
 	if in.IsTask {
+		// SDD169 requires the focused review to name the reviewed identity
+		// exactly: `git show <full40>` or `git diff <base>..<full40>`, no
+		// extra operands. Defaulting to the verification command produced
+		// evidence the validator rejected — caught by running `sdd task
+		// complete` against this repository's own plan.
 		focused := in.Focused
 		if focused == "" {
-			focused = in.VerifiedBy
+			focused = "git show " + in.Revision
 		}
 		fmt.Fprintf(&b, "- Focused review: `%s`; complete task diff reviewed for "+
 			"correctness, scope, tests, maintainability, and task boundary\n", focused)
