@@ -160,7 +160,7 @@ Revision boundary: Every artifact type is compiler-authored and guarded.
 - VCS: `git`
 - Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
 - Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
-- Final aligned review: Retro/07-Write-Guard-And-Rollout-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..a0f56ce60f506b21e203eee569f9992a2a5ad6a1
+- Final aligned review: Retro/07-Write-Guard-And-Rollout-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..381adda6c225688563de873a26d2ea21d01809fb
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
