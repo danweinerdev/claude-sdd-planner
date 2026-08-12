@@ -43,7 +43,8 @@ func cmdTransition(kind string, args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "task id (task complete only)")
 	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
-	if err := fs.Parse(args[1:]); err != nil {
+	flags, positional := splitArgs(args[1:], map[string]bool{"--id": true, "-id": true})
+	if err := fs.Parse(append(flags, positional...)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {

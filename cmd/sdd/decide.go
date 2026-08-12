@@ -31,6 +31,8 @@ func cmdDecide(args []string) error {
 		return cmdDecideSearch(args[1:])
 	case "add":
 		return cmdDecideAdd(args[1:])
+	case "validate":
+		return cmdDecideValidate(args[1:])
 	default:
 		return fmt.Errorf("decide: unknown action %q", args[0])
 	}

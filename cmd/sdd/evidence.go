@@ -49,7 +49,16 @@ func cmdEvidence(args []string) error {
 	focused := fs.String("focused-review", "", "exact focused-review command (tasks only)")
 	date := fs.String("date", "", "verification date (default: today)")
 	dryRun := fs.Bool("dry-run", false, "print the section without writing")
-	if err := fs.Parse(args[1:]); err != nil {
+	valueFlags := map[string]bool{
+		"--task": true, "--verified-by": true, "--working-dir": true,
+		"--result": true, "--tool": true, "--tool-context": true,
+		"--tool-result": true, "--focused-review": true, "--date": true,
+		"-task": true, "-verified-by": true, "-working-dir": true, "-result": true,
+		"-tool": true, "-tool-context": true, "-tool-result": true,
+		"-focused-review": true, "-date": true,
+	}
+	flags, positional := splitArgs(args[1:], valueFlags)
+	if err := fs.Parse(append(flags, positional...)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
