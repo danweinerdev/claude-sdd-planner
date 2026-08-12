@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
@@ -47,6 +49,8 @@ func cmdEvidence(args []string) error {
 	toolContext := fs.String("tool-context", "", "context for the tool row")
 	toolResult := fs.String("tool-result", "", "observable evidence for the tool row")
 	focused := fs.String("focused-review", "", "exact focused-review command (tasks only)")
+	finalReview := fs.String("final-review", "",
+		"`<review path>; frozen: <range>` for the phase's final aligned review")
 	date := fs.String("date", "", "verification date (default: today)")
 	revision := fs.String("revision", "", "the task's own implementation commit (default: HEAD)")
 	dryRun := fs.Bool("dry-run", false, "print the section without writing")
@@ -55,6 +59,7 @@ func cmdEvidence(args []string) error {
 		"--result": true, "--tool": true, "--tool-context": true,
 		"--tool-result": true, "--focused-review": true, "--date": true,
 		"--revision": true, "-revision": true,
+		"--final-review": true, "-final-review": true,
 		"-task": true, "-verified-by": true, "-working-dir": true, "-result": true,
 		"-tool": true, "-tool-context": true, "-tool-result": true,
 		"-focused-review": true, "-date": true,
@@ -129,11 +134,21 @@ func cmdEvidence(args []string) error {
 		}
 	}
 
+	// A phase's evidence must additionally carry one identity line per
+	// completed task (SDD157) and the final aligned review entry (SDD166).
+	// Those are derived from the phase itself rather than typed, so they
+	// cannot disagree with the tasks they describe.
+	var identities []taskIdentityLine
+	if *phase {
+		identities = completedTaskIdentities(doc)
+	}
+
 	section := renderEvidence(evidenceInput{
 		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: rev,
 		VerifiedBy: *verifiedBy, WorkingDir: *workingDir, Result: *result,
 		Tool: *tool, ToolContext: *toolContext, ToolResult: *toolResult,
 		Focused: *focused, IsTask: *task != "",
+		FinalReview: *finalReview, TaskIdentities: identities,
 	})
 
 	if *dryRun {
@@ -163,8 +178,61 @@ type evidenceInput struct {
 	Date, Repository, VCS, Revision string
 	VerifiedBy, WorkingDir, Result  string
 	Tool, ToolContext, ToolResult   string
-	Focused                         string
+	Focused, FinalReview            string
 	IsTask                          bool
+	TaskIdentities                  []taskIdentityLine
+}
+
+// taskIdentityLine is one completed task and the revision its own evidence
+// records, for the phase's `### Completed task identities` section.
+type taskIdentityLine struct{ ID, Revision string }
+
+// completedTaskIdentities reads each completed task's recorded revision out of
+// that task's own evidence, so the phase's roll-up cannot drift from the tasks
+// it summarizes — SDD157 requires them to agree exactly.
+func completedTaskIdentities(doc *artifact.Doc) []taskIdentityLine {
+	var meta struct {
+		Tasks []struct {
+			ID     string `yaml:"id"`
+			Status string `yaml:"status"`
+		} `yaml:"tasks"`
+	}
+	if yaml.Unmarshal([]byte(strings.Join(doc.FrontmatterRaw, "\n")), &meta) != nil {
+		return nil
+	}
+	body := docBody(doc)
+	var out []taskIdentityLine
+	for _, t := range meta.Tasks {
+		if t.Status != "complete" {
+			continue
+		}
+		if rev := taskRecordedRevision(body, t.ID); rev != "" {
+			out = append(out, taskIdentityLine{ID: t.ID, Revision: rev})
+		}
+	}
+	return out
+}
+
+// taskRecordedRevision pulls the `Revision / checkpoint` a task's own evidence
+// records, searching only within that task's section.
+func taskRecordedRevision(body, id string) string {
+	start := strings.Index(body, "\n## "+id)
+	if start < 0 {
+		return ""
+	}
+	rest := body[start+1:]
+	if next := strings.Index(rest[3:], "\n## "); next >= 0 {
+		rest = rest[:next+3]
+	}
+	for _, line := range strings.Split(rest, "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "- Revision / checkpoint:") {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(
+			strings.TrimPrefix(t, "- Revision / checkpoint:")), "`")
+	}
+	return ""
 }
 
 // renderEvidence emits the label set and tables completion-evidence.md
@@ -192,10 +260,19 @@ func renderEvidence(in evidenceInput) string {
 		fmt.Fprintf(&b, "- Reviewed candidate / final: `%s`\n", in.Revision)
 		b.WriteString("- Review result: PASS/Aligned\n")
 	}
+	if in.FinalReview != "" {
+		fmt.Fprintf(&b, "- Final aligned review: %s\n", in.FinalReview)
+	}
 	b.WriteString("\n| Command | Working directory | Result | Observable evidence |\n")
 	b.WriteString("|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| `%s` | `%s` | PASS (`exit 0`) | `%s` |\n",
 		in.VerifiedBy, in.WorkingDir, in.Result)
+	if len(in.TaskIdentities) > 0 {
+		b.WriteString("\n### Completed task identities\n\n")
+		for _, t := range in.TaskIdentities {
+			fmt.Fprintf(&b, "- `%s`: `%s`\n", t.ID, t.Revision)
+		}
+	}
 	if in.Tool != "" {
 		b.WriteString("\n| Tool / inspection | Context | Result | Observable evidence |\n")
 		b.WriteString("|---|---|---|---|\n")
@@ -295,4 +372,20 @@ func restampUpdated(source, today string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// docBody reassembles a document's body so a task's evidence can be located by
+// its `## <task-id>` heading.
+func docBody(doc *artifact.Doc) string {
+	var b strings.Builder
+	for _, l := range doc.Preamble {
+		b.WriteString(l + "\n")
+	}
+	for _, sec := range doc.Sections {
+		b.WriteString(sec.Heading + "\n")
+		for _, l := range sec.Body {
+			b.WriteString(l + "\n")
+		}
+	}
+	return b.String()
 }

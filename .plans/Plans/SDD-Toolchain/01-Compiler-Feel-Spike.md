@@ -192,5 +192,21 @@ Revision boundary: A decision with evidence behind it: proceed, amend the spec, 
 
 ## Phase Completion Evidence
 
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `85f019ec021636fe7cee094c717178ed19db5bac`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `85f019ec021636fe7cee094c717178ed19db5bac`
 - Final aligned review: Retro/01-Compiler-Feel-Spike-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac
-Pending — not complete.
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./...` | `.` | PASS (`exit 0`) | `all packages ok at the frozen endpoint` |
+
+### Completed task identities
+
+- `1.1`: `c19be0fee155d9fe548714e671996b92066ba4ea`
+- `1.2`: `3c6698eae10ff4fffd4f933960b15f1576c4a87f`
+- `1.3`: `ee1066ab158eed2031d814328d9fc7cb8d50f13c`
+- `1.4`: `48d9aece80cd287771e5628b82f4b0a1ff8a7c35`
+- `1.5`: `85f019ec021636fe7cee094c717178ed19db5bac`
