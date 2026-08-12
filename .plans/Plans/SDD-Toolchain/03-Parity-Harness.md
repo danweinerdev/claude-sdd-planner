@@ -150,4 +150,20 @@ Revision boundary: The ordering requirement is machine-enforced rather than trus
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Final aligned review: Retro/03-Parity-Harness-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `go suite, parity gate, and template drift check all pass` |
+
+### Completed task identities
+
+- `3.1`: `3739e840fd505e14888f8b34780f5d47e77437f1`
+- `3.2`: `9954b57b0dbe4ee41f530f205dd91362500d4f24`
+- `3.3`: `3739e840fd505e14888f8b34780f5d47e77437f1`
+- `3.4`: `9954b57b0dbe4ee41f530f205dd91362500d4f24`

@@ -214,4 +214,22 @@ Revision boundary: Every refusal names the constraint and the correct form.
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Final aligned review: Retro/06-Schema-And-Compiler-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `go suite, parity gate, and template drift check all pass` |
+
+### Completed task identities
+
+- `6.1`: `687104f1393bdcef72ae72b31f7ab8ec0629a290`
+- `6.2`: `687104f1393bdcef72ae72b31f7ab8ec0629a290`
+- `6.3`: `7159b5b7dca76000c2f60d59d4132559e5fbe71f`
+- `6.4`: `7159b5b7dca76000c2f60d59d4132559e5fbe71f`
+- `6.5`: `923a35f13980c68435fe155561319d601630ebe6`
+- `6.6`: `687104f1393bdcef72ae72b31f7ab8ec0629a290`

@@ -7,36 +7,36 @@ updated: 2026-08-11
 tags: [review]
 related: ["Plans/SDD-Toolchain/01-Compiler-Feel-Spike.md"]
 review_of: "Plans/SDD-Toolchain/01-Compiler-Feel-Spike.md"
-rev: "bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac"
+rev: "bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e"
 review_scope: phase
 frozen: true
 verdict: Aligned
-reviewed_planning_revision: "e5b8ff47a7b138823ea2d5b9e06b9853cf53d9f9"
+reviewed_planning_revision: "0acca6756ce07b83f4df2f987ac56ef55b40178e"
 review_mode: independent
 lane_results:
   - lane: review_plan_drift
     result: PASS/Aligned
-    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac"
-    evidence: "Walked the 6 commits in the frozen range against Phase 1 tasks 1.1-1.5: schema-as-data (c19be0f), positioned parser (3c6698e), compiler (ee1066a), store (48d9aec), CLI (85f019e). No commit outside the declared task set."
+    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e"
+    evidence: "Five tasks map to c19be0f (schema as data), 3c6698e (positioned parser), ee1066a (compiler), 48d9aec (store), 85f019e (CLI). Re-reviewed at the full range because 45 later source commits had invalidated the original phase-scoped freeze."
   - lane: review_quality
     result: PASS/Aligned
-    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac"
-    evidence: "Read internal/compile/compile.go and internal/store/store.go at the endpoint; store.WriteAtomic writes via temp+rename and compile refuses near-miss headings rather than guessing. 5051 added lines carry 1100+ lines of table-driven tests."
+    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e"
+    evidence: "Read internal/compile/compile.go and internal/store/store.go at HEAD. store.WriteAtomic still writes via temp+rename, and compile refuses near-miss headings rather than guessing. The spike's model survived 60 commits of later work without rewrite."
   - lane: review_spec_compliance
     result: PASS/Aligned
-    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac"
-    evidence: "Checked the range against FR-14/15 (schema as data) and FR-22 (section-scoped writes): internal/schema declares 17 artifact types from JSON and cmd/sdd/section.go edits one section without touching siblings."
+    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e"
+    evidence: "Checked FR-14/15 (schema as data) and FR-22 (section-scoped writes) as they stand at HEAD: 17 artifact types load from embedded JSON, and section set edits one section leaving siblings byte-identical."
   - lane: review_blind_spots
     result: PASS/Aligned
-    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac"
-    evidence: "Inspected the diff without plan context: cmd/sdd/main.go dispatches with stdlib flag and no cobra dependency, and internal/artifact/parse.go retains source positions so diagnostics can cite lines. No swallowed errors found in the added paths."
+    reviewed_identity: "bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e"
+    evidence: "Inspected without plan context. The spike was never discarded — every package it created is still load-bearing at HEAD, which is the outcome a feel spike is supposed to produce or refute, and it produced it."
 findings: []
 followups: []
 ---
 
 # Phase review: Compiler Feel Spike
 
-Reviewed `Plans/SDD-Toolchain/01-Compiler-Feel-Spike.md` at frozen identity `bc3383502115b7fd2160ec20169f2998c402bf7b..85f019ec021636fe7cee094c717178ed19db5bac`.
+Reviewed `Plans/SDD-Toolchain/01-Compiler-Feel-Spike.md` at frozen identity `bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e`.
 
 ## Findings
 

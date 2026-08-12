@@ -222,13 +222,13 @@ Revision boundary: A user can go install, run /setup, and have working skills an
 - Verified: 2026-08-11
 - Repository: `.`
 - VCS: `git`
-- Revision / checkpoint: `996610b148354ef56136801c17b8b3fe987116fe`
-- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `996610b148354ef56136801c17b8b3fe987116fe`
-- Final aligned review: Retro/02-Provisioning-Vertical-review.md; frozen: 85f019ec021636fe7cee094c717178ed19db5bac..996610b148354ef56136801c17b8b3fe987116fe
+- Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Final aligned review: Retro/02-Provisioning-Vertical-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
-| `go test ./...` | `.` | PASS (`exit 0`) | `all 10 packages ok at the frozen endpoint` |
+| `make test` | `.` | PASS (`exit 0`) | `go suite, parity gate, and template drift check all pass` |
 
 ### Completed task identities
 

@@ -149,4 +149,20 @@ Revision boundary: Validation is byte-stable across platforms and provably mutat
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-08-11
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-11 00:00 matched `0acca6756ce07b83f4df2f987ac56ef55b40178e`
+- Final aligned review: Retro/04-Validation-Port-review.md; frozen: bc3383502115b7fd2160ec20169f2998c402bf7b..0acca6756ce07b83f4df2f987ac56ef55b40178e
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `go suite, parity gate, and template drift check all pass` |
+
+### Completed task identities
+
+- `4.1`: `befc1ac4328f056f02a29c3c9040439f23fb8274`
+- `4.2`: `4294bc2398eb0cd8bc0a9cc491e0a90cd9233266`
+- `4.3`: `3739e840fd505e14888f8b34780f5d47e77437f1`
+- `4.4`: `befc1ac4328f056f02a29c3c9040439f23fb8274`
