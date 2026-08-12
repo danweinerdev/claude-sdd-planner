@@ -45,6 +45,8 @@ func main() {
 		err = cmdHook(os.Args[2:])
 	case "provision":
 		err = cmdProvision(os.Args[2:])
+	case "review":
+		err = cmdReview(os.Args[2:])
 	case "evidence":
 		err = cmdEvidence(os.Args[2:])
 	case "task", "phase", "plan":
@@ -77,7 +79,7 @@ func main() {
 	}
 }
 
-var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "evidence", "task", "phase", "plan", "help"}
+var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "review", "evidence", "task", "phase", "plan", "help"}
 
 func usage() {
 	fmt.Fprint(os.Stderr, `sdd — SDD toolchain (spike)
@@ -93,6 +95,7 @@ func usage() {
                                   [--json] [--expect DIGEST] [--type T]
   sdd doctor [--json]
   sdd provision [--plugin-root PATH] [--check] [--json]
+  sdd review scaffold <phase-path> --frozen <base>..<endpoint>
   sdd hook pretooluse | sessionstart   (reads a hook payload on stdin)
   sdd evidence add <artifact-path> --task ID|--phase|--plan
                    --verified-by CMD --result TEXT [--working-dir PATH]

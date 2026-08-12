@@ -57,6 +57,10 @@ var phaseReviewLanes = map[string]bool{
 
 var fullHexRe = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 var laneWordRe = regexp.MustCompile(`[A-Za-z0-9_./:-]+`)
+
+// placeholderRe matches an unfilled `<...>` template marker.
+var placeholderRe = regexp.MustCompile(`<[^>]*>`)
+
 var conclusoryEvidenceRe = regexp.MustCompile(
 	`^(?:no|none|zero)(?: (?:blocking|material|significant|actionable|critical|major|minor))* ` +
 		`(?:findings?|issues?|concerns?|problems?|defects?|regressions?)(?: (?:were|was))?` +
@@ -77,6 +81,12 @@ var genericLaneWords = map[string]bool{
 func usefulLaneEvidence(v any) bool {
 	s, ok := v.(string)
 	if !ok {
+		return false
+	}
+	// An unfilled template placeholder is not an observation, however many
+	// words it contains. Without this, `sdd review scaffold`'s own output
+	// validated clean and could have closed a phase on a review nobody ran.
+	if placeholderRe.MatchString(s) {
 		return false
 	}
 	words := laneWordRe.FindAllString(s, -1)

@@ -118,3 +118,31 @@ tasks: [{id: "1.1", status: complete}]
 		t.Error("expected a refusal for a flow-style lifecycle node")
 	}
 }
+
+// TestPlaceholderLaneEvidenceIsRefused: `sdd review scaffold` writes an
+// unfilled `<REPLACE: ...>` marker for each lane, and Python's
+// useful_lane_evidence accepted it — it has enough non-generic words to pass
+// the word-count heuristic. That would have let a phase close on a review
+// nobody performed, which is the exact failure the four-lane gate exists to
+// prevent. A deliberate divergence from the Python, tightening only.
+func TestPlaceholderLaneEvidenceIsRefused(t *testing.T) {
+	refused := []string{
+		"<REPLACE: what this lane inspected and observed>",
+		"<TODO fill in>",
+		"checked <something> in store/atomic.go",
+	}
+	for _, s := range refused {
+		if usefulLaneEvidence(s) {
+			t.Errorf("%q was accepted as lane evidence; an unfilled placeholder is not an observation", s)
+		}
+	}
+	accepted := []string{
+		"Checked the migration ordering in store/atomic.go.",
+		"Read cmd/sdd/apply.go and confirmed the digest guard rejects a stale write.",
+	}
+	for _, s := range accepted {
+		if !usefulLaneEvidence(s) {
+			t.Errorf("%q was refused; a concrete observation must be accepted", s)
+		}
+	}
+}
