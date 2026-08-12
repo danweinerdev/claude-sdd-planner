@@ -44,6 +44,10 @@ func main() {
 		err = cmdDoctor(os.Args[2:])
 	case "hook":
 		err = cmdHook(os.Args[2:])
+	case "evidence":
+		err = cmdEvidence(os.Args[2:])
+	case "task", "phase", "plan":
+		err = cmdTransition(os.Args[1], os.Args[2:])
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
 	case "validate":
@@ -88,6 +92,11 @@ func usage() {
                                   [--json] [--expect DIGEST] [--type T]
   sdd doctor [--json]
   sdd hook pretooluse | sessionstart   (reads a hook payload on stdin)
+  sdd evidence add <artifact-path> --task ID|--phase|--plan
+                   --verified-by CMD --result TEXT [--working-dir PATH]
+  sdd task complete <phase-path> --id ID
+  sdd phase complete <phase-path>
+  sdd plan complete <plan-path>
   sdd migrate <artifact-path> [--dry-run] [--diff] [--json] [--allow-frozen]
   sdd validate [--root PATH] [--scope PATH] [--format text|json]
   sdd next [PLAN-PATH] [--json]
