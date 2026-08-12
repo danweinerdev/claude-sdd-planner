@@ -52,6 +52,11 @@ permits only the phase's own doc, its review, the plan README, and its
 debrief — a faithful port of the Python, which assumed phases close one at a
 time.
 
+The same shared range trips SDD173's other branch: a phase review endpoint
+must equal that phase's own checkpoint, and one range reviewing seven phases
+can only end at one of them. Both branches are the same limitation seen from
+two sides.
+
 Every flagged path is a lifecycle document under the planning root; no source
 file is implicated. The diagnostic is correct about what changed and wrong
 about what it means, because the rule has no notion of sibling phases closing
