@@ -208,3 +208,41 @@ Consumed by the companion `sdd-dashboard` plugin; inline Mermaid diagrams in art
 - `deferred` / `archived` / `superseded` -> muted
 
 (Decision-ledger *entry* statuses are not artifact statuses; their rendering mapping lives in the Decision Ledger Schema section above.)
+
+## Accepted Exceptions (`waivers`)
+
+A validator gate with no exception path gets bypassed some other way — by
+loosening the rule for everyone, by hand-editing artifacts until the check
+passes, or by dropping the validator from CI. Each of those trades a narrow,
+attributable exception for a broad, silent one. `waivers` makes the narrow one
+the cheapest honest option.
+
+```yaml
+waivers:
+  - code: SDD173
+    reason: "Why this finding does not apply here, in a sentence."
+    accepted: "2026-08-12"   # optional
+```
+
+**Waiving is never quieter than fixing.** A waived finding is still reported —
+as `WAIVED`, with its reason — and the run headline says `N waived`. It stops
+making the root invalid; it does not stop being visible.
+
+Rules the mechanism enforces on itself:
+
+| Constraint | Why |
+|---|---|
+| Waivers live in the artifact's own frontmatter | Attributable to a commit and an author, greppable, visible in review. There is deliberately no config-file or CLI form — either would let a pipeline silence findings without changing a tracked file. |
+| A waiver is scoped to its own artifact and code | An exception's blast radius should be readable from the file it is written in. |
+| A reason is required and must be substantive | An unexplained exception is what this mechanism exists to prevent. Placeholders (`TBD`, `n/a`) and too-short text are refused — **SDD176**. |
+| Parse-stage codes (SDD002–007) cannot be waived | The validator could not model the file, so every rule below it silently did not run. Waiving that asserts an unreadable artifact is fine — **SDD176**. |
+| An unknown code cannot be waived | A typo or retired code yields a permanent no-op — **SDD176**. |
+| A waiver matching nothing is reported | Stale exceptions accumulate into a standing suppression list nobody re-reads, and would silently excuse the finding if it returned — **SDD177**. |
+
+`sdd validate --no-waivers` ignores the mechanism entirely and reports the
+unexcused state. Use it in release gates and audits; the waivered run is the
+day-to-day signal.
+
+Waivers are excluded from lifecycle normalization, so declaring one does not
+invalidate the phase review that surfaced the finding. Every other byte is
+still compared — a scope edit made in the same commit is still caught.

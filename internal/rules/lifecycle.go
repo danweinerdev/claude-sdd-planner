@@ -157,10 +157,45 @@ func mappingEntries(node *yaml.Node, name string) [][2]*yaml.Node {
 
 func isFlow(n *yaml.Node) bool { return n.Style == yaml.FlowStyle }
 
+// lifecycleBlockSpan excises a whole block-sequence entry — its key line
+// through the last line of its nested content. lifecycleEntrySpan handles only
+// single-line scalars, which a `waivers:` list is not.
+//
+// The end is found from the value's own final line rather than by scanning for
+// the next key, so trailing comments or blank lines between entries cannot
+// stretch the span past the value it belongs to.
+func lifecycleBlockSpan(payload string, offsets []int, key, value *yaml.Node, containerFlow bool) (span, error) {
+	if containerFlow || key.Line <= 0 || key.Line >= len(offsets) {
+		return span{}, errUnsupportedLifecycleNode
+	}
+	last := value.Line
+	var deepest func(n *yaml.Node)
+	deepest = func(n *yaml.Node) {
+		if n == nil {
+			return
+		}
+		if n.Line > last {
+			last = n.Line
+		}
+		for _, c := range n.Content {
+			deepest(c)
+		}
+	}
+	deepest(value)
+	if last <= 0 || last >= len(offsets) {
+		return span{}, errUnsupportedLifecycleNode
+	}
+	end := len(payload)
+	if last+1 < len(offsets) {
+		end = offsets[last+1]
+	}
+	return span{start: offsets[key.Line], end: end}, nil
+}
+
 // lifecycleFrontmatterSpans ports lifecycle_frontmatter_spans.
 func lifecycleFrontmatterSpans(payload string, offsets []int, root *yaml.Node, kind string) ([]span, error) {
 	var spans []span
-	for _, name := range [3]string{"updated", "status", "waivers"} {
+	for _, name := range [2]string{"updated", "status"} {
 		for _, kv := range mappingEntries(root, name) {
 			s, err := lifecycleEntrySpan(payload, offsets, kv[0], kv[1], isFlow(root))
 			if err != nil {
@@ -168,6 +203,15 @@ func lifecycleFrontmatterSpans(payload string, offsets []int, root *yaml.Node, k
 			}
 			spans = append(spans, s)
 		}
+	}
+	// `waivers` is a block sequence rather than a scalar, so it needs a
+	// whole-block span: from its key to the start of the next top-level key.
+	for _, kv := range mappingEntries(root, "waivers") {
+		s, err := lifecycleBlockSpan(payload, offsets, kv[0], kv[1], isFlow(root))
+		if err != nil {
+			return nil, err
+		}
+		spans = append(spans, s)
 	}
 	field := ""
 	switch kind {

@@ -239,3 +239,91 @@ func severityCodes(ds []Diagnostic) []string {
 	}
 	return out
 }
+
+// TestWaiverBlockIsExcisedFromLifecycleNormalization pins the fix for a
+// self-defeating interaction: declaring an exception edits the phase document,
+// and SDD174 compares a phase against the copy its review froze. Without
+// excising the waivers block, writing a waiver invalidated the review that
+// justified it, and the excision itself is non-obvious because `waivers` is a
+// block sequence while every other stripped key is a single-line scalar.
+func TestWaiverBlockIsExcisedFromLifecycleNormalization(t *testing.T) {
+	const withWaiver = `---
+title: "P"
+type: phase
+status: complete
+created: "2026-01-01"
+updated: "2026-01-02"
+waivers:
+  - code: SDD173
+    reason: "A multi-line block sequence, unlike every other stripped key."
+    accepted: "2026-01-02"
+tags: ["a"]
+related: []
+---
+
+# P
+
+## Overview
+
+Text.
+`
+	// The same document with the waivers block removed and `updated` moved on:
+	// normalization must render these two identical, because neither the
+	// exception nor the date is a change of intent.
+	without := strings.Replace(withWaiver,
+		"waivers:\n  - code: SDD173\n    reason: \"A multi-line block sequence, unlike every other stripped key.\"\n    accepted: \"2026-01-02\"\n",
+		"", 1)
+	without = strings.Replace(without, `updated: "2026-01-02"`, `updated: "2026-05-05"`, 1)
+
+	a, err := lifecycleNormalizedArtifact(withWaiver, "phase")
+	if err != nil {
+		t.Fatalf("normalizing the waivered form failed: %v", err)
+	}
+	b, err := lifecycleNormalizedArtifact(without, "phase")
+	if err != nil {
+		t.Fatalf("normalizing the plain form failed: %v", err)
+	}
+	if a != b {
+		t.Errorf("declaring a waiver changed the normalized form:\n--- with ---\n%s\n--- without ---\n%s", a, b)
+	}
+	if strings.Contains(a, "SDD173") {
+		t.Error("the waivers block survived normalization")
+	}
+}
+
+// A waiver must not be able to launder a real scope edit made in the same
+// commit: everything outside the waivers block is still compared.
+func TestWaiverDoesNotHideAdjacentEdits(t *testing.T) {
+	const base = `---
+title: "P"
+type: phase
+status: complete
+created: "2026-01-01"
+updated: "2026-01-02"
+waivers:
+  - code: SDD173
+    reason: "A multi-line block sequence, unlike every other stripped key."
+tags: ["a"]
+related: []
+---
+
+# P
+
+## Overview
+
+Original scope.
+`
+	edited := strings.Replace(base, "Original scope.", "Quietly rewritten scope.", 1)
+
+	a, err := lifecycleNormalizedArtifact(base, "phase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := lifecycleNormalizedArtifact(edited, "phase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Error("a scope edit alongside a waiver was normalized away")
+	}
+}
