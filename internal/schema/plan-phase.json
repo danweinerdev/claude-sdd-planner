@@ -48,6 +48,52 @@
       "required": false
     },
     {
+      "key": "deliverable",
+      "ownership": "author",
+      "required": true
+    },
+    {
+      "key": "tasks",
+      "ownership": "author",
+      "required": true,
+      "entry": {
+        "fields": [
+          {
+            "key": "id",
+            "required": true,
+            "pattern": "\\d+(?:[A-Z])?(?:-[A-Z])?\\.\\d+[a-z]?"
+          },
+          {
+            "key": "title",
+            "required": true
+          },
+          {
+            "key": "status",
+            "required": true,
+            "enum": [
+              "planned",
+              "in-progress",
+              "complete",
+              "blocked",
+              "deferred"
+            ]
+          },
+          {
+            "key": "verification",
+            "required": true
+          },
+          {
+            "key": "justifies",
+            "required": true
+          },
+          {
+            "key": "depends_on",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
       "key": "tags",
       "ownership": "author",
       "required": false,

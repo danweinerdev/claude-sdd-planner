@@ -1,5 +1,5 @@
 .PHONY: bump-patch bump-minor bump-major test \
-        build build-release build-all parity gen-fixtures check-fixtures clean-build
+        build build-release build-all parity gen-fixtures check-fixtures check-templates clean-build
 
 # The parity harness is stdlib-only Python: it drives the `sdd` binary and
 # compares against tools/parity/frozen-expectations.json. PyYAML and the
@@ -137,6 +137,14 @@ check-fixtures:
 		     echo "ERROR: committed fixtures differ from the rules' examples."; \
 		     echo "Run 'make gen-fixtures' and commit the result."; exit 1; }
 
+# check-templates regenerates every committed template from its schema and
+# fails on structural drift (task 6.2). The templates and the schemas state the
+# same structure twice, and the drift is otherwise silent: a template can grow
+# a heading the schema does not declare, and nothing fails until an author uses
+# it and `sdd apply` refuses a document that looked correct.
+check-templates: build
+	@$(SDD) template --check
+
 clean-build:
 	@rm -rf $(BUILD_DIR)
 	@echo "Removed $(BUILD_DIR)"
@@ -145,7 +153,7 @@ clean-build:
 # ordering check to be machine-enforced rather than trusted, so `make test`
 # runs the corpus: SDD154/155/156 fire against real git history built by each
 # fixture's SETUP script, and a regression there fails the build.
-test: parity
+test: parity check-templates
 	@go test ./...
 
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so
