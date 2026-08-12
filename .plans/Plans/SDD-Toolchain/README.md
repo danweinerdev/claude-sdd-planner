@@ -1,7 +1,7 @@
 ---
 title: "SDD Toolchain"
 type: plan
-status: active
+status: complete
 created: 2026-08-03
 updated: 2026-08-11
 tags: [golang, tooling, validation, authoring, hooks]
