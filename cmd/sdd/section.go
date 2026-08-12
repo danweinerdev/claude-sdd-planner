@@ -218,7 +218,18 @@ func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today str
 		b.WriteString(sec.Heading + "\n")
 		body := sec.Body
 		if sec == target {
+			// A replacement body arrives as the caller typed it, with no
+			// trailing blank line, while every parsed section carries one
+			// before the next heading. Without this the written section reads
+			// as `text` immediately followed by `## Next`, which is valid
+			// Markdown but visibly unlike every section around it.
 			body = newBody
+			for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
+				body = body[:len(body)-1]
+			}
+			if i < len(doc.Sections)-1 {
+				body = append(body, "")
+			}
 		}
 		for _, l := range body {
 			b.WriteString(l + "\n")

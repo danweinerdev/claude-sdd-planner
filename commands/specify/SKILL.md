@@ -18,8 +18,31 @@ When you need to define the requirements for a feature before designing or imple
    - Invoke the `sdd-planner:researcher` agent to gather context from existing artifacts and codebase
    - Review any related research or brainstorm documents
 
-2. **Draft Specification**
-   - Create `Specs/<FeatureName>/README.md` using `shared/templates/spec.md`
+2. **Draft Specification** — author through `sdd`, never with Write/Edit
+
+   The spec is a schema-governed artifact. Author it through the CLI so the
+   structure is enforced at write time rather than discovered later by
+   `/validate`; the PreToolUse guard denies `Write` and `Edit` on artifact
+   paths for exactly this reason.
+
+   ```bash
+   # Start from the schema, not a copied template — the two are kept in step
+   # by `sdd template --check`, and the generated form is always current.
+   sdd template spec --out Specs/<FeatureName>/README.md
+
+   # Fill one section at a time. Everything outside the named heading stays
+   # byte-identical, so a later edit cannot disturb an earlier one.
+   sdd section set Specs/<FeatureName>/README.md --heading "## Overview" <<'EOF'
+   <the overview prose>
+   EOF
+   ```
+
+   - `sdd apply` recompiles a whole artifact from a Markdown payload when you
+     are drafting the document in one pass; `sdd section set` edits one section
+     when you are revising. Prefer `section set` after the first draft.
+   - Pass `--expect <digest>` on a write when you read the artifact earlier in
+     the turn: it refuses if the file changed underneath you and tells you to
+     re-read and retry, instead of silently overwriting a concurrent edit.
    - Write: overview, goals, non-goals, requirements (functional + non-functional), user stories, acceptance criteria, constraints, dependencies
    - **Number requirements and acceptance criteria with stable ids** (`FR-NN`/`NFR-NN`/`AC-NN` per `shared/frontmatter-schema.md` § Stable Identifiers) — downstream designs and plan tasks cite these ids, so they are append-only and never renumbered
    - When the spec captures an **external contract** (a third-party API, protocol, wire format, or another team's interface), pin the source: link the authoritative doc and record its version and as-of date in the spec. Downstream implementation is only allowed to derive external-contract behavior from this captured source — never from model memory — so the pin is load-bearing.
