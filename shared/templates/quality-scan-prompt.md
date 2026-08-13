@@ -35,7 +35,7 @@ Placeholder reference:
                        report: short commit SHA (git), changelist
                        number (perforce), or "n/a" (no VCS)
 - REPO_PATH          — absolute path to the target repo on disk
-- VCS                — the label /implement detected in step 2:
+- VCS                — the label `/implement` detected in step 2:
                        git | git-worktree | perforce | none
 - SHOW_COMMAND       — the resolved, ready-to-run command to view the
                        change, e.g. `git show <sha> --stat` (per-file:
@@ -67,14 +67,25 @@ Placeholder reference:
                        Aim for 4–8 concrete, testable concerns. Avoid
                        vague prompts like "review for correctness".
 
+-->
+
 Rendering rules:
+<!-- claude-only -->
 - Send the rendered prompt directly to sdd-planner:quality-scanner via
   the Task tool. The agent's body has its own rules for output format
   and validation discipline; the template provides the framing.
+<!-- /claude-only -->
+<!-- portable-only
+- Send the rendered prompt to a collaboration subagent in a fresh
+  context that does not inherit the conversation; when collaboration is
+  unavailable, perform the pass yourself following this template and
+  label the result **self-review**. `shared/review-prompts/quality.md`
+  carries the reviewer's own rules for output format and validation
+  discipline; the template provides the framing.
+-->
 - Do NOT include plan/spec/design/research/debrief content in
   CLAIMED_CHANGES or FOCUS_LIST. Reference symbol names, file paths,
   and concrete behaviors only.
 - The "Output" block is normative — do not modify the table headers
   or severity/lens vocabulary. The per-task-findings.md template
   expects this exact shape.
--->

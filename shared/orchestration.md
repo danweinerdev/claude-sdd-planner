@@ -30,6 +30,18 @@ The primary context acts as a **tech lead** — it reads enough to make informed
 
 6. **The decision framework binds the primary context too.** `shared/decision-framework.md` is the universal decision discipline — premise checks before complying, run-to-verify for any commandable claim, documented searches behind absence claims, verbatim failure reporting, no downscoping by imagined effort. Agents carry its digest in their bodies; the primary context applies the full framework directly, especially when synthesizing agent reports (don't launder an agent's unverified claim into a verified-sounding summary).
 
+<!-- portable-only
+## Bundled role prompts
+
+Multi-agent behavior is expressed as bundled, runtime-neutral role prompts that any skill can render and dispatch when collaboration subagents are available:
+
+- `shared/agent-prompts/researcher.md` — context gathering across artifacts, codebase, and docs. Used by `sdd-specify`, `sdd-design`, and `sdd-plan`; `sdd-brainstorm`, `sdd-research`, and `sdd-debrief` may render it instead of writing an ad-hoc scan prompt.
+- `shared/agent-prompts/spec-reviewer.md` — independent specification review (testability, completeness, ambiguity, scope, gated work) with an Approve/Revise verdict.
+- `shared/agent-prompts/plan-reviewer.md` — independent plan/design review (completeness, feasibility, conventions, gaps, gated work) with an Approve/Revise verdict.
+- `shared/review-prompts/` — the four code-review lanes (see `shared/review-lanes.md`).
+
+Dispatch rules: substitute every `{{PLACEHOLDER}}` before dispatch; reviewer dispatches get a fresh context that does not inherit the primary conversation, so the artifact is judged as written rather than as intended. Skills must work without collaboration subagents: fall back to a transparent single-agent workflow, label reviewer fallbacks **self-review**, and never claim independent review or corroboration when none occurred.
+-->
 ## Session Onboarding
 
 Orientation read order at the start of a planning session — frontmatter answers most orientation questions; read bodies only when the decision at hand needs them:
