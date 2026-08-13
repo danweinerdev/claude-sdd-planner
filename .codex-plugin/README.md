@@ -1,7 +1,8 @@
 # SDD Planner — Portable Tree (OpenCode / Codex)
 
-> **Generated artifact.** This tree is produced by `sdd plugin sync` from the
-> canonical Claude plugin at the repository root of
+> **Generated artifact.** This tree (published as both `.codex-plugin/` and
+> `.opencode-plugin/`) is produced by `sdd plugin sync` from the canonical
+> Claude plugin at the repository root of
 > [claude-sdd-planner](https://github.com/danweinerdev/claude-sdd-planner).
 > Do not edit files here — edit the canonical tree (or its `*.portable.md`
 > variants / `portable-overrides/`) and regenerate. `make test` fails when
@@ -34,11 +35,12 @@ or too old.
 
 ## Installation
 
-- **OpenCode**: point a skills discovery path at this tree (for example
-  `ln -s <this-tree> ~/.agents`, so the skills resolve as
-  `~/.agents/skills/<name>/SKILL.md`), or mount it there in a container.
-- **Codex**: install via a marketplace that carries this tree
-  (`.codex-plugin/plugin.json` is the manifest). Start a new thread after
+- **OpenCode**: point a skills discovery path at the `.opencode-plugin/` tree
+  (for example `ln -s <repo>/.opencode-plugin ~/.agents`, so the skills
+  resolve as `~/.agents/skills/<name>/SKILL.md`), or mount it there in a
+  container.
+- **Codex**: install via a marketplace that carries the `.codex-plugin/` tree
+  (`plugin.json` at the tree root is the manifest). Start a new thread after
   installation so the skills are available.
 - Any other runtime that loads the `.agents/skills` convention or
   directory-sourced skills works the same way.

@@ -12,8 +12,12 @@ import (
 	"strings"
 )
 
-// OutDir is the generated tree, relative to the repository root.
-const OutDir = "portable"
+// OutDirs are the generated trees, relative to the repository root. The two
+// harness families install differently — Codex marketplaces expect a
+// .codex-plugin/ tree, OpenCode users symlink a plugin directory into their
+// .agents skill roots — so the same generated content is written to both,
+// each self-contained (skills/, shared/, plugin.json at the tree root).
+var OutDirs = []string{".codex-plugin", ".opencode-plugin"}
 
 // OverrideDir holds hand-maintained files that replace or extend the
 // generated output, mirroring the portable/ layout. Every file here is either
@@ -111,8 +115,11 @@ func Generate(repoRoot string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.Files[".codex-plugin/plugin.json"] = []byte(fmt.Sprintf(manifestTemplate, version, minSdd))
-	r.Generated = append(r.Generated, ".codex-plugin/plugin.json")
+	// Both trees carry the manifest at their root: Codex reads it, and the
+	// portable runtime spec (shared/agent-runtime.md) uses it as the
+	// plugin-root acceptance check on every harness.
+	r.Files["plugin.json"] = []byte(fmt.Sprintf(manifestTemplate, version, minSdd))
+	r.Generated = append(r.Generated, "plugin.json")
 
 	// Lifecycle skills: commands/<name>/SKILL.md -> skills/sdd-<name>/SKILL.md
 	cmdDirs, err := os.ReadDir(filepath.Join(repoRoot, "commands"))
@@ -289,31 +296,33 @@ func canonicalVersion(repoRoot string) (version, minSdd string, err error) {
 	return m.Version, m.MinSddVersion, nil
 }
 
-// Sync writes the generated tree to <repoRoot>/portable, replacing whatever
-// is there. The tree is fully generated, so a clean rewrite is correct — any
-// hand edit to portable/ is a bug by definition.
+// Sync writes the generated content to every tree in OutDirs, replacing
+// whatever is there. The trees are fully generated, so a clean rewrite is
+// correct — any hand edit to them is a bug by definition.
 func Sync(repoRoot string) (*Result, error) {
 	r, err := Generate(repoRoot)
 	if err != nil {
 		return nil, err
 	}
-	out := filepath.Join(repoRoot, OutDir)
-	if err := os.RemoveAll(out); err != nil {
-		return nil, err
-	}
-	for rel, content := range r.Files {
-		dst := filepath.Join(out, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	for _, dir := range OutDirs {
+		out := filepath.Join(repoRoot, dir)
+		if err := os.RemoveAll(out); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(dst, content, 0o644); err != nil {
-			return nil, err
+		for rel, content := range r.Files {
+			dst := filepath.Join(out, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(dst, content, 0o644); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return r, nil
 }
 
-// Check regenerates in memory and compares against the on-disk portable/
+// Check regenerates in memory and compares against every on-disk generated
 // tree. It returns the list of stale paths (missing, differing, or orphaned)
 // without writing anything.
 func Check(repoRoot string) (stale []string, err error) {
@@ -321,37 +330,39 @@ func Check(repoRoot string) (stale []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	out := filepath.Join(repoRoot, OutDir)
-	seen := map[string]bool{}
-	if _, statErr := os.Stat(out); statErr == nil {
-		err = filepath.WalkDir(out, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return err
-			}
-			rel, _ := filepath.Rel(out, p)
-			rel = filepath.ToSlash(rel)
-			seen[rel] = true
-			want, ok := r.Files[rel]
-			if !ok {
-				stale = append(stale, rel+" (orphan: no canonical source)")
+	for _, dir := range OutDirs {
+		out := filepath.Join(repoRoot, dir)
+		seen := map[string]bool{}
+		if _, statErr := os.Stat(out); statErr == nil {
+			err = filepath.WalkDir(out, func(p string, d fs.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return err
+				}
+				rel, _ := filepath.Rel(out, p)
+				rel = filepath.ToSlash(rel)
+				seen[rel] = true
+				want, ok := r.Files[rel]
+				if !ok {
+					stale = append(stale, dir+"/"+rel+" (orphan: no canonical source)")
+					return nil
+				}
+				got, err := os.ReadFile(p)
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(got, want) {
+					stale = append(stale, dir+"/"+rel+" (differs from generated content)")
+				}
 				return nil
-			}
-			got, err := os.ReadFile(p)
+			})
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if !bytes.Equal(got, want) {
-				stale = append(stale, rel+" (differs from generated content)")
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
-	}
-	for rel := range r.Files {
-		if !seen[rel] {
-			stale = append(stale, rel+" (missing from portable/)")
+		for rel := range r.Files {
+			if !seen[rel] {
+				stale = append(stale, dir+"/"+rel+" (missing)")
+			}
 		}
 	}
 	sort.Strings(stale)

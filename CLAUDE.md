@@ -20,8 +20,9 @@ sdd-planner/                      # Repository root = plugin root
 ├── agents/                       # Subagent definitions
 ├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, provisioning
 ├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs, portable)
-├── portable/                     # GENERATED OpenCode/Codex tree (`sdd plugin sync`) — never hand-edit
-├── portable-overrides/           # Hand-maintained portable-only files (agent prompts, README)
+├── .codex-plugin/                # GENERATED Codex plugin tree (`sdd plugin sync`) — never hand-edit
+├── .opencode-plugin/             # GENERATED OpenCode plugin tree (same content) — never hand-edit
+├── portable-overrides/           # Hand-maintained portable-only sources (README)
 ├── shared/
 │   ├── frontmatter-schema.md     # Single source of truth for artifact metadata
 │   ├── completion-evidence.md    # Evidence-gated completion — what `complete` requires, per level
@@ -113,7 +114,7 @@ Always use templates from `shared/templates/` when creating new artifacts. Repla
 
 ### Portable tree (OpenCode / Codex)
 
-This repository is the single source for **both** harness families. The repo root is the canonical Claude plugin, hand-edited as always. `portable/` is a **generated** second plugin tree for OpenCode and Codex — the same content re-expressed in their layout (`skills/sdd-<name>/SKILL.md`, prompt files instead of agent definitions, `.codex-plugin/plugin.json` manifest, runtime-neutral wording per `shared/agent-runtime.md`). It replaces the retired standalone `sdd-planner` repo.
+This repository is the single source for **both** harness families. The repo root is the canonical Claude plugin, hand-edited as always. `.codex-plugin/` and `.opencode-plugin/` are **generated** plugin trees for Codex and OpenCode — the same portable content written once per install convention (`skills/sdd-<name>/SKILL.md`, prompt files instead of agent definitions, `plugin.json` at each tree root, runtime-neutral wording per `shared/agent-runtime.md`). They replace the retired standalone `sdd-planner` repo. Codex marketplaces point at `.codex-plugin/`; OpenCode users symlink `.opencode-plugin/` into an `.agents` skills root.
 
 `sdd plugin sync` (`make plugins`) produces it from the canonical tree via `internal/portable`:
 - **Transforms** — skill rename (`plan` → `sdd-plan`), slash-title and description cleanup, `## Path Resolution` → stock `## Resources` section, agent-dispatch phrase rewrites (`sdd-planner:researcher` → collaboration-subagent idiom with the stable dispatch identifiers `implement_task`, `review_plan_drift`, `review_quality`, `review_spec_compliance`, `review_blind_spots`), path/term rewrites, and harness marker blocks (`<!-- claude-only -->…<!-- /claude-only -->` dropped; `<!-- portable-only … -->` uncommented).
@@ -122,7 +123,7 @@ This repository is the single source for **both** harness families. The repo roo
 - **Overrides** — `portable-overrides/` holds portable-only files with no canonical sibling (currently just the portable README).
 - **Gates** — `internal/portable`'s tests (run by `make test`) fail on drift between `portable/` and a fresh generation, and on any Claude-ism leaking into the portable tree (`sdd-planner:`, `the Task tool`, `~/.claude`, …). The generated manifest takes `version`/`minSddVersion` from `.claude-plugin/plugin.json`, and `make bump-*` re-syncs it inside the bump commit, so both trees always release together.
 
-`portable/` is committed (it is the tree the other harnesses install), and `sdd plugin status` prints the generated/variant/override provenance of every file.
+Both trees are committed (they are what the other harnesses install), and `sdd plugin status` prints the generated/variant/override provenance of every file.
 
 ## Skills
 

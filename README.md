@@ -2,7 +2,7 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for spec-driven development — structured project planning end-to-end. It provides slash commands that guide you through a full planning lifecycle — from research to debrief — with YAML-frontmatter-driven artifacts.
 
-The same repository also ships a **portable plugin tree** for OpenCode and Codex under [`portable/`](portable/) — the identical lifecycle re-expressed as runtime-neutral `SKILL.md` skills, generated from the canonical Claude tree by `sdd plugin sync` and released in lockstep. See [`portable/README.md`](portable-overrides/README.md) for installation in those runtimes.
+The same repository also ships **portable plugin trees** for Codex ([`.codex-plugin/`](.codex-plugin/)) and OpenCode ([`.opencode-plugin/`](.opencode-plugin/)) — the identical lifecycle re-expressed as runtime-neutral `SKILL.md` skills, generated from the canonical Claude tree by `sdd plugin sync` and released in lockstep. See [the portable README](portable-overrides/README.md) for installation in those runtimes.
 
 For the optional HTML dashboard view of these artifacts, install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin.
 
@@ -393,8 +393,9 @@ sdd-planner/                       # The plugin itself (not your project)
 │   ├── agent-runtime.md          # Portable runtime conventions (resolution, delegation, resource boundary)
 │   ├── *.portable.md             # Hand-maintained portable variants of runtime-mechanic docs
 │   └── templates/                # Document templates (plan, spec, design, ...)
-├── portable/                     # GENERATED OpenCode/Codex plugin tree (`sdd plugin sync`) — do not hand-edit
-├── portable-overrides/           # Portable-only sources (README, agent-prompts/, review-prompts/)
+├── .codex-plugin/                # GENERATED Codex plugin tree (`sdd plugin sync`) — do not hand-edit
+├── .opencode-plugin/             # GENERATED OpenCode plugin tree (same content) — do not hand-edit
+├── portable-overrides/           # Portable-only sources (README)
 ├── cmd/sdd/ + internal/          # The cross-platform `sdd` binary (validator, hooks, artifact writes, plugin sync)
 ├── Makefile                      # make bump-patch / bump-minor / bump-major / plugins / test
 ├── bump-version.py               # Version-bump helper used by the Makefile

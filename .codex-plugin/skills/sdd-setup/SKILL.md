@@ -16,7 +16,7 @@ Before opening `shared/...`, follow symlinks in this loaded file's path, then de
 0. **Verify the `sdd` binary.** Every skill drives the cross-platform `sdd`
    toolchain (validation, artifact writes, lifecycle transitions). Run
    `sdd version` and compare against the `minSddVersion` in the plugin
-   manifest (`.codex-plugin/plugin.json` at the plugin root). If the binary is
+   manifest (`plugin.json` at the plugin root). If the binary is
    missing or below the floor, stop and report the exact remedy — the plugin
    never compiles, downloads, or installs anything:
 

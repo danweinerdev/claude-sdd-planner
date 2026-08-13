@@ -66,8 +66,8 @@ def usage() -> None:
         "\n"
         "Every mode edits .claude-plugin/plugin.json (the single version source);\n"
         "version modes also rewrite internal/version/version.go. The generated\n"
-        "portable manifest is NOT touched here — run `make plugins` (the bump-*\n"
-        "targets do) so portable/.codex-plugin/plugin.json picks the new values up.",
+        "portable manifests are NOT touched here — run `make plugins` (the bump-*\n"
+        "targets do) so .codex-plugin/ and .opencode-plugin/ pick the new values up.",
         file=sys.stderr,
     )
     sys.exit(1)

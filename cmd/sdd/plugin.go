@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/portable"
 )
 
 // cmdPlugin maintains the generated portable (OpenCode/Codex) plugin tree.
 //
-//	sdd plugin sync  [--root <repo>]   regenerate portable/ from the canonical tree
-//	sdd plugin check [--root <repo>]   fail (exit 1) if portable/ is stale
+//	sdd plugin sync  [--root <repo>]   regenerate the portable trees from the canonical tree
+//	sdd plugin check [--root <repo>]   fail (exit 1) if a portable tree is stale
 //	sdd plugin status [--root <repo>]  print the generated/override provenance report
 func cmdPlugin(args []string) error {
 	if len(args) < 1 {
@@ -47,8 +48,8 @@ func cmdPlugin(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("plugin sync: %s/ <- %d generated, %d variants, %d overridden, %d portable-only\n",
-			portable.OutDir, len(r.Generated), len(r.Variants), len(r.Overridden), len(r.OverrideOnly))
+		fmt.Printf("plugin sync: %s <- %d generated, %d variants, %d overridden, %d portable-only\n",
+			strings.Join(portable.OutDirs, " + "), len(r.Generated), len(r.Variants), len(r.Overridden), len(r.OverrideOnly))
 		return nil
 	case "check":
 		stale, err := portable.Check(root)
@@ -57,12 +58,12 @@ func cmdPlugin(args []string) error {
 		}
 		if len(stale) > 0 {
 			for _, s := range stale {
-				fmt.Fprintf(os.Stderr, "plugin check: STALE %s/%s\n", portable.OutDir, s)
+				fmt.Fprintf(os.Stderr, "plugin check: STALE %s\n", s)
 			}
-			fmt.Fprintf(os.Stderr, "\n✗ %s/ is stale. Run: sdd plugin sync\n", portable.OutDir)
+			fmt.Fprintf(os.Stderr, "\n✗ portable trees are stale. Run: sdd plugin sync\n")
 			return &refusedError{n: len(stale)}
 		}
-		fmt.Printf("✓ %s/ is in sync with the canonical tree\n", portable.OutDir)
+		fmt.Printf("✓ %s are in sync with the canonical tree\n", strings.Join(portable.OutDirs, " + "))
 		return nil
 	case "status":
 		r, err := portable.Generate(root)

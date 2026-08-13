@@ -40,7 +40,7 @@ func TestGenerateRealTree(t *testing.T) {
 		}
 	}
 	for _, p := range []string{
-		".codex-plugin/plugin.json",
+		"plugin.json",
 		"shared/agent-runtime.md",
 		"shared/frontmatter-schema.md",
 		"shared/language-specs/go.md",
@@ -98,7 +98,7 @@ func TestGenerateRealTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := string(r.Files[".codex-plugin/plugin.json"])
+	manifest := string(r.Files["plugin.json"])
 	if !strings.Contains(manifest, `"version": "`+version+`"`) {
 		t.Errorf("manifest version not synced to canonical %s:\n%s", version, manifest)
 	}
@@ -107,16 +107,17 @@ func TestGenerateRealTree(t *testing.T) {
 	}
 }
 
-// TestCheckClean requires the committed portable/ tree to match a fresh
-// generation — the drift gate that keeps hand edits and forgotten syncs out
-// of the repository. Wired into `make test` via `go test ./...`.
+// TestCheckClean requires the committed portable trees (.codex-plugin/ and
+// .opencode-plugin/) to match a fresh generation — the drift gate that keeps
+// hand edits and forgotten syncs out of the repository. Wired into
+// `make test` via `go test ./...`.
 func TestCheckClean(t *testing.T) {
 	stale, err := Check(repoRoot(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range stale {
-		t.Errorf("stale: portable/%s", s)
+		t.Errorf("stale: %s", s)
 	}
 	if len(stale) > 0 {
 		t.Log("run `sdd plugin sync` (or `make plugins`) and commit the result")

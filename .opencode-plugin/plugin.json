@@ -1,0 +1,27 @@
+{
+  "name": "sdd-planner",
+  "version": "1.16.0",
+  "minSddVersion": "1.16.0",
+  "description": "Spec-driven development planning skills for research, requirements, designs, implementation plans, execution, review, debriefs, and validation.",
+  "author": {
+    "name": "Daniel Weiner"
+  },
+  "repository": "https://github.com/danweinerdev/claude-sdd-planner",
+  "license": "MIT",
+  "keywords": ["planning", "specification", "development", "review"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "SDD Planner",
+    "shortDescription": "Spec-driven development lifecycle skills",
+    "longDescription": "Create and maintain research, specifications, designs, implementation plans, reviews, debriefs, and completion evidence as structured Markdown artifacts.",
+    "developerName": "Daniel Weiner",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/danweinerdev/claude-sdd-planner",
+    "defaultPrompt": [
+      "Set up spec-driven planning for this repository.",
+      "Create a specification and implementation plan for this feature.",
+      "Review this implementation against its active plan."
+    ]
+  }
+}
