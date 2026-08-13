@@ -7,7 +7,7 @@ One repository, three harnesses:
 | Harness | Install from | Form |
 |---|---|---|
 | **Claude Code** | repo root (`--plugin-dir` or a marketplace) | 12 slash commands (`/sdd-planner:*`) + 8 subagents + hooks |
-| **Codex** | [`.codex-plugin/`](.codex-plugin/) | 13 `sdd-*` skills, selected by description |
+| **Codex** | [`.codex-plugin/`](.codex-plugin/) | 14 `sdd-*` skills, selected by description |
 | **OpenCode** | [`.opencode-plugin/`](.opencode-plugin/) | same skills via `.agents` skill discovery |
 
 The Codex/OpenCode trees are **generated** from the canonical Claude tree by `sdd plugin sync` and released in lockstep — same lifecycle, same conventions, same validator. See [the portable README](portable-overrides/README.md) for details on those runtimes.
@@ -190,7 +190,7 @@ Local absolute paths go in gitignored `planning-config.local.json`:
 claude-sdd-planner/
 ├── .claude-plugin/plugin.json    # Canonical manifest — single source of version + minSddVersion
 ├── commands/<name>/SKILL.md      # 12 lifecycle skills (+ SKILL.portable.md variants where harnesses differ)
-├── skills/                       # Model-loaded reference skills (7 language specs + decision-log)
+├── skills/                       # Model-loaded reference skills (7 language specs, decision-log, sdd-cli)
 ├── agents/                       # 8 agent definitions (also the source of the portable role prompts)
 ├── hooks/hooks.json              # SessionStart + PreToolUse, both served by `sdd hook`
 ├── shared/                       # Conventions + templates — the normative documents

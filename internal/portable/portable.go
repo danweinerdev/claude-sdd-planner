@@ -152,23 +152,32 @@ func Generate(repoRoot string) (*Result, error) {
 		r.Generated = append(r.Generated, rel)
 	}
 
-	// Model-only decision-log skill keeps skill form in the portable tree.
-	dlSrc := filepath.Join(repoRoot, "skills", "decision-log", "SKILL.md")
-	if v, ok, err := variantFor(dlSrc); err != nil {
-		return nil, err
-	} else if ok {
-		r.Files["skills/sdd-decision-log/SKILL.md"] = v
-		r.Variants = append(r.Variants, "skills/sdd-decision-log/SKILL.md")
-	} else if raw, err := os.ReadFile(dlSrc); err == nil {
-		out, err := transformSkill(string(raw), "decision-log", "skills/decision-log/SKILL.md")
+	// Model-only reference skills that keep skill form in the portable tree
+	// (the language-specification skills flatten to shared docs instead).
+	for _, name := range []string{"decision-log", "sdd-cli"} {
+		src := filepath.Join(repoRoot, "skills", name, "SKILL.md")
+		outName := name
+		if !strings.HasPrefix(outName, "sdd-") {
+			outName = "sdd-" + outName
+		}
+		rel := path.Join("skills", outName, "SKILL.md")
+		if v, ok, err := variantFor(src); err != nil {
+			return nil, err
+		} else if ok {
+			r.Files[rel] = v
+			r.Variants = append(r.Variants, rel)
+			continue
+		}
+		raw, err := os.ReadFile(src)
 		if err != nil {
 			return nil, err
 		}
-		rel := "skills/sdd-decision-log/SKILL.md"
+		out, err := transformSkill(string(raw), name, "skills/"+name+"/SKILL.md")
+		if err != nil {
+			return nil, err
+		}
 		r.Files[rel] = []byte(out)
 		r.Generated = append(r.Generated, rel)
-	} else if !os.IsNotExist(err) {
-		return nil, err
 	}
 
 	// Language reference skills flatten to shared/language-specs/<lang>.md.

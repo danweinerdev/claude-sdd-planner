@@ -329,9 +329,12 @@ func transformSkill(content, name, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if !strings.HasPrefix(name, "sdd-") {
+		name = "sdd-" + name
+	}
 	var b strings.Builder
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "name: sdd-%s\n", name)
+	fmt.Fprintf(&b, "name: %s\n", name)
 	fmt.Fprintf(&b, "description: %q\n", desc)
 	for _, line := range extra {
 		b.WriteString(line + "\n")
