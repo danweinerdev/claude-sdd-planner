@@ -27,8 +27,17 @@ const Version = "{version}"
 """
 
 
+def parse(version: str) -> tuple[int, int, int]:
+    try:
+        major, minor, patch = (int(x) for x in version.split("."))
+    except ValueError:
+        print(f"ERROR: {version!r} is not an X.Y.Z version", file=sys.stderr)
+        sys.exit(1)
+    return major, minor, patch
+
+
 def bump(version: str, part: str) -> str:
-    major, minor, patch = (int(x) for x in version.split("."))
+    major, minor, patch = parse(version)
     if part == "major":
         return f"{major + 1}.0.0"
     if part == "minor":
@@ -49,14 +58,62 @@ def update_version_go(path: Path, new_version: str) -> None:
     path.write_text(VERSION_GO_TEMPLATE.format(version=new_version))
 
 
-def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in ("patch", "minor", "major"):
-        print("Usage: bump-version.py <patch|minor|major>", file=sys.stderr)
-        sys.exit(1)
+def usage() -> None:
+    print(
+        "Usage: bump-version.py <patch|minor|major>\n"
+        "       bump-version.py set <X.Y.Z>        # explicit version (e.g. the 4.0.0 unification jump)\n"
+        "       bump-version.py set-floor <X.Y.Z>  # advance minSddVersion (deliberate, per D-0015)\n"
+        "\n"
+        "Every mode edits .claude-plugin/plugin.json (the single version source);\n"
+        "version modes also rewrite internal/version/version.go. The generated\n"
+        "portable manifest is NOT touched here — run `make plugins` (the bump-*\n"
+        "targets do) so portable/.codex-plugin/plugin.json picks the new values up.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
-    part = sys.argv[1]
-    current = json.loads(PLUGIN_JSON.read_text())["version"]
-    new_version = bump(current, part)
+
+def main() -> None:
+    args = sys.argv[1:]
+    if len(args) == 1 and args[0] in ("patch", "minor", "major"):
+        current = json.loads(PLUGIN_JSON.read_text())["version"]
+        new_version = bump(current, args[0])
+    elif len(args) == 2 and args[0] == "set":
+        current = json.loads(PLUGIN_JSON.read_text())["version"]
+        new_version = args[1]
+        parse(new_version)  # validate shape
+        if parse(new_version) <= parse(current):
+            print(
+                f"ERROR: set {new_version} does not move forward from {current} — "
+                "plugin caches resolve by highest version, so a downgrade would never be served",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    elif len(args) == 2 and args[0] == "set-floor":
+        floor = args[1]
+        parse(floor)  # validate shape
+        data = json.loads(PLUGIN_JSON.read_text())
+        if parse(floor) < parse(data.get("minSddVersion", "0.0.0")):
+            print(
+                f"ERROR: set-floor {floor} lowers the floor from {data['minSddVersion']} — "
+                "the floor only advances (D-0015)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if parse(floor) > parse(data["version"]):
+            print(
+                f"ERROR: floor {floor} exceeds the plugin version {data['version']} — "
+                "no released binary could satisfy it",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        data["minSddVersion"] = floor
+        PLUGIN_JSON.write_text(json.dumps(data, indent=2) + "\n")
+        print(floor)
+        return
+    else:
+        usage()
+        return
 
     update_json(PLUGIN_JSON, new_version)
     update_version_go(VERSION_GO, new_version)
