@@ -59,18 +59,18 @@ func cmdTransition(kind string, args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "task id (task complete only)")
 	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
-	flags, positional := splitArgs(args[1:], map[string]bool{"--id": true, "-id": true})
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args[1:])
+	if err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	if len(positional) != 1 {
 		return fmt.Errorf("%s complete: expected exactly one artifact path\n\n%s", kind, transitionUsage)
 	}
 	if kind == "task" && *id == "" {
 		return fmt.Errorf("task complete: --id is required")
 	}
 
-	path := fs.Arg(0)
+	path := positional[0]
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
@@ -261,14 +261,14 @@ func planLifecycle(verb string, args []string) error {
 	fs := flag.NewFlagSet("plan "+verb, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
-	flags, positional := splitArgs(args, map[string]bool{})
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	if len(positional) != 1 {
 		return fmt.Errorf("plan %s: expected exactly one plan path", verb)
 	}
-	path := fs.Arg(0)
+	path := positional[0]
 
 	art, err := store.Read(path)
 	if err != nil {

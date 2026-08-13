@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
@@ -152,18 +153,44 @@ type refusedError struct{ n int }
 
 func (e *refusedError) Error() string { return fmt.Sprintf("refused: %d violation(s)", e.n) }
 
-// splitArgs separates flags from positional arguments so that flags may appear
-// before or after the path, as every comparable CLI allows. valueFlags names the
-// flags that consume a following argument.
-func splitArgs(args []string, valueFlags map[string]bool) (flags, positional []string) {
+// parseFlags parses args with fs, permitting flags to appear before or after
+// positional arguments — which stdlib `flag` does not do on its own: it stops
+// at the first non-flag argument, so `sdd show path --json` would leave --json
+// unparsed. It returns the positional arguments in order.
+//
+// Which flags consume a following argument is read from the FlagSet itself,
+// via the same IsBoolFlag interface flag.Parse uses. That is the point of this
+// function: the previous implementation took a hand-written map of value-flag
+// names, restated at all sixteen call sites in both `-x` and `--x` spellings.
+// A flag added to the FlagSet but forgotten in that map silently mis-parsed —
+// its value was classified as a positional, so the command either rejected a
+// valid invocation or bound the value to the wrong parameter, with nothing to
+// catch the drift. Derived, the two cannot disagree.
+func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {
+	takesValue := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) {
+		b, ok := f.Value.(interface{ IsBoolFlag() bool })
+		if !ok || !b.IsBoolFlag() {
+			takesValue[f.Name] = true
+		}
+	})
+
+	var flags, positional []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "-":
 			// conventional stdin marker; ignored
+		case a == "--":
+			// everything after is positional, by convention
+			positional = append(positional, args[i+1:]...)
+			i = len(args)
 		case strings.HasPrefix(a, "-"):
 			flags = append(flags, a)
-			if valueFlags[a] && i+1 < len(args) {
+			// `--name=value` carries its own value; only the separated
+			// `--name value` form consumes the next argument.
+			name := strings.TrimLeft(a, "-")
+			if !strings.Contains(a, "=") && takesValue[name] && i+1 < len(args) {
 				i++
 				flags = append(flags, args[i])
 			}
@@ -171,7 +198,10 @@ func splitArgs(args []string, valueFlags map[string]bool) (flags, positional []s
 			positional = append(positional, a)
 		}
 	}
-	return
+	if err := fs.Parse(flags); err != nil {
+		return nil, err
+	}
+	return append(positional, fs.Args()...), nil
 }
 
 func writeJSON(v any) error {

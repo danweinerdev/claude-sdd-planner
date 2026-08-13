@@ -111,8 +111,8 @@ func cmdDecideList(args []string) error {
 	fs2.SetOutput(os.Stderr)
 	status := fs2.String("status", "", "filter: accepted|proposed|rejected|superseded")
 	jsonOut := fs2.Bool("json", false, "emit JSON")
-	flags, _ := splitArgs(args, map[string]bool{"-status": true, "--status": true})
-	if err := fs2.Parse(flags); err != nil {
+	_, err := parseFlags(fs2, args)
+	if err != nil {
 		return fmt.Errorf("decide list: %w", err)
 	}
 
@@ -148,8 +148,8 @@ func cmdDecideSearch(args []string) error {
 	fs2 := flag.NewFlagSet("decide search", flag.ContinueOnError)
 	fs2.SetOutput(os.Stderr)
 	jsonOut := fs2.Bool("json", false, "emit JSON")
-	flags, positional := splitArgs(args, map[string]bool{})
-	if err := fs2.Parse(flags); err != nil {
+	positional, err := parseFlags(fs2, args)
+	if err != nil {
 		return fmt.Errorf("decide search: %w", err)
 	}
 	if len(positional) == 0 {
@@ -205,17 +205,8 @@ func cmdDecideAdd(args []string) error {
 	dryRun := fs2.Bool("dry-run", false, "print what would be written and write nothing")
 	jsonOut := fs2.Bool("json", false, "emit JSON")
 
-	flags, _ := splitArgs(args, map[string]bool{
-		"-statement": true, "--statement": true,
-		"-rationale": true, "--rationale": true,
-		"-rejected": true, "--rejected": true,
-		"-scope": true, "--scope": true,
-		"-tags": true, "--tags": true,
-		"-supersedes": true, "--supersedes": true,
-		"-kind": true, "--kind": true,
-		"-reversibility": true, "--reversibility": true,
-	})
-	if err := fs2.Parse(flags); err != nil {
+	_, err := parseFlags(fs2, args)
+	if err != nil {
 		return fmt.Errorf("decide add: %w", err)
 	}
 	if strings.TrimSpace(*statement) == "" {

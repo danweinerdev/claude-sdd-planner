@@ -36,8 +36,8 @@ func cmdMigrate(args []string) error {
 	typ := fs.String("type", "", "artifact type schema (default: read from frontmatter)")
 	all := fs.Bool("all", false, "migrate every artifact under the planning root and print a summary worklist")
 
-	flags, positional := splitArgs(args, map[string]bool{"-type": true, "--type": true})
-	if err := fs.Parse(flags); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	if *all {

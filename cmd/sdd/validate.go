@@ -70,12 +70,8 @@ func cmdValidate(args []string) error {
 	// wants, and what makes the mechanism auditable rather than load-bearing.
 	noWaivers := fs2.Bool("no-waivers", false, "ignore accepted exceptions and report every finding as an error")
 
-	flags, positional := splitArgs(args, map[string]bool{
-		"-root": true, "--root": true,
-		"-scope": true, "--scope": true,
-		"-format": true, "--format": true,
-	})
-	if err := fs2.Parse(flags); err != nil {
+	positional, err := parseFlags(fs2, args)
+	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
 	if len(positional) > 0 {

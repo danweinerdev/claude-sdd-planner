@@ -61,15 +61,11 @@ func cmdReview(args []string) error {
 	mode := fs.String("mode", "independent", "independent | mixed | single-agent")
 	force := fs.Bool("force", false, "overwrite an existing review artifact")
 
-	valueFlags := map[string]bool{
-		"--frozen": true, "-frozen": true, "--out": true, "-out": true,
-		"--mode": true, "-mode": true,
-	}
-	flags, positional := splitArgs(args[1:], valueFlags)
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args[1:])
+	if err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	if len(positional) != 1 {
 		return fmt.Errorf("review scaffold: expected exactly one phase path\n\n%s", reviewUsage)
 	}
 	switch *mode {
@@ -78,7 +74,7 @@ func cmdReview(args []string) error {
 		return fmt.Errorf("review scaffold: --mode must be independent, mixed, or single-agent")
 	}
 
-	phasePath := fs.Arg(0)
+	phasePath := positional[0]
 	phaseArt, err := store.Read(phasePath)
 	if err != nil {
 		return fmt.Errorf("review scaffold: %w", err)

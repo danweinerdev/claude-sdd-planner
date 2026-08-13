@@ -41,12 +41,8 @@ func cmdSectionSet(args []string) error {
 	expect := fs.String("expect", "", "refuse unless the artifact's current digest equals this value (FR-48)")
 	typ := fs.String("type", "spec", "artifact type schema to check against")
 
-	flags, positional := splitArgs(args, map[string]bool{
-		"-heading": true, "--heading": true,
-		"-expect": true, "--expect": true,
-		"-type": true, "--type": true,
-	})
-	if err := fs.Parse(flags); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return fmt.Errorf("section set: %w", err)
 	}
 	var target string

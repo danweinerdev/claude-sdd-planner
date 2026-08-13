@@ -21,13 +21,13 @@ func cmdDecideValidate(args []string) error {
 	asJSON := fs.Bool("json", false, "emit diagnostics as JSON")
 	noHistory := fs.Bool("no-history", false,
 		"skip Git history checks; only for an explicitly unversioned audit")
-	flags, positional := splitArgs(args, map[string]bool{})
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return err
 	}
 
 	path := ""
-	switch fs.NArg() {
+	switch len(positional) {
 	case 0:
 		resolved, err := ledgerPath()
 		if err != nil {
@@ -35,7 +35,7 @@ func cmdDecideValidate(args []string) error {
 		}
 		path = resolved
 	case 1:
-		path = fs.Arg(0)
+		path = positional[0]
 	default:
 		return fmt.Errorf("decide validate: expected at most one ledger path")
 	}

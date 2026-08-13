@@ -21,8 +21,8 @@ func cmdShow(args []string) error {
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	typ := fs.String("type", "spec", "artifact type to assume when frontmatter omits it")
 
-	flags, positional := splitArgs(args, map[string]bool{"-type": true, "--type": true})
-	if err := fs.Parse(flags); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return fmt.Errorf("show: %w", err)
 	}
 	if len(positional) == 0 {
@@ -205,8 +205,8 @@ func cmdList(args []string) error {
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	root := fs.String("root", "", "planning root (default: resolved from planning-config.json)")
 
-	flags, positional := splitArgs(args, map[string]bool{"-root": true, "--root": true})
-	if err := fs.Parse(flags); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return fmt.Errorf("list: %w", err)
 	}
 	typ := "spec"

@@ -36,21 +36,19 @@ func cmdTemplate(args []string) error {
 	check := fs.Bool("check", false, "regenerate every committed template and diff")
 	dir := fs.String("dir", "shared/templates", "template directory for --check")
 
-	flags, positional := splitArgs(args, map[string]bool{
-		"--out": true, "-out": true, "--dir": true, "-dir": true,
-	})
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args)
+	if err != nil {
 		return err
 	}
 
 	if *check {
 		return checkTemplates(*dir)
 	}
-	if fs.NArg() != 1 {
+	if len(positional) != 1 {
 		return fmt.Errorf("template: expected exactly one artifact type\n\n%s", templateUsage)
 	}
 
-	body, err := renderTemplate(fs.Arg(0))
+	body, err := renderTemplate(positional[0])
 	if err != nil {
 		return fmt.Errorf("template: %w", err)
 	}

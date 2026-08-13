@@ -54,21 +54,11 @@ func cmdEvidence(args []string) error {
 	date := fs.String("date", "", "verification date (default: today)")
 	revision := fs.String("revision", "", "the task's own implementation commit (default: HEAD)")
 	dryRun := fs.Bool("dry-run", false, "print the section without writing")
-	valueFlags := map[string]bool{
-		"--task": true, "--verified-by": true, "--working-dir": true,
-		"--result": true, "--tool": true, "--tool-context": true,
-		"--tool-result": true, "--focused-review": true, "--date": true,
-		"--revision": true, "-revision": true,
-		"--final-review": true, "-final-review": true,
-		"-task": true, "-verified-by": true, "-working-dir": true, "-result": true,
-		"-tool": true, "-tool-context": true, "-tool-result": true,
-		"-focused-review": true, "-date": true,
-	}
-	flags, positional := splitArgs(args[1:], valueFlags)
-	if err := fs.Parse(append(flags, positional...)); err != nil {
+	positional, err := parseFlags(fs, args[1:])
+	if err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	if len(positional) != 1 {
 		return fmt.Errorf("evidence add: expected exactly one artifact path\n\n%s", evidenceUsage)
 	}
 	targets := 0
@@ -85,7 +75,7 @@ func cmdEvidence(args []string) error {
 			"evidence without a command and an observed result proves nothing")
 	}
 
-	path := fs.Arg(0)
+	path := positional[0]
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("evidence add: %w", err)

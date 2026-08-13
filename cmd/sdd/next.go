@@ -32,8 +32,8 @@ func cmdNext(args []string) error {
 	fs2.SetOutput(os.Stderr)
 	jsonOut := fs2.Bool("json", false, "emit JSON")
 
-	flags, positional := splitArgs(args, map[string]bool{})
-	if err := fs2.Parse(flags); err != nil {
+	positional, err := parseFlags(fs2, args)
+	if err != nil {
 		return fmt.Errorf("next: %w", err)
 	}
 	if len(positional) > 1 {
