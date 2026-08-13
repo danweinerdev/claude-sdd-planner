@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,32 +49,21 @@ var stableLanes = []struct{ lane, agent string }{
 // validated clean would let a phase close on a review nobody performed.
 const laneEvidencePlaceholder = "<REPLACE: what this lane inspected and observed>"
 
-func cmdReview(args []string) error {
-	if len(args) == 0 || args[0] != "scaffold" {
-		return fmt.Errorf("review: expected `scaffold`\n\n%s", reviewUsage)
-	}
-	fs := flag.NewFlagSet("review scaffold", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	frozen := fs.String("frozen", "", "the reviewed identity: <full40>..<full40>")
-	out := fs.String("out", "", "output path (default: Retro/<phase>-review.md)")
-	mode := fs.String("mode", "independent", "independent | mixed | single-agent")
-	force := fs.Bool("force", false, "overwrite an existing review artifact")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
+type reviewScaffoldOpts struct {
+	Frozen string
+	Out    string
+	Mode   string
+	Force  bool
+	JSON   bool
+}
 
-	positional, err := parseFlags(fs, args[1:])
-	if err != nil {
-		return err
-	}
-	if len(positional) != 1 {
-		return fmt.Errorf("review scaffold: expected exactly one phase path\n\n%s", reviewUsage)
-	}
-	switch *mode {
+func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
+	switch o.Mode {
 	case "independent", "mixed", "single-agent":
 	default:
 		return fmt.Errorf("review scaffold: --mode must be independent, mixed, or single-agent")
 	}
 
-	phasePath := positional[0]
 	phaseArt, err := store.Read(phasePath)
 	if err != nil {
 		return fmt.Errorf("review scaffold: %w", err)
@@ -92,7 +80,7 @@ func cmdReview(args []string) error {
 	// commits exist — the same shape SDD173 enforces. Checking here means a
 	// scaffold never carries an identity the gate would reject.
 	repo := vcs.Detect(evidenceRepoDir(phasePath))
-	base, endpoint, err := parseFrozenRange(*frozen)
+	base, endpoint, err := parseFrozenRange(o.Frozen)
 	if err != nil {
 		return fmt.Errorf("review scaffold: %w", err)
 	}
@@ -112,11 +100,11 @@ func cmdReview(args []string) error {
 		return fmt.Errorf("review scaffold: cannot read the planning repository's revision: %w", err)
 	}
 
-	dest := *out
+	dest := o.Out
 	if dest == "" {
 		dest = defaultReviewPath(phasePath)
 	}
-	if existing, err := store.Read(dest); err == nil && existing.Exists && !*force {
+	if existing, err := store.Read(dest); err == nil && existing.Exists && !o.Force {
 		return fmt.Errorf("review scaffold: %s already exists; pass --force to replace it", dest)
 	}
 
@@ -132,9 +120,9 @@ func cmdReview(args []string) error {
 	body := renderPhaseReview(phaseReviewInput{
 		Title:       strings.Trim(title, `"`),
 		ReviewOf:    reviewOf,
-		Frozen:      *frozen,
+		Frozen:      o.Frozen,
 		PlanningRev: planningRev,
-		Mode:        *mode,
+		Mode:        o.Mode,
 		Date:        time.Now().Format("2006-01-02"),
 	})
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -144,30 +132,30 @@ func cmdReview(args []string) error {
 		return fmt.Errorf("review scaffold: %w", err)
 	}
 
-	if *jsonOut {
+	if o.JSON {
 		return writeJSON(reviewScaffoldResult{
 			Path:             relPath(dest),
 			OK:               true,
 			Wrote:            true,
 			ReviewOf:         reviewOf,
 			PhasePath:        relPath(phasePath),
-			Frozen:           *frozen,
-			Mode:             *mode,
+			Frozen:           o.Frozen,
+			Mode:             o.Mode,
 			PlanningRevision: planningRev,
 			Lanes:            reviewLaneIDs(),
 			// The exact line the phase's evidence section must carry. It is
 			// the one output a caller most needs verbatim, and reconstructing
 			// it from the other fields means re-implementing the format.
 			EvidenceLine: fmt.Sprintf("- Final aligned review: %s; frozen: %s",
-				filepath.ToSlash(dest), *frozen),
+				filepath.ToSlash(dest), o.Frozen),
 		})
 	}
 
 	fmt.Printf("scaffolded %s for %s\n", dest, phasePath)
-	fmt.Printf("  frozen: %s\n", *frozen)
+	fmt.Printf("  frozen: %s\n", o.Frozen)
 	fmt.Printf("  next: replace each lane's evidence with what it observed, then\n")
 	fmt.Printf("        add `- Final aligned review: %s; frozen: %s`\n",
-		filepath.ToSlash(dest), *frozen)
+		filepath.ToSlash(dest), o.Frozen)
 	fmt.Printf("        to the phase's Phase Completion Evidence section.\n")
 	return nil
 }

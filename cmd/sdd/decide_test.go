@@ -57,7 +57,7 @@ func TestDecideAdd_AllocatesAboveHighWaterMark(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	if err := cmdDecide([]string{"add", "--statement", "A brand new unrelated fact about widgets.", "--accept"}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "A brand new unrelated fact about widgets.", Accept: true}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestDecideAdd_PreservesPriorEntriesByteForByte(t *testing.T) {
     reversibility: two-way`
 	writeLedger(t, root, entry)
 
-	if err := cmdDecide([]string{"add", "--statement", "A brand new unrelated fact about widgets.", "--accept"}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "A brand new unrelated fact about widgets.", Accept: true}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestDecideAdd_AdvancesUpdated(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	if err := cmdDecide([]string{"add", "--statement", "A brand new unrelated fact.", "--accept"}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "A brand new unrelated fact.", Accept: true}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 
@@ -154,8 +154,7 @@ func TestDecideAdd_CollisionRefusesWithoutSupersedes(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	err := cmdDecide([]string{"add", "--statement",
-		"SessionStart ledger injection moves into the Go binary as a hook, injecting accepted ledger entries as additional context at session start."})
+	err := cmdDecideAdd(decideAddOpts{Statement: "SessionStart ledger injection moves into the Go binary as a hook, injecting accepted ledger entries as additional context at session start."})
 	if err == nil {
 		t.Fatal("expected a refusal for the colliding statement")
 	}
@@ -187,8 +186,7 @@ func TestDecideAdd_SupersedesMarksOldEntry(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	if err := cmdDecide([]string{"add", "--statement", "The new approach for widget assembly.",
-		"--supersedes", "D-0001", "--accept"}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "The new approach for widget assembly.", Supersedes: "D-0001", Accept: true}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 
@@ -225,7 +223,7 @@ func TestDecideAdd_DefaultsToProposed(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	if err := cmdDecide([]string{"add", "--statement", "A brand new unrelated fact about widgets."}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "A brand new unrelated fact about widgets."}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 
@@ -268,8 +266,7 @@ func TestDecideAdd_SupersedesIgnoresFieldOrder(t *testing.T) {
     tags: []
     reversibility: two-way`)
 
-	if err := cmdDecide([]string{"add", "--statement", "The new approach.",
-		"--supersedes", "D-0001", "--accept"}); err != nil {
+	if err := cmdDecideAdd(decideAddOpts{Statement: "The new approach.", Supersedes: "D-0001", Accept: true}); err != nil {
 		t.Fatalf("decide add: %v", err)
 	}
 

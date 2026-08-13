@@ -280,10 +280,7 @@ func ledgerFixtureTwoScopes() string {
 // runValidate captures cmdValidate's stdout for one root/scope pair.
 func runValidate(t *testing.T, root, scope string) string {
 	t.Helper()
-	args := []string{"--root", root}
-	if scope != "" {
-		args = append(args, "--scope", scope)
-	}
+	opts := validateOpts{Root: root, Scope: scope}
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -295,7 +292,7 @@ func runValidate(t *testing.T, root, scope string) string {
 		b, _ := io.ReadAll(r)
 		done <- string(b)
 	}()
-	_ = cmdValidate(args) // a refusal is expected; the output is the subject
+	_ = cmdValidate(opts) // a refusal is expected; the output is the subject
 	w.Close()
 	os.Stdout = old
 	return <-done

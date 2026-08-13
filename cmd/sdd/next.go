@@ -4,7 +4,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,19 +26,7 @@ type nextEntry struct {
 	Command string `json:"command,omitempty"`
 }
 
-func cmdNext(args []string) error {
-	fs2 := flag.NewFlagSet("next", flag.ContinueOnError)
-	fs2.SetOutput(os.Stderr)
-	jsonOut := fs2.Bool("json", false, "emit JSON")
-
-	positional, err := parseFlags(fs2, args)
-	if err != nil {
-		return fmt.Errorf("next: %w", err)
-	}
-	if len(positional) > 1 {
-		return fmt.Errorf("next: unexpected extra argument %q", positional[1])
-	}
-
+func cmdNext(planPath string, jsonOut bool) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("next: %w", err)
@@ -50,8 +37,8 @@ func cmdNext(args []string) error {
 	}
 
 	var planPaths []string
-	if len(positional) == 1 {
-		p, err := resolvePlanReadme(positional[0])
+	if planPath != "" {
+		p, err := resolvePlanReadme(planPath)
 		if err != nil {
 			return fmt.Errorf("next: %w", err)
 		}
@@ -76,7 +63,7 @@ func cmdNext(args []string) error {
 		entries = append(entries, e)
 	}
 
-	if *jsonOut {
+	if jsonOut {
 		return writeJSON(struct {
 			Plans []nextEntry `json:"plans"`
 		}{entries})

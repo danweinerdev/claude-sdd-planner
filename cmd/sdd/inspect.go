@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -17,28 +16,17 @@ import (
 
 // cmdShow exposes an artifact's state without requiring the caller to parse
 // Markdown (FR-25).
-func cmdShow(args []string) error {
-	fs := flag.NewFlagSet("show", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	typ := fs.String("type", "spec", "artifact type to assume when frontmatter omits it")
+type showOpts struct {
+	JSON bool
+	Type string
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return fmt.Errorf("show: %w", err)
-	}
-	if len(positional) == 0 {
-		return fmt.Errorf("show: expected an artifact path")
-	}
-	if len(positional) > 1 {
-		return fmt.Errorf("show: unexpected extra argument %q", positional[1])
-	}
-
-	out, err := showArtifact(positional[0], *typ)
+func cmdShow(path string, o showOpts) error {
+	out, err := showArtifact(path, o.Type)
 	if err != nil {
 		return err
 	}
-	if *jsonOut {
+	if o.JSON {
 		return writeJSON(out)
 	}
 
@@ -201,25 +189,18 @@ func collectIDs(s *schema.Schema, folded []artifact.Section) (live, retired map[
 }
 
 // cmdList enumerates artifacts of a type from the resolved planning root.
-func cmdList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	root := fs.String("root", "", "planning root (default: resolved from planning-config.json)")
+type listOpts struct {
+	JSON bool
+	Root string
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return fmt.Errorf("list: %w", err)
-	}
+func cmdList(artifactType string, o listOpts) error {
 	typ := "spec"
-	if len(positional) > 1 {
-		return fmt.Errorf("list: unexpected extra argument %q", positional[1])
-	}
-	if len(positional) == 1 {
-		typ = strings.TrimSuffix(positional[0], "s")
+	if artifactType != "" {
+		typ = strings.TrimSuffix(artifactType, "s")
 	}
 
-	resolved := *root
+	resolved := o.Root
 	if resolved == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -254,7 +235,7 @@ func cmdList(args []string) error {
 		rows = append(rows, row{p, strings.Trim(title, `"`), status, art.Digest})
 	}
 
-	if *jsonOut {
+	if o.JSON {
 		return writeJSON(struct {
 			Root      string `json:"root"`
 			Type      string `json:"type"`

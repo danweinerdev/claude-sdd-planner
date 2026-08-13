@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,37 +32,27 @@ Records a completion-evidence section with the exact labels
 shared/completion-evidence.md requires. Repository, VCS, and revision identity
 are read from the target repository rather than supplied.`
 
-func cmdEvidence(args []string) error {
-	if len(args) == 0 || args[0] != "add" {
-		return fmt.Errorf("evidence: expected `add`\n\n%s", evidenceUsage)
-	}
-	fs := flag.NewFlagSet("evidence add", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	task := fs.String("task", "", "record evidence for this task id")
-	phase := fs.Bool("phase", false, "record the phase's own completion evidence")
-	plan := fs.Bool("plan", false, "record the plan's own completion evidence")
-	verifiedBy := fs.String("verified-by", "", "exact command that was run")
-	workingDir := fs.String("working-dir", ".", "working directory for the command, repo-relative")
-	result := fs.String("result", "", "observable evidence the command produced")
-	tool := fs.String("tool", "", "optional tool/inspection row")
-	toolContext := fs.String("tool-context", "", "context for the tool row")
-	toolResult := fs.String("tool-result", "", "observable evidence for the tool row")
-	focused := fs.String("focused-review", "", "exact focused-review command (tasks only)")
-	finalReview := fs.String("final-review", "",
-		"`<review path>; frozen: <range>` for the phase's final aligned review")
-	date := fs.String("date", "", "verification date (default: today)")
-	revision := fs.String("revision", "", "the task's own implementation commit (default: HEAD)")
-	dryRun := fs.Bool("dry-run", false, "print the section without writing")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
-	positional, err := parseFlags(fs, args[1:])
-	if err != nil {
-		return err
-	}
-	if len(positional) != 1 {
-		return fmt.Errorf("evidence add: expected exactly one artifact path\n\n%s", evidenceUsage)
-	}
+type evidenceOpts struct {
+	Task        string
+	Phase       bool
+	Plan        bool
+	VerifiedBy  string
+	WorkingDir  string
+	Result      string
+	Tool        string
+	ToolContext string
+	ToolResult  string
+	Focused     string
+	FinalReview string
+	Date        string
+	Revision    string
+	DryRun      bool
+	JSON        bool
+}
+
+func cmdEvidenceAdd(path string, o evidenceOpts) error {
 	targets := 0
-	for _, set := range []bool{*task != "", *phase, *plan} {
+	for _, set := range []bool{o.Task != "", o.Phase, o.Plan} {
 		if set {
 			targets++
 		}
@@ -71,12 +60,11 @@ func cmdEvidence(args []string) error {
 	if targets != 1 {
 		return fmt.Errorf("evidence add: pass exactly one of --task ID, --phase, or --plan")
 	}
-	if *verifiedBy == "" || *result == "" {
+	if o.VerifiedBy == "" || o.Result == "" {
 		return fmt.Errorf("evidence add: --verified-by and --result are required; " +
 			"evidence without a command and an observed result proves nothing")
 	}
 
-	path := positional[0]
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("evidence add: %w", err)
@@ -86,7 +74,7 @@ func cmdEvidence(args []string) error {
 	}
 	doc := artifact.Parse(art.Source)
 
-	when := *date
+	when := o.Date
 	if when == "" {
 		when = time.Now().Format("2006-01-02")
 	}
@@ -99,7 +87,7 @@ func cmdEvidence(args []string) error {
 	// one is named, it is verified to exist rather than trusted; when it is
 	// not, HEAD is used and the worktree must be clean, because otherwise the
 	// recorded revision would not describe what was verified.
-	rev := *revision
+	rev := o.Revision
 	if rev == "" {
 		head, err := repo.Head()
 		if err != nil || head == "" {
@@ -130,7 +118,7 @@ func cmdEvidence(args []string) error {
 	// Those are derived from the phase itself rather than typed, so they
 	// cannot disagree with the tasks they describe.
 	var identities []taskIdentityLine
-	if *phase {
+	if o.Phase {
 		identities = completedTaskIdentities(doc)
 	}
 
@@ -139,7 +127,7 @@ func cmdEvidence(args []string) error {
 	// (SDD158). Like the task roll-up, it is read from each phase's own
 	// recorded evidence rather than typed, so the two cannot disagree.
 	var phaseIdentities []phaseIdentityLine
-	if *plan {
+	if o.Plan {
 		var err error
 		phaseIdentities, err = completedPhaseIdentities(path, doc)
 		if err != nil {
@@ -149,27 +137,27 @@ func cmdEvidence(args []string) error {
 
 	section := renderEvidence(evidenceInput{
 		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: rev,
-		VerifiedBy: *verifiedBy, WorkingDir: *workingDir, Result: *result,
-		Tool: *tool, ToolContext: *toolContext, ToolResult: *toolResult,
-		Focused: *focused, IsTask: *task != "",
-		FinalReview: *finalReview, TaskIdentities: identities,
+		VerifiedBy: o.VerifiedBy, WorkingDir: o.WorkingDir, Result: o.Result,
+		Tool: o.Tool, ToolContext: o.ToolContext, ToolResult: o.ToolResult,
+		Focused: o.Focused, IsTask: o.Task != "",
+		FinalReview: o.FinalReview, TaskIdentities: identities,
 		PhaseIdentities: phaseIdentities,
 	})
 
 	heading, level := "## Phase Completion Evidence", 2
 	target := "phase"
 	switch {
-	case *plan:
+	case o.Plan:
 		heading, target = "## Plan Completion Evidence", "plan"
-	case *task != "":
+	case o.Task != "":
 		heading, level, target = "### Completion Evidence", 3, "task"
 	}
 
-	if *dryRun {
-		if *jsonOut {
+	if o.DryRun {
+		if o.JSON {
 			return emitEvidenceJSON(evidenceResult{
 				Path: relPath(path), OK: true, DryRun: true,
-				Target: target, TaskID: *task, Heading: heading,
+				Target: target, TaskID: o.Task, Heading: heading,
 				Revision: rev, Section: section,
 			})
 		}
@@ -177,17 +165,17 @@ func cmdEvidence(args []string) error {
 		return nil
 	}
 
-	updated, err := replaceEvidenceSection(doc, art.Source, heading, level, *task, section, when)
+	updated, err := replaceEvidenceSection(doc, art.Source, heading, level, o.Task, section, when)
 	if err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
-	if *jsonOut {
+	if o.JSON {
 		return emitEvidenceJSON(evidenceResult{
 			Path: relPath(path), OK: true, Wrote: true,
-			Target: target, TaskID: *task, Heading: heading,
+			Target: target, TaskID: o.Task, Heading: heading,
 			Revision: rev, Digest: store.Digest(updated), Section: section,
 		})
 	}

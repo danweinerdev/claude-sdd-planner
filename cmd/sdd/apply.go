@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,35 +13,22 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
 
-func cmdApply(args []string) error {
-	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	dryRun := fs.Bool("dry-run", false, "print what would be written and write nothing")
-	diff := fs.Bool("diff", false, "show a line diff against the artifact on disk")
-	create := fs.Bool("create", false, "treat the target as new even if it exists")
-	supersede := fs.Bool("supersede", false,
-		"replace the artifact's content, carrying its identifiers forward onto the rewritten items")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
-	retire := fs.String("retire", "", "comma-separated identifiers being deliberately retired")
-	expect := fs.String("expect", "", "refuse unless the artifact's current digest equals this value (FR-48)")
-	typ := fs.String("type", "spec", "artifact type schema to compile against")
+// applyOpts is what `sdd apply` needs from the command line. Cobra binds
+// these fields directly, so the flag set is declared once rather than twice.
+type applyOpts struct {
+	DryRun    bool
+	Diff      bool
+	Create    bool
+	Supersede bool
+	JSON      bool
+	Retire    string
+	Expect    string
+	Type      string
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return fmt.Errorf("apply: %w", err)
-	}
-	var target string
-	for _, a := range positional {
-		if target != "" {
-			return fmt.Errorf("apply: unexpected extra argument %q", a)
-		}
-		target = a
-	}
-	if target == "" {
-		return fmt.Errorf("apply: expected an artifact path")
-	}
+func cmdApply(target string, o applyOpts) error {
 
-	s, err := schema.Load(*typ)
+	s, err := schema.Load(o.Type)
 	if err != nil {
 		return err
 	}
@@ -63,28 +49,28 @@ func cmdApply(args []string) error {
 	// FR-48: isolation, not just atomicity. A caller that read the artifact in an
 	// earlier turn passes the digest it saw; if another writer has landed since,
 	// the write is refused rather than silently discarding their work.
-	if *expect != "" && *expect != art.Digest {
+	if o.Expect != "" && o.Expect != art.Digest {
 		got := art.Digest
 		if !art.Exists {
 			got = "<absent>"
 		}
-		return &staleError{path: target, want: *expect, got: got}
+		return &staleError{path: target, want: o.Expect, got: got}
 	}
 
-	if *supersede && *create {
+	if o.Supersede && o.Create {
 		return fmt.Errorf("apply: --supersede and --create are mutually exclusive; " +
 			"--create starts a new artifact, --supersede rewrites an existing one")
 	}
-	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}, Supersede: *supersede}
-	for _, id := range strings.Split(*retire, ",") {
+	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}, Supersede: o.Supersede}
+	for _, id := range strings.Split(o.Retire, ",") {
 		if id = strings.TrimSpace(id); id != "" {
 			opts.Retire[id] = true
 		}
 	}
-	if art.Exists && !*create {
+	if art.Exists && !o.Create {
 		opts.Existing = artifact.Parse(art.Source)
 	}
-	if *supersede && opts.Existing == nil {
+	if o.Supersede && opts.Existing == nil {
 		return fmt.Errorf("apply --supersede: %s does not exist; "+
 			"there is nothing to supersede (use --create for a new artifact)", relPath(target))
 	}
@@ -92,8 +78,8 @@ func cmdApply(args []string) error {
 	res := compile.Compile(s, string(payload), opts)
 	rel := relPath(target)
 
-	if *jsonOut {
-		return emitJSON(rel, art, res, *dryRun)
+	if o.JSON {
+		return emitJSON(rel, art, res, o.DryRun)
 	}
 
 	report(res)
@@ -108,15 +94,15 @@ func cmdApply(args []string) error {
 
 	unchanged := art.Exists && res.Output == art.Source
 
-	if *diff || *dryRun {
+	if o.Diff || o.DryRun {
 		if unchanged {
 			fmt.Printf("%s — no change (byte-idempotent)\n", rel)
-		} else if *diff {
+		} else if o.Diff {
 			fmt.Printf("would write %s:\n%s", rel, lineDiff(art.Source, res.Output))
 		}
 	}
-	if *dryRun {
-		if !unchanged && !*diff {
+	if o.DryRun {
+		if !unchanged && !o.Diff {
 			fmt.Print(res.Output)
 		}
 		return nil

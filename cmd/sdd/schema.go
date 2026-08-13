@@ -7,11 +7,8 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 )
 
-func cmdSchema(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("schema: expected \"list\" or \"show <type>\"")
-	}
-	switch args[0] {
+func cmdSchema(action, artifactType string) error {
+	switch action {
 	case "list":
 		for _, t := range schema.Types() {
 			s, err := schema.Load(t)
@@ -29,10 +26,7 @@ func cmdSchema(args []string) error {
 		}
 		return nil
 	case "show":
-		if len(args) < 2 {
-			return fmt.Errorf("schema show: expected an artifact type")
-		}
-		s, err := schema.Load(args[1])
+		s, err := schema.Load(artifactType)
 		if err != nil {
 			return err
 		}
@@ -62,5 +56,5 @@ func cmdSchema(args []string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("schema: unknown action %q", args[0])
+	return fmt.Errorf("schema: unknown action %q", action)
 }

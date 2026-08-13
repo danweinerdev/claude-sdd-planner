@@ -14,28 +14,8 @@ import (
 //	sdd plugin sync  [--root <repo>]   regenerate the portable trees from the canonical tree
 //	sdd plugin check [--root <repo>]   fail (exit 1) if a portable tree is stale
 //	sdd plugin status [--root <repo>]  print the generated/override provenance report
-func cmdPlugin(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: sdd plugin <sync|check|status> [--root <repo>]")
-	}
-	sub, rest := args[0], args[1:]
-	root := "."
-	jsonOut := false
-	for i := 0; i < len(rest); i++ {
-		switch rest[i] {
-		case "--root":
-			if i+1 >= len(rest) {
-				return fmt.Errorf("--root requires a path")
-			}
-			root = rest[i+1]
-			i++
-		case "--json":
-			jsonOut = true
-		default:
-			return fmt.Errorf("sdd plugin %s: unknown argument %q", sub, rest[i])
-		}
-	}
-	root, err := filepath.Abs(root)
+func cmdPlugin(sub, rootArg string, jsonOut bool) error {
+	root, err := filepath.Abs(rootArg)
 	if err != nil {
 		return err
 	}

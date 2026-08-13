@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
@@ -39,13 +38,7 @@ type doctorReport struct {
 // cmdDoctor reports the binary's own identity, the resolved planning root (or
 // why it couldn't resolve one), and every embedded schema with how many
 // artifacts of that type exist under the root.
-func cmdDoctor(args []string) error {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("doctor: %w", err)
-	}
+func cmdDoctor(jsonOut bool) error {
 
 	rep := doctorReport{Version: version.Version}
 	rep.HookBinary, rep.HookBinaryError = checkHookBinary()
@@ -91,7 +84,7 @@ func cmdDoctor(args []string) error {
 		rep.Schemas = append(rep.Schemas, info)
 	}
 
-	if *jsonOut {
+	if jsonOut {
 		if err := writeJSON(rep); err != nil {
 			return err
 		}

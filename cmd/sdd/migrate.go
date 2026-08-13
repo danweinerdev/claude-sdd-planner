@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -25,35 +24,23 @@ import (
 // refusing non-compliant structure — that refusal is the whole point of routing
 // writes through a compiler. Upgrading is an explicit, auditable act performed
 // once per artifact, not a mode ordinary edits run in.
-func cmdMigrate(args []string) error {
-	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	dryRun := fs.Bool("dry-run", false, "report what would change and write nothing")
-	diff := fs.Bool("diff", false, "show a line diff")
-	jsonOut := fs.Bool("json", false, "emit JSON")
-	allowFrozen := fs.Bool("allow-frozen", false, "also migrate complete/frozen artifacts (FR-46 exemption; see the warning in --help)")
-	noStubs := fs.Bool("no-stub-sections", false, "do not insert placeholder bodies for missing required sections")
-	typ := fs.String("type", "", "artifact type schema (default: read from frontmatter)")
-	all := fs.Bool("all", false, "migrate every artifact under the planning root and print a summary worklist")
+type migrateOpts struct {
+	DryRun      bool
+	Diff        bool
+	JSON        bool
+	AllowFrozen bool
+	NoStubs     bool
+	Type        string
+	All         bool
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return fmt.Errorf("migrate: %w", err)
+func cmdMigrate(target string, o migrateOpts) error {
+	if o.All {
+		return migrateAll(target, o.DryRun, o.JSON, o.AllowFrozen, !o.NoStubs)
 	}
-	if *all {
-		root := ""
-		if len(positional) == 1 {
-			root = positional[0]
-		}
-		return migrateAll(root, *dryRun, *jsonOut, *allowFrozen, !*noStubs)
-	}
-	if len(positional) == 0 {
+	if target == "" {
 		return fmt.Errorf("migrate: expected an artifact path, or --all to sweep the planning root")
 	}
-	if len(positional) > 1 {
-		return fmt.Errorf("migrate: unexpected extra argument %q", positional[1])
-	}
-	target := positional[0]
 
 	art, err := store.Read(target)
 	if err != nil {
@@ -64,7 +51,7 @@ func cmdMigrate(args []string) error {
 	}
 	doc := artifact.Parse(art.Source)
 
-	resolvedType := *typ
+	resolvedType := o.Type
 	if resolvedType == "" {
 		t, ok := doc.FM("type")
 		if !ok {
@@ -81,12 +68,12 @@ func cmdMigrate(args []string) error {
 		Today:        time.Now().Format("2006-01-02"),
 		Existing:     doc,
 		Upgrade:      true,
-		AllowFrozen:  *allowFrozen,
-		StubSections: !*noStubs,
+		AllowFrozen:  o.AllowFrozen,
+		StubSections: !o.NoStubs,
 	})
 
 	rel := relPath(target)
-	if *jsonOut {
+	if o.JSON {
 		return writeJSON(struct {
 			Path        string   `json:"path"`
 			Type        string   `json:"type"`
@@ -97,7 +84,7 @@ func cmdMigrate(args []string) error {
 			Refusals    []string `json:"refusals,omitempty"`
 			Wrote       bool     `json:"wrote"`
 		}{rel, resolvedType, res.OK(), res.Added, res.Corrections, res.Todos,
-			refusalStrings(res), res.OK() && !*dryRun && res.Output != art.Source})
+			refusalStrings(res), res.OK() && !o.DryRun && res.Output != art.Source})
 	}
 
 	fmt.Printf("%s (%s)\n", rel, resolvedType)
@@ -123,10 +110,10 @@ func cmdMigrate(args []string) error {
 		fmt.Println("  already compliant; nothing to do")
 		return nil
 	}
-	if *diff {
+	if o.Diff {
 		fmt.Print(lineDiff(art.Source, res.Output))
 	}
-	if *dryRun {
+	if o.DryRun {
 		fmt.Printf("  would write (%d insertions)\n", len(res.Added))
 		return nil
 	}

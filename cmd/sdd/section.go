@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -15,51 +14,24 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
 
-// cmdSection dispatches `sdd section <verb>`. Spike scope: `set` only (FR-22).
-func cmdSection(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("section: expected \"set\"")
-	}
-	switch args[0] {
-	case "set":
-		return cmdSectionSet(args[1:])
-	default:
-		return fmt.Errorf("section: unknown action %q", args[0])
-	}
-}
-
 // cmdSectionSet implements `sdd section set`: replace exactly one section's
 // body, leaving every other section and the entire frontmatter (aside from
 // `updated`) byte-identical (FR-22).
-func cmdSectionSet(args []string) error {
-	fs := flag.NewFlagSet("section set", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	heading := fs.String("heading", "", "declared section heading to replace, e.g. \"## Overview\"")
-	dryRun := fs.Bool("dry-run", false, "print what would be written and write nothing")
-	diff := fs.Bool("diff", false, "show a line diff against the artifact on disk")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
-	expect := fs.String("expect", "", "refuse unless the artifact's current digest equals this value (FR-48)")
-	typ := fs.String("type", "spec", "artifact type schema to check against")
+type sectionSetOpts struct {
+	Heading string
+	DryRun  bool
+	Diff    bool
+	JSON    bool
+	Expect  string
+	Type    string
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return fmt.Errorf("section set: %w", err)
-	}
-	var target string
-	for _, a := range positional {
-		if target != "" {
-			return fmt.Errorf("section set: unexpected extra argument %q", a)
-		}
-		target = a
-	}
-	if target == "" {
-		return fmt.Errorf("section set: expected an artifact path")
-	}
-	if strings.TrimSpace(*heading) == "" {
+func cmdSectionSet(target string, o sectionSetOpts) error {
+	if strings.TrimSpace(o.Heading) == "" {
 		return fmt.Errorf("section set: --heading is required")
 	}
 
-	s, err := schema.Load(*typ)
+	s, err := schema.Load(o.Type)
 	if err != nil {
 		return err
 	}
@@ -76,8 +48,8 @@ func cmdSectionSet(args []string) error {
 	if !art.Exists {
 		return fmt.Errorf("section set: %s does not exist", target)
 	}
-	if *expect != "" && *expect != art.Digest {
-		return &staleError{path: target, want: *expect, got: art.Digest}
+	if o.Expect != "" && o.Expect != art.Digest {
+		return &staleError{path: target, want: o.Expect, got: art.Digest}
 	}
 
 	doc := artifact.Parse(art.Source)
@@ -85,13 +57,13 @@ func cmdSectionSet(args []string) error {
 	var refs []compile.Refusal
 	refs = append(refs, compile.CheckFrozen(doc, false)...)
 
-	out, secRefs := setSection(doc, s, *heading, string(payload), time.Now().Format("2006-01-02"))
+	out, secRefs := setSection(doc, s, o.Heading, string(payload), time.Now().Format("2006-01-02"))
 	refs = append(refs, secRefs...)
 
 	rel := relPath(target)
 
-	if *jsonOut {
-		return emitSectionJSON(rel, art, out, refs, *dryRun)
+	if o.JSON {
+		return emitSectionJSON(rel, art, out, refs, o.DryRun)
 	}
 
 	if len(refs) > 0 {
@@ -104,15 +76,15 @@ func cmdSectionSet(args []string) error {
 
 	unchanged := out == art.Source
 
-	if *diff || *dryRun {
+	if o.Diff || o.DryRun {
 		if unchanged {
 			fmt.Printf("%s — no change (byte-idempotent)\n", rel)
-		} else if *diff {
+		} else if o.Diff {
 			fmt.Printf("would write %s:\n%s", rel, lineDiff(art.Source, out))
 		}
 	}
-	if *dryRun {
-		if !unchanged && !*diff {
+	if o.DryRun {
+		if !unchanged && !o.Diff {
 			fmt.Print(out)
 		}
 		return nil

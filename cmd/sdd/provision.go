@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,17 +16,15 @@ import (
 // setup when it fails (FR-40). It never compiles, downloads, or installs —
 // `go install` is the user's prerequisite (FR-41), so a missing binary is
 // reported with the exact command that satisfies it rather than fixed here.
-func cmdProvision(args []string) error {
-	fs := flag.NewFlagSet("provision", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	pluginRoot := fs.String("plugin-root", "", "plugin root (default: $CLAUDE_PLUGIN_ROOT)")
-	asJSON := fs.Bool("json", false, "emit the outcome as JSON")
-	checkOnly := fs.Bool("check", false, "resolve and report without writing the copy")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+type provisionOpts struct {
+	PluginRoot string
+	JSON       bool
+	Check      bool
+}
 
-	root := *pluginRoot
+func cmdProvision(o provisionOpts) error {
+
+	root := o.PluginRoot
 	if root == "" {
 		root = os.Getenv("CLAUDE_PLUGIN_ROOT")
 	}
@@ -45,7 +42,7 @@ func cmdProvision(args []string) error {
 	}
 
 	var res provision.Result
-	if *checkOnly {
+	if o.Check {
 		res, err = provision.Resolve(root, floor)
 	} else {
 		res, err = provision.Provision(root, floor)
@@ -54,7 +51,7 @@ func cmdProvision(args []string) error {
 		return provisionFailure(res, floor, err)
 	}
 
-	if *asJSON {
+	if o.JSON {
 		out, marshalErr := json.MarshalIndent(map[string]any{
 			"source":      res.Source,
 			"version":     res.Version,

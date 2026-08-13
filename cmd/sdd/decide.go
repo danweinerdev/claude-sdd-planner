@@ -5,7 +5,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,24 +18,6 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
-
-func cmdDecide(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("decide: expected \"list\", \"search\", or \"add\"")
-	}
-	switch args[0] {
-	case "list":
-		return cmdDecideList(args[1:])
-	case "search":
-		return cmdDecideSearch(args[1:])
-	case "add":
-		return cmdDecideAdd(args[1:])
-	case "validate":
-		return cmdDecideValidate(args[1:])
-	default:
-		return fmt.Errorf("decide: unknown action %q", args[0])
-	}
-}
 
 // decisionEntry mirrors the ledger's decisions[] entry schema
 // (shared/decision-log.md § Entry Schema).
@@ -106,16 +87,7 @@ func loadEntries(doc *artifact.Doc) []decisionEntry {
 	return out
 }
 
-func cmdDecideList(args []string) error {
-	fs2 := flag.NewFlagSet("decide list", flag.ContinueOnError)
-	fs2.SetOutput(os.Stderr)
-	status := fs2.String("status", "", "filter: accepted|proposed|rejected|superseded")
-	jsonOut := fs2.Bool("json", false, "emit JSON")
-	_, err := parseFlags(fs2, args)
-	if err != nil {
-		return fmt.Errorf("decide list: %w", err)
-	}
-
+func cmdDecideList(status string, jsonOut bool) error {
 	doc, _, err := loadLedger()
 	if err != nil {
 		return fmt.Errorf("decide list: %w", err)
@@ -123,13 +95,13 @@ func cmdDecideList(args []string) error {
 	entries := loadEntries(doc)
 	var out []decisionEntry
 	for _, e := range entries {
-		if *status != "" && e.Status != *status {
+		if status != "" && e.Status != status {
 			continue
 		}
 		out = append(out, e)
 	}
 
-	if *jsonOut {
+	if jsonOut {
 		return writeJSON(struct {
 			Decisions []decisionEntry `json:"decisions"`
 		}{out})
@@ -144,18 +116,8 @@ func cmdDecideList(args []string) error {
 	return nil
 }
 
-func cmdDecideSearch(args []string) error {
-	fs2 := flag.NewFlagSet("decide search", flag.ContinueOnError)
-	fs2.SetOutput(os.Stderr)
-	jsonOut := fs2.Bool("json", false, "emit JSON")
-	positional, err := parseFlags(fs2, args)
-	if err != nil {
-		return fmt.Errorf("decide search: %w", err)
-	}
-	if len(positional) == 0 {
-		return fmt.Errorf("decide search: expected a search term")
-	}
-	term := strings.ToLower(strings.Join(positional, " "))
+func cmdDecideSearch(term string, jsonOut bool) error {
+	term = strings.ToLower(term)
 
 	doc, _, err := loadLedger()
 	if err != nil {
@@ -168,7 +130,7 @@ func cmdDecideSearch(args []string) error {
 		}
 	}
 
-	if *jsonOut {
+	if jsonOut {
 		return writeJSON(struct {
 			Decisions []decisionEntry `json:"decisions"`
 		}{out})
@@ -190,26 +152,22 @@ func entryMatches(e decisionEntry, term string) bool {
 	return false
 }
 
-func cmdDecideAdd(args []string) error {
-	fs2 := flag.NewFlagSet("decide add", flag.ContinueOnError)
-	fs2.SetOutput(os.Stderr)
-	statement := fs2.String("statement", "", "the decided statement (required)")
-	rationale := fs2.String("rationale", "", "why this over the alternatives")
-	rejected := fs2.String("rejected", "", "comma-separated anti-choices")
-	scope := fs2.String("scope", "", "comma-separated governed artifacts")
-	tags := fs2.String("tags", "", "comma-separated tags")
-	supersedes := fs2.String("supersedes", "", "D-NNNN this entry supersedes")
-	kind := fs2.String("kind", "decision", "decision|assumption|definition|answered-question")
-	reversibility := fs2.String("reversibility", "two-way", "one-way|two-way")
-	accept := fs2.Bool("accept", false, "record as accepted rather than proposed")
-	dryRun := fs2.Bool("dry-run", false, "print what would be written and write nothing")
-	jsonOut := fs2.Bool("json", false, "emit JSON")
+type decideAddOpts struct {
+	Statement     string
+	Rationale     string
+	Rejected      string
+	Scope         string
+	Tags          string
+	Supersedes    string
+	Kind          string
+	Reversibility string
+	Accept        bool
+	DryRun        bool
+	JSON          bool
+}
 
-	_, err := parseFlags(fs2, args)
-	if err != nil {
-		return fmt.Errorf("decide add: %w", err)
-	}
-	if strings.TrimSpace(*statement) == "" {
+func cmdDecideAdd(o decideAddOpts) error {
+	if strings.TrimSpace(o.Statement) == "" {
 		return fmt.Errorf("decide add: --statement is required")
 	}
 
@@ -222,8 +180,8 @@ func cmdDecideAdd(args []string) error {
 	// D-0003: a new entry that collides with an accepted one always stops for
 	// the user unless --supersedes names the entry it resolves the collision
 	// with. Never auto-resolve, never settle by recency.
-	if *supersedes == "" {
-		candidates := findCollisionCandidates(*statement, splitCSV(*scope), entries)
+	if o.Supersedes == "" {
+		candidates := findCollisionCandidates(o.Statement, splitCSV(o.Scope), entries)
 		if len(candidates) > 0 {
 			fmt.Fprintln(os.Stderr, "decide add: refused — candidate collision(s) with accepted entries:")
 			for _, c := range candidates {
@@ -232,8 +190,8 @@ func cmdDecideAdd(args []string) error {
 			fmt.Fprintln(os.Stderr, "pass --supersedes D-NNNN to resolve one of them, or rephrase --statement to avoid the overlap")
 			return &refusedError{n: len(candidates)}
 		}
-	} else if _, ok := findEntry(entries, *supersedes); !ok {
-		return fmt.Errorf("decide add: --supersedes %s does not name an existing entry", *supersedes)
+	} else if _, ok := findEntry(entries, o.Supersedes); !ok {
+		return fmt.Errorf("decide add: --supersedes %s does not name an existing entry", o.Supersedes)
 	}
 
 	s, err := schema.Load("decision-log")
@@ -256,24 +214,24 @@ func cmdDecideAdd(args []string) error {
 	today := time.Now().Format("2006-01-02")
 	status := "proposed"
 	decidedBy := "agent"
-	if *accept {
+	if o.Accept {
 		status = "accepted"
 		decidedBy = "user-approved"
 	}
 
 	newLines := renderEntry(decisionEntry{
-		ID: newID, Kind: *kind, Status: status, Date: today, DecidedBy: decidedBy,
-		Statement: *statement, Rejected: splitCSV(*rejected), Rationale: *rationale,
-		Scope: splitCSV(*scope), Tags: splitCSV(*tags), Supersedes: *supersedes,
-		Reversibility: *reversibility,
+		ID: newID, Kind: o.Kind, Status: status, Date: today, DecidedBy: decidedBy,
+		Statement: o.Statement, Rejected: splitCSV(o.Rejected), Rationale: o.Rationale,
+		Scope: splitCSV(o.Scope), Tags: splitCSV(o.Tags), Supersedes: o.Supersedes,
+		Reversibility: o.Reversibility,
 	})
 
-	out, err := applyLedgerEdits(doc, today, newLines, *supersedes, newID)
+	out, err := applyLedgerEdits(doc, today, newLines, o.Supersedes, newID)
 	if err != nil {
 		return err
 	}
 
-	if *jsonOut {
+	if o.JSON {
 		res := struct {
 			Path    string `json:"path"`
 			ID      string `json:"id"`
@@ -281,8 +239,8 @@ func cmdDecideAdd(args []string) error {
 			Wrote   bool   `json:"wrote"`
 			Refused bool   `json:"refused"`
 			Output  string `json:"output,omitempty"`
-		}{Path: relPath(path), ID: newID, DryRun: *dryRun}
-		if *dryRun {
+		}{Path: relPath(path), ID: newID, DryRun: o.DryRun}
+		if o.DryRun {
 			res.Output = out
 		} else {
 			if err := store.WriteAtomic(path, out); err != nil {
@@ -293,7 +251,7 @@ func cmdDecideAdd(args []string) error {
 		return writeJSON(res)
 	}
 
-	if *dryRun {
+	if o.DryRun {
 		fmt.Print(out)
 		return nil
 	}

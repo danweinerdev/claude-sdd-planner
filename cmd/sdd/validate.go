@@ -10,7 +10,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,33 +54,31 @@ type outDoc struct {
 	Waived int `json:"waived"`
 }
 
-func cmdValidate(args []string) error {
-	fs2 := flag.NewFlagSet("validate", flag.ContinueOnError)
-	fs2.SetOutput(os.Stderr)
-	root := fs2.String("root", "", "planning root (default: resolved from planning-config.json)")
-	scope := fs2.String("scope", "", "limit findings to an artifact/path and paths it directly relates to")
-	format := fs2.String("format", "text", "output format: text|json")
-	// FR-04 requires --json on every subcommand. validate predates that and
-	// spells it --format json; the alias makes the uniform flag work without
-	// breaking the existing spelling or the callers that use it.
-	asJSON := fs2.Bool("json", false, "shorthand for --format json")
-	// Accepted exceptions are a property of the artifacts, so the default is to
-	// honor them. --no-waivers asks the opposite question — what does this root
-	// violate with nothing excused — which is what a release gate or an audit
-	// wants, and what makes the mechanism auditable rather than load-bearing.
-	noWaivers := fs2.Bool("no-waivers", false, "ignore accepted exceptions and report every finding as an error")
+// validateOpts is what `sdd validate` needs from the command line.
+//
+// Format and JSON coexist deliberately: validate predates FR-04's uniform
+// --json and spells it --format json, so the alias makes the uniform flag work
+// without breaking the existing spelling or the callers using it. NoWaivers
+// asks the opposite question from the default — what does this root violate
+// with nothing excused — which is what a release gate or an audit wants, and
+// what makes the waiver mechanism auditable rather than load-bearing.
+type validateOpts struct {
+	Root      string
+	Scope     string
+	Format    string
+	JSON      bool
+	NoWaivers bool
+}
 
-	positional, err := parseFlags(fs2, args)
-	if err != nil {
-		return fmt.Errorf("validate: %w", err)
+func cmdValidate(o validateOpts) error {
+	format := o.Format
+	if format == "" {
+		format = "text"
 	}
-	if len(positional) > 0 {
-		return fmt.Errorf("validate: unexpected extra argument %q", positional[0])
+	if o.JSON {
+		format = "json"
 	}
-	if *asJSON {
-		*format = "json"
-	}
-	if *format != "text" && *format != "json" {
+	if format != "text" && format != "json" {
 		return fmt.Errorf("validate: --format must be text or json")
 	}
 
@@ -89,7 +86,7 @@ func cmdValidate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
-	resolved, repoRoot, err := resolveRoots(wd, *root)
+	resolved, repoRoot, err := resolveRoots(wd, o.Root)
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
@@ -106,7 +103,7 @@ func cmdValidate(args []string) error {
 	}
 
 	diags := rules.RunWithWaivers(r)
-	if *noWaivers {
+	if o.NoWaivers {
 		diags = rules.Run(r)
 	}
 	// The decision-ledger validator (DLG*) runs alongside the artifact rules,
@@ -118,9 +115,9 @@ func cmdValidate(args []string) error {
 	for _, a := range r.Artifacts {
 		artifactsInScope = append(artifactsInScope, a.Rel)
 	}
-	if *scope != "" {
-		artifactsInScope = filterInScope(artifactsInScope, *scope)
-		diags = selectInScope(diags, *scope, artifactsInScope, governingDecisions(r, artifactsInScope))
+	if o.Scope != "" {
+		artifactsInScope = filterInScope(artifactsInScope, o.Scope)
+		diags = selectInScope(diags, o.Scope, artifactsInScope, governingDecisions(r, artifactsInScope))
 	}
 	sort.Strings(artifactsInScope)
 
@@ -148,7 +145,7 @@ func cmdValidate(args []string) error {
 		}
 	}
 
-	if *format == "json" {
+	if format == "json" {
 		doc := outDoc{
 			ArtifactsInScope:   artifactsInScope,
 			ArtifactsInspected: len(r.Artifacts),
@@ -161,7 +158,7 @@ func cmdValidate(args []string) error {
 			return err
 		}
 	} else {
-		printValidateReport(resolved, *scope, len(r.Artifacts), len(artifactsInScope), out, valid, waived)
+		printValidateReport(resolved, o.Scope, len(r.Artifacts), len(artifactsInScope), out, valid, waived)
 	}
 
 	if !valid {

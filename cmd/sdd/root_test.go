@@ -131,20 +131,23 @@ func TestJSONFlagCoverage(t *testing.T) {
 	})
 }
 
-// TestNoInertFlags is the regression gate for a flag that cobra advertises but
-// the underlying handler never defined. The cobra migration introduced exactly
-// that bug four times: `sdd task|phase|plan complete --json`, `sdd plan approve
-// --json`, and `sdd validate --identity-mode` all appeared in help while their
-// handlers had no such flag, so each invocation died with a leaked stdlib error
-// ("flag provided but not defined") instead of doing anything. Help that
-// advertises a flag which cannot work is worse than an absent feature: it sends
-// callers down a dead end that looks supported.
+// The flag surface no longer needs a runtime gate.
 //
-// The check is static rather than behavioral — it compares the flags cobra
-// declares against the flags each handler's own FlagSet defines, so it runs in
-// microseconds and never touches the filesystem, git, or stdout. A behavioral
-// probe (actually invoking every handler) caught the same bugs but took ~25s,
-// which is the kind of cost that gets a test skipped.
+// TestNoInertFlags and TestNoUnreachableFlags used to compare cobra's declared
+// flags against a hand-maintained table of what each handler parsed, because
+// the two were separate declarations that could drift: a flag could be
+// advertised but unimplemented (inert), or implemented but unreachable. Both
+// bugs happened, twice, in this codebase.
+//
+// Handlers now take typed options structs that cobra binds directly, so there
+// is exactly one declaration. Drift is a compile error rather than a test
+// failure — verified by renaming a struct field a flag binds to, which fails
+// as `o.NoSuchField undefined (type validateOpts has no field or method
+// NoSuchField)`. A test asserting what the compiler already proves is a test
+// that can only rot, so the pair and their table are deleted.
+
+// TestJSONFlagCoverage enforces FR-04: every command that emits data offers
+// --json, so callers never have to scrape rendered text.
 func TestNoInertFlags(t *testing.T) {
 	for _, tc := range handlerFlagSets() {
 		declared := map[string]bool{}
@@ -212,7 +215,7 @@ func handlerFlagSets() []struct {
 		{"sdd apply", []string{"dry-run", "diff", "create", "json", "retire", "expect", "type", "supersede"}},
 		{"sdd section set", []string{"heading", "dry-run", "diff", "json", "expect", "type"}},
 		{"sdd template", []string{"out", "check", "dir", "for-apply", "json"}},
-		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "type"}},
+		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "no-stub-sections", "type", "all"}},
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json"}},
 		{"sdd evidence add", []string{

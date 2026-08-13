@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 
@@ -15,50 +14,37 @@ import (
 // rules. This entry point exists because a ledger is often edited on its own —
 // and because a ledger may live in a repository that has no planning root at
 // all, which `sdd validate` cannot be pointed at.
-func cmdDecideValidate(args []string) error {
-	fs := flag.NewFlagSet("decide validate", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	// FR-02 specifies --format for this command, and the bundled docs
-	// (shared/decision-log.md, the validate skill) tell authors to use it;
-	// only --json was implemented, so every documented invocation failed.
-	// Both spellings now work: --format is the documented one, --json is the
-	// shorthand every other subcommand carries.
-	format := fs.String("format", "text", "output format: text|json")
-	asJSON := fs.Bool("json", false, "shorthand for --format json")
-	noHistory := fs.Bool("no-history", false,
-		"skip Git history checks; only for an explicitly unversioned audit")
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return err
-	}
-	switch *format {
-	case "text":
+type decideValidateOpts struct {
+	Format    string
+	JSON      bool
+	NoHistory bool
+}
+
+func cmdDecideValidate(ledgerArg string, o decideValidateOpts) error {
+	asJSON := o.JSON
+	switch o.Format {
+	case "", "text":
 	case "json":
-		*asJSON = true
+		asJSON = true
 	default:
-		return fmt.Errorf("decide validate: --format must be text or json, got %q", *format)
+		return fmt.Errorf("decide validate: --format must be text or json, got %q", o.Format)
 	}
 
-	path := ""
-	switch len(positional) {
-	case 0:
+	path := ledgerArg
+	if path == "" {
 		resolved, err := ledgerPath()
 		if err != nil {
 			return fmt.Errorf("decide validate: %w", err)
 		}
 		path = resolved
-	case 1:
-		path = positional[0]
-	default:
-		return fmt.Errorf("decide validate: expected at most one ledger path")
 	}
 	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("decide validate: %s is not a readable ledger file", path)
 	}
 
-	diagnostics := dlg.Validate(path, !*noHistory)
+	diagnostics := dlg.Validate(path, !o.NoHistory)
 
-	if *asJSON {
+	if asJSON {
 		out, err := json.MarshalIndent(map[string]any{
 			"path":        path,
 			"diagnostics": diagnostics,

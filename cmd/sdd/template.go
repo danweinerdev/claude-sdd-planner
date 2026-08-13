@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,48 +37,42 @@ conflicting value, so the default form is not valid apply input.
 
 --check regenerates every committed template and fails if any differs.`
 
-func cmdTemplate(args []string) error {
-	fs := flag.NewFlagSet("template", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	out := fs.String("out", "", "write to this path instead of stdout")
-	check := fs.Bool("check", false, "regenerate every committed template and diff")
-	dir := fs.String("dir", "shared/templates", "template directory for --check")
-	forApply := fs.Bool("for-apply", false,
-		"omit tool-owned fields, so the output is a valid apply payload")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
+type templateOpts struct {
+	Out      string
+	Check    bool
+	Dir      string
+	ForApply bool
+	JSON     bool
+}
 
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return err
+func cmdTemplate(artifactType string, o templateOpts) error {
+	if o.Check {
+		return checkTemplates(o.Dir, o.JSON)
 	}
-
-	if *check {
-		return checkTemplates(*dir, *jsonOut)
-	}
-	if len(positional) != 1 {
+	if artifactType == "" {
 		return fmt.Errorf("template: expected exactly one artifact type\n\n%s", templateUsage)
 	}
 
-	body, err := renderTemplateFor(positional[0], *forApply)
+	body, err := renderTemplateFor(artifactType, o.ForApply)
 	if err != nil {
 		return fmt.Errorf("template: %w", err)
 	}
-	if *jsonOut {
-		res := templateResult{OK: true, Type: positional[0], ForApply: *forApply, Body: body}
-		if *out != "" {
-			if dir := filepath.Dir(*out); dir != "" && dir != "." {
+	if o.JSON {
+		res := templateResult{OK: true, Type: artifactType, ForApply: o.ForApply, Body: body}
+		if o.Out != "" {
+			if dir := filepath.Dir(o.Out); dir != "" && dir != "." {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					return fmt.Errorf("template: creating %s: %w", dir, err)
 				}
 			}
-			if err := os.WriteFile(*out, []byte(body), 0o644); err != nil {
+			if err := os.WriteFile(o.Out, []byte(body), 0o644); err != nil {
 				return fmt.Errorf("template: %w", err)
 			}
-			res.Path, res.Wrote = relPath(*out), true
+			res.Path, res.Wrote = relPath(o.Out), true
 		}
 		return writeJSON(res)
 	}
-	if *out == "" {
+	if o.Out == "" {
 		fmt.Print(body)
 		return nil
 	}
@@ -88,15 +81,15 @@ func cmdTemplate(args []string) error {
 	// always targets a directory that does not exist yet; failing with a bare
 	// ENOENT made the tool look broken at the exact moment an author was
 	// starting work.
-	if dir := filepath.Dir(*out); dir != "" && dir != "." {
+	if dir := filepath.Dir(o.Out); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("template: creating %s: %w", dir, err)
 		}
 	}
-	if err := os.WriteFile(*out, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(o.Out, []byte(body), 0o644); err != nil {
 		return fmt.Errorf("template: %w", err)
 	}
-	fmt.Printf("wrote %s\n", *out)
+	fmt.Printf("wrote %s\n", o.Out)
 	return nil
 }
 

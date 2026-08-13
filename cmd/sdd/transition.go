@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -37,41 +36,21 @@ Each verb refuses unless the gate its schema declares is met, evaluated by the
 same rules sdd validate runs. Pass --dry-run to see the verdict without
 writing.`
 
-func cmdTransition(kind string, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("%s: expected a transition verb\n\n%s", kind, transitionUsage)
-	}
-	verb := args[0]
-	// `approve` and `activate` move a plan through the lifecycle before work
-	// starts. They are separate verbs rather than flags because each gates on
-	// something different, and because a plan that jumps straight to
-	// `complete` leaves no record that it was ever reviewed or started.
-	if verb == "approve" || verb == "activate" {
-		if kind != "plan" {
-			return fmt.Errorf("%s: `%s` applies to a plan, not a %s", kind, verb, kind)
-		}
-		return planLifecycle(verb, args[1:])
-	}
-	if verb != "complete" {
-		return fmt.Errorf("%s: unknown verb %q\n\n%s", kind, verb, transitionUsage)
-	}
-	fs := flag.NewFlagSet(kind+" complete", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	id := fs.String("id", "", "task id (task complete only)")
-	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
-	positional, err := parseFlags(fs, args[1:])
-	if err != nil {
-		return err
-	}
-	if len(positional) != 1 {
-		return fmt.Errorf("%s complete: expected exactly one artifact path\n\n%s", kind, transitionUsage)
-	}
-	if kind == "task" && *id == "" {
+// completeOpts is what a `<kind> complete` transition needs. `approve` and
+// `activate` are separate verbs rather than flags because each gates on
+// something different, and because a plan that jumps straight to `complete`
+// leaves no record that it was ever reviewed or started.
+type completeOpts struct {
+	ID     string
+	DryRun bool
+	JSON   bool
+}
+
+func cmdComplete(kind, path string, o completeOpts) error {
+	if kind == "task" && o.ID == "" {
 		return fmt.Errorf("task complete: --id is required")
 	}
 
-	path := positional[0]
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
@@ -81,7 +60,7 @@ func cmdTransition(kind string, args []string) error {
 	}
 
 	today := time.Now().Format("2006-01-02")
-	updated, err := applyTransition(art.Source, kind, *id, today)
+	updated, err := applyTransition(art.Source, kind, o.ID, today)
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
 	}
@@ -108,13 +87,13 @@ func cmdTransition(kind string, args []string) error {
 	blocking, pending := splitCommitPending(blocking)
 
 	res := transitionResult{
-		Path: relPath(path), Kind: kind, Verb: "complete", ID: *id,
-		To: "complete", DryRun: *dryRun,
+		Path: relPath(path), Kind: kind, Verb: "complete", ID: o.ID,
+		To: "complete", DryRun: o.DryRun,
 		Blocking: toGateFindings(blocking), Pending: toGateFindings(pending),
 	}
 
 	if len(blocking) > 0 {
-		if *jsonOut {
+		if o.JSON {
 			return emitTransitionJSON(res)
 		}
 		var b strings.Builder
@@ -127,21 +106,21 @@ func cmdTransition(kind string, args []string) error {
 	}
 	res.OK = true
 
-	if *dryRun {
-		if *jsonOut {
+	if o.DryRun {
+		if o.JSON {
 			return emitTransitionJSON(res)
 		}
-		fmt.Printf("%s complete: gate met; would mark %s complete\n", kind, describeTarget(kind, *id, path))
+		fmt.Printf("%s complete: gate met; would mark %s complete\n", kind, describeTarget(kind, o.ID, path))
 		return nil
 	}
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
 	}
 	res.Wrote = true
-	if *jsonOut {
+	if o.JSON {
 		return emitTransitionJSON(res)
 	}
-	fmt.Printf("marked %s complete in %s\n", describeTarget(kind, *id, path), path)
+	fmt.Printf("marked %s complete in %s\n", describeTarget(kind, o.ID, path), path)
 	if len(pending) > 0 {
 		fmt.Printf("  next: commit this change; %d evidence check(s) verify the "+
 			"committed copy at HEAD and stay unmet until then\n", len(pending))
@@ -275,20 +254,7 @@ var _ = artifact.Parse
 // approving a plan requires it to validate (an invalid plan has not been
 // reviewed, whatever a human says), and activating requires it to have been
 // approved first. Neither invents a gate the schema does not declare.
-func planLifecycle(verb string, args []string) error {
-	fs := flag.NewFlagSet("plan "+verb, flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
-	jsonOut := fs.Bool("json", false, "emit the result as JSON")
-	positional, err := parseFlags(fs, args)
-	if err != nil {
-		return err
-	}
-	if len(positional) != 1 {
-		return fmt.Errorf("plan %s: expected exactly one plan path", verb)
-	}
-	path := positional[0]
-
+func planLifecycle(verb, path string, dryRun, jsonOut bool) error {
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("plan %s: %w", verb, err)
@@ -306,11 +272,11 @@ func planLifecycle(verb string, args []string) error {
 	}
 	res := transitionResult{
 		Path: relPath(path), Kind: "plan", Verb: verb,
-		From: current, To: want, DryRun: *dryRun,
+		From: current, To: want, DryRun: dryRun,
 	}
 	if current == want {
 		res.OK, res.Already = true, true
-		if *jsonOut {
+		if jsonOut {
 			return emitTransitionJSON(res)
 		}
 		fmt.Printf("plan %s: already %s\n", verb, want)
@@ -339,7 +305,7 @@ func planLifecycle(verb string, args []string) error {
 		blocking, pending = splitCommitPending(blocking)
 		res.Blocking, res.Pending = toGateFindings(blocking), toGateFindings(pending)
 		if len(blocking) > 0 {
-			if *jsonOut {
+			if jsonOut {
 				return emitTransitionJSON(res)
 			}
 			var b strings.Builder
@@ -352,8 +318,8 @@ func planLifecycle(verb string, args []string) error {
 	}
 	res.OK = true
 
-	if *dryRun {
-		if *jsonOut {
+	if dryRun {
+		if jsonOut {
 			return emitTransitionJSON(res)
 		}
 		fmt.Printf("plan %s: would move %s from %s to %s\n", verb, path, current, want)
@@ -363,7 +329,7 @@ func planLifecycle(verb string, args []string) error {
 		return fmt.Errorf("plan %s: %w", verb, err)
 	}
 	res.Wrote = true
-	if *jsonOut {
+	if jsonOut {
 		return emitTransitionJSON(res)
 	}
 	fmt.Printf("plan %s: %s is now %s\n", verb, path, want)

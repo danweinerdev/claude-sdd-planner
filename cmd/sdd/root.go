@@ -92,14 +92,14 @@ func schemaCmd() *cobra.Command {
 			Use:   "list",
 			Short: "List every artifact type and its section counts",
 			Args:  cobra.NoArgs,
-			RunE:  func(_ *cobra.Command, _ []string) error { return cmdSchema([]string{"list"}) },
+			RunE:  func(_ *cobra.Command, _ []string) error { return cmdSchema("list", "") },
 		},
 		&cobra.Command{
 			Use:   "show <type>",
 			Short: "Show one type's frontmatter fields and required sections",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
-				return cmdSchema([]string{"show", args[0]})
+				return cmdSchema("show", args[0])
 			},
 		},
 	)
@@ -107,8 +107,7 @@ func schemaCmd() *cobra.Command {
 }
 
 func showCmd() *cobra.Command {
-	var jsonOut bool
-	var typ string
+	var o showOpts
 	c := &cobra.Command{
 		Use:   "show <artifact-path>",
 		Short: "Print an artifact's frontmatter, sections, and content digest",
@@ -116,34 +115,36 @@ func showCmd() *cobra.Command {
 content digest to pass back via --expect on a later write.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdShow(reassemble(args, flagPair("--json", jsonOut), flagVal("--type", typ)))
+			return cmdShow(args[0], o)
 		},
 	}
-	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
-	c.Flags().StringVar(&typ, "type", "spec", "artifact type to assume when frontmatter omits it")
+	c.Flags().BoolVar(&o.JSON, "json", false, "emit JSON")
+	c.Flags().StringVar(&o.Type, "type", "spec", "artifact type to assume when frontmatter omits it")
 	return c
 }
 
 func listCmd() *cobra.Command {
-	var jsonOut bool
-	var root string
+	var o listOpts
 	c := &cobra.Command{
 		Use:       "list [spec|design|plan|research]",
 		Short:     "List artifacts under the resolved planning root",
 		Args:      cobra.MaximumNArgs(1),
 		ValidArgs: []string{"spec", "design", "plan", "research"},
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdList(reassemble(args, flagPair("--json", jsonOut), flagVal("--root", root)))
+			artifactType := ""
+			if len(args) == 1 {
+				artifactType = args[0]
+			}
+			return cmdList(artifactType, o)
 		},
 	}
-	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
-	c.Flags().StringVar(&root, "root", "", "planning root (default: resolved from planning-config.json)")
+	c.Flags().BoolVar(&o.JSON, "json", false, "emit JSON")
+	c.Flags().StringVar(&o.Root, "root", "", "planning root (default: resolved from planning-config.json)")
 	return c
 }
 
 func applyCmd() *cobra.Command {
-	var dryRun, diff, create, jsonOut, supersede bool
-	var retire, expect, typ string
+	var o applyOpts
 	c := &cobra.Command{
 		Use:   "apply <artifact-path>",
 		Short: "Compile a Markdown proposal from stdin into an artifact",
@@ -161,29 +162,23 @@ stable. Without it, apply treats the payload as an edit, so a full rewrite
 reads as every identifier being deleted at once.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdApply(reassemble(args,
-				flagPair("--dry-run", dryRun), flagPair("--diff", diff),
-				flagPair("--create", create), flagPair("--json", jsonOut),
-				flagPair("--supersede", supersede),
-				flagVal("--retire", retire), flagVal("--expect", expect),
-				flagVal("--type", typ)))
+			return cmdApply(args[0], o)
 		},
 	}
 	f := c.Flags()
-	f.BoolVar(&dryRun, "dry-run", false, "print what would be written and write nothing")
-	f.BoolVar(&diff, "diff", false, "show a line diff against the artifact on disk")
-	f.BoolVar(&create, "create", false, "treat the target as new even if it exists")
-	f.BoolVar(&supersede, "supersede", false, "replace the artifact's content, carrying its identifiers forward")
-	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
-	f.StringVar(&retire, "retire", "", "comma-separated identifiers being deliberately retired")
-	f.StringVar(&expect, "expect", "", "refuse unless the artifact's current digest equals this value")
-	f.StringVar(&typ, "type", "spec", "artifact type schema to compile against")
+	f.BoolVar(&o.DryRun, "dry-run", false, "print what would be written and write nothing")
+	f.BoolVar(&o.Diff, "diff", false, "show a line diff against the artifact on disk")
+	f.BoolVar(&o.Create, "create", false, "treat the target as new even if it exists")
+	f.BoolVar(&o.Supersede, "supersede", false, "replace the artifact's content, carrying its identifiers forward")
+	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
+	f.StringVar(&o.Retire, "retire", "", "comma-separated identifiers being deliberately retired")
+	f.StringVar(&o.Expect, "expect", "", "refuse unless the artifact's current digest equals this value")
+	f.StringVar(&o.Type, "type", "spec", "artifact type schema to compile against")
 	return c
 }
 
 func sectionCmd() *cobra.Command {
-	var dryRun, diff, jsonOut bool
-	var heading, expect, typ string
+	var o sectionSetOpts
 	set := &cobra.Command{
 		Use:   "set <artifact-path>",
 		Short: "Replace one section's body, read from stdin",
@@ -191,19 +186,16 @@ func sectionCmd() *cobra.Command {
 frontmatter (aside from 'updated') byte-identical.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdSection(reassemble(append([]string{"set"}, args...),
-				flagVal("--heading", heading), flagPair("--dry-run", dryRun),
-				flagPair("--diff", diff), flagPair("--json", jsonOut),
-				flagVal("--expect", expect), flagVal("--type", typ)))
+			return cmdSectionSet(args[0], o)
 		},
 	}
 	f := set.Flags()
-	f.StringVar(&heading, "heading", "", `declared section heading to replace, e.g. "## Overview"`)
-	f.BoolVar(&dryRun, "dry-run", false, "print what would be written and write nothing")
-	f.BoolVar(&diff, "diff", false, "show a line diff against the artifact on disk")
-	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
-	f.StringVar(&expect, "expect", "", "refuse unless the artifact's current digest equals this value")
-	f.StringVar(&typ, "type", "spec", "artifact type schema to check against")
+	f.StringVar(&o.Heading, "heading", "", `declared section heading to replace, e.g. "## Overview"`)
+	f.BoolVar(&o.DryRun, "dry-run", false, "print what would be written and write nothing")
+	f.BoolVar(&o.Diff, "diff", false, "show a line diff against the artifact on disk")
+	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
+	f.StringVar(&o.Expect, "expect", "", "refuse unless the artifact's current digest equals this value")
+	f.StringVar(&o.Type, "type", "spec", "artifact type schema to check against")
 	_ = set.MarkFlagRequired("heading")
 
 	c := &cobra.Command{Use: "section", Short: "Section-scoped artifact edits"}
@@ -212,8 +204,7 @@ frontmatter (aside from 'updated') byte-identical.`,
 }
 
 func templateCmd() *cobra.Command {
-	var check, forApply, tmplJSON bool
-	var out, dir string
+	var o templateOpts
 	c := &cobra.Command{
 		Use:   "template [type]",
 		Short: "Print an artifact template, or check the committed set for drift",
@@ -225,47 +216,51 @@ fill in by hand.
 sets them itself and refuses a payload carrying a conflicting value.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdTemplate(reassemble(args, flagVal("--out", out),
-				flagPair("--check", check), flagVal("--dir", dir),
-				flagPair("--for-apply", forApply), flagPair("--json", tmplJSON)))
+			artifactType := ""
+			if len(args) == 1 {
+				artifactType = args[0]
+			}
+			return cmdTemplate(artifactType, o)
 		},
 	}
-	c.Flags().StringVar(&out, "out", "", "write to this path instead of stdout")
-	c.Flags().BoolVar(&check, "check", false, "regenerate every committed template and diff")
-	c.Flags().StringVar(&dir, "dir", "shared/templates", "template directory for --check")
-	c.Flags().BoolVar(&forApply, "for-apply", false, "omit tool-owned fields, so the output is a valid apply payload")
-	c.Flags().BoolVar(&tmplJSON, "json", false, "emit the result as JSON")
+	c.Flags().StringVar(&o.Out, "out", "", "write to this path instead of stdout")
+	c.Flags().BoolVar(&o.Check, "check", false, "regenerate every committed template and diff")
+	c.Flags().StringVar(&o.Dir, "dir", "shared/templates", "template directory for --check")
+	c.Flags().BoolVar(&o.ForApply, "for-apply", false, "omit tool-owned fields, so the output is a valid apply payload")
+	c.Flags().BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	return c
 }
 
 func migrateCmd() *cobra.Command {
-	var dryRun, diff, jsonOut, allowFrozen bool
-	var typ string
+	var o migrateOpts
 	c := &cobra.Command{
 		Use:   "migrate <artifact-path>",
 		Short: "Upgrade an artifact that predates the current schema",
 		Long: `Inserts missing required sections and author frontmatter from schema
 defaults, reporting every insertion. A separate verb on purpose: apply keeps
 refusing non-compliant structure.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdMigrate(reassemble(args, flagPair("--dry-run", dryRun),
-				flagPair("--diff", diff), flagPair("--json", jsonOut),
-				flagPair("--allow-frozen", allowFrozen), flagVal("--type", typ)))
+			target := ""
+			if len(args) == 1 {
+				target = args[0]
+			}
+			return cmdMigrate(target, o)
 		},
 	}
 	f := c.Flags()
-	f.BoolVar(&dryRun, "dry-run", false, "report what would change and write nothing")
-	f.BoolVar(&diff, "diff", false, "show a line diff")
-	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
-	f.BoolVar(&allowFrozen, "allow-frozen", false, "permit migrating a frozen artifact")
-	f.StringVar(&typ, "type", "", "artifact type to assume when frontmatter omits it")
+	f.BoolVar(&o.DryRun, "dry-run", false, "report what would change and write nothing")
+	f.BoolVar(&o.Diff, "diff", false, "show a line diff")
+	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
+	f.BoolVar(&o.AllowFrozen, "allow-frozen", false, "also migrate complete/frozen artifacts (FR-46 exemption)")
+	f.BoolVar(&o.NoStubs, "no-stub-sections", false, "do not insert placeholder bodies for missing required sections")
+	f.StringVar(&o.Type, "type", "", "artifact type to assume when frontmatter omits it")
+	f.BoolVar(&o.All, "all", false, "migrate every artifact under the planning root and print a summary worklist")
 	return c
 }
 
 func validateCmd() *cobra.Command {
-	var jsonOut, noWaivers bool
-	var root, scope, format string
+	var o validateOpts
 	c := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate every artifact under the planning root (read-only)",
@@ -277,17 +272,15 @@ Exit 0 means the checks passed; exit 1 means the diagnostics are authoritative
 findings; exit 2 means validation could not run.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdValidate(reassemble(nil, flagVal("--root", root),
-				flagVal("--scope", scope), flagVal("--format", format),
-				flagPair("--json", jsonOut), flagPair("--no-waivers", noWaivers)))
+			return cmdValidate(o)
 		},
 	}
 	f := c.Flags()
-	f.StringVar(&root, "root", "", "planning root (default: resolved from planning-config.json)")
-	f.StringVar(&scope, "scope", "", "limit findings to an artifact/path and paths it directly relates to")
-	f.StringVar(&format, "format", "text", "output format: text|json")
-	f.BoolVar(&jsonOut, "json", false, "shorthand for --format json")
-	f.BoolVar(&noWaivers, "no-waivers", false, "ignore accepted exceptions and report every finding as an error")
+	f.StringVar(&o.Root, "root", "", "planning root (default: resolved from planning-config.json)")
+	f.StringVar(&o.Scope, "scope", "", "limit findings to an artifact/path and paths it directly relates to")
+	f.StringVar(&o.Format, "format", "text", "output format: text|json")
+	f.BoolVar(&o.JSON, "json", false, "shorthand for --format json")
+	f.BoolVar(&o.NoWaivers, "no-waivers", false, "ignore accepted exceptions and report every finding as an error")
 	return c
 }
 
@@ -298,7 +291,11 @@ func nextCmd() *cobra.Command {
 		Short: "Report current state and the literal next command to run",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdNext(reassemble(args, flagPair("--json", jsonOut)))
+			planPath := ""
+			if len(args) == 1 {
+				planPath = args[0]
+			}
+			return cmdNext(planPath, jsonOut)
 		},
 	}
 	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
@@ -306,10 +303,7 @@ func nextCmd() *cobra.Command {
 }
 
 func evidenceCmd() *cobra.Command {
-	var phase, plan, dryRun, jsonOut bool
-	var task, verifiedBy, workingDir, result string
-	var tool, toolContext, toolResult string
-	var focused, finalReview, date, revision string
+	var o evidenceOpts
 	add := &cobra.Command{
 		Use:   "add <artifact-path>",
 		Short: "Record retrospective completion evidence",
@@ -318,32 +312,25 @@ the observable result — for a task, a phase, or a plan. Evidence is the gate
 every 'complete' transition checks.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdEvidence(reassemble(append([]string{"add"}, args...),
-				flagVal("--task", task), flagPair("--phase", phase), flagPair("--plan", plan),
-				flagVal("--verified-by", verifiedBy), flagVal("--working-dir", workingDir),
-				flagVal("--result", result), flagVal("--tool", tool),
-				flagVal("--tool-context", toolContext), flagVal("--tool-result", toolResult),
-				flagVal("--focused-review", focused), flagVal("--final-review", finalReview),
-				flagVal("--date", date), flagVal("--revision", revision),
-				flagPair("--dry-run", dryRun), flagPair("--json", jsonOut)))
+			return cmdEvidenceAdd(args[0], o)
 		},
 	}
 	f := add.Flags()
-	f.StringVar(&task, "task", "", "record evidence for this task id")
-	f.BoolVar(&phase, "phase", false, "record the phase's own completion evidence")
-	f.BoolVar(&plan, "plan", false, "record the plan's own completion evidence")
-	f.StringVar(&verifiedBy, "verified-by", "", "exact command that was run")
-	f.StringVar(&workingDir, "working-dir", ".", "working directory for the command, repo-relative")
-	f.StringVar(&result, "result", "", "observable evidence the command produced")
-	f.StringVar(&tool, "tool", "", "optional tool/inspection row")
-	f.StringVar(&toolContext, "tool-context", "", "context for the tool row")
-	f.StringVar(&toolResult, "tool-result", "", "observable evidence for the tool row")
-	f.StringVar(&focused, "focused-review", "", "exact focused-review command (tasks only)")
-	f.StringVar(&finalReview, "final-review", "", "`<review path>; frozen: <range>` for the phase's final aligned review")
-	f.StringVar(&date, "date", "", "verification date (default: today)")
-	f.StringVar(&revision, "revision", "", "the task's own implementation commit (default: HEAD)")
-	f.BoolVar(&dryRun, "dry-run", false, "print the section without writing")
-	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
+	f.StringVar(&o.Task, "task", "", "record evidence for this task id")
+	f.BoolVar(&o.Phase, "phase", false, "record the phase's own completion evidence")
+	f.BoolVar(&o.Plan, "plan", false, "record the plan's own completion evidence")
+	f.StringVar(&o.VerifiedBy, "verified-by", "", "exact command that was run")
+	f.StringVar(&o.WorkingDir, "working-dir", ".", "working directory for the command, repo-relative")
+	f.StringVar(&o.Result, "result", "", "observable evidence the command produced")
+	f.StringVar(&o.Tool, "tool", "", "optional tool/inspection row")
+	f.StringVar(&o.ToolContext, "tool-context", "", "context for the tool row")
+	f.StringVar(&o.ToolResult, "tool-result", "", "observable evidence for the tool row")
+	f.StringVar(&o.Focused, "focused-review", "", "exact focused-review command (tasks only)")
+	f.StringVar(&o.FinalReview, "final-review", "", "`<review path>; frozen: <range>` for the phase's final aligned review")
+	f.StringVar(&o.Date, "date", "", "verification date (default: today)")
+	f.StringVar(&o.Revision, "revision", "", "the task's own implementation commit (default: HEAD)")
+	f.BoolVar(&o.DryRun, "dry-run", false, "print the section without writing")
+	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 
 	c := &cobra.Command{Use: "evidence", Short: "Completion-evidence records"}
 	c.AddCommand(add)
@@ -351,25 +338,21 @@ every 'complete' transition checks.`,
 }
 
 func reviewCmd() *cobra.Command {
-	var force, jsonOut bool
-	var frozen, out, mode string
+	var o reviewScaffoldOpts
 	scaffold := &cobra.Command{
 		Use:   "scaffold <phase-path>",
 		Short: "Create the persisted four-lane review artifact for a phase gate",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdReview(reassemble(append([]string{"scaffold"}, args...),
-				flagVal("--frozen", frozen), flagVal("--out", out),
-				flagVal("--mode", mode), flagPair("--force", force),
-				flagPair("--json", jsonOut)))
+			return cmdReviewScaffold(args[0], o)
 		},
 	}
 	f := scaffold.Flags()
-	f.StringVar(&frozen, "frozen", "", "the reviewed identity: <full40>..<full40>")
-	f.StringVar(&out, "out", "", "output path (default: Retro/<phase>-review.md)")
-	f.StringVar(&mode, "mode", "independent", "independent | mixed | single-agent")
-	f.BoolVar(&force, "force", false, "overwrite an existing review artifact")
-	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
+	f.StringVar(&o.Frozen, "frozen", "", "the reviewed identity: <full40>..<full40>")
+	f.StringVar(&o.Out, "out", "", "output path (default: Retro/<phase>-review.md)")
+	f.StringVar(&o.Mode, "mode", "independent", "independent | mixed | single-agent")
+	f.BoolVar(&o.Force, "force", false, "overwrite an existing review artifact")
+	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	_ = scaffold.MarkFlagRequired("frozen")
 
 	c := &cobra.Command{Use: "review", Short: "Persisted review artifacts"}
@@ -391,7 +374,7 @@ an accepted entry unless --supersedes names it.`,
 	list := &cobra.Command{
 		Use: "list", Short: "List ledger entries", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdDecide(reassemble([]string{"list"}, flagVal("--status", status), flagPair("--json", listJSON)))
+			return cmdDecideList(status, listJSON)
 		},
 	}
 	list.Flags().StringVar(&status, "status", "", "filter: accepted|proposed|rejected|superseded")
@@ -401,54 +384,48 @@ an accepted entry unless --supersedes names it.`,
 	search := &cobra.Command{
 		Use: "search <term>", Short: "Search ledger statements", Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdDecide(reassemble([]string{"search", args[0]}, flagPair("--json", searchJSON)))
+			return cmdDecideSearch(args[0], searchJSON)
 		},
 	}
 	search.Flags().BoolVar(&searchJSON, "json", false, "emit JSON")
 
-	var accept, addDry, addJSON bool
-	var statement, rationale, rejected, scope, tags, supersedes, kind, reversibility string
+	var a decideAddOpts
 	add := &cobra.Command{
 		Use: "add", Short: "Append a decision (collision-checked)", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdDecide(reassemble([]string{"add"},
-				flagVal("--statement", statement), flagVal("--rationale", rationale),
-				flagVal("--rejected", rejected), flagVal("--scope", scope),
-				flagVal("--tags", tags), flagVal("--supersedes", supersedes),
-				flagVal("--kind", kind), flagVal("--reversibility", reversibility),
-				flagPair("--accept", accept), flagPair("--dry-run", addDry),
-				flagPair("--json", addJSON)))
+			return cmdDecideAdd(a)
 		},
 	}
 	af := add.Flags()
-	af.StringVar(&statement, "statement", "", "the decided statement (required)")
-	af.StringVar(&rationale, "rationale", "", "why this over the alternatives")
-	af.StringVar(&rejected, "rejected", "", "comma-separated anti-choices")
-	af.StringVar(&scope, "scope", "", "comma-separated governed artifacts")
-	af.StringVar(&tags, "tags", "", "comma-separated tags")
-	af.StringVar(&supersedes, "supersedes", "", "D-NNNN this entry supersedes")
-	af.StringVar(&kind, "kind", "decision", "decision|assumption|definition|answered-question")
-	af.StringVar(&reversibility, "reversibility", "two-way", "one-way|two-way")
-	af.BoolVar(&accept, "accept", false, "record as accepted rather than proposed")
-	af.BoolVar(&addDry, "dry-run", false, "print what would be written and write nothing")
-	af.BoolVar(&addJSON, "json", false, "emit JSON")
+	af.StringVar(&a.Statement, "statement", "", "the decided statement (required)")
+	af.StringVar(&a.Rationale, "rationale", "", "why this over the alternatives")
+	af.StringVar(&a.Rejected, "rejected", "", "comma-separated anti-choices")
+	af.StringVar(&a.Scope, "scope", "", "comma-separated governed artifacts")
+	af.StringVar(&a.Tags, "tags", "", "comma-separated tags")
+	af.StringVar(&a.Supersedes, "supersedes", "", "D-NNNN this entry supersedes")
+	af.StringVar(&a.Kind, "kind", "decision", "decision|assumption|definition|answered-question")
+	af.StringVar(&a.Reversibility, "reversibility", "two-way", "one-way|two-way")
+	af.BoolVar(&a.Accept, "accept", false, "record as accepted rather than proposed")
+	af.BoolVar(&a.DryRun, "dry-run", false, "print what would be written and write nothing")
+	af.BoolVar(&a.JSON, "json", false, "emit JSON")
 	_ = add.MarkFlagRequired("statement")
 
-	var valJSON, noHistory bool
-	var valFormat string
+	var v decideValidateOpts
 	validate := &cobra.Command{
 		Use:   "validate [ledger-path]",
 		Short: "Audit the ledger's format, ids, supersession, and immutability",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdDecideValidate(reassemble(args,
-				flagVal("--format", valFormat),
-				flagPair("--json", valJSON), flagPair("--no-history", noHistory)))
+			ledger := ""
+			if len(args) == 1 {
+				ledger = args[0]
+			}
+			return cmdDecideValidate(ledger, v)
 		},
 	}
-	validate.Flags().StringVar(&valFormat, "format", "text", "output format: text|json")
-	validate.Flags().BoolVar(&valJSON, "json", false, "shorthand for --format json")
-	validate.Flags().BoolVar(&noHistory, "no-history", false, "skip Git history checks; only for an explicitly unversioned audit")
+	validate.Flags().StringVar(&v.Format, "format", "text", "output format: text|json")
+	validate.Flags().BoolVar(&v.JSON, "json", false, "shorthand for --format json")
+	validate.Flags().BoolVar(&v.NoHistory, "no-history", false, "skip Git history checks; only for an explicitly unversioned audit")
 
 	c.AddCommand(list, search, add, validate)
 	return c
@@ -469,9 +446,7 @@ func transitionCmd(level string) *cobra.Command {
 		Short: fmt.Sprintf("Mark a %s complete (evidence-gated)", level),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return cmdTransition(level, reassemble(append([]string{"complete"}, args...),
-				flagVal("--id", id), flagPair("--dry-run", dryRun),
-				flagPair("--json", jsonOut)))
+			return cmdComplete(level, args[0], completeOpts{ID: id, DryRun: dryRun, JSON: jsonOut})
 		},
 	}
 	if level == "task" {
@@ -487,8 +462,7 @@ func transitionCmd(level string) *cobra.Command {
 		approve := &cobra.Command{
 			Use: "approve <plan-path>", Short: "Mark a plan approved", Args: cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
-				return cmdTransition(level, reassemble(append([]string{"approve"}, args...),
-					flagPair("--dry-run", apDry), flagPair("--json", apJSON)))
+				return planLifecycle("approve", args[0], apDry, apJSON)
 			},
 		}
 		approve.Flags().BoolVar(&apDry, "dry-run", false, "report the outcome without writing")
@@ -505,7 +479,7 @@ func doctorCmd() *cobra.Command {
 		Short: "Report binary identity, planning root, and schema set",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdDoctor(reassemble(nil, flagPair("--json", jsonOut)))
+			return cmdDoctor(jsonOut)
 		},
 	}
 	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
@@ -513,20 +487,18 @@ func doctorCmd() *cobra.Command {
 }
 
 func provisionCmd() *cobra.Command {
-	var jsonOut, checkOnly bool
-	var pluginRoot string
+	var o provisionOpts
 	c := &cobra.Command{
 		Use:   "provision",
 		Short: "Resolve an sdd binary and refresh the plugin-root copy",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdProvision(reassemble(nil, flagVal("--plugin-root", pluginRoot),
-				flagPair("--json", jsonOut), flagPair("--check", checkOnly)))
+			return cmdProvision(o)
 		},
 	}
-	c.Flags().StringVar(&pluginRoot, "plugin-root", "", "plugin root (default: $CLAUDE_PLUGIN_ROOT)")
-	c.Flags().BoolVar(&jsonOut, "json", false, "emit the outcome as JSON")
-	c.Flags().BoolVar(&checkOnly, "check", false, "resolve and report without writing the copy")
+	c.Flags().StringVar(&o.PluginRoot, "plugin-root", "", "plugin root (default: $CLAUDE_PLUGIN_ROOT)")
+	c.Flags().BoolVar(&o.JSON, "json", false, "emit the outcome as JSON")
+	c.Flags().BoolVar(&o.Check, "check", false, "resolve and report without writing the copy")
 	return c
 }
 
@@ -549,8 +521,7 @@ fails when either is stale, and 'status' reports each file's provenance.`,
 		sc := &cobra.Command{
 			Use: s.use, Short: s.short, Args: cobra.NoArgs,
 			RunE: func(_ *cobra.Command, _ []string) error {
-				return cmdPlugin(reassemble([]string{s.use}, flagVal("--root", root),
-					flagPair("--json", jsonOut)))
+				return cmdPlugin(s.use, root, jsonOut)
 			},
 		}
 		sc.Flags().StringVar(&root, "root", ".", "repository root")
@@ -575,39 +546,10 @@ call, which is worse than a missed denial.`,
 		e := ev
 		c.AddCommand(&cobra.Command{
 			Use: e.use, Short: e.short, Args: cobra.NoArgs,
-			RunE: func(_ *cobra.Command, _ []string) error { return cmdHook([]string{e.use}) },
+			RunE: func(_ *cobra.Command, _ []string) error { return cmdHook(e.use) },
 		})
 	}
 	return c
-}
-
-// reassemble rebuilds the argv slice the cmdX functions still parse. Cobra owns
-// the user-facing surface — parsing, validation, help, suggestions — and this
-// adapter feeds the existing handlers without rewriting their bodies. Only
-// flags the user actually set are emitted, so each handler's own defaults
-// continue to apply.
-func reassemble(positional []string, flags ...[]string) []string {
-	out := append([]string{}, positional...)
-	for _, f := range flags {
-		out = append(out, f...)
-	}
-	return out
-}
-
-// flagVal emits `--name value` when value is non-empty.
-func flagVal(name, value string) []string {
-	if value == "" {
-		return nil
-	}
-	return []string{name, value}
-}
-
-// flagPair emits `--name` when set.
-func flagPair(name string, set bool) []string {
-	if !set {
-		return nil
-	}
-	return []string{name}
 }
 
 // exitCode maps an error to the FR-03 code. Cobra returns 1 for everything,

@@ -116,7 +116,7 @@ func TestValidate_MissingRequiredHeading(t *testing.T) {
 	writeArtifact(t, root, "Specs/Thing", "README.md", broken)
 
 	out, err := captureStdout(t, func() error {
-		return cmdValidate([]string{"--root", root, "--format", "json"})
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
 	})
 	if _, ok := err.(*refusedError); !ok {
 		t.Fatalf("cmdValidate: %v", err)
@@ -137,7 +137,7 @@ func TestValidate_DanglingCitation(t *testing.T) {
 	writeArtifact(t, root, "Research", "note.md", content)
 
 	out, err := captureStdout(t, func() error {
-		return cmdValidate([]string{"--root", root, "--format", "json"})
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
 	})
 	if _, ok := err.(*refusedError); !ok {
 		t.Fatalf("cmdValidate: %v", err)
@@ -185,7 +185,7 @@ func TestValidate_DeterministicSort(t *testing.T) {
 	writeArtifact(t, root, "Specs/Alpha", "README.md", alpha)
 
 	out, err := captureStdout(t, func() error {
-		return cmdValidate([]string{"--root", root, "--format", "json"})
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
 	})
 	if _, ok := err.(*refusedError); !ok {
 		t.Fatalf("cmdValidate: %v", err)
@@ -222,7 +222,7 @@ func TestValidate_ExitCodeMapping(t *testing.T) {
 		writeConfig(t, root)
 		writeArtifact(t, root, "Specs/Thing", "README.md", validSpec)
 		_, err := captureStdout(t, func() error {
-			return cmdValidate([]string{"--root", root, "--format", "json"})
+			return cmdValidate(validateOpts{Root: root, Format: "json"})
 		})
 		if err != nil {
 			t.Errorf("expected nil error for a clean root, got %v", err)
@@ -235,7 +235,7 @@ func TestValidate_ExitCodeMapping(t *testing.T) {
 		broken := replaceOnce(validSpec, "## Non-Goals\n\nText.", "")
 		writeArtifact(t, root, "Specs/Thing", "README.md", broken)
 		_, err := captureStdout(t, func() error {
-			return cmdValidate([]string{"--root", root, "--format", "json"})
+			return cmdValidate(validateOpts{Root: root, Format: "json"})
 		})
 		if _, ok := err.(*refusedError); !ok {
 			t.Errorf("expected *refusedError, got %v (%T)", err, err)
@@ -244,7 +244,7 @@ func TestValidate_ExitCodeMapping(t *testing.T) {
 
 	t.Run("could not run", func(t *testing.T) {
 		_, err := captureStdout(t, func() error {
-			return cmdValidate([]string{"--root", filepath.Join(t.TempDir(), "does-not-exist")})
+			return cmdValidate(validateOpts{Root: filepath.Join(t.TempDir(), "does-not-exist")})
 		})
 		if err == nil {
 			t.Fatal("expected an error for a nonexistent root")
@@ -264,7 +264,7 @@ func TestValidate_TextFormat(t *testing.T) {
 	writeArtifact(t, root, "Specs/Thing", "README.md", broken)
 
 	out, err := captureStdout(t, func() error {
-		return cmdValidate([]string{"--root", root})
+		return cmdValidate(validateOpts{Root: root})
 	})
 	if _, ok := err.(*refusedError); !ok {
 		t.Fatalf("cmdValidate: %v", err)

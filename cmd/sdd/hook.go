@@ -27,17 +27,14 @@ type hookPayload struct {
 	CWD string `json:"cwd"`
 }
 
-func cmdHook(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("hook: expected `pretooluse` or `sessionstart`")
-	}
-	switch args[0] {
+func cmdHook(event string) error {
+	switch event {
 	case "pretooluse":
 		return hookPreToolUse()
 	case "sessionstart":
 		return hookSessionStart()
 	default:
-		return fmt.Errorf("hook: unknown event %q; expected `pretooluse` or `sessionstart`", args[0])
+		return fmt.Errorf("hook: unknown event %q; expected `pretooluse` or `sessionstart`", event)
 	}
 }
 
