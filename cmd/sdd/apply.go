@@ -27,6 +27,21 @@ type applyOpts struct {
 }
 
 func cmdApply(target string, o applyOpts) error {
+	// Argument validation runs before anything is read. Both of these checks
+	// used to sit after the stdin read, so `--supersede --create` and
+	// superseding a missing artifact both surfaced as "empty payload on
+	// stdin" when invoked without a payload — the wrong reason, and one that
+	// sends the caller looking at their pipe instead of their flags.
+	if o.Supersede && o.Create {
+		return fmt.Errorf("apply: --supersede and --create are mutually exclusive; " +
+			"--create starts a new artifact, --supersede rewrites an existing one")
+	}
+	if o.Supersede {
+		if existing, err := store.Read(target); err == nil && !existing.Exists {
+			return fmt.Errorf("apply --supersede: %s does not exist; "+
+				"there is nothing to supersede (use --create for a new artifact)", relPath(target))
+		}
+	}
 
 	s, err := schema.Load(o.Type)
 	if err != nil {
@@ -57,10 +72,6 @@ func cmdApply(target string, o applyOpts) error {
 		return &staleError{path: target, want: o.Expect, got: got}
 	}
 
-	if o.Supersede && o.Create {
-		return fmt.Errorf("apply: --supersede and --create are mutually exclusive; " +
-			"--create starts a new artifact, --supersede rewrites an existing one")
-	}
 	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}, Supersede: o.Supersede}
 	for _, id := range strings.Split(o.Retire, ",") {
 		if id = strings.TrimSpace(id); id != "" {
@@ -69,10 +80,6 @@ func cmdApply(target string, o applyOpts) error {
 	}
 	if art.Exists && !o.Create {
 		opts.Existing = artifact.Parse(art.Source)
-	}
-	if o.Supersede && opts.Existing == nil {
-		return fmt.Errorf("apply --supersede: %s does not exist; "+
-			"there is nothing to supersede (use --create for a new artifact)", relPath(target))
 	}
 
 	res := compile.Compile(s, string(payload), opts)

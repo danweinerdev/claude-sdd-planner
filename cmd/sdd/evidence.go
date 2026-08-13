@@ -155,7 +155,7 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 
 	if o.DryRun {
 		if o.JSON {
-			return emitEvidenceJSON(evidenceResult{
+			return writeJSON(evidenceResult{
 				Path: relPath(path), OK: true, DryRun: true,
 				Target: target, TaskID: o.Task, Heading: heading,
 				Revision: rev, Section: section,
@@ -174,7 +174,7 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 		return fmt.Errorf("evidence add: %w", err)
 	}
 	if o.JSON {
-		return emitEvidenceJSON(evidenceResult{
+		return writeJSON(evidenceResult{
 			Path: relPath(path), OK: true, Wrote: true,
 			Target: target, TaskID: o.Task, Heading: heading,
 			Revision: rev, Digest: store.Digest(updated), Section: section,
@@ -201,10 +201,6 @@ type evidenceResult struct {
 	Revision string `json:"revision,omitempty"`
 	Digest   string `json:"digest,omitempty"`
 	Section  string `json:"section"`
-}
-
-func emitEvidenceJSON(res evidenceResult) error {
-	return writeJSON(res)
 }
 
 type evidenceInput struct {

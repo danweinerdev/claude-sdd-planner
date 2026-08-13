@@ -101,21 +101,9 @@ func TestJSONFlagCoverage(t *testing.T) {
 		"sdd hook pretooluse":   "emits its own hook JSON protocol",
 		"sdd hook sessionstart": "emits its own hook JSON protocol",
 		"sdd plugin":            "group",
-		// Known FR-04 gaps, tracked for implementation. Each handler has no
-		// JSON rendering path yet; advertising a --json flag the handler
-		// ignores would be worse than an exemption that names the work.
-		"sdd template":        "no JSON path yet: template --check drift report",
-		"sdd plugin sync":     "no JSON path yet: provenance/stale report",
-		"sdd plugin check":    "no JSON path yet: provenance/stale report",
-		"sdd plugin status":   "no JSON path yet: provenance/stale report",
-		"sdd review scaffold": "no JSON path yet: writes an artifact, reports the path",
-		"sdd task complete":   "no JSON path yet: cmdTransition renders text only",
-		"sdd phase complete":  "no JSON path yet: cmdTransition renders text only",
-		"sdd plan complete":   "no JSON path yet: cmdTransition renders text only",
-		"sdd plan approve":    "no JSON path yet: cmdTransition renders text only",
-		"sdd task":            "group",
-		"sdd phase":           "group",
-		"sdd plan":            "group",
+		"sdd task":              "group",
+		"sdd phase":             "group",
+		"sdd plan":              "group",
 	}
 	walk(newRootCmd(), func(c *cobra.Command) {
 		path := c.CommandPath()

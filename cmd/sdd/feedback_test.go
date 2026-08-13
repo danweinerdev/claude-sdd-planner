@@ -496,3 +496,25 @@ func TestGoverningDecisionsRequiresPathSegments(t *testing.T) {
 		t.Errorf("the decision governing Specs/FooBar was dropped from its own scope:\n%s", outBar)
 	}
 }
+
+// TestApplyGuardClauses covers the two CLI-level refusals --supersede
+// introduced. They are one-line checks, but they encode a real distinction:
+// --create starts a new artifact and --supersede rewrites an existing one, so
+// conflating them is how an artifact's identifier history gets lost to a typo.
+// A future edit that reorders either check relative to store.Read would break
+// them silently.
+func TestApplyGuardClauses(t *testing.T) {
+	dir := t.TempDir()
+
+	err := cmdApply(filepath.Join(dir, "x.md"), applyOpts{Supersede: true, Create: true, Type: "spec"})
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("--supersede with --create should refuse as mutually exclusive, got: %v", err)
+	}
+
+	// Superseding something that does not exist must refuse rather than
+	// silently creating it: there is no identifier history to carry forward.
+	err = cmdApply(filepath.Join(dir, "absent.md"), applyOpts{Supersede: true, Type: "spec"})
+	if err == nil || !strings.Contains(err.Error(), "nothing to supersede") {
+		t.Errorf("--supersede on a missing artifact should refuse, got: %v", err)
+	}
+}
