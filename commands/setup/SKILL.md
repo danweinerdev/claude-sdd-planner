@@ -43,6 +43,19 @@ binary setup admitted even if a different version appears earlier on `PATH`
 later. The hooks still work without it — they fall back to `PATH` — so a
 missing copy degrades version pinning, not function.
 
+`sdd provision` also **generates `hooks/hooks.json`** for the platform it runs
+on. The plugin ships no `hooks.json`: every command that file lists runs on
+every platform, so shipping one would name an interpreter that does not exist
+somewhere and emit a hook error on every tool call. Until provisioning runs,
+the plugin simply has no hooks — a documented, supported state.
+
+**Tell the user the hooks need a session restart to take effect.** Claude Code
+documents its file watcher for *settings* hooks; whether a newly generated
+*plugin* `hooks.json` is picked up mid-session is not documented, and a user
+who sees no ledger context after setup would otherwise have no way to tell a
+broken install from one that just needs a reload. Report it as a next step,
+not a warning.
+
 Then verify through the plugin-root path specifically, not through `PATH`:
 
 ```

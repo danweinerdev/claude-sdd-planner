@@ -18,8 +18,9 @@ claude-sdd-planner/               # Repository root = canonical Claude plugin ro
 │   ├── decision-log/             #   ad-hoc decision capture outside lifecycle skills
 │   └── sdd-cli/                  #   how to drive the sdd binary — task→command map + write-path discipline
 ├── agents/                       # Subagent definitions — also the source for the portable role prompts
-├── hooks/
-│   └── hooks.json                # SessionStart + PreToolUse, both served by `sdd hook`
+├── hooks/                        # Wrappers that locate the binary; hooks.json is NOT shipped —
+│   ├── sdd-hook.sh               #   `sdd provision` generates it per-platform (see below)
+│   └── sdd-hook.ps1
 ├── shared/                       # Conventions + templates, shipped to every harness
 │   ├── frontmatter-schema.md     #   single source of truth for artifact metadata
 │   ├── completion-evidence.md    #   evidence-gated completion — what `complete` requires, per level

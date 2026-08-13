@@ -57,3 +57,8 @@ bin/
 # They carry no content — only lock state — and are recreated on demand, so a
 # stale one is harmless and none should ever be committed.
 *.sdd-lock
+
+# hooks.json is generated per-platform by `sdd provision` (run by /setup).
+# Shipping one would name an interpreter that does not exist on some
+# platforms, and every listed hook command runs on every platform.
+hooks/hooks.json
