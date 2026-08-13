@@ -180,7 +180,7 @@ func init() {
 		Code: "SDD112", Severity: Error, PyFunc: "_ledger",
 		What: "a decision entry omits a required field",
 		Check: func(a *Artifact, emit func(Diagnostic)) {
-			eachDecision(a, func(entry map[string]any, _ string) {
+			eachDecision(a, func(entry map[string]any, id string) {
 				for _, field := range requiredDecisionFields() {
 					// Python's test is `entry.get(field) in (None, "")`, so a
 					// present-but-empty value counts as missing, and any other
@@ -188,9 +188,19 @@ func init() {
 					if v, present := entry[field]; present && v != nil && v != "" {
 						continue
 					}
+					// Name the entry. Without the id, two entries missing the
+					// same field produced two byte-identical lines at line 1,
+					// which reads as the validator repeating itself rather
+					// than as two findings, and leaves the reader no way to
+					// tell which entries to fix. It also lets scoped
+					// validation decide whether the finding is relevant.
+					subject := "Decision"
+					if id != "" {
+						subject = "Decision `" + id + "`"
+					}
 					emit(Diagnostic{
 						Code: "SDD112", Severity: Error, Path: a.Rel, Line: 1,
-						Message:    "Decision is missing `" + field + "`.",
+						Message:    subject + " is missing `" + field + "`.",
 						Correction: "Add a nonempty `" + field + "`.",
 					})
 				}

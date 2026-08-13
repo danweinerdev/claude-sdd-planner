@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,4 +198,103 @@ func afterFrontmatter(doc string) string {
 		return rest[i+len("\n---\n"):]
 	}
 	return doc
+}
+
+// TestScopedValidationKeepsOnlyGoverningLedgerFindings pins the reported
+// behavior: `sdd validate --scope` printed the whole decision ledger's
+// diagnostics regardless of the scope, so a single artifact's findings were
+// buried under errors about unrelated decisions. The ledger is genuinely
+// cross-cutting — one file whose entries govern artifacts across the root —
+// so the fix is relevance, not exclusion: an entry stays when it governs
+// something in scope and is dropped when it does not.
+func TestScopedValidationKeepsOnlyGoverningLedgerFindings(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "planning-config.json"), `{"planningRoot":"."}`)
+	for _, name := range []string{"Alpha", "Beta"} {
+		mustWrite(t, filepath.Join(root, "Specs", name, "README.md"), specFixture(name))
+	}
+	// Two entries, each missing `rationale` (SDD112), each governing one spec.
+	mustWrite(t, filepath.Join(root, "Decisions", "decisions.md"), ledgerFixtureTwoScopes())
+
+	all := runValidate(t, root, "")
+	if !strings.Contains(all, "D-0001") || !strings.Contains(all, "D-0002") {
+		t.Fatalf("unscoped run should report both entries:\n%s", all)
+	}
+
+	alpha := runValidate(t, root, "Specs/Alpha")
+	if !strings.Contains(alpha, "D-0001") {
+		t.Errorf("scoping to Specs/Alpha dropped D-0001, which governs it:\n%s", alpha)
+	}
+	if strings.Contains(alpha, "D-0002") {
+		t.Errorf("scoping to Specs/Alpha kept D-0002, which governs only Specs/Beta:\n%s", alpha)
+	}
+}
+
+// TestLedgerFindingsNameTheirEntry pins the other half of the report: two
+// entries missing the same field produced two byte-identical lines at line 1,
+// which reads as the validator repeating itself and leaves no way to tell
+// which entries to fix.
+func TestLedgerFindingsNameTheirEntry(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "planning-config.json"), `{"planningRoot":"."}`)
+	mustWrite(t, filepath.Join(root, "Specs", "Alpha", "README.md"), specFixture("Alpha"))
+	mustWrite(t, filepath.Join(root, "Specs", "Beta", "README.md"), specFixture("Beta"))
+	mustWrite(t, filepath.Join(root, "Decisions", "decisions.md"), ledgerFixtureTwoScopes())
+
+	out := runValidate(t, root, "")
+	var lines []string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "SDD112") {
+			lines = append(lines, strings.TrimSpace(l))
+		}
+	}
+	if len(lines) != 2 {
+		t.Fatalf("want two SDD112 findings, got %d:\n%s", len(lines), out)
+	}
+	if lines[0] == lines[1] {
+		t.Errorf("the two findings are indistinguishable; each must name its entry:\n  %s", lines[0])
+	}
+}
+
+func specFixture(title string) string {
+	return "---\ntitle: \"" + title + "\"\ntype: spec\nstatus: draft\n" +
+		"created: 2026-01-01\nupdated: 2026-01-01\ntags: []\nrelated: []\n---\n\n" +
+		"## Overview\nx\n\n## Goals\n- g\n\n## Non-Goals\n- n\n\n" +
+		"## Requirements\n### Functional Requirements\n- **FR-01**: r\n\n" +
+		"## Acceptance Criteria\n- **AC-01**: a\n\n## Open Questions\nNone.\n"
+}
+
+// Two accepted entries, each missing `rationale`, each scoped to one spec.
+func ledgerFixtureTwoScopes() string {
+	return "---\ntitle: \"Decisions\"\ntype: decision-log\nstatus: active\n" +
+		"created: 2026-01-01\nupdated: 2026-01-01\ndecisions:\n" +
+		"  - id: D-0001\n    kind: decision\n    status: accepted\n    date: 2026-01-01\n" +
+		"    decided_by: user\n    statement: Alpha uses X.\n    scope: [\"Specs/Alpha\"]\n" +
+		"  - id: D-0002\n    kind: decision\n    status: accepted\n    date: 2026-01-01\n" +
+		"    decided_by: user\n    statement: Beta uses Y.\n    scope: [\"Specs/Beta\"]\n" +
+		"---\n\n## Decisions\nSee frontmatter.\n"
+}
+
+// runValidate captures cmdValidate's stdout for one root/scope pair.
+func runValidate(t *testing.T, root, scope string) string {
+	t.Helper()
+	args := []string{"--root", root}
+	if scope != "" {
+		args = append(args, "--scope", scope)
+	}
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	_ = cmdValidate(args) // a refusal is expected; the output is the subject
+	w.Close()
+	os.Stdout = old
+	return <-done
 }

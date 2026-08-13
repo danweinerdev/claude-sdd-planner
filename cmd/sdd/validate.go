@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -119,7 +120,7 @@ func cmdValidate(args []string) error {
 	}
 	if *scope != "" {
 		artifactsInScope = filterInScope(artifactsInScope, *scope)
-		diags = selectInScope(diags, *scope, artifactsInScope)
+		diags = selectInScope(diags, *scope, artifactsInScope, governingDecisions(r, artifactsInScope))
 	}
 	sort.Strings(artifactsInScope)
 
@@ -353,7 +354,18 @@ func splitIdent(id string) (string, int, bool) {
 	return ns, n, true
 }
 
-func selectInScope(diags []rules.Diagnostic, scope string, inScope []string) []rules.Diagnostic {
+// selectInScope keeps the diagnostics that bear on the requested scope.
+//
+// A diagnostic qualifies when it is reported against an in-scope artifact, or
+// when it implicates one. The decision ledger is the one cross-cutting case:
+// it lives at a single path but its entries govern artifacts throughout the
+// planning root, so path alone cannot answer whether an entry is relevant.
+// The previous rule admitted every `Decisions/` diagnostic unconditionally,
+// which meant scoping a single spec still printed the whole ledger's findings
+// — the target's own diagnostics buried under errors about unrelated
+// decisions. A ledger entry is now in scope when the decision it describes
+// governs an in-scope artifact, via its `scope` field or a citation from one.
+func selectInScope(diags []rules.Diagnostic, scope string, inScope []string, governing map[string]bool) []rules.Diagnostic {
 	scope = strings.Trim(filepath.ToSlash(scope), "/")
 	allowed := map[string]bool{}
 	for _, p := range inScope {
@@ -361,15 +373,89 @@ func selectInScope(diags []rules.Diagnostic, scope string, inScope []string) []r
 	}
 	var out []rules.Diagnostic
 	for _, d := range diags {
-		if strings.HasPrefix(d.Path, "Decisions/") || allowed[d.Path] ||
-			d.Path == scope || strings.HasPrefix(d.Path, scope+"/") {
+		if allowed[d.Path] || d.Path == scope || strings.HasPrefix(d.Path, scope+"/") {
 			out = append(out, d)
+			continue
+		}
+		if isLedgerPath(d.Path) {
+			// Keep the entry-specific ones whose decision governs something in
+			// scope, plus the structural ones that describe the ledger as a
+			// whole (no id to attribute), since a malformed ledger invalidates
+			// any conclusion drawn from it.
+			if id := decisionIDIn(d.Message); id == "" || governing[id] {
+				out = append(out, d)
+			}
 			continue
 		}
 		for _, imp := range d.Implicated {
 			if allowed[imp] {
 				out = append(out, d)
 				break
+			}
+		}
+	}
+	return out
+}
+
+func isLedgerPath(p string) bool {
+	return strings.HasPrefix(p, "Decisions/") || strings.HasSuffix(p, "DECISIONS.md")
+}
+
+// decisionIDRe finds the `D-NNNN` a diagnostic message attributes itself to.
+var decisionIDRe = regexp.MustCompile(`\bD-\d{4}\b`)
+
+func decisionIDIn(msg string) string {
+	return decisionIDRe.FindString(msg)
+}
+
+// governingDecisions returns the ids of decisions that govern any in-scope
+// artifact: those whose `scope` names one, and those an in-scope artifact
+// cites. Both directions matter — the ledger points at artifacts via `scope`,
+// and artifacts point back via inline `(D-NNNN)` citations, and either link
+// makes the entry part of the scoped picture.
+func governingDecisions(r *rules.Root, inScope []string) map[string]bool {
+	allowed := map[string]bool{}
+	for _, p := range inScope {
+		allowed[p] = true
+	}
+	out := map[string]bool{}
+	for _, a := range r.Artifacts {
+		// Direction 1: an in-scope artifact cites a decision.
+		if allowed[a.Rel] {
+			for _, id := range decisionIDRe.FindAllString(a.Body, -1) {
+				out[id] = true
+			}
+		}
+		// Direction 2: a ledger entry scopes itself to an in-scope artifact.
+		entries, ok := a.Meta["decisions"].([]any)
+		if !ok {
+			continue
+		}
+		for _, raw := range entries {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			id, _ := entry["id"].(string)
+			if id == "" {
+				continue
+			}
+			scopes, ok := entry["scope"].([]any)
+			if !ok {
+				continue
+			}
+			for _, s := range scopes {
+				ref, ok := s.(string)
+				if !ok {
+					continue
+				}
+				ref = strings.Trim(filepath.ToSlash(ref), "/")
+				for p := range allowed {
+					if p == ref || strings.HasPrefix(p, ref+"/") ||
+						strings.HasPrefix(ref, strings.TrimSuffix(p, "/README.md")) {
+						out[id] = true
+					}
+				}
 			}
 		}
 	}
