@@ -40,6 +40,7 @@ type Result struct {
 	Output      string
 	Corrections []string // itemized auto-corrections (FR-19)
 	Allocations []string // identifiers allocated and the text they bound to (FR-20)
+	Carried     []string // identifiers carried forward onto rewritten items (supersede)
 	Retired     []string
 	Added       []string // structure inserted by the upgrade path
 	// Todos are things a human or model must supply: a stubbed section whose
@@ -63,6 +64,20 @@ type Options struct {
 	Existing *artifact.Doc
 	// Retire names identifiers the author is deliberately removing (FR-45).
 	Retire map[string]bool
+	// Supersede replaces an artifact's content wholesale while carrying its
+	// identifiers forward positionally: the Nth identified item in the payload
+	// inherits the Nth live identifier, and only items beyond that count get
+	// newly allocated ones.
+	//
+	// Ordinary apply is an EDIT: it assumes the payload restates the artifact,
+	// so an identifier present on disk and absent from the payload is an
+	// accidental deletion (SPK031) and an unidentified item is a genuinely new
+	// requirement. Rewriting a spec from scratch violates both assumptions at
+	// once — every requirement looks new and every existing id looks dropped —
+	// which produced allocation output and mass-retirement refusals that
+	// contradicted each other. Supersede states the intent that apply had to
+	// guess: this is the same artifact, rewritten.
+	Supersede bool
 	// Today is the date stamped into `updated` (tool-owned, FR-18).
 	Today string
 	// AllowFrozen lets the FR-47 normalization migration — and only it — rewrite
@@ -577,6 +592,7 @@ func splitID(id string) (string, int, bool) {
 // applyIdentifiers enforces FR-45: payload identifiers are assertions verified
 // against the artifact's current set, and an item with no identifier is new.
 func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, live, retired identSet, opts Options, res *Result) {
+	carry := newCarryState()
 	for _, h := range s.Headings {
 		if h.IDNamespace == "" {
 			continue
@@ -619,23 +635,53 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 				}
 				payload.add(ns, num)
 				if opts.Existing != nil && !live.has(ns, num) {
-					what := "does not exist in the artifact"
 					if retired.has(ns, num) {
-						what = "is retired and may not be reissued"
+						res.refuse("SPK030", sec.Line,
+							fmt.Sprintf("payload declares %s, which is retired and may not be reissued", m[2]),
+							fmt.Sprintf("use a new identifier; live %s identifiers: %s",
+								ns, joinOrNone(live.list(ns, *nsDef))))
+						continue
+					}
+					// A payload may introduce the next identifier in a
+					// namespace: that is how a section grows, and how a
+					// namespace with no live identifiers is started at all.
+					// Refusing it made an empty namespace unusable — the
+					// correction printed "live NFR identifiers:" with nothing
+					// after it, so the only stated remedy named no option.
+					// Anything beyond the next number is still refused: a gap
+					// is an authoring mistake, not an intent.
+					if num == nextFreeIn(live, ns, *nsDef)+1 {
+						res.Allocations = append(res.Allocations,
+							fmt.Sprintf("%s assigned to %q (declared in the payload)", m[2], snippetAfterID(line, m[2])))
+						continue
 					}
 					res.refuse("SPK030", sec.Line,
-						fmt.Sprintf("payload declares %s, which %s", m[2], what),
-						fmt.Sprintf("live %s identifiers: %s", ns, strings.Join(live.list(ns, *nsDef), ", ")))
+						fmt.Sprintf("payload declares %s, which does not exist in the artifact", m[2]),
+						fmt.Sprintf("use %s for the next new item; live %s identifiers: %s",
+							nsDef.Format(nextFreeIn(live, ns, *nsDef)+1), ns,
+							joinOrNone(live.list(ns, *nsDef))))
 				}
 				continue
 			}
 			// An unidentified item in an identifier-bearing section is new.
 			if isNewItem(line) {
+				// Superseding: inherit the next unclaimed live identifier
+				// before allocating a fresh one, so a rewrite preserves the
+				// identifiers everything else cites.
+				if opts.Supersede {
+					if id, num, ok := carry.next(h.IDNamespace, live, *nsDef, payload); ok {
+						sec.Body[li] = insertID(line, id)
+						res.Carried = append(res.Carried,
+							fmt.Sprintf("%s kept on %q", id, snippet(line)))
+						payload.add(h.IDNamespace, num)
+						continue
+					}
+				}
 				nextFree++
 				id := nsDef.Format(nextFree)
 				sec.Body[li] = insertID(line, id)
 				res.Allocations = append(res.Allocations,
-					fmt.Sprintf("%s -> %s", id, snippet(line)))
+					fmt.Sprintf("%s assigned to %q", id, snippet(line)))
 				payload.add(h.IDNamespace, nextFree)
 			}
 		}
@@ -654,6 +700,14 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 				res.Retired = append(res.Retired, id)
 				continue
 			}
+			if opts.Supersede {
+				// The rewrite has fewer items than the artifact had, so this
+				// identifier has nothing to attach to. Retire it rather than
+				// refusing: dropping content is the ordinary meaning of a
+				// supersede, and reporting it keeps the removal visible.
+				res.Retired = append(res.Retired, id)
+				continue
+			}
 			res.refuse("SPK031", sec.Line,
 				fmt.Sprintf("%s exists in the artifact but is absent from the payload", id),
 				fmt.Sprintf("restore it, or pass --retire %s to retire it deliberately", id))
@@ -666,6 +720,30 @@ func maxOf(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// carryState hands out an artifact's existing identifiers, in order, to the
+// rewritten items of a supersede payload. Positional inheritance is the only
+// mapping available without asking the author to restate every id — and asking
+// that is exactly the burden supersede removes. It is reported per item
+// (`FR-01 kept on "..."`) so the author can see what inherited what and correct
+// it in the payload if the order is wrong.
+type carryState struct{ used map[string]int }
+
+func newCarryState() *carryState { return &carryState{used: map[string]int{}} }
+
+// next returns the next live identifier in ns that the payload has not already
+// claimed, marking it used.
+func (c *carryState) next(ns string, live identSet, def schema.Namespace, payload identSet) (string, int, bool) {
+	for _, id := range live.list(ns, def) {
+		_, num, ok := splitID(id)
+		if !ok || payload.has(ns, num) || c.used[id] > 0 {
+			continue
+		}
+		c.used[id]++
+		return id, num, true
+	}
+	return "", 0, false
 }
 
 // isNewItem reports whether a line is a list item with no identifier — the
@@ -846,4 +924,42 @@ func emitPreserved(s *schema.Schema, fmLines []string, doc *artifact.Doc, ordere
 
 func normalizeListMarker(line string) string {
 	return listRe.ReplaceAllString(line, "$1-$2")
+}
+
+// nextFreeIn returns the highest live number in ns, so the next new identifier
+// is that plus one. Zero when the namespace is empty, which makes the first
+// identifier NS-01.
+func nextFreeIn(live identSet, ns string, def schema.Namespace) int {
+	highest := 0
+	for _, id := range live.list(ns, def) {
+		if _, num, ok := splitID(id); ok && num > highest {
+			highest = num
+		}
+	}
+	return highest
+}
+
+// joinOrNone renders an identifier list, saying so explicitly when it is
+// empty rather than trailing off after the colon.
+func joinOrNone(ids []string) string {
+	if len(ids) == 0 {
+		return "(none yet)"
+	}
+	return strings.Join(ids, ", ")
+}
+
+// snippetAfterID renders the text of an item that already carries an
+// identifier, without echoing the identifier back into the message.
+func snippetAfterID(line, id string) string {
+	t := snippet(line)
+	// The declaration may be spelled `**FR-01**:`, `~~**FR-01**~~:`, or bare.
+	// Trim from the identifier through the colon that follows it, whatever
+	// emphasis markers sit in between.
+	if i := strings.Index(t, id); i >= 0 {
+		rest := t[i+len(id):]
+		rest = strings.TrimLeft(rest, "*~")
+		rest = strings.TrimPrefix(rest, ":")
+		return strings.TrimSpace(rest)
+	}
+	return t
 }

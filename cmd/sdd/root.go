@@ -142,7 +142,7 @@ func listCmd() *cobra.Command {
 }
 
 func applyCmd() *cobra.Command {
-	var dryRun, diff, create, jsonOut bool
+	var dryRun, diff, create, jsonOut, supersede bool
 	var retire, expect, typ string
 	c := &cobra.Command{
 		Use:   "apply <artifact-path>",
@@ -152,12 +152,19 @@ schema, and writes it atomically. Refuses non-compliant structure — that
 refusal is the reason writes go through a compiler at all.
 
 Pass --expect with the digest from 'sdd show' to refuse the write if the
-artifact changed underneath you.`,
+artifact changed underneath you.
+
+--supersede rewrites an existing artifact wholesale: the payload restates the
+content freely, and the artifact's identifiers are carried forward onto the
+rewritten items in order, so FR/NFR/AC numbers everything else cites stay
+stable. Without it, apply treats the payload as an edit, so a full rewrite
+reads as every identifier being deleted at once.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdApply(reassemble(args,
 				flagPair("--dry-run", dryRun), flagPair("--diff", diff),
 				flagPair("--create", create), flagPair("--json", jsonOut),
+				flagPair("--supersede", supersede),
 				flagVal("--retire", retire), flagVal("--expect", expect),
 				flagVal("--type", typ)))
 		},
@@ -166,6 +173,7 @@ artifact changed underneath you.`,
 	f.BoolVar(&dryRun, "dry-run", false, "print what would be written and write nothing")
 	f.BoolVar(&diff, "diff", false, "show a line diff against the artifact on disk")
 	f.BoolVar(&create, "create", false, "treat the target as new even if it exists")
+	f.BoolVar(&supersede, "supersede", false, "replace the artifact's content, carrying its identifiers forward")
 	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
 	f.StringVar(&retire, "retire", "", "comma-separated identifiers being deliberately retired")
 	f.StringVar(&expect, "expect", "", "refuse unless the artifact's current digest equals this value")

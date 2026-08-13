@@ -20,6 +20,8 @@ func cmdApply(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "print what would be written and write nothing")
 	diff := fs.Bool("diff", false, "show a line diff against the artifact on disk")
 	create := fs.Bool("create", false, "treat the target as new even if it exists")
+	supersede := fs.Bool("supersede", false,
+		"replace the artifact's content, carrying its identifiers forward onto the rewritten items")
 	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 	retire := fs.String("retire", "", "comma-separated identifiers being deliberately retired")
 	expect := fs.String("expect", "", "refuse unless the artifact's current digest equals this value (FR-48)")
@@ -69,7 +71,11 @@ func cmdApply(args []string) error {
 		return &staleError{path: target, want: *expect, got: got}
 	}
 
-	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}}
+	if *supersede && *create {
+		return fmt.Errorf("apply: --supersede and --create are mutually exclusive; " +
+			"--create starts a new artifact, --supersede rewrites an existing one")
+	}
+	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}, Supersede: *supersede}
 	for _, id := range strings.Split(*retire, ",") {
 		if id = strings.TrimSpace(id); id != "" {
 			opts.Retire[id] = true
@@ -77,6 +83,10 @@ func cmdApply(args []string) error {
 	}
 	if art.Exists && !*create {
 		opts.Existing = artifact.Parse(art.Source)
+	}
+	if *supersede && opts.Existing == nil {
+		return fmt.Errorf("apply --supersede: %s does not exist; "+
+			"there is nothing to supersede (use --create for a new artifact)", relPath(target))
 	}
 
 	res := compile.Compile(s, string(payload), opts)
@@ -149,6 +159,7 @@ func report(res *compile.Result) {
 		items  []string
 	}{
 		{"corrections", "~", res.Corrections},
+		{"carried forward", "=", res.Carried},
 		{"allocated", "+", res.Allocations},
 		{"retired", "-", res.Retired},
 		{"notes", "i", res.Notes},
