@@ -131,3 +131,43 @@ func TestTransformLangSpec(t *testing.T) {
 		t.Fatalf("token backticking wrong:\n%s", out2)
 	}
 }
+
+func TestTransformPrompt(t *testing.T) {
+	spec := promptSpec{
+		agent: "x", out: "shared/review-prompts/x.md", title: "X Review",
+		inputs: []string{"- Repo: `{{TARGET_REPO}}`"},
+		note:   "Report missing inputs first.",
+	}
+	// Agent WITH its own Inputs section: placeholder list replaces the
+	// "You are invoked with" block, other prose survives.
+	in := "---\nname: x\n---\n\n# X Agent\n\nIntro.\n\n## Path Resolution\nglob stuff\n\n## Inputs\n\nYou are invoked with:\n- **Target repo path**\n\nYou are **not** given plans.\n\n## Process\nGo.\n"
+	out, err := transformPrompt(in, spec, "agents/x.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"# X Review\n", "- Repo: `{{TARGET_REPO}}`", "Report missing inputs first.",
+		"You are **not** given plans.", "## Process",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{"You are invoked with", "## Path Resolution", "# X Agent", "---"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output still contains %q:\n%s", bad, out)
+		}
+	}
+	if strings.Count(out, "## Inputs") != 1 {
+		t.Errorf("want exactly one Inputs section:\n%s", out)
+	}
+	// Agent WITHOUT an Inputs section: one is inserted after the intro.
+	in2 := "---\nname: x\n---\n\n# X Agent\n\nIntro.\n\n## Process\nGo.\n"
+	out2, err := transformPrompt(in2, spec, "agents/x.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out2, "Intro.\n\n## Inputs\n\n- Repo: `{{TARGET_REPO}}`") {
+		t.Errorf("inserted Inputs misplaced:\n%s", out2)
+	}
+}

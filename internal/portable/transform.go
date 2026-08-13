@@ -216,6 +216,25 @@ func swapSection(content, heading, replacement string) string {
 	return content[:start] + replacement + "\n\n" + content[end:]
 }
 
+// sectionBody returns the body of the named section (text after the heading
+// line, up to the next heading or end of file), or "" when absent.
+func sectionBody(content, heading string) string {
+	start := -1
+	if strings.HasPrefix(content, heading+"\n") {
+		start = 0
+	} else if i := strings.Index(content, "\n"+heading+"\n"); i >= 0 {
+		start = i + 1
+	}
+	if start < 0 {
+		return ""
+	}
+	rest := content[start+len(heading):]
+	if i := strings.Index(rest, "\n#"); i >= 0 {
+		rest = rest[:i]
+	}
+	return rest
+}
+
 // rewriteDispatch applies the collaboration-idiom rewrites and the stock
 // section swap.
 func rewriteDispatch(content string) string {

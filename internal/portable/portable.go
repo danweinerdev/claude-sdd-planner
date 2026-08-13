@@ -180,6 +180,11 @@ func Generate(repoRoot string) (*Result, error) {
 		r.Generated = append(r.Generated, rel)
 	}
 
+	// Role prompts derived from the agent definitions.
+	if err := generatePrompts(repoRoot, r); err != nil {
+		return nil, err
+	}
+
 	// Shared docs and templates.
 	sharedRoot := filepath.Join(repoRoot, "shared")
 	err = filepath.WalkDir(sharedRoot, func(p string, d fs.DirEntry, err error) error {
