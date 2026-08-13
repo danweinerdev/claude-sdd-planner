@@ -518,3 +518,61 @@ func TestApplyGuardClauses(t *testing.T) {
 		t.Errorf("--supersede on a missing artifact should refuse, got: %v", err)
 	}
 }
+
+// TestLockIgnoreSuggestion pins that doctor advises on the lock sidecars and
+// never acts. The .gitignore belongs to the user's repository; a tool that
+// edits it because it noticed something edits files nobody asked it to touch.
+// It must also stay quiet once the advice has been taken — advice that repeats
+// after being acted on is advice people learn to skip.
+func TestLockIgnoreSuggestion(t *testing.T) {
+	newRepo := func(t *testing.T, gitignore string, hasGit bool) string {
+		t.Helper()
+		root := t.TempDir()
+		if hasGit {
+			if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if gitignore != "" {
+			mustWrite(t, filepath.Join(root, ".gitignore"), gitignore)
+		}
+		if err := os.MkdirAll(filepath.Join(root, ".plans"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+
+	// Pattern absent: suggest.
+	root := newRepo(t, "node_modules/\n", true)
+	if got := checkLockIgnore(filepath.Join(root, ".plans")); got == "" {
+		t.Error("no suggestion when the lock pattern is missing")
+	} else if !strings.Contains(got, lockIgnorePattern) {
+		t.Errorf("the suggestion does not name the pattern to add: %q", got)
+	}
+
+	// No .gitignore at all: still suggest, since the sidecars would show up
+	// as untracked files.
+	if got := checkLockIgnore(filepath.Join(newRepo(t, "", true), ".plans")); got == "" {
+		t.Error("no suggestion when the repository has no .gitignore")
+	}
+
+	// Already ignored: silent.
+	ignored := newRepo(t, "node_modules/\n"+lockIgnorePattern+"\n", true)
+	if got := checkLockIgnore(filepath.Join(ignored, ".plans")); got != "" {
+		t.Errorf("suggestion repeated after the pattern was added: %q", got)
+	}
+
+	// Not a Git repository: nothing to ignore into, so silent.
+	if got := checkLockIgnore(filepath.Join(newRepo(t, "", false), ".plans")); got != "" {
+		t.Errorf("suggestion outside a Git repository: %q", got)
+	}
+
+	// The suggestion must never write. Confirm the file is untouched.
+	repo := newRepo(t, "node_modules/\n", true)
+	before, _ := os.ReadFile(filepath.Join(repo, ".gitignore"))
+	_ = checkLockIgnore(filepath.Join(repo, ".plans"))
+	after, _ := os.ReadFile(filepath.Join(repo, ".gitignore"))
+	if string(before) != string(after) {
+		t.Error("checkLockIgnore modified .gitignore; it must only advise")
+	}
+}

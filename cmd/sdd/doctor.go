@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
@@ -36,6 +37,9 @@ type doctorReport struct {
 	HookBinaryError   string       `json:"hook_binary_error,omitempty"`
 	HooksFile         string       `json:"hooks_file,omitempty"`
 	HooksFileError    string       `json:"hooks_file_error,omitempty"`
+	// GitignoreSuggestion is advice, not a finding: an unignored lock sidecar
+	// is untidy, never incorrect.
+	GitignoreSuggestion string `json:"gitignore_suggestion,omitempty"`
 }
 
 // cmdDoctor reports the binary's own identity, the resolved planning root (or
@@ -71,6 +75,7 @@ func cmdDoctor(o doctorOpts) error {
 		rep.PlanningRootError = rootErr.Error()
 	} else {
 		rep.PlanningRoot = relPath(root)
+		rep.GitignoreSuggestion = checkLockIgnore(root)
 	}
 
 	for _, t := range schema.Types() {
@@ -128,6 +133,9 @@ func printDoctorReport(r doctorReport) {
 		fmt.Printf("  planning root: ERROR: %s\n", r.PlanningRootError)
 	} else {
 		fmt.Printf("  planning root: %s\n", r.PlanningRoot)
+	}
+	if r.GitignoreSuggestion != "" {
+		fmt.Printf("  suggestion: %s\n", r.GitignoreSuggestion)
 	}
 	fmt.Println("  schemas:")
 	for _, s := range r.Schemas {
@@ -210,4 +218,51 @@ func checkHookBinary() (path, problem string) {
 		return p, "present but not executable: " + err.Error()
 	}
 	return p, ""
+}
+
+// lockIgnorePattern is what a repository needs to keep the advisory lock
+// sidecars out of version control.
+const lockIgnorePattern = "*.sdd-lock"
+
+// checkLockIgnore suggests ignoring the lock sidecars when the repository
+// holding the planning root does not already.
+//
+// Reading and writing artifacts creates `.<name>.sdd-lock` files next to them.
+// They carry no content, only lock state, and are recreated on demand — so
+// committing one is harmless but pointless noise in every future diff.
+//
+// This only ever SUGGESTS. The file belongs to the user's repository, and a
+// tool that edits .gitignore because it noticed something is a tool that
+// edits files nobody asked it to touch. It also stays silent when the pattern
+// is already covered, when there is no .gitignore to speak of, and when the
+// planning root is not in a Git repository at all — advice that repeats after
+// being acted on is advice people learn to skip.
+func checkLockIgnore(planningRoot string) string {
+	repo := planningRoot
+	for {
+		if _, err := os.Stat(filepath.Join(repo, ".git")); err == nil {
+			break
+		}
+		parent := filepath.Dir(repo)
+		if parent == repo {
+			return "" // not a Git repository: nothing to ignore into
+		}
+		repo = parent
+	}
+
+	path := filepath.Join(repo, ".gitignore")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		// No .gitignore at all. Worth suggesting, since the sidecars will
+		// otherwise show up as untracked files.
+		return "add `" + lockIgnorePattern + "` to " + relPath(path) +
+			" so artifact lock sidecars stay out of version control"
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.TrimSpace(line) == lockIgnorePattern {
+			return ""
+		}
+	}
+	return "add `" + lockIgnorePattern + "` to " + relPath(path) +
+		" so artifact lock sidecars stay out of version control"
 }
