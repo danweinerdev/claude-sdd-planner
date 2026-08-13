@@ -212,7 +212,7 @@ frontmatter (aside from 'updated') byte-identical.`,
 }
 
 func templateCmd() *cobra.Command {
-	var check, forApply bool
+	var check, forApply, tmplJSON bool
 	var out, dir string
 	c := &cobra.Command{
 		Use:   "template [type]",
@@ -227,13 +227,14 @@ sets them itself and refuses a payload carrying a conflicting value.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdTemplate(reassemble(args, flagVal("--out", out),
 				flagPair("--check", check), flagVal("--dir", dir),
-				flagPair("--for-apply", forApply)))
+				flagPair("--for-apply", forApply), flagPair("--json", tmplJSON)))
 		},
 	}
 	c.Flags().StringVar(&out, "out", "", "write to this path instead of stdout")
 	c.Flags().BoolVar(&check, "check", false, "regenerate every committed template and diff")
 	c.Flags().StringVar(&dir, "dir", "shared/templates", "template directory for --check")
 	c.Flags().BoolVar(&forApply, "for-apply", false, "omit tool-owned fields, so the output is a valid apply payload")
+	c.Flags().BoolVar(&tmplJSON, "json", false, "emit the result as JSON")
 	return c
 }
 
@@ -350,7 +351,7 @@ every 'complete' transition checks.`,
 }
 
 func reviewCmd() *cobra.Command {
-	var force bool
+	var force, jsonOut bool
 	var frozen, out, mode string
 	scaffold := &cobra.Command{
 		Use:   "scaffold <phase-path>",
@@ -359,7 +360,8 @@ func reviewCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdReview(reassemble(append([]string{"scaffold"}, args...),
 				flagVal("--frozen", frozen), flagVal("--out", out),
-				flagVal("--mode", mode), flagPair("--force", force)))
+				flagVal("--mode", mode), flagPair("--force", force),
+				flagPair("--json", jsonOut)))
 		},
 	}
 	f := scaffold.Flags()
@@ -367,6 +369,7 @@ func reviewCmd() *cobra.Command {
 	f.StringVar(&out, "out", "", "output path (default: Retro/<phase>-review.md)")
 	f.StringVar(&mode, "mode", "independent", "independent | mixed | single-agent")
 	f.BoolVar(&force, "force", false, "overwrite an existing review artifact")
+	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
 	_ = scaffold.MarkFlagRequired("frozen")
 
 	c := &cobra.Command{Use: "review", Short: "Persisted review artifacts"}
@@ -460,14 +463,15 @@ func transitionCmd(level string) *cobra.Command {
 		Short: fmt.Sprintf("Lifecycle transitions for a %s", level),
 	}
 	var id string
-	var dryRun bool
+	var dryRun, jsonOut bool
 	complete := &cobra.Command{
 		Use:   "complete <path>",
 		Short: fmt.Sprintf("Mark a %s complete (evidence-gated)", level),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdTransition(level, reassemble(append([]string{"complete"}, args...),
-				flagVal("--id", id), flagPair("--dry-run", dryRun)))
+				flagVal("--id", id), flagPair("--dry-run", dryRun),
+				flagPair("--json", jsonOut)))
 		},
 	}
 	if level == "task" {
@@ -475,15 +479,16 @@ func transitionCmd(level string) *cobra.Command {
 		_ = complete.MarkFlagRequired("id")
 	}
 	complete.Flags().BoolVar(&dryRun, "dry-run", false, "report the outcome without writing")
+	complete.Flags().BoolVar(&jsonOut, "json", false, "emit the result as JSON")
 	c.AddCommand(complete)
 
 	if level == "plan" {
-		var apDry bool
+		var apDry, apJSON bool
 		approve := &cobra.Command{
 			Use: "approve <plan-path>", Short: "Mark a plan approved", Args: cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
 				return cmdTransition(level, reassemble(append([]string{"approve"}, args...),
-					flagPair("--dry-run", apDry)))
+					flagPair("--dry-run", apDry), flagPair("--json", apJSON)))
 			},
 		}
 		approve.Flags().BoolVar(&apDry, "dry-run", false, "report the outcome without writing")
@@ -526,6 +531,7 @@ func provisionCmd() *cobra.Command {
 
 func pluginCmd() *cobra.Command {
 	var root string
+	var jsonOut bool
 	c := &cobra.Command{
 		Use:   "plugin",
 		Short: "Maintain the generated Codex/OpenCode plugin trees",
@@ -542,10 +548,12 @@ fails when either is stale, and 'status' reports each file's provenance.`,
 		sc := &cobra.Command{
 			Use: s.use, Short: s.short, Args: cobra.NoArgs,
 			RunE: func(_ *cobra.Command, _ []string) error {
-				return cmdPlugin(reassemble([]string{s.use}, flagVal("--root", root)))
+				return cmdPlugin(reassemble([]string{s.use}, flagVal("--root", root),
+					flagPair("--json", jsonOut)))
 			},
 		}
 		sc.Flags().StringVar(&root, "root", ".", "repository root")
+		sc.Flags().BoolVar(&jsonOut, "json", false, "emit the result as JSON")
 		c.AddCommand(sc)
 	}
 	return c

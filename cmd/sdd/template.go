@@ -46,6 +46,7 @@ func cmdTemplate(args []string) error {
 	dir := fs.String("dir", "shared/templates", "template directory for --check")
 	forApply := fs.Bool("for-apply", false,
 		"omit tool-owned fields, so the output is a valid apply payload")
+	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 
 	positional, err := parseFlags(fs, args)
 	if err != nil {
@@ -53,7 +54,7 @@ func cmdTemplate(args []string) error {
 	}
 
 	if *check {
-		return checkTemplates(*dir)
+		return checkTemplates(*dir, *jsonOut)
 	}
 	if len(positional) != 1 {
 		return fmt.Errorf("template: expected exactly one artifact type\n\n%s", templateUsage)
@@ -62,6 +63,21 @@ func cmdTemplate(args []string) error {
 	body, err := renderTemplateFor(positional[0], *forApply)
 	if err != nil {
 		return fmt.Errorf("template: %w", err)
+	}
+	if *jsonOut {
+		res := templateResult{OK: true, Type: positional[0], ForApply: *forApply, Body: body}
+		if *out != "" {
+			if dir := filepath.Dir(*out); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return fmt.Errorf("template: creating %s: %w", dir, err)
+				}
+			}
+			if err := os.WriteFile(*out, []byte(body), 0o644); err != nil {
+				return fmt.Errorf("template: %w", err)
+			}
+			res.Path, res.Wrote = relPath(*out), true
+		}
+		return writeJSON(res)
 	}
 	if *out == "" {
 		fmt.Print(body)
@@ -174,7 +190,34 @@ func placeholderFor(heading string) string {
 // force that prose out of the templates or into the schema, neither of which
 // is an improvement. What must not drift is the set and order of headings and
 // the frontmatter keys.
-func checkTemplates(dir string) error {
+// templateResult is the machine-readable outcome of rendering a template.
+type templateResult struct {
+	// OK is present on every result shape the binary emits, so a caller can
+	// branch on one field regardless of which command produced the document.
+	OK       bool   `json:"ok"`
+	Type     string `json:"type"`
+	ForApply bool   `json:"for_apply"`
+	Path     string `json:"path,omitempty"`
+	Wrote    bool   `json:"wrote,omitempty"`
+	Body     string `json:"body"`
+}
+
+// templateCheckResult reports the drift gate's verdict. --check is a CI-shaped
+// command, so a pipeline should be able to read which templates drifted and
+// why without parsing the rendered report.
+type templateCheckResult struct {
+	OK      bool                 `json:"ok"`
+	Checked int                  `json:"checked"`
+	Drifted []templateDriftEntry `json:"drifted,omitempty"`
+	Remedy  string               `json:"remedy,omitempty"`
+}
+
+type templateDriftEntry struct {
+	Path       string `json:"path"`
+	Difference string `json:"difference"`
+}
+
+func checkTemplates(dir string, jsonOut bool) error {
 	var drifted []string
 	checked := 0
 
@@ -215,14 +258,34 @@ func checkTemplates(dir string) error {
 		}
 	}
 
+	const remedy = "regenerate with `sdd template <type> --out <path>`, " +
+		"or correct the schema if the template is right"
+
+	if jsonOut {
+		res := templateCheckResult{OK: len(drifted) == 0, Checked: checked}
+		for _, d := range drifted {
+			path, difference, _ := strings.Cut(d, ": ")
+			res.Drifted = append(res.Drifted, templateDriftEntry{Path: path, Difference: difference})
+		}
+		if !res.OK {
+			res.Remedy = remedy
+		}
+		if err := writeJSON(res); err != nil {
+			return err
+		}
+		if !res.OK {
+			return &refusedError{n: len(drifted)}
+		}
+		return nil
+	}
+
 	if len(drifted) > 0 {
 		var b strings.Builder
 		b.WriteString("template --check: committed templates drifted from their schemas:\n")
 		for _, d := range drifted {
 			b.WriteString("  " + d + "\n")
 		}
-		b.WriteString("  fix: regenerate with `sdd template <type> --out <path>`, " +
-			"or correct the schema if the template is right")
+		b.WriteString("  fix: " + remedy)
 		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 	}
 	fmt.Printf("%d templates match their schemas\n", checked)

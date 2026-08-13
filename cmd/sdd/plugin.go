@@ -20,6 +20,7 @@ func cmdPlugin(args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 	root := "."
+	jsonOut := false
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
 		case "--root":
@@ -28,6 +29,8 @@ func cmdPlugin(args []string) error {
 			}
 			root = rest[i+1]
 			i++
+		case "--json":
+			jsonOut = true
 		default:
 			return fmt.Errorf("sdd plugin %s: unknown argument %q", sub, rest[i])
 		}
@@ -48,6 +51,13 @@ func cmdPlugin(args []string) error {
 		if err != nil {
 			return err
 		}
+		if jsonOut {
+			return writeJSON(pluginResult{
+				OK: true, Action: "sync", Trees: portable.OutDirs,
+				Generated: r.Generated, Variants: r.Variants,
+				Overridden: r.Overridden, PortableOnly: r.OverrideOnly,
+			})
+		}
 		fmt.Printf("plugin sync: %s <- %d generated, %d variants, %d overridden, %d portable-only\n",
 			strings.Join(portable.OutDirs, " + "), len(r.Generated), len(r.Variants), len(r.Overridden), len(r.OverrideOnly))
 		return nil
@@ -55,6 +65,19 @@ func cmdPlugin(args []string) error {
 		stale, err := portable.Check(root)
 		if err != nil {
 			return err
+		}
+		if jsonOut {
+			res := pluginResult{OK: len(stale) == 0, Action: "check", Trees: portable.OutDirs, Stale: stale}
+			if !res.OK {
+				res.Remedy = "run `sdd plugin sync` and commit the result"
+			}
+			if err := writeJSON(res); err != nil {
+				return err
+			}
+			if !res.OK {
+				return &refusedError{n: len(stale)}
+			}
+			return nil
 		}
 		if len(stale) > 0 {
 			for _, s := range stale {
@@ -69,6 +92,13 @@ func cmdPlugin(args []string) error {
 		r, err := portable.Generate(root)
 		if err != nil {
 			return err
+		}
+		if jsonOut {
+			return writeJSON(pluginResult{
+				OK: true, Action: "status", Trees: portable.OutDirs,
+				Generated: r.Generated, Variants: r.Variants,
+				Overridden: r.Overridden, PortableOnly: r.OverrideOnly,
+			})
 		}
 		fmt.Printf("generated (%d):\n", len(r.Generated))
 		for _, p := range r.Generated {
@@ -90,4 +120,21 @@ func cmdPlugin(args []string) error {
 	default:
 		return fmt.Errorf("sdd plugin: unknown subcommand %q (want sync, check, or status)", sub)
 	}
+}
+
+// pluginResult is the machine-readable outcome of a `sdd plugin` action
+// (FR-04). check is a CI-shaped command — a pipeline should read which files
+// are stale rather than parse the rendered report — and sync/status report the
+// provenance of every generated file, which is the thing a maintainer wants
+// when deciding whether a change belongs in the canonical tree or a variant.
+type pluginResult struct {
+	OK           bool     `json:"ok"`
+	Action       string   `json:"action"`
+	Trees        []string `json:"trees"`
+	Generated    []string `json:"generated,omitempty"`
+	Variants     []string `json:"variants,omitempty"`
+	Overridden   []string `json:"overridden,omitempty"`
+	PortableOnly []string `json:"portable_only,omitempty"`
+	Stale        []string `json:"stale,omitempty"`
+	Remedy       string   `json:"remedy,omitempty"`
 }

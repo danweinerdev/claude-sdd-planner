@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
@@ -297,4 +299,120 @@ func runValidate(t *testing.T, root, scope string) string {
 	w.Close()
 	os.Stdout = old
 	return <-done
+}
+
+// TestTransitionJSONShapeCarriesGateFindings pins the FR-04 contract for
+// lifecycle transitions. The refusal case is the one that mattered: the text
+// path renders gate findings as prose, so a caller scripting a phase close had
+// to scrape it to learn *why* a completion was refused.
+func TestTransitionJSONShapeCarriesGateFindings(t *testing.T) {
+	res := transitionResult{
+		Path: "Plans/P/01-Phase.md", Kind: "task", Verb: "complete", ID: "1.1",
+		To: "complete",
+		Blocking: toGateFindings([]rules.Diagnostic{{
+			Code: "SDD070", Path: "Plans/P/01-Phase.md", Line: 12,
+			Message: "evidence is pending", Correction: "record it",
+		}}),
+		Pending: toGateFindings([]rules.Diagnostic{{
+			Code: "SDD160", Path: "Plans/P/01-Phase.md", Line: 1,
+			Message: "verifies the committed copy", Correction: "commit first",
+		}}),
+	}
+	b, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"path", "ok", "kind", "verb", "id", "to", "blocking", "pending"} {
+		if _, ok := got[k]; !ok {
+			t.Errorf("transition JSON is missing %q: %s", k, b)
+		}
+	}
+	// Blocking findings must carry the code and correction a caller acts on,
+	// not just a message.
+	blocking, _ := got["blocking"].([]any)
+	if len(blocking) != 1 {
+		t.Fatalf("want one blocking finding, got %v", got["blocking"])
+	}
+	f, _ := blocking[0].(map[string]any)
+	for _, k := range []string{"code", "path", "line", "message", "correction"} {
+		if _, ok := f[k]; !ok {
+			t.Errorf("blocking finding is missing %q: %v", k, f)
+		}
+	}
+	// Pending is separate from blocking: those checks inspect the committed
+	// copy and cannot pass until this very change is committed, so reporting
+	// them as blockers would describe an unresolvable state.
+	if pending, _ := got["pending"].([]any); len(pending) != 1 {
+		t.Errorf("pending findings were not reported separately: %v", got["pending"])
+	}
+
+	// A refused transition exits 1 (refusal), not 2 (could not run).
+	if code := exitCode(&refusedError{n: 1}); code != 1 {
+		t.Errorf("a refused transition should exit 1, got %d", code)
+	}
+	// Omitted optionals stay absent rather than serializing as false/empty.
+	clean, _ := json.Marshal(transitionResult{Path: "p", OK: true, Kind: "plan", Verb: "approve"})
+	if strings.Contains(string(clean), "blocking") || strings.Contains(string(clean), "dry_run") {
+		t.Errorf("empty optionals should be omitted: %s", clean)
+	}
+}
+
+// TestJSONResultsAreParseable guards the property every --json path must hold:
+// stdout carries exactly one JSON document and nothing else. Diagnostics and
+// refusal messages belong on stderr, because a caller that pipes stdout into a
+// parser gets "extra data" the moment prose leaks into it.
+func TestJSONResultsAreParseable(t *testing.T) {
+	cases := []struct {
+		name string
+		v    any
+	}{
+		{"transition", transitionResult{Path: "p", OK: false, Kind: "task", Verb: "complete",
+			Blocking: toGateFindings([]rules.Diagnostic{{Code: "X", Message: "m"}})}},
+		{"review scaffold", reviewScaffoldResult{Path: "r.md", OK: true, Wrote: true,
+			Frozen: "a..b", Lanes: reviewLaneIDs(), EvidenceLine: "- Final aligned review: r.md; frozen: a..b"}},
+		{"template", templateResult{Type: "spec", Body: "---\ntitle: x\n---\n"}},
+		{"template check", templateCheckResult{OK: false, Checked: 8,
+			Drifted: []templateDriftEntry{{Path: "shared/templates/spec.md", Difference: "heading"}},
+			Remedy:  "regenerate"}},
+		{"plugin", pluginResult{OK: false, Action: "check", Trees: []string{".codex-plugin"},
+			Stale: []string{"x (differs)"}, Remedy: "sync"}},
+	}
+	for _, c := range cases {
+		b, err := json.Marshal(c.v)
+		if err != nil {
+			t.Errorf("%s: does not marshal: %v", c.name, err)
+			continue
+		}
+		var round map[string]any
+		if err := json.Unmarshal(b, &round); err != nil {
+			t.Errorf("%s: does not round-trip: %v", c.name, err)
+			continue
+		}
+		if _, ok := round["ok"]; !ok {
+			t.Errorf("%s: result has no `ok` field; a caller cannot tell success from failure: %s", c.name, b)
+		}
+	}
+}
+
+// TestReviewScaffoldJSONCarriesTheEvidenceLine pins the one output a phase-gate
+// caller most needs verbatim. Reconstructing it from the other fields means
+// re-implementing the format the validator checks byte-for-byte.
+func TestReviewScaffoldJSONCarriesTheEvidenceLine(t *testing.T) {
+	res := reviewScaffoldResult{
+		Path: "Retro/01-review.md", Frozen: "aaa..bbb",
+		EvidenceLine: "- Final aligned review: Retro/01-review.md; frozen: aaa..bbb",
+	}
+	if !strings.HasPrefix(res.EvidenceLine, "- Final aligned review: ") {
+		t.Errorf("evidence line does not match the label the validator requires: %q", res.EvidenceLine)
+	}
+	if !strings.Contains(res.EvidenceLine, res.Frozen) {
+		t.Errorf("evidence line omits the frozen range: %q", res.EvidenceLine)
+	}
+	if len(reviewLaneIDs()) != 4 {
+		t.Errorf("want the four stable lane identifiers, got %v", reviewLaneIDs())
+	}
 }

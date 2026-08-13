@@ -186,7 +186,7 @@ func handlerFlagSets() []struct {
 		{"sdd list", []string{"json", "root"}},
 		{"sdd apply", []string{"dry-run", "diff", "create", "json", "retire", "expect", "type", "supersede"}},
 		{"sdd section set", []string{"heading", "dry-run", "diff", "json", "expect", "type"}},
-		{"sdd template", []string{"out", "check", "dir", "for-apply"}},
+		{"sdd template", []string{"out", "check", "dir", "for-apply", "json"}},
 		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "type"}},
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json"}},
@@ -194,7 +194,7 @@ func handlerFlagSets() []struct {
 			"task", "phase", "plan", "verified-by", "working-dir", "result",
 			"tool", "tool-context", "tool-result", "focused-review",
 			"final-review", "date", "revision", "dry-run", "json"}},
-		{"sdd review scaffold", []string{"frozen", "out", "mode", "force"}},
+		{"sdd review scaffold", []string{"frozen", "out", "mode", "force", "json"}},
 		{"sdd decide list", []string{"status", "json"}},
 		{"sdd decide search", []string{"json"}},
 		{"sdd decide add", []string{
@@ -203,13 +203,13 @@ func handlerFlagSets() []struct {
 		{"sdd decide validate", []string{"format", "json", "no-history"}},
 		{"sdd doctor", []string{"json"}},
 		{"sdd provision", []string{"plugin-root", "json", "check"}},
-		{"sdd plugin sync", []string{"root"}},
-		{"sdd plugin check", []string{"root"}},
-		{"sdd plugin status", []string{"root"}},
-		{"sdd task complete", []string{"id", "dry-run"}},
-		{"sdd phase complete", []string{"dry-run"}},
-		{"sdd plan complete", []string{"dry-run"}},
-		{"sdd plan approve", []string{"dry-run"}},
+		{"sdd plugin sync", []string{"root", "json"}},
+		{"sdd plugin check", []string{"root", "json"}},
+		{"sdd plugin status", []string{"root", "json"}},
+		{"sdd task complete", []string{"id", "dry-run", "json"}},
+		{"sdd phase complete", []string{"dry-run", "json"}},
+		{"sdd plan complete", []string{"dry-run", "json"}},
+		{"sdd plan approve", []string{"dry-run", "json"}},
 	}
 }
 

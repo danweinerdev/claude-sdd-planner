@@ -60,6 +60,7 @@ func cmdReview(args []string) error {
 	out := fs.String("out", "", "output path (default: Retro/<phase>-review.md)")
 	mode := fs.String("mode", "independent", "independent | mixed | single-agent")
 	force := fs.Bool("force", false, "overwrite an existing review artifact")
+	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 
 	positional, err := parseFlags(fs, args[1:])
 	if err != nil {
@@ -143,6 +144,25 @@ func cmdReview(args []string) error {
 		return fmt.Errorf("review scaffold: %w", err)
 	}
 
+	if *jsonOut {
+		return writeJSON(reviewScaffoldResult{
+			Path:             relPath(dest),
+			OK:               true,
+			Wrote:            true,
+			ReviewOf:         reviewOf,
+			PhasePath:        relPath(phasePath),
+			Frozen:           *frozen,
+			Mode:             *mode,
+			PlanningRevision: planningRev,
+			Lanes:            reviewLaneIDs(),
+			// The exact line the phase's evidence section must carry. It is
+			// the one output a caller most needs verbatim, and reconstructing
+			// it from the other fields means re-implementing the format.
+			EvidenceLine: fmt.Sprintf("- Final aligned review: %s; frozen: %s",
+				filepath.ToSlash(dest), *frozen),
+		})
+	}
+
 	fmt.Printf("scaffolded %s for %s\n", dest, phasePath)
 	fmt.Printf("  frozen: %s\n", *frozen)
 	fmt.Printf("  next: replace each lane's evidence with what it observed, then\n")
@@ -150,6 +170,23 @@ func cmdReview(args []string) error {
 		filepath.ToSlash(dest), *frozen)
 	fmt.Printf("        to the phase's Phase Completion Evidence section.\n")
 	return nil
+}
+
+// reviewScaffoldResult is the machine-readable outcome of `review scaffold`
+// (FR-04). /code-review drives the phase gate, so the fields it needs — where
+// the artifact landed, the frozen identity it must echo, and the evidence line
+// to paste — are reported rather than scraped from prose.
+type reviewScaffoldResult struct {
+	Path             string   `json:"path"`
+	OK               bool     `json:"ok"`
+	Wrote            bool     `json:"wrote"`
+	ReviewOf         string   `json:"review_of"`
+	PhasePath        string   `json:"phase_path"`
+	Frozen           string   `json:"frozen"`
+	Mode             string   `json:"mode"`
+	PlanningRevision string   `json:"planning_revision"`
+	Lanes            []string `json:"lanes"`
+	EvidenceLine     string   `json:"evidence_line"`
 }
 
 func parseFrozenRange(v string) (base, endpoint string, err error) {
@@ -243,4 +280,14 @@ func renderPhaseReview(in phaseReviewInput) string {
 	b.WriteString("## Findings\n\nNone.\n\n")
 	b.WriteString("## Resolution Log\n\nNone.\n")
 	return b.String()
+}
+
+// reviewLaneIDs lists the stable lane identifiers a scaffolded review carries,
+// read from the same table that renders the artifact so the two cannot drift.
+func reviewLaneIDs() []string {
+	out := make([]string, 0, len(stableLanes))
+	for _, l := range stableLanes {
+		out = append(out, l.lane)
+	}
+	return out
 }

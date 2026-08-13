@@ -59,6 +59,7 @@ func cmdTransition(kind string, args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "task id (task complete only)")
 	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
+	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 	positional, err := parseFlags(fs, args[1:])
 	if err != nil {
 		return err
@@ -106,7 +107,16 @@ func cmdTransition(kind string, args []string) error {
 	// the write lands, so neither is suppressed, only deferred.
 	blocking, pending := splitCommitPending(blocking)
 
+	res := transitionResult{
+		Path: relPath(path), Kind: kind, Verb: "complete", ID: *id,
+		To: "complete", DryRun: *dryRun,
+		Blocking: toGateFindings(blocking), Pending: toGateFindings(pending),
+	}
+
 	if len(blocking) > 0 {
+		if *jsonOut {
+			return emitTransitionJSON(res)
+		}
 		var b strings.Builder
 		fmt.Fprintf(&b, "%s complete: refused — the completion gate is not met:\n", kind)
 		for _, d := range blocking {
@@ -115,13 +125,21 @@ func cmdTransition(kind string, args []string) error {
 		}
 		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 	}
+	res.OK = true
 
 	if *dryRun {
+		if *jsonOut {
+			return emitTransitionJSON(res)
+		}
 		fmt.Printf("%s complete: gate met; would mark %s complete\n", kind, describeTarget(kind, *id, path))
 		return nil
 	}
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
+	}
+	res.Wrote = true
+	if *jsonOut {
+		return emitTransitionJSON(res)
 	}
 	fmt.Printf("marked %s complete in %s\n", describeTarget(kind, *id, path), path)
 	if len(pending) > 0 {
@@ -261,6 +279,7 @@ func planLifecycle(verb string, args []string) error {
 	fs := flag.NewFlagSet("plan "+verb, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dryRun := fs.Bool("dry-run", false, "report the verdict without writing")
+	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 	positional, err := parseFlags(fs, args)
 	if err != nil {
 		return err
@@ -285,7 +304,15 @@ func planLifecycle(verb string, args []string) error {
 	if verb == "activate" {
 		want, from = "active", "approved"
 	}
+	res := transitionResult{
+		Path: relPath(path), Kind: "plan", Verb: verb,
+		From: current, To: want, DryRun: *dryRun,
+	}
 	if current == want {
+		res.OK, res.Already = true, true
+		if *jsonOut {
+			return emitTransitionJSON(res)
+		}
 		fmt.Printf("plan %s: already %s\n", verb, want)
 		return nil
 	}
@@ -308,8 +335,13 @@ func planLifecycle(verb string, args []string) error {
 		if err != nil {
 			return fmt.Errorf("plan approve: %w", err)
 		}
-		blocking, _ = splitCommitPending(blocking)
+		var pending []rules.Diagnostic
+		blocking, pending = splitCommitPending(blocking)
+		res.Blocking, res.Pending = toGateFindings(blocking), toGateFindings(pending)
 		if len(blocking) > 0 {
+			if *jsonOut {
+				return emitTransitionJSON(res)
+			}
 			var b strings.Builder
 			b.WriteString("plan approve: refused — the plan does not validate:\n")
 			for _, d := range blocking {
@@ -318,14 +350,82 @@ func planLifecycle(verb string, args []string) error {
 			return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 		}
 	}
+	res.OK = true
 
 	if *dryRun {
+		if *jsonOut {
+			return emitTransitionJSON(res)
+		}
 		fmt.Printf("plan %s: would move %s from %s to %s\n", verb, path, current, want)
 		return nil
 	}
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("plan %s: %w", verb, err)
 	}
+	res.Wrote = true
+	if *jsonOut {
+		return emitTransitionJSON(res)
+	}
 	fmt.Printf("plan %s: %s is now %s\n", verb, path, want)
+	return nil
+}
+
+// transitionResult is the machine-readable outcome of a lifecycle transition
+// (FR-04). One shape serves `task|phase|plan complete` and `plan approve`:
+// they answer the same question — did the status move, and if not, what
+// blocked it — and a caller scripting a phase close should not need a
+// different parser per verb.
+//
+// Gate findings are the reason this matters most. The text path renders them
+// as prose, so a caller that wants to know *why* a completion was refused had
+// to scrape it; here they are structured, and `pending` separately carries the
+// checks that inspect the committed copy and therefore cannot pass until the
+// transition itself is committed.
+type transitionResult struct {
+	Path    string `json:"path"`
+	OK      bool   `json:"ok"`
+	Kind    string `json:"kind"`           // task | phase | plan
+	Verb    string `json:"verb"`           // complete | approve | activate
+	ID      string `json:"id,omitempty"`   // task id, when kind is task
+	From    string `json:"from,omitempty"` // status before the transition
+	To      string `json:"to,omitempty"`   // status after it
+	DryRun  bool   `json:"dry_run,omitempty"`
+	Wrote   bool   `json:"wrote,omitempty"`
+	Already bool   `json:"already,omitempty"` // already in the target state; a no-op
+	// Blocking lists the gate findings that refused the transition.
+	Blocking []gateFinding `json:"blocking,omitempty"`
+	// Pending lists checks that verify the committed copy at HEAD and stay
+	// unmet until this change is committed. They do not block.
+	Pending []gateFinding `json:"pending,omitempty"`
+}
+
+type gateFinding struct {
+	Code       string `json:"code"`
+	Path       string `json:"path"`
+	Line       int    `json:"line,omitempty"`
+	Message    string `json:"message"`
+	Correction string `json:"correction,omitempty"`
+}
+
+func toGateFindings(diags []rules.Diagnostic) []gateFinding {
+	var out []gateFinding
+	for _, d := range diags {
+		out = append(out, gateFinding{
+			Code: d.Code, Path: d.Path, Line: d.Line,
+			Message: d.Message, Correction: d.Correction,
+		})
+	}
+	return out
+}
+
+// emitTransitionJSON writes the result and returns the refusal error when the
+// transition did not happen, so --json and the text path agree on exit codes.
+func emitTransitionJSON(res transitionResult) error {
+	if err := writeJSON(res); err != nil {
+		return err
+	}
+	if !res.OK {
+		return &refusedError{n: len(res.Blocking)}
+	}
 	return nil
 }
