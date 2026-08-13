@@ -1,12 +1,15 @@
 ---
-name: debrief
-description: "Write after-action notes for a completed plan phase. Triggers: /debrief, debrief phase, after-action, phase complete"
+name: sdd-debrief
+description: "Write after-action notes for a completed plan phase. debrief phase, after-action, phase complete"
 ---
 
-# /debrief — After-Action Phase Notes
+# After-Action Phase Notes
 
-## Path Resolution
-The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings. Find it by globbing for `**/commands/research/SKILL.md` in both the current directory and `~/.claude/plugins/cache/`; if multiple versions match, sort them as **semantic versions** (like `sort -V`) and use the highest, then strip `commands/research/SKILL.md` from the match. Resolve the planning root (artifacts) and target repository per `shared/path-resolution.md` in the plugin directory.
+## Resources
+
+Before opening `shared/...`, follow symlinks in this loaded file's path, then derive `<plugin-root>` from `<plugin-root>/skills/<name>/SKILL.md`; fallback search roots are repository/user `.agents/` (including `$HOME/.agents/plugins/*/`), Codex `${CODEX_HOME:-$HOME/.codex}/plugins/cache/*/*/*/`, and runtime-configured skill roots. Accept only a root containing this skill, `shared/agent-runtime.md`, and the matching plugin manifest; never use the working directory. Then read `<plugin-root>/shared/agent-runtime.md` and `<plugin-root>/shared/path-resolution.md`, and resolve every `shared/<path>` reference in this skill against `<plugin-root>`.
+
+**Resource boundary:** Read the plugin, all `SKILL.md` files, and `shared/` resources in place. Never copy or symlink them into the working directory, target repository, or planning root. Only generated SDD outputs may be materialized from bundled resources.
 
 ## When to Use
 When a plan phase has been completed (or substantially completed) and you want to capture what happened: decisions made, deviations from plan, lessons learned, and impact on future phases.
@@ -24,7 +27,7 @@ When a plan phase has been completed (or substantially completed) and you want t
    - Read every task's `### Completion Evidence` — an absent or pending section on a `complete` task is a legacy evidence gap (`shared/completion-evidence.md`); report it in the debrief, never treat it as proof
    - Read related designs from `Designs/` to identify deviations from intended architecture
    - Read related specs from `Specs/` to assess requirements coverage
-   - If more than ~3 related documents are involved, delegate the sweep to `sdd-planner:researcher` instead of reading them all yourself
+   - If more than ~3 related documents are involved, delegate the sweep to the researcher prompt (`shared/agent-prompts/researcher.md`) instead of reading them all yourself
    - Ask the user about:
      - Key decisions made during implementation
      - What deviated from the original plan or design
@@ -52,7 +55,7 @@ When a plan phase has been completed (or substantially completed) and you want t
    - For each item in Decisions Made that the user confirmed (step 2), isn't already in `Decisions/decisions.md`, and passes the **admission test** in `shared/decision-log.md` § Capture, append an entry per that convention — collision check first; a collision stops for the user. Items that only explain how this phase went stay in the debrief. Scope entries to the plan. This is the safety net for decisions made mid-implementation that escaped capture.
 
 6. **Update Phase Status**
-   - A status backfill here is subject to the same gate as `/implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
+   - A status backfill here is subject to the same gate as `sdd-implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
    - When the gate holds, set the phase status to `complete` in both:
      - The phase doc frontmatter
      - The plan README's `phases[]` array
