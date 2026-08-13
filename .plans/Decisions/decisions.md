@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-03
+updated: 2026-08-12
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -180,7 +180,19 @@ decisions:
     scope: [Specs/SDD-Toolchain]
     tags: [golang, distribution, versioning, setup, hooks]
     reversibility: two-way
+  - id: D-0016
+    kind: decision
+    status: accepted
+    date: 2026-08-12
+    decided_by: user-approved
+    statement: "The plugin ships from one repository: the repo root is the canonical hand-edited Claude plugin, and portable/ is a generated OpenCode/Codex tree produced by 'sdd plugin sync' (transforms + .portable.md variants + portable-overrides/), drift- and leak-gated by make test, with version/minSddVersion synced from .claude-plugin/plugin.json. The standalone sdd-planner repo is retired."
+    rejected: [keep two repos in manual sync, author a harness-neutral core tree and generate both plugins from it, bash cp-fanout mirrors like code-graph-mcp]
+    rationale: "Two hand-synced repos duplicated every content change and had already drifted (Python-era skills vs Go binary). Generation from one canonical tree keeps the harness-specific mechanics (Task dispatch vs collaboration-subagent idiom) while making divergence a build failure instead of a maintenance task."
+    scope: [portable/, internal/portable, Makefile]
+    tags: [architecture, portable, plugin, release]
+    reversibility: two-way
 ---
+
 
 # Decision Ledger
 
