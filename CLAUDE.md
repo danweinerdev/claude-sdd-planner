@@ -1,56 +1,68 @@
 # SDD Planner
 
-A Claude Code plugin for spec-driven development — structured project planning with lifecycle skills and review agents. The optional HTML dashboard lives in a companion plugin: [sdd-dashboard](https://github.com/danweinerdev/sdd-dashboard-plugin).
+A spec-driven development toolchain: structured project planning with lifecycle skills, intent-isolated review agents, and a deterministic Go validator (`sdd`). This repository is the **single source for every supported harness**:
+
+- **Repo root** — the canonical, hand-edited Claude Code plugin (`commands/`, `agents/`, `skills/`, `shared/`, `hooks/`).
+- **`.codex-plugin/` and `.opencode-plugin/`** — generated plugin trees for Codex and OpenCode, produced by `sdd plugin sync`. Never hand-edited; drift fails `make test`.
+
+The optional HTML dashboard lives in a companion plugin: [sdd-dashboard](https://github.com/danweinerdev/sdd-dashboard-plugin).
 
 ## Directory Structure
 
 ```
-sdd-planner/                      # Repository root = plugin root
+claude-sdd-planner/               # Repository root = canonical Claude plugin root
 ├── .claude-plugin/
-│   └── plugin.json               # Plugin manifest (name: "sdd-planner")
-├── CLAUDE.md                     # This file
-├── hooks/
-│   └── hooks.json                # Plugin hooks — SessionStart + PreToolUse, both served by `sdd hook`
-├── Makefile                      # make bump-patch / bump-minor / bump-major
-├── planning-config.json          # Planning configuration
-├── .gitignore
-├── commands/                     # Slash commands (auto-namespaced /sdd-planner:*); each is a dir with SKILL.md inside
+│   └── plugin.json               # Canonical manifest — single source of version + minSddVersion
+├── commands/                     # Slash commands (auto-namespaced /sdd-planner:*); each is a dir with SKILL.md
+│   └── <name>/SKILL.portable.md  #   optional hand-maintained portable variant (code-review, implement, setup)
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
-│   └── <lang>-specifications/    # Per-language structural verification (cpp, rust, go, python, typescript, java, swift)
-├── agents/                       # Subagent definitions
-├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, provisioning
+│   ├── <lang>-specifications/    #   per-language structural verification (cpp, rust, go, python, typescript, java, swift)
+│   └── decision-log/             #   ad-hoc decision capture outside lifecycle skills
+├── agents/                       # Subagent definitions — also the source for the portable role prompts
+├── hooks/
+│   └── hooks.json                # SessionStart + PreToolUse, both served by `sdd hook`
+├── shared/                       # Conventions + templates, shipped to every harness
+│   ├── frontmatter-schema.md     #   single source of truth for artifact metadata
+│   ├── completion-evidence.md    #   evidence-gated completion — what `complete` requires, per level
+│   ├── decision-log.md           #   decision ledger — entry schema, admission test, collision procedure
+│   ├── decision-framework.md     #   universal decision discipline for all skills and agents
+│   ├── path-resolution.md        #   planning-root / plugin-dir / target-repo resolution (marker-managed)
+│   ├── orchestration.md          #   orchestration model + portable prompt catalog (marker-managed)
+│   ├── vcs-detection.md          #   VCS detection algorithm + operations table (git / p4 / plain)
+│   ├── autonomy.md               #   cross-skill autonomy table — what runs solo vs stops for the user
+│   ├── review-lanes.md           #   project-supplied review-lane socket (+ .portable.md variant)
+│   ├── review-artifacts.md       #   persisted review contract incl. the phase-completion gate
+│   ├── language-verification.md  #   language-specific verification — what good looks like
+│   ├── agent-runtime.md          #   portable runtime conventions (resolution, delegation, resource boundary)
+│   └── templates/                #   document templates (+ agents-md-*, claude-md-*, custom-reviewer variants)
+├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, plugin sync
 ├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs, portable)
-├── .codex-plugin/                # GENERATED Codex plugin tree (`sdd plugin sync`) — never hand-edit
+├── tools/                        # genfixtures + the frozen regression corpus (run by `go test ./...`)
+├── .codex-plugin/                # GENERATED Codex plugin tree — never hand-edit
 ├── .opencode-plugin/             # GENERATED OpenCode plugin tree (same content) — never hand-edit
-├── portable-overrides/           # Hand-maintained portable-only sources (README)
-├── shared/
-│   ├── frontmatter-schema.md     # Single source of truth for artifact metadata
-│   ├── completion-evidence.md    # Evidence-gated completion — what `complete` requires, per level
-│   ├── decision-log.md           # Decision ledger — entry schema, capture triggers, collision procedure
-│   ├── path-resolution.md        # Canonical planning-root / plugin-dir / target-repo resolution
-│   ├── vcs-detection.md          # VCS detection algorithm + operations table (git / p4 / plain)
-│   ├── orchestration.md          # Orchestration model, session onboarding, post-compaction re-reads
-│   ├── autonomy.md               # Cross-skill autonomy table — what runs solo vs stops for the user
-│   ├── decision-framework.md     # Universal decision discipline for all skills and agents, any model
-│   ├── review-lanes.md           # Project-supplied review-lane socket convention
-│   ├── language-verification.md  # Language-specific verification — what good looks like
-│   ├── languages/                # Per-language verification references
-│   └── templates/                # Document templates
-├── Research/                     # Research artifacts (flat)
-├── Brainstorm/                   # Brainstorm artifacts (flat)
-├── Specs/                        # Specs (subdirectory per feature)
-│   └── <feature>/README.md
-├── Designs/                      # Designs (subdirectory per component)
-│   └── <component>/README.md
-├── Plans/                        # Implementation plans (flat — status lives in frontmatter)
-│   └── <PlanName>/
-│       ├── README.md             # Frontmatter with status, phases[], overview
-│       ├── 01-Phase-Name.md      # Frontmatter with tasks[], details
-│       └── notes/                # After-action notes
-│           └── 01-Phase-Name.md  # Debrief for Phase 1
-└── Decisions/                    # Decision ledger (single canonical file)
-    └── decisions.md              # decisions[] frontmatter array — see shared/decision-log.md
+├── portable-overrides/           # Hand-maintained portable-only sources (the portable README)
+├── .plans/                       # This repo's own planning artifacts (planning-config.json → ".plans")
+│   └── Decisions/decisions.md    #   the decision ledger — D-NNNN entries are standing constraints
+├── Makefile                      # build / test / plugins / bump-*
+└── bump-version.py               # patch|minor|major bumps, `set X.Y.Z`, `set-floor X.Y.Z`
 ```
+
+## The Two-Tree Architecture
+
+The repo root is hand-edited; `.codex-plugin/` and `.opencode-plugin/` are compiled from it by `sdd plugin sync` (`make plugins`, engine in `internal/portable`). The portable trees re-express the same content in the layout the other harnesses install: `skills/sdd-<name>/SKILL.md`, role prompts instead of agent definitions, `plugin.json` at each tree root, runtime-neutral wording per `shared/agent-runtime.md`.
+
+Four mechanisms, in order of preference:
+
+1. **Transforms** (free — prefer these): skill rename (`plan` → `sdd-plan`), slash-title and description cleanup, `## Path Resolution` → stock `## Resources` swap, agent-dispatch phrase rewrites onto the stable identifiers (`implement_task`, `review_plan_drift`, `review_quality`, `review_spec_compliance`, `review_blind_spots`), path/term rewrites.
+2. **Harness markers** (paragraph-level divergence in one file): `<!-- claude-only -->…<!-- /claude-only -->` blocks are dropped from portable output; `<!-- portable-only … -->` blocks are uncommented. Used in `path-resolution.md`, `orchestration.md`, `templates/quality-scan-prompt.md`.
+3. **Variants** (whole-file divergence): a `*.portable.md` sibling replaces the generated transform of its canonical file. Current variants: `commands/{code-review,implement,setup}/SKILL.portable.md`, `shared/review-lanes.portable.md`, `shared/templates/custom-reviewer.portable.md`. **Editing a canonical file that has a variant means checking whether the variant needs the same change.**
+4. **Overrides** (portable-only files, no canonical sibling): `portable-overrides/` (currently just the portable README).
+
+**Derived prompts**: `shared/agent-prompts/` and `shared/review-prompts/` in the portable trees are generated from `agents/*.md` (`internal/portable/prompts.go`) — frontmatter and Path Resolution dropped, a `{{PLACEHOLDER}}` Inputs block merged in, standard transforms applied. An agent edit propagates to both harnesses automatically. `code-implementer` deliberately has no prompt: implementation dispatches carry the task inline under `implement_task` (D-0009).
+
+**Gates**: `internal/portable`'s tests run in `make test` and fail on (a) drift — either tree differing from a fresh generation — and (b) leaks — any Claude-ism (`sdd-planner:`, `the Task tool`, `~/.claude`, `## Path Resolution`, …) reaching portable output. The generated manifests take `version`/`minSddVersion` from `.claude-plugin/plugin.json`; `make bump-*` re-syncs them inside the bump commit so all trees release together (D-0016).
+
+`sdd plugin status` prints the generated/variant/override provenance of every portable file.
 
 ## Conventions
 
@@ -61,22 +73,16 @@ All artifacts use YAML frontmatter as the machine-readable data layer. See `shar
 Artifacts never capture credentials, private hostnames/IPs, usernames, or machine-specific absolute paths (`/home/<user>/...`, `C:\Users\...`). Paths are repo/planning-root-relative by default; `~/...`/`$HOME/...` are acceptable generic forms where a path outside the root is needed; scrub pasted command output. Single source of truth: `shared/frontmatter-schema.md` § Sensitive Data.
 
 ### VCS-agnostic operations
-The plugin works with git, git worktrees, Perforce, and unversioned directories. Skills that inspect files or history detect the VCS first using the algorithm in `shared/vcs-detection.md`, then use the corresponding command from that file's operations table (`git mv` / `p4 move` / plain `mv`, `git diff` / `p4 diff2`, etc.). Don't hard-code `git` in skills. Likewise, path resolution (planning root, plugin directory, target repo) is defined once in `shared/path-resolution.md` — the single source of truth; don't re-derive it in skills.
+The plugin works with git, git worktrees, Perforce, and unversioned directories. Skills that inspect files or history detect the VCS first using the algorithm in `shared/vcs-detection.md`, then use the corresponding command from that file's operations table. Don't hard-code `git` in skills. Likewise, path resolution (planning root, plugin directory, target repo) is defined once in `shared/path-resolution.md` — don't re-derive it in skills.
 
 ### Decision framework
-Every context this plugin runs in — primary-context skills and all agents, on any model — follows the universal decision discipline in `shared/decision-framework.md` (premise checks before complying, run-to-verify for commandable claims, documented searches behind absence claims, verbatim failure reporting, no downscoping by imagined effort). Each agent embeds the framework's canonical digest block verbatim as a `## Decision Framework` section; `shared/orchestration.md` binds the primary context. When editing the framework, re-sync the embedded block in every agent.
+Every context this plugin runs in — primary-context skills and all agents, on any model — follows the universal decision discipline in `shared/decision-framework.md` (premise checks before complying, run-to-verify for commandable claims, documented searches behind absence claims, verbatim failure reporting, no downscoping by imagined effort). Each agent embeds the framework's canonical digest block verbatim as a `## Decision Framework` section. When editing the framework, re-sync the embedded block in every agent (the portable prompts then follow automatically via generation).
 
 ### Sourced Necessity (the scope counterweight)
-Every gap-detection mechanism in the plugin is additive — `plan-reviewer`'s Completeness and Gap lenses hunt for what's *missing*, and "don't downscope by human effort" correctly disables cost as a reason to cut. Sourced necessity is the counterweight that keeps plans from growing monotonically. It is deliberately **not** "keep it simple", which backfires by inviting cuts to correctness.
-
-The rule is traceability, not size: **every task carries the demand that motivates it, or it is cut** — the same discipline the plugin already applies to facts ("no source, no number"). Operationally: task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`D-NNNN` ids it serves, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses to create unsourced tasks and can now *retire* tasks in Revise mode; `plan-reviewer` carries a Scope lens; and plans and designs carry `## Non-Goals` so a spec's boundaries survive downstream. `sdd validate` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo).
-
-The counterweight starts earlier, at `/brainstorm`, where the cheapest scope decision is available: **Idea 0 is always "do nothing / status quo"**, scored in the same matrix columns as every other option. It is the baseline the rest must beat, `aim for 3-5` is a range rather than a quota, and "do nothing" is a legitimate recommendation — a brainstorm that concludes the problem isn't worth solving yet has succeeded. Because a brainstorm is exploratory, a missing baseline is a `candidate` diagnostic (SDD078), surfaced without blocking; omitting it is legitimate when inaction is impossible (hard deadline, compliance obligation, active outage), but the omission must be deliberate and stated, never silent.
-
-Two limits bound it, and both are load-bearing: **necessity is about sourcing, not size** (the test is "what demands this?", never "does this feel like a lot of work"), and **correctness is never speculative** — error handling, edge cases, tests, rollback, and observability stay even when no requirement names them, justified by the failure they prevent. This targets speculative *capability*, never diligence.
+Every gap-detection mechanism in the plugin is additive, so this rule keeps plans from growing monotonically. It is traceability, not size: **every task carries the demand that motivates it, or it is cut**. Task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`D-NNNN` ids it serves, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses unsourced tasks and can retire tasks in Revise mode; `plan-reviewer` carries a Scope lens; plans and designs carry `## Non-Goals`. `sdd validate` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo). The counterweight starts at `/brainstorm`: **Idea 0 is always "do nothing / status quo"**, scored in the same matrix as every other option (SDD078 surfaces a missing baseline as a candidate diagnostic). Two limits bound the rule: necessity is about sourcing, not size, and **correctness is never speculative** — error handling, edge cases, tests, rollback, and observability stay even when no requirement names them.
 
 ### Decision Ledger
-User decisions — design choices, concept definitions, answered design questions — are recorded as durable truth in a `decision-log` artifact (`decisions[]` frontmatter array): `Decisions/decisions.md` under the planning root when the root is inside the repo, or the target repo's own `DECISIONS.md` when the planning root is external — decisions live with the repo they represent, never in a cross-repo global ledger. Only *durable* decisions qualify: the ledger is the set of truths a future session must find without knowing which document to open, so a choice whose whole effect is what a spec or design now says stays in that artifact — `shared/decision-log.md` § Capture carries the admission test (outlives its document / not already carried by it / a real alternative lost), and under-capture is recoverable while an accepted entry is immutable. `shared/decision-log.md` is the single source of truth: entry schema, the admission test and capture triggers, the append-time collision check (a contradiction with an `accepted` entry always stops for the user — never auto-resolve), and distribution rules (the ledger is intent context: researcher/plan-reviewer/spec-reviewer yes; quality-scanner/blind-spot-finder never). Not to be confused with the decision *framework* above, which is the reasoning discipline.
+User decisions — design choices, concept definitions, answered design questions — are recorded as durable truth in a `decision-log` artifact (`decisions[]` frontmatter array): `Decisions/decisions.md` under the planning root when the root is inside the repo, or the target repo's own `DECISIONS.md` when the planning root is external. Only *durable* decisions qualify — `shared/decision-log.md` § Capture carries the admission test (outlives its document / not already carried by it / a real alternative lost). A new decision that contradicts an `accepted` entry always stops for user reconciliation — never auto-resolve. `shared/decision-log.md` is the single source of truth: entry schema, capture triggers, collision check, and distribution rules (the ledger is intent context: researcher/plan-reviewer/spec-reviewer yes; quality-scanner/blind-spot-finder never). Not to be confused with the decision *framework* above, which is the reasoning discipline.
 
 ### Plan Hierarchy
 ```
@@ -93,37 +99,21 @@ Plan (README.md)       <- like a Jira Project
 | phase | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | task | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 
+| Artifact type | Statuses |
+|------|----------|
+| research / brainstorm | `draft`, `active`, `archived` |
+| spec / design | `draft`, `review`, `approved`, `implemented`, `superseded` |
+| debrief | `draft`, `complete` |
+| retro / diagram (legacy, read-only) | `draft`, `complete` / `draft`, `active`, `archived` |
+
 ### Completion Evidence
-`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence (`### Completion Evidence` per task, `## Phase Completion Evidence`, `## Plan Completion Evidence`) records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. A task, phase, or plan may not transition to `complete` while its evidence section is pending or nonconforming. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically.
+`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically.
 
 ### Plan Lifecycle
-Plans live flat under `Plans/<PlanName>/`. Lifecycle is tracked in the plan README's frontmatter `status` field (`draft`, `approved`, `active`, `complete`, `archived`) — not by moving directories. Commands update `status` as plans progress:
-- `/plan` creates the plan with `status: draft`, then sets `status: approved` after review
-- `/implement` sets `status: active` when starting work
-- `/implement` sets `status: complete` when the final phase finishes (evidence-gated — see above); `/debrief` backfills it if missed, subject to the same gate
+Plans live flat under `Plans/<PlanName>/`; lifecycle is the README frontmatter `status`, never a directory move. `/plan` creates `draft` and sets `approved` after review; `/implement` sets `active`, then `complete` when the final phase finishes (evidence-gated); `/debrief` backfills a missed transition subject to the same gate. AI commands filter by `status` to scope what they read.
 
-AI commands filter by `status` to scope what they read.
-
-### File Naming
-- Plans: `Plans/<PlanName>/README.md`, `01-Phase-Name.md`
-- Phases numbered with zero-padded prefixes: `01-`, `02-`, etc.
-- Specs/Designs: `<Name>/README.md`
-
-### Templates
-Always use templates from `shared/templates/` when creating new artifacts. Replace `{{PLACEHOLDERS}}` with actual values.
-
-### Portable tree (OpenCode / Codex)
-
-This repository is the single source for **both** harness families. The repo root is the canonical Claude plugin, hand-edited as always. `.codex-plugin/` and `.opencode-plugin/` are **generated** plugin trees for Codex and OpenCode — the same portable content written once per install convention (`skills/sdd-<name>/SKILL.md`, prompt files instead of agent definitions, `plugin.json` at each tree root, runtime-neutral wording per `shared/agent-runtime.md`). They replace the retired standalone `sdd-planner` repo. Codex marketplaces point at `.codex-plugin/`; OpenCode users symlink `.opencode-plugin/` into an `.agents` skills root.
-
-`sdd plugin sync` (`make plugins`) produces it from the canonical tree via `internal/portable`:
-- **Transforms** — skill rename (`plan` → `sdd-plan`), slash-title and description cleanup, `## Path Resolution` → stock `## Resources` section, agent-dispatch phrase rewrites (`sdd-planner:researcher` → collaboration-subagent idiom with the stable dispatch identifiers `implement_task`, `review_plan_drift`, `review_quality`, `review_spec_compliance`, `review_blind_spots`), path/term rewrites, and harness marker blocks (`<!-- claude-only -->…<!-- /claude-only -->` dropped; `<!-- portable-only … -->` uncommented).
-- **Variants** — where the two harnesses need genuinely different documents, a `*.portable.md` sibling next to the canonical file wins wholesale (`commands/code-review/SKILL.portable.md`, `commands/implement/SKILL.portable.md`, `commands/setup/SKILL.portable.md`, `shared/orchestration.portable.md`, `shared/path-resolution.portable.md`, `shared/review-lanes.portable.md`, plus two templates). **Editing a canonical file that has a variant means checking whether the variant needs the same change.**
-- **Derived prompts** — `shared/agent-prompts/` + `shared/review-prompts/` in the portable tree are generated from `agents/*.md` (`internal/portable/prompts.go`): frontmatter dropped, Path Resolution section dropped, a `{{PLACEHOLDER}}` Inputs block merged in (an agent's own `## Inputs` section keeps its lane-critical prose), standard transforms applied. An agent edit propagates to both harnesses automatically; `code-implementer` deliberately has no prompt (implementation dispatches carry the task inline under the stable identifier `implement_task`).
-- **Overrides** — `portable-overrides/` holds portable-only files with no canonical sibling (currently just the portable README).
-- **Gates** — `internal/portable`'s tests (run by `make test`) fail on drift between `portable/` and a fresh generation, and on any Claude-ism leaking into the portable tree (`sdd-planner:`, `the Task tool`, `~/.claude`, …). The generated manifest takes `version`/`minSddVersion` from `.claude-plugin/plugin.json`, and `make bump-*` re-syncs it inside the bump commit, so both trees always release together.
-
-Both trees are committed (they are what the other harnesses install), and `sdd plugin status` prints the generated/variant/override provenance of every file.
+### File Naming & Templates
+Plans: `Plans/<PlanName>/README.md` with zero-padded phase docs (`01-Phase-Name.md`); specs/designs: `<Name>/README.md`; research/brainstorm: flat files. Always create artifacts from `shared/templates/`, replacing `{{PLACEHOLDERS}}` — the templates, `shared/frontmatter-schema.md`, and `sdd validate` are kept in lockstep by `make test`.
 
 ## Skills
 
@@ -133,25 +123,19 @@ Both trees are committed (they are what the other harnesses install), and `sdd p
 | `/sdd-planner:brainstorm` | Explore possibilities → `Brainstorm/<topic>.md` |
 | `/sdd-planner:specify` | Write requirements → `Specs/<feature>/README.md` |
 | `/sdd-planner:design` | Technical architecture → `Designs/<component>/README.md` |
-| `/sdd-planner:plan` | Create or expand an implementation plan → `Plans/<Name>/` (deepens existing plans via gap analysis on re-run) |
+| `/sdd-planner:plan` | Create or expand an implementation plan → `Plans/<Name>/` (deepens on re-run) |
 | `/sdd-planner:implement` | Execute a plan phase — implement tasks, track progress |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
-| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
-| `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories, creates launcher |
+| `/sdd-planner:validate` | Deterministic + semantic validation (read-only, wraps `sdd validate`) |
+| `/sdd-planner:setup` | Set up a repo — config, directories, binary verification, launcher |
+
+In the portable trees the same skills ship as `sdd-research`, `sdd-plan`, …, selected by description matching rather than slash invocation.
 
 ### Model-only reference skills (`skills/`)
-
-The `skills/` directory holds reference skills that are **not** user-invocable slash commands. Each carries `disable-model-invocation: true`, so it never appears in the `/sdd-planner:*` namespace, but the model auto-loads its body (progressive disclosure) when the task matches its `description`. They package on-demand reference that lifecycle skills used to read inline.
-
-| Skill | Loads when |
-|-------|-----------|
-| `<lang>-specifications` (`cpp`, `rust`, `go`, `python`, `typescript`, `java`, `swift`) | Planning, implementing, or reviewing code in that language — supplies structural-verification tools and quality patterns. Coordinated by `shared/language-verification.md`. |
-| `decision-log` | The user makes a design choice, defines a concept, or answers a design question — in any conversation, inside or outside a lifecycle skill. Carries the capture + collision discipline; convention lives in `shared/decision-log.md`. |
-
-Restricted agents (e.g. the intent-isolated reviewers) don't get the main session's auto-loading, so they read a skill's `SKILL.md` body as a plain file when they need it.
+Not user-invocable (`disable-model-invocation: true`); the model auto-loads them by description. `<lang>-specifications` (7 languages) supplies structural-verification tools when planning/implementing/reviewing that language, coordinated by `shared/language-verification.md`; `decision-log` carries the capture + collision discipline for ad-hoc decisions. In the portable trees the language skills flatten to `shared/language-specs/<lang>.md`; `decision-log` ships as `sdd-decision-log`. Restricted agents read skill bodies as plain files when they need them.
 
 ## Agents
 
@@ -161,129 +145,75 @@ Restricted agents (e.g. the intent-isolated reviewers) don't get the main sessio
 | `plan-reviewer` | Sonnet | Reviews plans for completeness, feasibility, conventions |
 | `spec-reviewer` | Haiku | Reviews specs for testability, completeness, ambiguity |
 | `code-implementer` | Opus | Implements code from plan tasks in the target codebase |
-| `drift-detector` | Sonnet | Diff + plan only — flags missing work, scope creep, approach drift |
+| `drift-detector` | Sonnet | Diff + plan only — missing work, scope creep, approach drift |
 | `quality-scanner` | Sonnet | Diff + code only (intent-blind) — correctness, safety, maintainability, over-engineering |
 | `spec-compliance` | Sonnet | Diff + specs/designs only — requirements coverage, contract violations |
 | `blind-spot-finder` | Sonnet | Diff only — adversarial fresh-eyes reviewer |
 
+These files are dual-purpose: Claude dispatches them as subagent types, and the portable trees derive their role-prompt files from the same bodies.
+
 ### Code Review Architecture
 
-`/code-review` orchestrates the four specialized reviewers **from the primary context**. Claude Code does not allow subagents to spawn subagents, so the orchestration has to live in the slash command (which runs in the primary context), not in an orchestrator subagent.
+`/code-review` orchestrates the four specialized reviewers **from the primary context** (Claude Code does not allow subagents to spawn subagents):
 
-1. **`/code-review` (primary context)** identifies the minimum references — plan path, phase doc path, target repo path, diff scope — and resolves just enough planning metadata to dispatch with the right inputs (plan's `related` frontmatter for spec/design paths, a concrete git diff range). It does **not** read plan/spec/design bodies or diff contents.
-2. **Four specialized reviewers** are dispatched in parallel via `Task` (a single message with four tool calls) using the plugin-namespaced form: `sdd-planner:drift-detector`, `sdd-planner:quality-scanner`, `sdd-planner:spec-compliance`, `sdd-planner:blind-spot-finder`. Each runs in its own fresh context. Intent isolation is enforced by what they're given:
-   - `drift-detector` sees diff + plan (no specs/designs)
-   - `quality-scanner` sees diff + code only (intent-blind)
-   - `spec-compliance` sees diff + specs/designs (no plan)
-   - `blind-spot-finder` sees diff only (no context at all)
-3. **Primary context** synthesizes the four reports — highlighting agreements, disagreements, and findings only `blind-spot-finder` caught — and presents the unified review to the user.
+1. The primary context identifies only references — plan path, phase doc path, target repo path, diff scope — plus the plan's `related` frontmatter and a concrete diff range. It does **not** read plan/spec/design bodies or diff contents.
+2. Four reviewers are dispatched in parallel via `Task` using plugin-namespaced names (`sdd-planner:drift-detector`, …), each receiving only its lane's inputs. Intent isolation is the product: `blind-spot-finder` sees the diff and nothing else.
+3. The primary context synthesizes the reports — agreements, disagreements, and blind-spot-only findings.
 
-**Hard contract**: `/code-review` MUST dispatch the four sub-agents via Task. It MUST NOT read the plan body, spec bodies, design bodies, or full diff and write findings itself — that would collapse the intent isolation and produce a single-pass review cosplaying as a four-lane review. If any dispatch fails, `/code-review` returns a loud error and stops; it does not fall back to self-synthesis.
+**Hard contract**: `/code-review` MUST dispatch the four lanes via Task and MUST NOT read the bodies and self-synthesize — that is a single-pass review cosplaying as a four-lane review. A failed built-in dispatch is a loud STOP, never a silent fallback. `drift-detector`, `quality-scanner`, and `blind-spot-finder` validate every finding against the full file and calling context, because diffs lie by omission.
 
-`drift-detector`, `quality-scanner`, and `blind-spot-finder` are required to validate every finding against the actual code (full file + calling context), not just the diff hunk, because diffs lie by omission.
+**Project-supplied review lanes (the socket).** A project can add its own read-only lanes by dropping `.claude/agents/*-reviewer.md` with `reviewLane: true` (optional `appliesTo` globs, `lane` input-bundle selector, `required` verdict gate). Project lanes are additive and best-effort — they never weaken the built-in four, and a declared lane that doesn't run degrades the verdict (a `required` one forces BLOCKED). Lanes are trust-gated: `/code-review` confirms discovered lanes before dispatch when the target repo isn't the session's own project. Convention: `shared/review-lanes.md`; template: `shared/templates/custom-reviewer.md`.
 
-**Project-supplied review lanes (the socket).** The four built-in lanes are a floor, not a ceiling. A project can plug in its own specialized reviewers — e.g. a SQL-migration or Terraform reviewer — by dropping a `.claude/agents/*-reviewer.md` with `reviewLane: true` in its frontmatter, without touching the plugin. `/code-review` globs for these (Step 2e), matches each against the diff's shape, and dispatches the matches as **additional** parallel lanes. The convention is defined in `shared/review-lanes.md` (single source of truth) with a copyable template at `shared/templates/custom-reviewer.md`. Three frontmatter fields: `reviewLane: true` (required; the opt-in marker), `appliesTo` (optional path globs gating dispatch — absent means always dispatched and self-scoping), and `lane` (optional — a recognized value `code`/`spec`/`plan`/`diff-only` gets that built-in's intent-isolated input bundle with isolation **plugin-enforced**; an absent value makes it a standalone lane and an unrecognized value groups same-named lanes together, both getting base inputs only and self-gathering further context, so their isolation is the **project's** responsibility). Project lanes are strictly **additive and best-effort**: they never replace or weaken the built-in four, and a project lane that fails to dispatch, errors, or is malformed is recorded and skipped — never fatal (the socket imposes no timeout; keeping a lane responsive is the project's responsibility). The strict "STOP on dispatch failure" rule applies to the four built-ins only; the Overall Verdict is computed from the four plus any successful project lanes. Failure is **never silent**, though: a declared lane that doesn't run **degrades the verdict headline**, and an opt-in `required: true` lane that doesn't run **forces the verdict to BLOCKED** (the four still run — `required` gates the verdict, not the floor). Lanes must be **read-only** and are **trust-gated** — `/code-review` confirms discovered lanes before dispatch when the target repo isn't the session's own project, since they execute repo-supplied instructions with session tool access. (The discovery glob also matches a project's `plan-reviewer`/`spec-reviewer` overrides; those must **not** carry `reviewLane` — the marker is what disambiguates a lane from an override.)
-
-`/implement` dispatches `quality-scanner` directly (via `sdd-planner:quality-scanner`) for per-task reviews. It bypasses the full four-lane review because the question after a single task is local to the code at hand.
+`/implement` dispatches `quality-scanner` directly for per-task reviews. In the portable trees, the four lanes run as rendered prompts under the stable identifiers (`review_plan_drift`, `review_quality`, `review_spec_compliance`, `review_blind_spots`) with a labeled single-agent fallback — serial lanes never claim independent corroboration.
 
 ### MCP Server Inheritance
 
-Agents fall into two groups based on how they handle MCP servers:
-
-**Inherit all session tools (no `tools:` frontmatter)** — these agents automatically pick up whatever MCP servers the user's project has configured (e.g., `context7` for docs, Linear/Jira MCPs for tickets, Slack, Notion, etc.):
-- `researcher` — uses doc-lookup MCPs for library research; falls back to WebFetch/WebSearch
-- `code-implementer` — uses doc-lookup MCPs to verify current API syntax while writing code
-- `quality-scanner` — uses doc-lookup MCPs when judging whether diff code uses a library correctly
-- `plan-reviewer` — uses doc-lookup MCPs to verify planned APIs are real and current; uses ticket/KB MCPs to cross-check the plan against linked tickets
-- `spec-reviewer` — uses ticket/KB MCPs to compare a spec against its source-of-truth ticket; uses doc-lookup MCPs to verify external API contracts the spec assumes
-
-**Restricted allowlist (`tools:` frontmatter)** — these three review agents have no MCP access on purpose. Their value comes from intent isolation: each is shown only what its lane needs, and MCP access would let intent leak in through external sources:
-- `drift-detector` — diff + plan only. Reading specs/designs (or fetching tickets that *are* specs) would erase the lane.
-- `spec-compliance` — diff + specs/designs only. Reading the plan via tickets would muddy what counts as "the spec."
-- `blind-spot-finder` — diff only. Any external context erodes the diff-only adversarial guarantee.
-
-The allowlists block MCP/Write/Edit, but the lanes keep `Bash` because the diff is their input — only a shell can run `git diff`/`p4 diff2` and the tests/linters their validation duties require. Bash is not inherently read-only, so it is guarded twice: behaviorally (each lane's prompt forbids writes and out-of-lane reads, and the orchestrator curates inputs) and mechanically, by the `sdd hook pretooluse` PreToolUse hook — for the seven read-only agents (`drift-detector`, `spec-compliance`, `blind-spot-finder`, `quality-scanner`, `researcher`, `plan-reviewer`, `spec-reviewer`) it allowlists read-only `git`/`p4` subcommands and denies write- or network-shaped commands (`rm`, `sed -i`, redirection outside `/dev/null`, `curl`, package installs, `git commit/push/checkout/...`). Test and lint runs still pass through, since reviewers are required to run them. The guard fails open for every other agent and the main session, and it covers only the plugin's own agents — project-supplied review lanes remain protected by the trust gate, not the guard. Intent isolation (what a lane is *given*) remains behavioral either way.
-
-The inheriting agents carry behavioral guardrails in their bodies (`researcher`, `quality-scanner`, `plan-reviewer`, and `spec-reviewer` are read-only even though they could technically inherit Write/Edit and write-shaped MCP calls from the session). Projects that want stricter guarantees can drop overrides into `.claude/agents/<name>.md` at the project level — those take precedence over plugin-provided agents.
+Agents without `tools:` frontmatter (`researcher`, `code-implementer`, `quality-scanner`, `plan-reviewer`, `spec-reviewer`) inherit all session tools including MCP servers — doc lookups, ticket cross-checks. The three intent-isolated lanes (`drift-detector`, `spec-compliance`, `blind-spot-finder`) carry a restricted allowlist with no MCP access on purpose: external context would erode the lane. All lanes keep `Bash` because the diff is their input; it is guarded behaviorally (prompts forbid writes) and mechanically by the `sdd hook pretooluse` PreToolUse hook, which allowlists read-only `git`/`p4` subcommands and `sdd`'s own read-only subcommands for the seven read-only agents, denies write- or network-shaped commands, and fails open for everything else. Projects wanting stricter guarantees can override any agent via `.claude/agents/<name>.md`.
 
 ## Workflow Lifecycle
 
-The typical flow through skills:
 ```
-/sdd-planner:setup → /sdd-planner:research → /sdd-planner:brainstorm → /sdd-planner:specify → /sdd-planner:design → /sdd-planner:plan → /sdd-planner:implement → /sdd-planner:code-review → /sdd-planner:debrief
+/sdd-planner:setup → research → brainstorm → specify → design → plan → implement → code-review → debrief
 ```
-Install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin to add `/sdd-dashboard:dashboard` (HTML dashboard) and `/sdd-dashboard:status` (quick text summary) for checking progress.
-Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point (`/sdd-planner:decide check` is the periodic hygiene net for the ledger). Use `/sdd-planner:validate` before implementation, before any completion transition, or in CI — lifecycle skills also invoke its validator script at their own gates.
-
-## Artifact Status Values
-
-| Type | Statuses |
-|------|----------|
-| research | `draft`, `active`, `archived` |
-| brainstorm | `draft`, `active`, `archived` |
-| spec | `draft`, `review`, `approved`, `implemented`, `superseded` |
-| design | `draft`, `review`, `approved`, `implemented`, `superseded` |
-| diagram (legacy) | `draft`, `active`, `archived` |
-| debrief | `draft`, `complete` |
-| retro (legacy) | `draft`, `complete` |
+Use `poke-holes` before approving any artifact, `decide` to record or audit decided truths at any point (`decide check` is the ledger hygiene net), and `validate` before implementation, before any completion transition, or in CI. Install the companion `sdd-dashboard` plugin for `/sdd-dashboard:dashboard` and `/sdd-dashboard:status`.
 
 ## The `sdd` Binary
 
-Every skill and both hooks drive one cross-platform Go binary. The plugin does
-not ship or build it — install it once per machine:
+Every skill and both hooks drive one cross-platform Go binary. The plugin does not ship or build it — users install it once per machine:
 
 ```bash
 go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
 ```
 
-`/setup` verifies it before touching anything, copies it to
-`${CLAUDE_PLUGIN_ROOT}/bin/` (hooks.json can interpolate only
-`${CLAUDE_PLUGIN_ROOT}`, never `PATH`), and stops with the exact `go install`
-command when the binary is missing or below `minSddVersion`.
+`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `decide`, `review scaffold`, `template`, `hook`, `provision`, `plugin sync|check|status`, `doctor`.
 
 ## Configuration
 
-### planning-config.json
-The planning root's `planning-config.json` drives all path resolution:
-- `planningRoot`: where artifacts live, as a path. Use `"."` if planning artifacts are at the repo root, a relative subdirectory name (e.g., `"Planning"`) if they live inside a project, or an absolute path (e.g., `"/home/user/Code/my-planning-repo"`) if they live in an external directory shared by multiple repos. There is no other distinction — the path is just a path.
-- `repositories`: map of external repo keys to GitHub URLs (used when plans target code in other repos)
-- `planMapping`: map of plan names to target repos
-- `planRepository`: key for the planning repo itself
-
-The companion `sdd-dashboard` plugin reads two additional fields when generating its HTML dashboard: `dashboard: true` (opt-in switch), and `title` / `description` for the page chrome. They are ignored if the plugin isn't installed.
-
-### planning-config.local.json (gitignored)
-Local filesystem paths for external repositories:
-```json
-{ "repositories": { "repo-key": { "path": "/absolute/path" } } }
-```
-
-## Dashboard
-
-The HTML dashboard previously lived here has moved to a companion plugin: [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin). Install it alongside `sdd-planner` to get `/sdd-dashboard:dashboard` (HTML) and `/sdd-dashboard:status` (text summary). The dashboard is opt-in via `"dashboard": true` in `planning-config.json`.
+`planning-config.json` at the planning root drives path resolution: `planningRoot` (a path — `"."`, a relative subdirectory, or an absolute external directory), `repositories` (repo keys → GitHub URLs), `planMapping` (plan names → repo keys), `planRepository`. Local absolute paths live in gitignored `planning-config.local.json`. The dashboard companion reads optional `dashboard` / `title` / `description`. This repo's own planning root is `.plans/`.
 
 ## Maintenance Rules
 
-When adding, removing, or renaming skills (`commands/`), agents (`agents/`), or modifying user-facing behavior, update these files to stay in sync:
-- **`README.md`** — command/agent counts, tables, Mermaid diagrams, directory listing
-- **`CLAUDE.md`** — skill table, agent table, workflow lifecycle
-- **`shared/templates/claude-md-full.md`** — full CLAUDE.md template for a planning-only repo (skill table, agent table, workflow lifecycle)
-- **`shared/templates/claude-md-snippet.md`** — embeddable section to drop into an existing project's CLAUDE.md (skill table only)
-- **Templates ↔ schema ↔ validator** — when changing any template, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md`, verify every template still satisfies the schema AND `sdd validate`'s contract (required fields and exact headings present, statuses valid, evidence labels intact). The validator is the enforcement layer; docs and script must not drift apart
-- **`shared/decision-framework.md` ↔ agents** — when changing the framework, update the canonical agent block in that file and re-sync the identical `## Decision Framework` section in all eight `agents/*.md`
-- **Run `make test` after touching templates, `shared/frontmatter-schema.md`, or a rule in `internal/rules/`** — it runs the Go suite *and* the differential gate (`make parity`), so template↔validator drift fails the build instead of reaching users
-- **Every rule carries its own `Good` and `Bad` examples.** A rule with no failing example has never been shown to fire; one with no passing example has never been shown to stay quiet. The registry meta-test in `internal/rules/rules_test.go` fails when either is missing, so examples cannot lag the port. `make gen-fixtures` materializes them into the parity corpus; commit the result
-- **Run `make plugins` after touching `commands/`, `skills/`, `agents/`, `shared/`, or `.claude-plugin/plugin.json`** — the portable tree (including the agent-derived prompt files) is generated from them and `make test` fails on drift. When a canonical file has a `*.portable.md` variant, decide whether the variant needs the same edit
-- **Never regenerate `tools/parity/frozen-expectations.json`.** It is the deleted Python validator's last recorded verdict and the only remaining statement of what "correct" means. Rewriting it would change the answer rather than test against it. `tools/parity/EXEMPTIONS.md` records the two codes it does not cover and why
+When adding, removing, or renaming skills, agents, or user-facing behavior, keep these in sync:
+
+- **`README.md`**, **`CLAUDE.md`**, **`AGENTS.md`** — counts, tables, diagrams, directory listings
+- **`shared/templates/claude-md-full.md`** / **`claude-md-snippet.md`** and **`agents-md-full.md`** / **`agents-md-snippet.md`** — the setup-generated guidance must mirror the skill/agent tables
+- **Run `make plugins` after touching `commands/`, `skills/`, `agents/`, `shared/`, or `.claude-plugin/plugin.json`** — the portable trees are generated from them; `make test` fails on drift. When a canonical file has a `*.portable.md` variant, decide whether the variant needs the same edit
+- **Templates ↔ schema ↔ validator** — when changing any template, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md`, verify every template still satisfies the schema AND `sdd validate`'s contract. The validator is the enforcement layer; docs and binary must not drift apart
+- **`shared/decision-framework.md` ↔ agents** — when changing the framework, re-sync the identical `## Decision Framework` block in all eight `agents/*.md` (portable prompts regenerate from them)
+- **Run `make test` after touching templates, the schema, or `internal/rules/`** — it runs the Go suite, the frozen regression corpus, the template gate, and the portable drift/leak gates
+- **Every rule carries its own `Good` and `Bad` examples** — the registry meta-test fails when either is missing. `make gen-fixtures` materializes them into the corpus; commit the result
+- **Never regenerate `tools/parity/frozen-expectations.json`** — it is the deleted Python validator's last recorded verdict; rewriting it would change the answer rather than test against it
 
 ## Versioning
 
-The plugin uses `vMAJOR.MINOR.PATCH` semver. The version is declared in `.claude-plugin/plugin.json`. Claude Code caches plugins by version — **users will not see changes unless the version is bumped**.
+`vMAJOR.MINOR.PATCH`, declared in `.claude-plugin/plugin.json` — the single source; `internal/version/version.go` and both portable manifests are regenerated from it. Claude Code caches plugins by version — **users will not see changes unless the version is bumped**.
 
-| Bump | When | Command |
-|------|------|---------|
-| **patch** | Bug fix, wording tweak, small correction | `make bump-patch` |
-| **minor** | New or completed feature, new skill, meaningful behavior change | `make bump-minor` |
-| **major** | Breaking changes to artifact format, config schema, or skill interface | `make bump-major` |
+| Action | Command |
+|--------|---------|
+| Bug fix / wording tweak | `make bump-patch` |
+| New or changed feature, new skill | `make bump-minor` |
+| Breaking artifact/config/skill-interface change | `make bump-major` |
+| Explicit jump (e.g. release unification) | `python3 bump-version.py set X.Y.Z && make plugins` |
+| Advance the binary floor (deliberate, D-0015) | `python3 bump-version.py set-floor X.Y.Z && make plugins` |
 
-Each `make bump-*` target updates `plugin.json`, creates a commit (`v1.2.3`), and adds a git tag (`v1.2.3`). Always bump before pushing a release.
+Each `make bump-*` target runs the test suite first, updates `plugin.json` + `version.go`, re-syncs the portable manifests, and creates the `vX.Y.Z` commit + tag. Always bump before pushing a release.
