@@ -172,7 +172,11 @@ var agentRewrites = []struct{ from, to string }{
 	{"`sdd-planner:researcher`", "the researcher prompt (`shared/agent-prompts/researcher.md`)"},
 	{"`sdd-planner:plan-reviewer`", "the plan-review prompt (`shared/agent-prompts/plan-reviewer.md`)"},
 	{"`sdd-planner:spec-reviewer`", "the spec-review prompt (`shared/agent-prompts/spec-reviewer.md`)"},
-	{"`sdd-planner:quality-scanner`", "the quality-scan prompt (`shared/templates/quality-scan-prompt.md`)"},
+	// Kept consistent with the three sibling lane rules even though every
+	// current occurrence is shadowed by a variant or marker block — a future
+	// unshadowed reference must render as the stable lane identifier, not as
+	// bespoke phrasing.
+	{"`sdd-planner:quality-scanner`", "the `review_quality` lane (`shared/review-prompts/quality.md`)"},
 	{"`sdd-planner:drift-detector`", "the `review_plan_drift` lane (`shared/review-prompts/plan-drift.md`)"},
 	{"`sdd-planner:spec-compliance`", "the `review_spec_compliance` lane (`shared/review-prompts/spec-compliance.md`)"},
 	{"`sdd-planner:blind-spot-finder`", "the `review_blind_spots` lane (`shared/review-prompts/blind-spots.md`)"},

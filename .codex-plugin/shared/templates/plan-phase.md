@@ -68,6 +68,7 @@ Brief description of what this phase delivers.
 
 ### Notes
 Revision boundary: {{COMPLETE_BEHAVIOR_OR_CAPABILITY_THIS_TASK_LANDS}}
+
 ### Completion Evidence
 
 <!-- Keep the exact pending line until completion. Populated evidence uses the

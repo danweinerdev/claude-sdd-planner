@@ -40,6 +40,7 @@ Multi-agent behavior is expressed as bundled, runtime-neutral role prompts that 
 - `shared/review-prompts/` — the four code-review lanes (see `shared/review-lanes.md`).
 
 Dispatch rules: substitute every `{{PLACEHOLDER}}` before dispatch; reviewer dispatches get a fresh context that does not inherit the primary conversation, so the artifact is judged as written rather than as intended. Skills must work without collaboration subagents: fall back to a transparent single-agent workflow, label reviewer fallbacks **self-review**, and never claim independent review or corroboration when none occurred.
+
 ## Session Onboarding
 
 Orientation read order at the start of a planning session — frontmatter answers most orientation questions; read bodies only when the decision at hand needs them:

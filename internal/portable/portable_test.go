@@ -123,3 +123,64 @@ func TestCheckClean(t *testing.T) {
 		t.Log("run `sdd plugin sync` (or `make plugins`) and commit the result")
 	}
 }
+
+// TestHeadingSpacing lints every generated markdown file for a heading that
+// directly follows a non-blank line — the rendering defect a marker block
+// without a trailing blank line produces (strict CommonMark does not promise
+// a heading renders as one without a preceding blank line). Fence-aware so
+// `# comments` inside code blocks don't false-positive.
+func TestHeadingSpacing(t *testing.T) {
+	r, err := Generate(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range r.Files {
+		if !strings.HasSuffix(rel, ".md") {
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		inFence := false
+		inComment := false
+		inFrontmatter := strings.HasPrefix(string(content), "---\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if inFrontmatter {
+				if i > 0 && trimmed == "---" {
+					inFrontmatter = false
+				}
+				continue // YAML comments are #-lines too
+			}
+			if inComment {
+				if strings.Contains(line, "-->") {
+					inComment = false
+				}
+				continue
+			}
+			if strings.Contains(line, "<!--") && !strings.Contains(line, "-->") {
+				inComment = true
+				continue
+			}
+			if strings.HasPrefix(trimmed, "```") {
+				inFence = !inFence
+				continue
+			}
+			if inFence || i == 0 {
+				continue
+			}
+			if strings.HasPrefix(line, "#") {
+				// Heading-shaped: one to six #'s then a space.
+				hashes := 0
+				for hashes < len(line) && line[hashes] == '#' {
+					hashes++
+				}
+				if hashes == 0 || hashes > 6 || hashes >= len(line) || line[hashes] != ' ' {
+					continue
+				}
+				prev := strings.TrimSpace(lines[i-1])
+				if prev != "" && !strings.HasPrefix(prev, "#") {
+					t.Errorf("%s:%d: heading %q directly follows non-blank line %q — needs a blank line", rel, i+1, line, lines[i-1])
+				}
+			}
+		}
+	}
+}
