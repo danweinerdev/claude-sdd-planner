@@ -38,18 +38,18 @@ Resolve the ledger per `shared/decision-log.md` § Ledger location: `<planning-r
 0. An explicit `/decide` is the user asking for the entry — record it. But if the statement plainly fails the admission test (it restates what an artifact already says, or it's an event or one-off disposition), say so in one line and name the artifact that already carries it, then follow the user's call. Don't refuse, and don't silently skip.
 1. Draft the entry per the schema in `shared/decision-log.md`: next sequential `D-NNNN`, `kind`, `statement` (one standalone sentence), `rationale`, and — pull these from the conversation or ask briefly — `rejected[]` alternatives, `scope`, `tags`. `decided_by: user` and `status: accepted` only when the user actually made the choice; an agent-inferred decision is `status: proposed` with `decided_by: agent` (acceptance later flips it to `user-approved`).
 2. **Run the collision check** (`shared/decision-log.md` § Collision Detection) before appending. On `contradicts`/`supersedes`, STOP and present both entries; the user chooses supersede / keep-old / both-hold-with-narrowed-scope. Never auto-resolve.
-3. Show the drafted entry to the user in-flow, append it to `decisions[]`, update the ledger's `updated` date, and re-read the frontmatter to confirm it parses as YAML.
+3. Show the drafted entry to the user **verbatim and in full, and wait for explicit approval** — even though `/decide` was an explicit ask, the exact entry text must itself be approved before it is written; an amended draft is re-shown and re-approved. Only then append the approved text unchanged to `decisions[]`, update the ledger's `updated` date, and re-read the frontmatter to confirm it parses as YAML.
 
 ### List / Search / Show
 Read the ledger frontmatter only (frontmatter-first). Present matching entries compactly: `id — status — statement (date)`. For `show`, include the full entry plus any `## D-NNNN` body section. For lookups phrased as questions ("what did we decide about X?"), answer with the matching `statement`s and cite the ids — the statement IS the answer.
 
 ### Accept
-Promoting a `proposed` entry is an **append-equivalent event** (`shared/decision-log.md` lifecycle rules): only the user can accept, and the full collision check re-runs first — entries accepted since the proposal was logged may collide with it. On a clean check, set `status: accepted`, update the entry's `date` and the ledger's `updated` date. On a collision, stop and run the reconciliation menu.
+Promoting a `proposed` entry is an **append-equivalent event** (`shared/decision-log.md` lifecycle rules): only the user can accept, and the full collision check re-runs first — entries accepted since the proposal was logged may collide with it. On a clean check, show the exact mutation (the entry with `status: accepted`, updated `date`, and `decided_by` flip where applicable) and get explicit approval before writing it. On a collision, stop and run the reconciliation menu.
 
 ### Supersede
 1. Read the target entry. If it isn't `accepted`, tell the user (rejected/superseded entries need no supersession; proposed entries can simply be edited — they aren't immutable yet).
-2. Draft the replacement entry with `supersedes: D-NNNN`; confirm with the user.
-3. Append the new entry; on the old entry set `status: superseded` and `superseded_by: <new id>` — touching nothing else in it.
+2. Draft the replacement entry with `supersedes: D-NNNN`; show the exact, complete entry text and the status-flip mutation to the old entry, and get the user's explicit approval of both before writing.
+3. Append the approved entry unchanged; on the old entry set `status: superseded` and `superseded_by: <new id>` — touching nothing else in it.
 4. Run the **supersession cascade** from `shared/decision-log.md`: grep `Specs/`, `Designs/`, `Plans/` for citations of the superseded entry and report possibly-stale artifacts. Don't rewrite them unasked.
 
 ### Check (hygiene audit)
@@ -63,4 +63,4 @@ Appends to (or creates) `Decisions/decisions.md`. Never deletes or rewrites acce
 - Template: `shared/templates/decision-log.md`
 - Schema: `shared/frontmatter-schema.md`
 - Orchestration: `shared/orchestration.md`
-- Autonomy: `shared/autonomy.md` — writing an entry is autonomous; resolving a collision always stops for the user
+- Autonomy: `shared/autonomy.md` — every ledger write stops for explicit user approval of the exact entry text; collisions additionally stop for reconciliation

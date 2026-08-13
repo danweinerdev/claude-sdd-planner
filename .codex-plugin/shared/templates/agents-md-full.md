@@ -32,7 +32,8 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
 - Every task, phase, and plan has a completion-evidence section. Record exact
   commands/tools, context, revision/checkpoint, result, and observable evidence
   before any `complete` transition; prospective verification criteria are not
-  proof. Write artifacts and ledger entries in-flow, but never commit per edit.
+  proof. Write artifacts in-flow, but never commit per edit; decision-ledger
+  entries are never written without explicit user approval of the exact text.
   **Git adapter:** in commit-capable workflows where commits are authorized,
   commit the verified feature slice first, then record once per affected root at
   task closeout. Shared-root task artifacts and ledgers use one boundary commit;

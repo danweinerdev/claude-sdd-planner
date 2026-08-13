@@ -9,7 +9,7 @@ A spec-driven development toolchain published to multiple agent harnesses from o
 - **Repo root** — the canonical, hand-edited Claude Code plugin: `commands/` (lifecycle skills), `agents/` (review/implementation agent definitions), `skills/` (model-loaded reference skills), `shared/` (conventions + templates), `hooks/`.
 - **`.codex-plugin/` and `.opencode-plugin/`** — GENERATED plugin trees for Codex and OpenCode, identical content, produced by `sdd plugin sync`. **Never edit these by hand** — any hand edit is destroyed by the next sync and rejected by the drift gate.
 - **`cmd/sdd` + `internal/`** — the cross-platform Go binary behind every skill: deterministic validation (`sdd validate`), artifact writes, lifecycle transitions, hooks, and the portable-tree generator (`internal/portable`).
-- **`.plans/`** — this repo's own planning artifacts. `.plans/Decisions/decisions.md` is the decision ledger; its `accepted` D-NNNN entries are standing constraints on all work here. A change that contradicts one must stop for user reconciliation, never silently proceed.
+- **`.plans/`** — this repo's own planning artifacts. `.plans/Decisions/decisions.md` is the decision ledger; its `accepted` D-NNNN entries are standing constraints on all work here. A change that contradicts one must stop for user reconciliation, never silently proceed. The ledger itself is never edited — for any reason — without the user's explicit approval of the exact, unmodified text of the change, shown in full beforehand.
 
 ## Build and test
 

@@ -80,9 +80,11 @@ Read the active plan and phase frontmatter. Read the decision ledger's frontmatt
    Only then set the task status to `complete`, check completed subtasks, and
    update frontmatter. A task with absent, pending, vague, or failing evidence
    stays non-complete.
-9. Write the task status, checkboxes, completion evidence, and any
-   task-related decision-ledger entry in-flow as each fact becomes known; do
-   not commit these individual writes (D-0019). At task closeout, record all
+9. Write the task status, checkboxes, and completion evidence in-flow as each
+   fact becomes known; do not commit these individual writes (D-0019). A
+   task-related decision-ledger entry is written in-flow only **after** the
+   user has explicitly approved its exact, unmodified text
+   (`shared/decision-log.md` write gate). At task closeout, record all
    accumulated task-related updates once per affected SCM root
    (`shared/autonomy.md` § SCM boundary cadence).
    This lifecycle record must preserve the task's complete state and must not

@@ -14,8 +14,8 @@ Resolve the ledger per `shared/decision-log.md` § Ledger location — `<plannin
 
 1. Recognize the moment: a stated choice between alternatives, a definition of a project term, an answer to a design question, or an explicit reversal. Then apply the **admission test** (`shared/decision-log.md` § Capture) before writing anything: the truth has to outlive the document being worked on, not already be carried by that document, and have had a real alternative that lost. Status updates, task events, one-off dispositions, and choices that a spec or design already states in full are not ledger entries — leaving them where they are is the correct outcome, not a miss.
 2. **Run the collision check first** (`shared/decision-log.md` § Collision Detection): grep the ledger for the new entry's tags, scope, and key nouns; apply the structural checks; judge survivors. On `contradicts`/`supersedes` → STOP and present both entries for the user to reconcile. Never auto-resolve, never pick by recency.
-3. Append the entry (next sequential `D-NNNN`, `decided_by: user` only if the user actually stated the choice — otherwise `status: proposed`), update the ledger's `updated` date, and confirm the frontmatter still parses as YAML.
-4. Mention the recording in one line (e.g., "Recorded as D-0007 in the decision ledger") — no ceremony.
+3. Draft the entry (next sequential `D-NNNN`, `decided_by: user` only if the user actually stated the choice — otherwise `status: proposed`) and **show the exact, complete entry text to the user for explicit approval before writing anything**. The ledger is never edited without that approval — the decision being the user's does not make the write approved, and non-objection is not approval. If the user amends the entry, show the amended text and get approval again.
+4. Only after explicit approval: append the approved text verbatim, update the ledger's `updated` date, and confirm the frontmatter still parses as YAML. Confirm in one line (e.g., "Recorded as D-0007 in the decision ledger").
 
 ## When about to act on a governed topic
 
