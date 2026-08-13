@@ -204,20 +204,28 @@ frontmatter (aside from 'updated') byte-identical.`,
 }
 
 func templateCmd() *cobra.Command {
-	var check bool
+	var check, forApply bool
 	var out, dir string
 	c := &cobra.Command{
 		Use:   "template [type]",
 		Short: "Print an artifact template, or check the committed set for drift",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `The default output is a complete artifact, including the frontmatter fields
+the tool owns (type, status, created, updated) — the form to write to disk and
+fill in by hand.
+
+--for-apply omits those fields, producing a payload 'sdd apply' accepts: apply
+sets them itself and refuses a payload carrying a conflicting value.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdTemplate(reassemble(args, flagVal("--out", out),
-				flagPair("--check", check), flagVal("--dir", dir)))
+				flagPair("--check", check), flagVal("--dir", dir),
+				flagPair("--for-apply", forApply)))
 		},
 	}
 	c.Flags().StringVar(&out, "out", "", "write to this path instead of stdout")
 	c.Flags().BoolVar(&check, "check", false, "regenerate every committed template and diff")
 	c.Flags().StringVar(&dir, "dir", "shared/templates", "template directory for --check")
+	c.Flags().BoolVar(&forApply, "for-apply", false, "omit tool-owned fields, so the output is a valid apply payload")
 	return c
 }
 

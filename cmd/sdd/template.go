@@ -23,11 +23,20 @@ import (
 // check-templates` regenerates and diffs, so drift fails the build instead of
 // surfacing as a confusing refusal later.
 
-const templateUsage = `sdd template <type> [--out PATH]
+const templateUsage = `sdd template <type> [--out PATH] [--for-apply]
 sdd template --check
 
-Generates an artifact template from its schema. --check regenerates every
-committed template and fails if any differs.`
+Generates an artifact template from its schema.
+
+By default the output is a complete artifact: every frontmatter field is
+present, including the ones the tool owns (type, status, created, updated).
+That is the form to write to disk and fill in by hand.
+
+--for-apply omits the tool-owned fields, producing a payload that sdd apply
+accepts. apply sets those fields itself and refuses a payload that carries a
+conflicting value, so the default form is not valid apply input.
+
+--check regenerates every committed template and fails if any differs.`
 
 func cmdTemplate(args []string) error {
 	fs := flag.NewFlagSet("template", flag.ContinueOnError)
@@ -35,6 +44,8 @@ func cmdTemplate(args []string) error {
 	out := fs.String("out", "", "write to this path instead of stdout")
 	check := fs.Bool("check", false, "regenerate every committed template and diff")
 	dir := fs.String("dir", "shared/templates", "template directory for --check")
+	forApply := fs.Bool("for-apply", false,
+		"omit tool-owned fields, so the output is a valid apply payload")
 
 	positional, err := parseFlags(fs, args)
 	if err != nil {
@@ -48,7 +59,7 @@ func cmdTemplate(args []string) error {
 		return fmt.Errorf("template: expected exactly one artifact type\n\n%s", templateUsage)
 	}
 
-	body, err := renderTemplate(positional[0])
+	body, err := renderTemplateFor(positional[0], *forApply)
 	if err != nil {
 		return fmt.Errorf("template: %w", err)
 	}
@@ -75,6 +86,22 @@ func cmdTemplate(args []string) error {
 
 // renderTemplate builds one artifact type's template from its schema.
 func renderTemplate(artifactType string) (string, error) {
+	return renderTemplateFor(artifactType, false)
+}
+
+// renderTemplateFor builds one artifact type's template.
+//
+// forApply omits the fields the tool owns. The two consumers need opposite
+// documents: a skill writing an artifact by hand wants the complete file,
+// tool-owned fields included; an `sdd apply` payload must omit them, because
+// apply sets them itself and refuses a payload that carries a conflicting
+// value. Emitting one document for both is what made `sdd template spec`
+// output invalid as `sdd apply` input — the template's unexpanded
+// `created: {{DATE}}` is not a date, so apply read it as a conflict.
+//
+// The full form stays the default: it is what shared/templates/ contains and
+// what `--check` compares against.
+func renderTemplateFor(artifactType string, forApply bool) (string, error) {
 	s, err := schema.Load(artifactType)
 	if err != nil {
 		return "", err
@@ -83,6 +110,9 @@ func renderTemplate(artifactType string) (string, error) {
 	var b strings.Builder
 	b.WriteString("---\n")
 	for _, f := range s.Frontmatter {
+		if forApply && f.Ownership() == schema.Tool {
+			continue
+		}
 		b.WriteString(f.Key + ": " + templateFieldValue(f, artifactType) + "\n")
 	}
 	b.WriteString("---\n\n")

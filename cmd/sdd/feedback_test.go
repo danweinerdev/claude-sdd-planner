@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 )
 
@@ -134,4 +135,66 @@ func mustWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestTemplateForApplyOmitsToolOwnedFields pins the two template forms.
+//
+// Field feedback: `sdd apply` rejected tool-owned frontmatter (status,
+// updated, type, created) that the generated template contained — so template
+// output was not valid apply input. The default form stays complete (it is
+// what shared/templates/ ships and what --check compares against); --for-apply
+// drops exactly the fields the tool owns.
+func TestTemplateForApplyOmitsToolOwnedFields(t *testing.T) {
+	s, err := schema.Load("spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := renderTemplateFor("spec", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := renderTemplateFor("spec", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var toolFields, authorFields []string
+	for _, f := range s.Frontmatter {
+		if f.Ownership() == schema.Tool {
+			toolFields = append(toolFields, f.Key)
+		} else {
+			authorFields = append(authorFields, f.Key)
+		}
+	}
+	if len(toolFields) == 0 {
+		t.Fatal("spec schema declares no tool-owned fields; this test proves nothing")
+	}
+
+	for _, k := range toolFields {
+		if !strings.Contains(full, "\n"+k+":") {
+			t.Errorf("default template is missing tool-owned %q; it must stay a complete artifact", k)
+		}
+		if strings.Contains(payload, "\n"+k+":") {
+			t.Errorf("--for-apply payload still carries tool-owned %q; apply would refuse it", k)
+		}
+	}
+	// Author fields must survive in both — dropping them would make the
+	// payload useless rather than merely acceptable.
+	for _, k := range authorFields {
+		if !strings.Contains(payload, "\n"+k+":") {
+			t.Errorf("--for-apply payload dropped author-owned %q", k)
+		}
+	}
+	// Body structure is identical: only frontmatter differs.
+	if fullBody, payloadBody := afterFrontmatter(full), afterFrontmatter(payload); fullBody != payloadBody {
+		t.Error("--for-apply changed the body; it must only drop frontmatter fields")
+	}
+}
+
+func afterFrontmatter(doc string) string {
+	rest := strings.TrimPrefix(doc, "---\n")
+	if i := strings.Index(rest, "\n---\n"); i >= 0 {
+		return rest[i+len("\n---\n"):]
+	}
+	return doc
 }

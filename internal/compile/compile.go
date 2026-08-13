@@ -451,18 +451,24 @@ func toolFieldConsistent(opts Options, f schema.Field, payloadValue string, tool
 	return payloadValue == onDisk
 }
 
+// ownerHint explains why one tool-owned field may not be supplied, and points
+// at the command that generates a payload without any of them. Naming the flag
+// matters: the refusal previously taught one field per attempt, so an author
+// starting from `sdd template <type>` output hit four rounds of trial and error
+// before arriving at a payload apply would accept.
 func ownerHint(key string) string {
+	const remedy = " (`sdd template <type> --for-apply` emits a payload with the tool-owned fields already omitted)"
 	switch key {
 	case "status":
-		return "status is set by the lifecycle transition verbs, not by apply"
+		return "status is set by the lifecycle transition verbs, not by apply" + remedy
 	case "updated":
-		return "updated is stamped by the tool; remove it from the payload"
+		return "updated is stamped by the tool; remove it from the payload" + remedy
 	case "created":
-		return "created is preserved from the existing artifact; remove it from the payload"
+		return "created is preserved from the existing artifact; remove it from the payload" + remedy
 	case "type":
-		return "type is fixed by the schema; remove it from the payload"
+		return "type is fixed by the schema; remove it from the payload" + remedy
 	}
-	return "remove the key; it is owned by the tool"
+	return "remove the key; it is owned by the tool" + remedy
 }
 
 type identSet map[string]map[int]bool // namespace -> numbers
