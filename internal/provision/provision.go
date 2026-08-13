@@ -16,8 +16,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 // Candidate is one resolved binary and why it was or was not admitted.
@@ -79,7 +80,7 @@ func Resolve(pluginRoot, floor string) (Result, error) {
 		c.Version = v
 		switch cmp, cmpErr := compareVersions(v, floor); {
 		case cmpErr != nil:
-			c.Reason = "unparseable version " + strconv.Quote(v)
+			c.Reason = fmt.Sprintf("unparseable version %q", v)
 		case cmp < 0:
 			c.Reason = fmt.Sprintf("version %s is below the required floor %s", v, floor)
 		default:
@@ -107,47 +108,53 @@ func probeVersion(path string) (string, error) {
 	return fields[1], nil
 }
 
-// compareVersions orders two dotted numeric versions. A prerelease suffix is
-// ignored for ordering, deliberately: the floor is about the CLI contract a
-// binary implements, and a prerelease of a version implements it.
+// compareVersions orders two versions by their release cores only. A
+// prerelease suffix is ignored for ordering, deliberately: the floor is about
+// the CLI contract a binary implements, and a prerelease of a version
+// implements it — `1.16.0-rc1` satisfies a `1.16.0` floor.
+//
+// This is why the comparison is not semver.Compare: strict semver orders a
+// prerelease *below* its release (verified: semver.Compare("v1.16.0-rc1",
+// "v1.16.0") == -1), which would reject exactly the binaries this floor means
+// to admit. golang.org/x/mod/semver still does the parsing and validation —
+// canonicalization, the "is this even a version" check, and the core
+// extraction — so only the intended deviation is ours.
 func compareVersions(a, b string) (int, error) {
-	pa, err := parseVersion(a)
+	ca, err := releaseCore(a)
 	if err != nil {
 		return 0, err
 	}
-	pb, err := parseVersion(b)
+	cb, err := releaseCore(b)
 	if err != nil {
 		return 0, err
 	}
-	for i := 0; i < 3; i++ {
-		if pa[i] != pb[i] {
-			if pa[i] < pb[i] {
-				return -1, nil
-			}
-			return 1, nil
-		}
-	}
-	return 0, nil
+	return semver.Compare(ca, cb), nil
 }
 
-func parseVersion(v string) ([3]int, error) {
-	var out [3]int
-	core := strings.TrimPrefix(v, "v")
+// releaseCore canonicalizes a version and strips any prerelease/build suffix,
+// yielding the `vMAJOR.MINOR.PATCH` form semver.Compare orders. It requires
+// all three components: a bare `v1` is valid semver to x/mod but is not a
+// version this toolchain ever publishes, and silently reading it as `1.0.0`
+// would admit a binary on a guess.
+func releaseCore(v string) (string, error) {
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	if !semver.IsValid(v) {
+		return "", fmt.Errorf("not a MAJOR.MINOR.PATCH version: %q", v)
+	}
+	// Require all three components in the input: semver.Canonical expands `v1`
+	// to `v1.0.0`, and admitting a binary on that expansion would bypass the
+	// floor on a guess. Measure the release core only — a prerelease or build
+	// suffix carries its own dots (`1.16.0+build.5`) and must not count.
+	core := v
 	if i := strings.IndexAny(core, "-+"); i >= 0 {
 		core = core[:i]
 	}
-	parts := strings.Split(core, ".")
-	if len(parts) != 3 {
-		return out, fmt.Errorf("not a MAJOR.MINOR.PATCH version: %q", v)
+	if strings.Count(core, ".") != 2 {
+		return "", fmt.Errorf("not a MAJOR.MINOR.PATCH version: %q", v)
 	}
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return out, fmt.Errorf("not a MAJOR.MINOR.PATCH version: %q", v)
-		}
-		out[i] = n
-	}
-	return out, nil
+	return semver.Canonical(core), nil
 }
 
 // Provision resolves a binary and refreshes the plugin-root copy (FR-37).

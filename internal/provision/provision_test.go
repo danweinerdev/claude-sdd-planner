@@ -134,6 +134,11 @@ func TestCompareVersionsIgnoresPrerelease(t *testing.T) {
 		{"1.16.0-rc1", "1.16.0", 0},
 		{"v1.16.0", "1.16.0", 0},
 		{"2.0.0", "1.99.99", 1},
+		// Build metadata is ignored for ordering, like a prerelease.
+		{"1.16.0+build.5", "1.16.0", 0},
+		// Prerelease on the floor side: still core-only.
+		{"1.16.0", "1.16.0-rc1", 0},
+		{"1.16.1-rc1", "1.16.0", 1},
 	}
 	for _, c := range cases {
 		got, err := compareVersions(c.a, c.b)
@@ -157,5 +162,19 @@ func TestInstallCommandNamesTheFloor(t *testing.T) {
 	want := "go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v1.16.0"
 	if got != want {
 		t.Errorf("InstallCommand = %q, want %q", got, want)
+	}
+}
+
+// TestCompareVersionsRejectsMalformed pins the inputs the floor must refuse
+// rather than guess at. `v1` and `1.16` are valid or coercible to some semver
+// parsers; admitting a binary on that guess would silently bypass the floor.
+func TestCompareVersionsRejectsMalformed(t *testing.T) {
+	for _, bad := range []string{"", "v1", "1.16", "1.16.x", "latest", "1.16.0.1", "not-a-version"} {
+		if _, err := compareVersions(bad, "1.16.0"); err == nil {
+			t.Errorf("compareVersions(%q, floor) accepted a malformed version", bad)
+		}
+		if _, err := compareVersions("1.16.0", bad); err == nil {
+			t.Errorf("compareVersions(version, %q) accepted a malformed floor", bad)
+		}
 	}
 }

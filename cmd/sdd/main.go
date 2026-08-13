@@ -7,10 +7,8 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,131 +20,19 @@ import (
 var idDeclRe = regexp.MustCompile(`^\s*[-*+]\s*(?:\[[ xX]\]\s*)?(~~)?\*\*([A-Z]+-\d+)\*\*(~~)?\s*:`)
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
-	}
-	var err error
-	switch os.Args[1] {
-	case "version":
-		fmt.Printf("sdd %s\n", version.Version)
-	case "schema":
-		err = cmdSchema(os.Args[2:])
-	case "apply":
-		err = cmdApply(os.Args[2:])
-	case "show":
-		err = cmdShow(os.Args[2:])
-	case "list":
-		err = cmdList(os.Args[2:])
-	case "section":
-		err = cmdSection(os.Args[2:])
-	case "doctor":
-		err = cmdDoctor(os.Args[2:])
-	case "hook":
-		err = cmdHook(os.Args[2:])
-	case "provision":
-		err = cmdProvision(os.Args[2:])
-	case "review":
-		err = cmdReview(os.Args[2:])
-	case "template":
-		err = cmdTemplate(os.Args[2:])
-	case "evidence":
-		err = cmdEvidence(os.Args[2:])
-	case "task", "phase", "plan":
-		err = cmdTransition(os.Args[1], os.Args[2:])
-	case "migrate":
-		err = cmdMigrate(os.Args[2:])
-	case "validate":
-		err = cmdValidate(os.Args[2:])
-	case "next":
-		err = cmdNext(os.Args[2:])
-	case "decide":
-		err = cmdDecide(os.Args[2:])
-	case "plugin":
-		err = cmdPlugin(os.Args[2:])
-	case "-h", "--help", "help":
-		usage()
-	default:
-		fmt.Fprintf(os.Stderr, "sdd: unknown subcommand %q\n", os.Args[1])
-		if s := nearest(os.Args[1], subcommands); s != "" {
-			fmt.Fprintf(os.Stderr, "    did you mean %q?\n", s)
-		}
-		usage()
-		os.Exit(2)
-	}
+	root := newRootCmd()
+	root.SetArgs(os.Args[1:])
+	err := root.Execute()
 	if err != nil {
-		var re *refusedError
-		if errors.As(err, &re) {
-			os.Exit(1)
-		}
 		fmt.Fprintf(os.Stderr, "sdd: %v\n", err)
-		os.Exit(2)
+		// Cobra already printed the suggestion for an unknown command; for a
+		// malformed invocation, point at the right help rather than dumping
+		// the whole usage block.
+		if usageHint(err) {
+			fmt.Fprintln(os.Stderr, "    run `sdd help` or `sdd <command> --help`")
+		}
 	}
-}
-
-var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "review", "template", "evidence", "task", "phase", "plan", "plugin", "help"}
-
-func usage() {
-	fmt.Fprint(os.Stderr, `sdd — SDD toolchain
-
-  sdd version
-  sdd schema list
-  sdd schema show <type>
-  sdd show <artifact-path> [--json]
-  sdd list [spec|design|plan|research] [--root PATH] [--json]
-  sdd apply <artifact-path> [--dry-run] [--diff] [--json]
-                            [--expect DIGEST] [--retire ID[,ID...]] [--create]
-  sdd section set <artifact-path> --heading "## Overview" [--dry-run] [--diff]
-                                  [--json] [--expect DIGEST] [--type T]
-  sdd doctor [--json]
-  sdd provision [--plugin-root PATH] [--check] [--json]
-  sdd review scaffold <phase-path> --frozen <base>..<endpoint>
-  sdd template <type> [--out PATH] | --check
-  sdd hook pretooluse | sessionstart   (reads a hook payload on stdin)
-  sdd evidence add <artifact-path> --task ID|--phase|--plan
-                   --verified-by CMD --result TEXT [--working-dir PATH]
-  sdd task complete <phase-path> --id ID
-  sdd phase complete <phase-path>
-  sdd plan complete <plan-path>
-  sdd migrate <artifact-path> [--dry-run] [--diff] [--json] [--allow-frozen]
-  sdd validate [--root PATH] [--scope PATH] [--format text|json]
-  sdd next [PLAN-PATH] [--json]
-  sdd plugin sync|check|status [--root PATH]
-  sdd decide list [--status accepted|proposed|rejected|superseded] [--json]
-  sdd decide search <term> [--json]
-  sdd decide add --statement TEXT [--rationale TEXT] [--rejected "a,b"]
-                 [--scope "p,q"] [--tags "x,y"] [--supersedes D-NNNN]
-                 [--kind decision|assumption] [--reversibility one-way|two-way]
-                 [--accept] [--dry-run] [--json]
-
-apply reads a Markdown proposal on stdin. Without --dry-run it writes the
-compiled artifact atomically. Pass --expect with the digest you read to refuse
-the write if the artifact changed underneath you.
-
-section set reads the new section body on stdin and replaces only that
-section, leaving every other section and the frontmatter (aside from
-`+"`updated`"+`) byte-identical.
-
-migrate is the upgrade path for artifacts that predate the schema: it inserts
-missing required sections and author frontmatter from schema defaults and reports
-every insertion. It is a separate verb on purpose — apply keeps refusing
-non-compliant structure, which is the reason writes go through a compiler at all.
-
-doctor reports the binary's identity, the resolved planning root, and the
-embedded schema set with per-type artifact counts; it exits 2 if the planning
-root cannot be resolved.
-
-validate is a native, schema-driven validator over a whole planning root.
-Pre-parity: scripts/sdd_validate.py remains authoritative until the
-FR-30/FR-32 gate runs.
-
-next reports current state and the literal next command to run, for one plan
-or every plan under the resolved planning root (FR-25).
-
-decide reads and writes the decision ledger (Decisions/decisions.md):
-list, search, and add — add refuses on a candidate collision with an accepted
-entry unless --supersedes names it (D-0003).
-`)
+	os.Exit(exitCode(err))
 }
 
 type refusedError struct{ n int }
@@ -228,50 +114,6 @@ func relPath(p string) string {
 	return filepath.ToSlash(r)
 }
 
-// nearest returns the closest candidate within a small edit distance, so an
-// unknown subcommand or flag gets a suggestion rather than bare usage (FR-29).
-func nearest(got string, candidates []string) string {
-	best, bestD := "", 3
-	for _, c := range candidates {
-		if d := editDistance(got, c); d < bestD {
-			best, bestD = c, d
-		}
-	}
-	return best
-}
-
-func editDistance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	cur := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		cur[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			cur[j] = min3(cur[j-1]+1, prev[j]+1, prev[j-1]+cost)
-		}
-		prev, cur = cur, prev
-	}
-	return prev[len(b)]
-}
-
-func min3(a, b, c int) int {
-	if b < a {
-		a = b
-	}
-	if c < a {
-		a = c
-	}
-	return a
-}
-
-// lineDiff is a compact longest-common-subsequence diff, sufficient for
-// eyeballing what normalization would change.
 func lineDiff(a, b string) string {
 	if a == b {
 		return ""

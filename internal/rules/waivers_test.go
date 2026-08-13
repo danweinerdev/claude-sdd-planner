@@ -229,7 +229,6 @@ func TestWaiverCannotDowngradeCandidate(t *testing.T) {
 	}
 }
 
-
 // severityCodes renders findings as severity:code, so a failure message shows
 // whether a diagnostic was excused rather than only which one fired.
 func severityCodes(ds []Diagnostic) []string {
