@@ -1,9 +1,9 @@
 .PHONY: bump-patch bump-minor bump-major test \
-        build build-release build-all regression gen-fixtures check-fixtures check-templates clean-build
+        build build-release build-all gen-fixtures check-fixtures check-templates clean-build
 
-# The regression suite is Go: it drives the `sdd` binary and compares against
-# tools/regression/expectations.json. PyYAML and the
-# virtualenv bootstrap left with the Python validators (task 5.1).
+# Python remains only for bump-version.py. The validators, the parity harness,
+# PyYAML, and the virtualenv bootstrap are all gone (tasks 5.1 and the Go
+# regression port).
 PYTHON := python3
 
 # --- Go toolchain -----------------------------------------------------------
@@ -42,8 +42,7 @@ RELEASE_LDFLAGS := -s -w
 RELEASE_FLAGS := -trimpath -ldflags="$(RELEASE_LDFLAGS)"
 
 # The host binaries, one per variant. SDD names the debug build: it is the one
-# day-to-day work and the regression suite use, since a failing comparison is
-# something you then go and debug.
+# day-to-day work uses, since a failure is something you then go and debug.
 SDD := $(BUILD_DIR)/$(HOST_TUPLE)-debug/sdd
 SDD_RELEASE := $(BUILD_DIR)/$(HOST_TUPLE)-release/sdd
 
@@ -93,33 +92,11 @@ build-all:
 		done; \
 	done
 
-# regression asserts `sdd validate` still produces exactly the diagnostics the
-# committed corpus records, building the binary first so the check never runs
-# against a stale artifact. Exits non-zero on any drift, which is what makes it
-# usable as a CI gate.
-#
-# This was a differential oracle against scripts/sdd_validate.py until that
-# Python was deleted in task 5.1. With no second implementation to agree with,
-# what remains is a regression corpus: 128 fixture roots generated from the
-# rules' own Bad examples, with 705 recorded diagnostics. Its value is breadth
-# — it spans rule interactions no unit test covers, so a change to one rule
-# that perturbs another's output fails here.
-#
-# tools/regression/expectations.json is never regenerated wholesale; changing
-# it would change what "correct" means rather than test against it. When a rule
-# change legitimately alters output, regenerate the fixtures with
-# `make gen-fixtures` and edit the expectation as a reviewed diff.
-REGRESSION_DIR := tools/regression
-REGRESSION_FIXTURES := $(REGRESSION_DIR)/fixtures
-REGRESSION_MANIFEST := $(REGRESSION_FIXTURES)/MANIFEST
-REGRESSION_EXPECTATIONS := $(REGRESSION_DIR)/expectations.json
-
-regression: build
-	@go run ./tools/regression \
-		-manifest $(REGRESSION_MANIFEST) \
-		-frozen $(REGRESSION_EXPECTATIONS) \
-		-fixtures $(REGRESSION_FIXTURES) \
-		-binary $(SDD)
+# The corpus of fixture roots the regression test in tools/regression runs
+# against. It is exercised by `go test ./...` like any other test, so there is
+# no separate target: a corpus check you have to remember to run is one that
+# eventually is not run.
+REGRESSION_FIXTURES := tools/regression/fixtures
 
 # gen-fixtures regenerates the corpus from the rules' own Bad examples. Run it
 # after adding or changing a rule; the result is committed.
@@ -153,7 +130,7 @@ clean-build:
 # ordering check to be machine-enforced rather than trusted, so `make test`
 # runs the corpus: SDD154/155/156 fire against real git history built by each
 # fixture's SETUP script, and a regression there fails the build.
-test: regression check-templates
+test: check-templates
 	@go test ./...
 
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so

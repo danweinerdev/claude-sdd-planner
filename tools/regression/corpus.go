@@ -1,5 +1,11 @@
-// Command regression asserts that `sdd validate` still produces exactly the
+// Package regression asserts that validation still produces exactly the
 // diagnostics the committed corpus records for each fixture root.
+//
+// It runs as an ordinary Go test (corpus_test.go), so `go test ./...` covers it
+// with everything else and there is no separate command to remember. The rules
+// are invoked in-process rather than through the built binary, which removes
+// the stale-artifact hazard a shell-out has: a corpus check that silently ran
+// against yesterday's build would report a pass it did not earn.
 //
 // It began as a differential oracle comparing the Go validator against
 // scripts/sdd_validate.py. That Python is gone, and with it the "parity"
@@ -14,22 +20,23 @@
 // that silently perturbs another's output. Every cross-cutting edit to Run()
 // is checked against all 705 recorded diagnostics at once.
 //
-// tools/parity/frozen-expectations.json is the recorded answer and is never
+// expectations.json is the recorded answer and is never
 // regenerated: rewriting it would change what "correct" means rather than test
 // against it. When a rule change legitimately alters output, the fixture corpus
 // is regenerated (`make gen-fixtures`) and the expectation edited deliberately,
 // as a reviewed diff.
-package main
+package regression
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
 )
 
 // Diagnostic is the identity of one finding. Message text is deliberately not
@@ -73,103 +80,68 @@ var setupEnv = []string{
 	"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
 }
 
-func main() {
-	var (
-		manifest = flag.String("manifest", "", "file listing one fixture root per line")
-		frozen   = flag.String("frozen", "", "recorded expectations JSON")
-		binary   = flag.String("binary", "", "path to the sdd binary")
-		fixtures = flag.String("fixtures", "", "fixture corpus root, for manifest-relative keys")
-		verbose  = flag.Bool("v", false, "print a line per root even when it passes")
-	)
-	flag.Parse()
-
-	if *manifest == "" || *frozen == "" || *binary == "" {
-		fmt.Fprintln(os.Stderr, "regression: --manifest, --frozen, and --binary are required")
-		os.Exit(2)
-	}
-	if *fixtures == "" {
-		*fixtures = filepath.Dir(*manifest)
-	}
-
-	if err := run(*manifest, *frozen, *binary, *fixtures, *verbose); err != nil {
-		fmt.Fprintf(os.Stderr, "regression: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func run(manifestPath, frozenPath, binary, fixturesDir string, verbose bool) error {
-	expectations, err := loadExpectations(frozenPath)
+// Check validates every root in the manifest against its recorded expectation,
+// returning one human-readable failure per regressed root.
+func Check(manifestPath, expectationsPath, fixturesDir string) ([]string, error) {
+	expectations, err := loadExpectations(expectationsPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	roots, err := loadManifest(manifestPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	absFixtures, err := filepath.Abs(fixturesDir)
 	if err != nil {
-		return err
-	}
-	absBinary, err := filepath.Abs(binary)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	scratch, err := os.MkdirTemp("", "sdd-regression-")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer os.RemoveAll(scratch)
 
 	var failures []string
-	checked, totalDiags := 0, 0
-
 	for _, root := range roots {
 		key, err := expectationKey(root, absFixtures)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		want, ok := expectations[key]
 		if !ok {
-			// A root with no recorded expectation proves nothing, and silently
-			// skipping it would let a fixture drift out of coverage unnoticed.
-			failures = append(failures, fmt.Sprintf("%s: no recorded expectation", key))
+			// A root with no recorded expectation proves nothing, and skipping
+			// it silently would let a fixture drift out of coverage unnoticed.
+			failures = append(failures, key+": no recorded expectation")
 			continue
 		}
 
 		prepared, err := prepare(root, scratch)
 		if err != nil {
-			return fmt.Errorf("%s: %w", key, err)
+			return nil, fmt.Errorf("%s: %w", key, err)
 		}
-		gotExit, got, err := runValidate(absBinary, prepared)
+		gotExit, got, err := validate(prepared)
 		if err != nil {
-			return fmt.Errorf("%s: %w", key, err)
+			return nil, fmt.Errorf("%s: %w", key, err)
 		}
-
-		checked++
-		totalDiags += len(want.Diagnostics)
 		if diff := compare(want, gotExit, got); diff != "" {
 			failures = append(failures, key+":\n"+diff)
-		} else if verbose {
-			fmt.Printf("  ok  %-60s %d diagnostics\n", key, len(want.Diagnostics))
 		}
 	}
+	return failures, nil
+}
 
-	if len(failures) > 0 {
-		fmt.Fprintf(os.Stderr, "\n%d of %d roots regressed:\n\n", len(failures), len(roots))
-		for _, f := range failures {
-			fmt.Fprintln(os.Stderr, f)
-		}
-		fmt.Fprintln(os.Stderr,
-			"\nIf a rule change legitimately alters this output, regenerate the corpus\n"+
-				"with `make gen-fixtures` and update the expectation as a reviewed diff.\n"+
-				"Never regenerate frozen-expectations.json wholesale — that changes what\n"+
-				"\"correct\" means instead of testing against it.")
-		return fmt.Errorf("%d root(s) regressed", len(failures))
+// Corpus reports how many roots and diagnostics the expectations record, so a
+// passing run can state its own breadth rather than just being silent.
+func Corpus(expectationsPath string) (roots, diagnostics int, err error) {
+	expectations, err := loadExpectations(expectationsPath)
+	if err != nil {
+		return 0, 0, err
 	}
-
-	fmt.Printf("regression: %d roots, %d diagnostics, no drift\n", checked, totalDiags)
-	return nil
+	for _, e := range expectations {
+		diagnostics += len(e.Diagnostics)
+	}
+	return len(expectations), diagnostics, nil
 }
 
 // compare reports the difference between the recorded and observed verdicts, or
@@ -357,30 +329,71 @@ func hash(s string) string {
 	return fmt.Sprintf("%08x", h)
 }
 
-func runValidate(binary, root string) (int, []Diagnostic, error) {
-	cmd := exec.Command(binary, "validate", "--root", root, "--format", "json",
-		// The corpus records the unexcused state. A fixture that declared a
-		// waiver would otherwise record fewer diagnostics than the rules
-		// actually produce, and the corpus would stop testing the rules.
-		"--no-waivers")
-	out, err := cmd.Output()
-	exit := 0
-	if ee, ok := err.(*exec.ExitError); ok {
-		exit = ee.ExitCode()
-	} else if err != nil {
+// validate runs the validator over one prepared root, in-process, and returns
+// what `sdd validate --no-waivers --format json` would have reported.
+//
+// It mirrors cmdValidate's composition deliberately: rules.Run for the artifact
+// rules plus FocusedDecisionLogs for the DLG family, which the CLI folds in the
+// same way. Diverging here would mean the corpus tested something the tool does
+// not actually do.
+//
+// Run, not RunWithWaivers: the corpus records the unexcused state. A fixture
+// that declared an accepted exception would otherwise record fewer diagnostics
+// than the rules produce, and the corpus would quietly stop testing them.
+func validate(root string) (int, []Diagnostic, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
 		return 0, nil, err
 	}
-	if len(strings.TrimSpace(string(out))) == 0 {
-		return exit, nil, nil
+	repoRoot := gitRoot(abs)
+	if repoRoot == "" {
+		repoRoot = abs
 	}
-	var doc validateOutput
-	if err := json.Unmarshal(out, &doc); err != nil {
-		return exit, nil, fmt.Errorf("parsing validate output: %w", err)
+	r, err := rules.LoadRootRepo(abs, repoRoot)
+	if err != nil {
+		return 0, nil, err
 	}
-	for i := range doc.Diagnostics {
-		doc.Diagnostics[i].Path = strings.ReplaceAll(doc.Diagnostics[i].Path, "\\", "/")
+	if len(r.Artifacts) == 0 {
+		// The CLI treats this as a usage error and exits 2 without a document.
+		return 2, nil, nil
 	}
-	return exit, doc.Diagnostics, nil
+
+	diags := rules.Run(r)
+	diags = append(diags, rules.FocusedDecisionLogs(r, false)...)
+	rules.SortDiagnostics(diags)
+
+	out := make([]Diagnostic, 0, len(diags))
+	exit := 0
+	for _, d := range diags {
+		if d.Severity == rules.Error {
+			exit = 1
+		}
+		out = append(out, Diagnostic{
+			Code:     d.Code,
+			Path:     strings.ReplaceAll(d.Path, "\\", "/"),
+			Line:     d.Line,
+			Severity: string(d.Severity),
+		})
+	}
+	return exit, out, nil
+}
+
+// gitRoot walks up for a .git entry, matching how the CLI resolves the
+// repository a planning root belongs to. The DLG history rules read that
+// repository's log, so a root resolved to the wrong one reports different
+// diagnostics.
+func gitRoot(start string) string {
+	current := start
+	for {
+		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
 }
 
 func loadExpectations(path string) (map[string]Expectation, error) {
@@ -436,4 +449,14 @@ func expectationKey(root, fixturesDir string) (string, error) {
 		return "", err
 	}
 	return filepath.ToSlash(rel), nil
+}
+
+// writeJSONFile writes v as indented JSON. Used by the tests to build a
+// perturbed expectations file.
+func writeJSONFile(path string, v any) error {
+	raw, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o644)
 }
