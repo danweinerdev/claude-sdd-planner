@@ -1,0 +1,124 @@
+package portable
+
+import (
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// repoRoot resolves the repository root from this test file's location, so
+// the integration tests run against the real canonical tree — the same
+// philosophy as the regression corpus: the actual content is the fixture.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("no caller info")
+	}
+	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
+}
+
+// TestGenerateRealTree is the leak gate: no Claude-specific mechanics may
+// reach the portable tree. A hit here means a canonical edit introduced a
+// Claude-ism that the transforms don't cover — fix it with a phrase rule, a
+// marker block, or a .portable.md variant.
+func TestGenerateRealTree(t *testing.T) {
+	r, err := Generate(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Files) == 0 {
+		t.Fatal("no files generated")
+	}
+
+	// Every lifecycle skill must be present.
+	for _, n := range []string{"brainstorm", "code-review", "debrief", "decide", "design",
+		"implement", "plan", "poke-holes", "research", "setup", "specify", "validate"} {
+		if _, ok := r.Files["skills/sdd-"+n+"/SKILL.md"]; !ok {
+			t.Errorf("missing skills/sdd-%s/SKILL.md", n)
+		}
+	}
+	for _, p := range []string{
+		".codex-plugin/plugin.json",
+		"shared/agent-runtime.md",
+		"shared/frontmatter-schema.md",
+		"shared/language-specs/go.md",
+		"shared/agent-prompts/researcher.md",
+		"shared/review-prompts/quality.md",
+		"README.md",
+	} {
+		if _, ok := r.Files[p]; !ok {
+			t.Errorf("missing %s", p)
+		}
+	}
+
+	// Claude-isms that must never leak. "CLAUDE.md" and ".claude/" appear in
+	// deliberate "do not use" sentences in portable-authored files, so they
+	// are checked only in generated (transformed) files, not variants or
+	// overrides.
+	// shared/agent-runtime.md is the portable runtime spec: it names Claude
+	// paths and slash commands solely to prohibit them, so it is exempt.
+	leakExempt := map[string]bool{"shared/agent-runtime.md": true}
+	leakTerms := []string{"sdd-planner:", "the Task tool", "~/.claude", "## Path Resolution"}
+	for rel, content := range r.Files {
+		if !strings.HasSuffix(rel, ".md") || leakExempt[rel] {
+			continue
+		}
+		for _, term := range leakTerms {
+			if strings.Contains(string(content), term) {
+				t.Errorf("%s: leaked %q into portable tree", rel, term)
+			}
+		}
+	}
+	generated := map[string]bool{}
+	for _, g := range r.Generated {
+		generated[g] = true
+	}
+	for rel, content := range r.Files {
+		if !generated[rel] || !strings.HasSuffix(rel, ".md") || leakExempt[rel] {
+			continue
+		}
+		for _, term := range []string{"CLAUDE.md", "claude-md-full", "slash command"} {
+			if strings.Contains(string(content), term) {
+				t.Errorf("%s: generated file leaked %q", rel, term)
+			}
+		}
+	}
+
+	// Claude-only templates must not cross over.
+	for _, p := range []string{"shared/templates/claude-md-full.md", "shared/templates/claude-md-snippet.md"} {
+		if _, ok := r.Files[p]; ok {
+			t.Errorf("%s crossed into the portable tree", p)
+		}
+	}
+
+	// Manifest carries the canonical version.
+	version, minSdd, err := canonicalVersion(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := string(r.Files[".codex-plugin/plugin.json"])
+	if !strings.Contains(manifest, `"version": "`+version+`"`) {
+		t.Errorf("manifest version not synced to canonical %s:\n%s", version, manifest)
+	}
+	if !strings.Contains(manifest, `"minSddVersion": "`+minSdd+`"`) {
+		t.Errorf("manifest minSddVersion not synced to canonical %s", minSdd)
+	}
+}
+
+// TestCheckClean requires the committed portable/ tree to match a fresh
+// generation — the drift gate that keeps hand edits and forgotten syncs out
+// of the repository. Wired into `make test` via `go test ./...`.
+func TestCheckClean(t *testing.T) {
+	stale, err := Check(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range stale {
+		t.Errorf("stale: portable/%s", s)
+	}
+	if len(stale) > 0 {
+		t.Log("run `sdd plugin sync` (or `make plugins`) and commit the result")
+	}
+}

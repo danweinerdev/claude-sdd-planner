@@ -61,6 +61,8 @@ func main() {
 		err = cmdNext(os.Args[2:])
 	case "decide":
 		err = cmdDecide(os.Args[2:])
+	case "plugin":
+		err = cmdPlugin(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -81,7 +83,7 @@ func main() {
 	}
 }
 
-var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "review", "template", "evidence", "task", "phase", "plan", "help"}
+var subcommands = []string{"version", "schema", "apply", "show", "list", "section", "doctor", "migrate", "validate", "next", "decide", "hook", "provision", "review", "template", "evidence", "task", "phase", "plan", "plugin", "help"}
 
 func usage() {
 	fmt.Fprint(os.Stderr, `sdd — SDD toolchain
@@ -108,6 +110,7 @@ func usage() {
   sdd migrate <artifact-path> [--dry-run] [--diff] [--json] [--allow-frozen]
   sdd validate [--root PATH] [--scope PATH] [--format text|json]
   sdd next [PLAN-PATH] [--json]
+  sdd plugin sync|check|status [--root PATH]
   sdd decide list [--status accepted|proposed|rejected|superseded] [--json]
   sdd decide search <term> [--json]
   sdd decide add --statement TEXT [--rationale TEXT] [--rejected "a,b"]
