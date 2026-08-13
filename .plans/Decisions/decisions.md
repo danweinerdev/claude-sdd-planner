@@ -204,6 +204,17 @@ decisions:
     scope: [internal/portable, Makefile]
     tags: [architecture, portable, plugin, release]
     reversibility: two-way
+  - id: D-0018
+    kind: decision
+    status: accepted
+    date: 2026-08-13
+    decided_by: user
+    statement: "No LLM edits a decision ledger, for any reason, without the user's explicit approval of the exact, unmodified text of the change, shown in full beforehand — writes on assumption or non-objection are forbidden."
+    rejected: [Autonomous append of collision-free entries after the user decides]
+    rationale: "The ledger is durable truth; an unapproved or paraphrased write silently forks it. The user, not the agent, owns both the decision and the record of it."
+    confirmation: "shared/decision-log.md carries the write-gate callout and shared/autonomy.md lists ledger writes under 'Stops for the user'."
+    tags: [decision-ledger, autonomy, approval]
+    reversibility: two-way
 ---
 
 
