@@ -154,19 +154,19 @@ bump-patch: test
 	$(eval VERSION := $(shell python3 bump-version.py patch))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
 	@go run ./cmd/sdd plugin sync >/dev/null
-	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@git add .claude-plugin/plugin.json internal/version/version.go portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"
 
 bump-minor: test
 	$(eval VERSION := $(shell python3 bump-version.py minor))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
 	@go run ./cmd/sdd plugin sync >/dev/null
-	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@git add .claude-plugin/plugin.json internal/version/version.go portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"
 
 bump-major: test
 	$(eval VERSION := $(shell python3 bump-version.py major))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
 	@go run ./cmd/sdd plugin sync >/dev/null
-	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@git add .claude-plugin/plugin.json internal/version/version.go portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"
