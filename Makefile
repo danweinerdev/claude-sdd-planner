@@ -1,5 +1,6 @@
 .PHONY: bump-patch bump-minor bump-major test \
-        build build-release build-all gen-fixtures check-fixtures check-templates clean-build
+        build build-release build-all gen-fixtures check-fixtures check-templates clean-build \
+        plugins plugins-check
 
 # Python remains only for bump-version.py. The validators, the parity harness,
 # PyYAML, and the virtualenv bootstrap are all gone (tasks 5.1 and the Go
@@ -133,22 +134,39 @@ clean-build:
 test: check-templates
 	@go test ./...
 
+# --- Portable (OpenCode/Codex) tree --------------------------------------
+#
+# portable/ is generated from the canonical Claude tree at the repo root by
+# `sdd plugin sync` (see internal/portable). It is committed, because it is
+# the artifact the other harnesses install, and drift-gated: the Go suite's
+# TestCheckClean (run by `make test`) fails when portable/ does not match a
+# fresh generation. Never edit portable/ by hand — edit the canonical file,
+# its .portable.md variant, or portable-overrides/, then `make plugins`.
+plugins:
+	@go run ./cmd/sdd plugin sync
+
+plugins-check:
+	@go run ./cmd/sdd plugin check
+
 # Version bumps are gated on the test suite. `test` runs as a prerequisite, so
 # a failing suite aborts before bump-version.py or any git write happens.
 bump-patch: test
 	$(eval VERSION := $(shell python3 bump-version.py patch))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
-	@git add .claude-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@go run ./cmd/sdd plugin sync >/dev/null
+	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"
 
 bump-minor: test
 	$(eval VERSION := $(shell python3 bump-version.py minor))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
-	@git add .claude-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@go run ./cmd/sdd plugin sync >/dev/null
+	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"
 
 bump-major: test
 	$(eval VERSION := $(shell python3 bump-version.py major))
 	@test -n "$(VERSION)" || { echo "ERROR: bump-version.py produced no version — aborting"; exit 1; }
-	@git add .claude-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	@go run ./cmd/sdd plugin sync >/dev/null
+	@git add .claude-plugin/plugin.json portable/.codex-plugin/plugin.json && git commit -m "v$(VERSION)" && git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	@echo "Bumped to v$(VERSION)"

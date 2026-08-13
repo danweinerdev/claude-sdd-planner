@@ -19,7 +19,9 @@ sdd-planner/                      # Repository root = plugin root
 │   └── <lang>-specifications/    # Per-language structural verification (cpp, rust, go, python, typescript, java, swift)
 ├── agents/                       # Subagent definitions
 ├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, provisioning
-├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs)
+├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs, portable)
+├── portable/                     # GENERATED OpenCode/Codex tree (`sdd plugin sync`) — never hand-edit
+├── portable-overrides/           # Hand-maintained portable-only files (agent prompts, README)
 ├── shared/
 │   ├── frontmatter-schema.md     # Single source of truth for artifact metadata
 │   ├── completion-evidence.md    # Evidence-gated completion — what `complete` requires, per level
@@ -108,6 +110,18 @@ AI commands filter by `status` to scope what they read.
 
 ### Templates
 Always use templates from `shared/templates/` when creating new artifacts. Replace `{{PLACEHOLDERS}}` with actual values.
+
+### Portable tree (OpenCode / Codex)
+
+This repository is the single source for **both** harness families. The repo root is the canonical Claude plugin, hand-edited as always. `portable/` is a **generated** second plugin tree for OpenCode and Codex — the same content re-expressed in their layout (`skills/sdd-<name>/SKILL.md`, prompt files instead of agent definitions, `.codex-plugin/plugin.json` manifest, runtime-neutral wording per `shared/agent-runtime.md`). It replaces the retired standalone `sdd-planner` repo.
+
+`sdd plugin sync` (`make plugins`) produces it from the canonical tree via `internal/portable`:
+- **Transforms** — skill rename (`plan` → `sdd-plan`), slash-title and description cleanup, `## Path Resolution` → stock `## Resources` section, agent-dispatch phrase rewrites (`sdd-planner:researcher` → collaboration-subagent idiom with the stable dispatch identifiers `implement_task`, `review_plan_drift`, `review_quality`, `review_spec_compliance`, `review_blind_spots`), path/term rewrites, and harness marker blocks (`<!-- claude-only -->…<!-- /claude-only -->` dropped; `<!-- portable-only … -->` uncommented).
+- **Variants** — where the two harnesses need genuinely different documents, a `*.portable.md` sibling next to the canonical file wins wholesale (`commands/code-review/SKILL.portable.md`, `commands/implement/SKILL.portable.md`, `commands/setup/SKILL.portable.md`, `shared/orchestration.portable.md`, `shared/path-resolution.portable.md`, `shared/review-lanes.portable.md`, plus two templates). **Editing a canonical file that has a variant means checking whether the variant needs the same change.**
+- **Overrides** — `portable-overrides/` holds portable-only files with no canonical sibling: the portable README and `shared/agent-prompts/` + `shared/review-prompts/` (the prompt-file form of `agents/*.md`). **Editing an agent in `agents/` means re-syncing the matching prompt file by hand** — deriving prompts from agent bodies mechanically is the remaining convergence backlog.
+- **Gates** — `internal/portable`'s tests (run by `make test`) fail on drift between `portable/` and a fresh generation, and on any Claude-ism leaking into the portable tree (`sdd-planner:`, `the Task tool`, `~/.claude`, …). The generated manifest takes `version`/`minSddVersion` from `.claude-plugin/plugin.json`, and `make bump-*` re-syncs it inside the bump commit, so both trees always release together.
+
+`portable/` is committed (it is the tree the other harnesses install), and `sdd plugin status` prints the generated/variant/override provenance of every file.
 
 ## Skills
 
@@ -257,6 +271,7 @@ When adding, removing, or renaming skills (`commands/`), agents (`agents/`), or 
 - **`shared/decision-framework.md` ↔ agents** — when changing the framework, update the canonical agent block in that file and re-sync the identical `## Decision Framework` section in all eight `agents/*.md`
 - **Run `make test` after touching templates, `shared/frontmatter-schema.md`, or a rule in `internal/rules/`** — it runs the Go suite *and* the differential gate (`make parity`), so template↔validator drift fails the build instead of reaching users
 - **Every rule carries its own `Good` and `Bad` examples.** A rule with no failing example has never been shown to fire; one with no passing example has never been shown to stay quiet. The registry meta-test in `internal/rules/rules_test.go` fails when either is missing, so examples cannot lag the port. `make gen-fixtures` materializes them into the parity corpus; commit the result
+- **Run `make plugins` after touching `commands/`, `skills/`, `shared/`, or `.claude-plugin/plugin.json`** — the portable tree is generated from them and `make test` fails on drift. When a canonical file has a `*.portable.md` variant, decide whether the variant needs the same edit; when editing `agents/*.md`, re-sync the matching prompt in `portable-overrides/shared/*-prompts/` by hand
 - **Never regenerate `tools/parity/frozen-expectations.json`.** It is the deleted Python validator's last recorded verdict and the only remaining statement of what "correct" means. Rewriting it would change the answer rather than test against it. `tools/parity/EXEMPTIONS.md` records the two codes it does not cover and why
 
 ## Versioning
