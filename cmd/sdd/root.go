@@ -248,7 +248,7 @@ refusing non-compliant structure.`,
 
 func validateCmd() *cobra.Command {
 	var jsonOut, noWaivers bool
-	var root, scope, format, identityMode string
+	var root, scope, format string
 	c := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate every artifact under the planning root (read-only)",
@@ -262,8 +262,7 @@ findings; exit 2 means validation could not run.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return cmdValidate(reassemble(nil, flagVal("--root", root),
 				flagVal("--scope", scope), flagVal("--format", format),
-				flagPair("--json", jsonOut), flagPair("--no-waivers", noWaivers),
-				flagVal("--identity-mode", identityMode)))
+				flagPair("--json", jsonOut), flagPair("--no-waivers", noWaivers)))
 		},
 	}
 	f := c.Flags()
@@ -272,7 +271,6 @@ findings; exit 2 means validation could not run.`,
 	f.StringVar(&format, "format", "text", "output format: text|json")
 	f.BoolVar(&jsonOut, "json", false, "shorthand for --format json")
 	f.BoolVar(&noWaivers, "no-waivers", false, "ignore accepted exceptions and report every finding as an error")
-	f.StringVar(&identityMode, "identity-mode", "", "auto|current|historical")
 	return c
 }
 
@@ -291,7 +289,7 @@ func nextCmd() *cobra.Command {
 }
 
 func evidenceCmd() *cobra.Command {
-	var phase, plan, dryRun bool
+	var phase, plan, dryRun, jsonOut bool
 	var task, verifiedBy, workingDir, result string
 	var tool, toolContext, toolResult string
 	var focused, finalReview, date, revision string
@@ -310,7 +308,7 @@ every 'complete' transition checks.`,
 				flagVal("--tool-context", toolContext), flagVal("--tool-result", toolResult),
 				flagVal("--focused-review", focused), flagVal("--final-review", finalReview),
 				flagVal("--date", date), flagVal("--revision", revision),
-				flagPair("--dry-run", dryRun)))
+				flagPair("--dry-run", dryRun), flagPair("--json", jsonOut)))
 		},
 	}
 	f := add.Flags()
@@ -328,6 +326,7 @@ every 'complete' transition checks.`,
 	f.StringVar(&date, "date", "", "verification date (default: today)")
 	f.StringVar(&revision, "revision", "", "the task's own implementation commit (default: HEAD)")
 	f.BoolVar(&dryRun, "dry-run", false, "print the section without writing")
+	f.BoolVar(&jsonOut, "json", false, "emit the result as JSON")
 
 	c := &cobra.Command{Use: "evidence", Short: "Completion-evidence records"}
 	c.AddCommand(add)
@@ -442,34 +441,32 @@ func transitionCmd(level string) *cobra.Command {
 		Short: fmt.Sprintf("Lifecycle transitions for a %s", level),
 	}
 	var id string
-	var jsonOut, dryRun bool
+	var dryRun bool
 	complete := &cobra.Command{
 		Use:   "complete <path>",
 		Short: fmt.Sprintf("Mark a %s complete (evidence-gated)", level),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdTransition(level, reassemble(append([]string{"complete"}, args...),
-				flagVal("--id", id), flagPair("--json", jsonOut), flagPair("--dry-run", dryRun)))
+				flagVal("--id", id), flagPair("--dry-run", dryRun)))
 		},
 	}
 	if level == "task" {
 		complete.Flags().StringVar(&id, "id", "", "task id to transition")
 		_ = complete.MarkFlagRequired("id")
 	}
-	complete.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	complete.Flags().BoolVar(&dryRun, "dry-run", false, "report the outcome without writing")
 	c.AddCommand(complete)
 
 	if level == "plan" {
-		var apJSON, apDry bool
+		var apDry bool
 		approve := &cobra.Command{
 			Use: "approve <plan-path>", Short: "Mark a plan approved", Args: cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
 				return cmdTransition(level, reassemble(append([]string{"approve"}, args...),
-					flagPair("--json", apJSON), flagPair("--dry-run", apDry)))
+					flagPair("--dry-run", apDry)))
 			},
 		}
-		approve.Flags().BoolVar(&apJSON, "json", false, "emit JSON")
 		approve.Flags().BoolVar(&apDry, "dry-run", false, "report the outcome without writing")
 		c.AddCommand(approve)
 	}

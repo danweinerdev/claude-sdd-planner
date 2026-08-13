@@ -54,6 +54,7 @@ func cmdEvidence(args []string) error {
 	date := fs.String("date", "", "verification date (default: today)")
 	revision := fs.String("revision", "", "the task's own implementation commit (default: HEAD)")
 	dryRun := fs.Bool("dry-run", false, "print the section without writing")
+	jsonOut := fs.Bool("json", false, "emit the result as JSON")
 	positional, err := parseFlags(fs, args[1:])
 	if err != nil {
 		return err
@@ -155,18 +156,27 @@ func cmdEvidence(args []string) error {
 		PhaseIdentities: phaseIdentities,
 	})
 
+	heading, level := "## Phase Completion Evidence", 2
+	target := "phase"
+	switch {
+	case *plan:
+		heading, target = "## Plan Completion Evidence", "plan"
+	case *task != "":
+		heading, level, target = "### Completion Evidence", 3, "task"
+	}
+
 	if *dryRun {
+		if *jsonOut {
+			return emitEvidenceJSON(evidenceResult{
+				Path: relPath(path), OK: true, DryRun: true,
+				Target: target, TaskID: *task, Heading: heading,
+				Revision: rev, Section: section,
+			})
+		}
 		fmt.Print(section)
 		return nil
 	}
 
-	heading, level := "## Phase Completion Evidence", 2
-	switch {
-	case *plan:
-		heading = "## Plan Completion Evidence"
-	case *task != "":
-		heading, level = "### Completion Evidence", 3
-	}
 	updated, err := replaceEvidenceSection(doc, art.Source, heading, level, *task, section, when)
 	if err != nil {
 		return fmt.Errorf("evidence add: %w", err)
@@ -174,8 +184,38 @@ func cmdEvidence(args []string) error {
 	if err := store.WriteAtomic(path, updated); err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
+	if *jsonOut {
+		return emitEvidenceJSON(evidenceResult{
+			Path: relPath(path), OK: true, Wrote: true,
+			Target: target, TaskID: *task, Heading: heading,
+			Revision: rev, Digest: store.Digest(updated), Section: section,
+		})
+	}
 	fmt.Printf("recorded %s in %s (revision %s)\n", strings.TrimSpace(strings.TrimPrefix(heading, "##")), path, short(rev))
 	return nil
+}
+
+// evidenceResult is the machine-readable outcome of `evidence add` (FR-04).
+// It mirrors the shape the other writing commands emit — path/ok/dry_run/
+// wrote/digest — and adds what is specific to evidence: which level was
+// recorded, the heading it landed under, the revision the evidence attests
+// to, and the rendered section itself, so a caller can log or re-check what
+// was written without re-reading the artifact.
+type evidenceResult struct {
+	Path     string `json:"path"`
+	OK       bool   `json:"ok"`
+	DryRun   bool   `json:"dry_run,omitempty"`
+	Wrote    bool   `json:"wrote,omitempty"`
+	Target   string `json:"target"`
+	TaskID   string `json:"task_id,omitempty"`
+	Heading  string `json:"heading"`
+	Revision string `json:"revision,omitempty"`
+	Digest   string `json:"digest,omitempty"`
+	Section  string `json:"section"`
+}
+
+func emitEvidenceJSON(res evidenceResult) error {
+	return writeJSON(res)
 }
 
 type evidenceInput struct {

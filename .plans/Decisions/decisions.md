@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-12
+updated: 2026-08-13
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -191,7 +191,31 @@ decisions:
     scope: [portable/, internal/portable, Makefile]
     tags: [architecture, portable, plugin, release]
     reversibility: two-way
+  - id: D-0017
+    kind: decision
+    status: proposed
+    date: 2026-08-13
+    decided_by: agent
+    statement: "x"
+    rejected: []
+    rationale: ""
+    scope: []
+    tags: []
+    reversibility: two-way
+  - id: D-0018
+    kind: decision
+    status: proposed
+    date: 2026-08-13
+    decided_by: agent
+    statement: "x"
+    rejected: []
+    rationale: ""
+    scope: []
+    tags: []
+    reversibility: two-way
 ---
+
+
 
 
 # Decision Ledger
