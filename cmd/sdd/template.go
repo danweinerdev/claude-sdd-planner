@@ -56,6 +56,16 @@ func cmdTemplate(args []string) error {
 		fmt.Print(body)
 		return nil
 	}
+	// Create the parent directory. Artifact layouts are nested by convention
+	// (Specs/<Feature>/README.md), so the first write of a new artifact almost
+	// always targets a directory that does not exist yet; failing with a bare
+	// ENOENT made the tool look broken at the exact moment an author was
+	// starting work.
+	if dir := filepath.Dir(*out); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("template: creating %s: %w", dir, err)
+		}
+	}
 	if err := os.WriteFile(*out, []byte(body), 0o644); err != nil {
 		return fmt.Errorf("template: %w", err)
 	}

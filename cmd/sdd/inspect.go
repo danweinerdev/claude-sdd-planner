@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
@@ -43,7 +45,7 @@ func cmdShow(args []string) error {
 	fmt.Printf("%s\n  type: %s\n  digest: %s\n", out.Path, out.Type, out.Digest[:12])
 	fmt.Println("  frontmatter:")
 	for _, k := range sortedKeys(out.Frontmatter) {
-		fmt.Printf("    %-10s %s\n", k+":", out.Frontmatter[k])
+		fmt.Printf("    %-10s %v\n", k+":", out.Frontmatter[k])
 	}
 	for ns, ids := range out.Identifiers {
 		fmt.Printf("  %s (%d): %s\n", ns, len(ids), strings.Join(ids, ", "))
@@ -67,7 +69,7 @@ func cmdShow(args []string) error {
 	return nil
 }
 
-func sortedKeys(m map[string]string) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -89,7 +91,7 @@ type showOut struct {
 	Path        string              `json:"path"`
 	Digest      string              `json:"digest"`
 	Type        string              `json:"type"`
-	Frontmatter map[string]string   `json:"frontmatter"`
+	Frontmatter map[string]any      `json:"frontmatter"`
 	Identifiers map[string][]string `json:"identifiers,omitempty"`
 	Retired     map[string][]string `json:"retired,omitempty"`
 	Sections    []sectionInfo       `json:"sections"`
@@ -110,10 +112,10 @@ func showArtifact(path, typ string) (*showOut, error) {
 	}
 	out := &showOut{
 		Path: relPath(path), Digest: art.Digest, Type: typ,
-		Frontmatter: map[string]string{},
+		Frontmatter: map[string]any{},
 	}
 	for _, e := range doc.Frontmatter {
-		out.Frontmatter[e.Key] = e.Value
+		out.Frontmatter[e.Key] = yamlValue(e.Value)
 	}
 
 	s, err := schema.Load(typ)
@@ -267,4 +269,36 @@ func cmdList(args []string) error {
 		fmt.Printf("%-12s %-44s %s\n", r.Status, r.Path, r.Title)
 	}
 	return nil
+}
+
+// yamlValue converts a frontmatter value from its raw source text into the
+// Go value it denotes, so `sdd show --json` emits real JSON types.
+//
+// Field feedback: arrays serialized as the string "[a, b, c]" and quoted
+// scalars carried their literal quote characters into the JSON string
+// ("\"Title\""), forcing every consumer to re-parse YAML out of a JSON
+// string. Frontmatter is the machine-readable layer of every artifact; a
+// structured view of it that is not itself structured defeats the purpose.
+//
+// Values that do not parse as YAML fall back to the raw text rather than
+// failing: show is a read-only inspection command, and a malformed field is
+// exactly what someone runs it to find.
+func yamlValue(raw string) any {
+	var v any
+	if err := yaml.Unmarshal([]byte(raw), &v); err != nil {
+		return raw
+	}
+	switch v.(type) {
+	case nil:
+		// Empty or unparseable: report what is actually in the file.
+		return raw
+	case time.Time:
+		// YAML resolves an unquoted `2026-08-02` to a timestamp, which would
+		// re-render as "2026-08-02T00:00:00Z" — a value that is not what the
+		// artifact says and that round-trips back into the file wrongly. The
+		// schema's date fields are plain dates, so keep the source spelling.
+		return strings.TrimSpace(raw)
+	default:
+		return v
+	}
 }

@@ -31,6 +31,12 @@ type Artifact struct {
 // Read loads an artifact. A missing file is not an error: the caller may be
 // creating it.
 func Read(path string) (*Artifact, error) {
+	// Accept planning-root-relative paths (`Specs/X/README.md`) alongside
+	// working-directory-relative ones. Read is the choke point every
+	// path-taking command flows through, so resolving here fixes them all at
+	// once; the returned Artifact carries the resolved path so callers report
+	// the location they actually read.
+	path = ResolveArtifactPath(path)
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return &Artifact{Path: path}, nil
@@ -171,4 +177,50 @@ func rel(root, p string) string {
 		return filepath.ToSlash(p)
 	}
 	return filepath.ToSlash(r)
+}
+
+// ResolveArtifactPath accepts the two spellings an author naturally reaches
+// for and returns the one that exists on disk:
+//
+//	.plans/Specs/Feature/README.md   working-directory-relative
+//	Specs/Feature/README.md          planning-root-relative
+//
+// Field feedback: `sdd show Specs/...` failed while `.plans/Specs/...`
+// worked. Every artifact identifier the tool prints — validator diagnostics,
+// `list` output, `next` suggestions, `related` frontmatter — is planning-root
+// relative, so copying one back into a command was the obvious move and the
+// one that did not work.
+//
+// Resolution order is deliberate: the literal path wins when it exists, so a
+// real file is never shadowed by a same-named artifact under the planning
+// root. Only when the literal path is absent is the planning-root form tried.
+// Absolute paths and paths that exist are returned untouched, so this is
+// additive — no previously working invocation changes meaning.
+func ResolveArtifactPath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	root, err := FindPlanningRoot(".")
+	if err != nil {
+		return path // no config: nothing to resolve against; report the original
+	}
+	candidate := filepath.Join(root, path)
+	if _, err := os.Stat(candidate); err == nil {
+		// Prefer the relative spelling when the planning root is inside the
+		// working directory, so what the tool echoes back stays
+		// copy-pasteable. Rel is computed from the absolute cwd rather than
+		// ".", because a cwd reached through a symlink (the common case for
+		// temp dirs, and for $HOME on some systems) makes Rel(".", abs)
+		// return an absolute-looking result.
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(wd, candidate); err == nil && !strings.HasPrefix(rel, "..") {
+				return rel
+			}
+		}
+		return candidate
+	}
+	return path
 }

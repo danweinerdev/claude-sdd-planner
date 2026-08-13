@@ -273,7 +273,8 @@ func lintSectionBody(lines []string, targetDepth int) []compile.Refusal {
 				Code: "SEC021", Line: i + 1,
 				Message: fmt.Sprintf("payload heading %q is at depth %d, at or shallower than the target section's own depth %d",
 					t, depth, targetDepth),
-				Correction: "use a deeper subheading, or run a separate section set for that section",
+				Correction: "provide the section body only; omit the heading line itself. " +
+					"To change a different section, run section set again with that --heading",
 			})
 		}
 	}

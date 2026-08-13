@@ -200,7 +200,7 @@ func handlerFlagSets() []struct {
 		{"sdd decide add", []string{
 			"statement", "rationale", "rejected", "scope", "tags", "supersedes",
 			"kind", "reversibility", "accept", "dry-run", "json"}},
-		{"sdd decide validate", []string{"json", "no-history"}},
+		{"sdd decide validate", []string{"format", "json", "no-history"}},
 		{"sdd doctor", []string{"json"}},
 		{"sdd provision", []string{"plugin-root", "json", "check"}},
 		{"sdd plugin sync", []string{"root"}},

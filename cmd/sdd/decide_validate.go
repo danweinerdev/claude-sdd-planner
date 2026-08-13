@@ -18,12 +18,25 @@ import (
 func cmdDecideValidate(args []string) error {
 	fs := flag.NewFlagSet("decide validate", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	asJSON := fs.Bool("json", false, "emit diagnostics as JSON")
+	// FR-02 specifies --format for this command, and the bundled docs
+	// (shared/decision-log.md, the validate skill) tell authors to use it;
+	// only --json was implemented, so every documented invocation failed.
+	// Both spellings now work: --format is the documented one, --json is the
+	// shorthand every other subcommand carries.
+	format := fs.String("format", "text", "output format: text|json")
+	asJSON := fs.Bool("json", false, "shorthand for --format json")
 	noHistory := fs.Bool("no-history", false,
 		"skip Git history checks; only for an explicitly unversioned audit")
 	positional, err := parseFlags(fs, args)
 	if err != nil {
 		return err
+	}
+	switch *format {
+	case "text":
+	case "json":
+		*asJSON = true
+	default:
+		return fmt.Errorf("decide validate: --format must be text or json, got %q", *format)
 	}
 
 	path := ""

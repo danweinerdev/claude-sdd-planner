@@ -128,10 +128,11 @@ type staleError struct {
 }
 
 func (e *staleError) Error() string {
+	want, got := distinguishing(e.want, e.got)
 	return fmt.Sprintf(
 		"apply: %s changed since it was read (expected digest %s, found %s)\n"+
 			"    fix: re-read the artifact, reapply your edit to the current content, and retry",
-		e.path, short(e.want), short(e.got))
+		e.path, want, got)
 }
 
 func short(d string) string {
@@ -208,4 +209,34 @@ func emitJSON(rel string, art *store.Artifact, res *compile.Result, dryRun bool)
 		return &refusedError{n: len(res.Refusals)}
 	}
 	return nil
+}
+
+// distinguishing shortens two digests to a common length that still shows
+// they differ. A fixed 12-character truncation produced the worst possible
+// message when two digests shared a long prefix:
+//
+//	expected 2900a4afce7b, found 2900a4afce7b
+//
+// — a mismatch error whose own evidence says the values are equal, which
+// reads as a tool bug rather than the stale-read it actually reports. The
+// length grows until the prefixes diverge, so the difference is always
+// visible; identical inputs (which should never reach here) fall back to the
+// full strings rather than silently claiming a difference.
+func distinguishing(a, b string) (string, string) {
+	const min = 12
+	if a == b {
+		return a, b
+	}
+	n := min
+	for n < len(a) && n < len(b) && a[:n] == b[:n] {
+		n += 4
+	}
+	return truncate(a, n), truncate(b, n)
+}
+
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }

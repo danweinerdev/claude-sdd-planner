@@ -416,16 +416,19 @@ an accepted entry unless --supersedes names it.`,
 	_ = add.MarkFlagRequired("statement")
 
 	var valJSON, noHistory bool
+	var valFormat string
 	validate := &cobra.Command{
 		Use:   "validate [ledger-path]",
 		Short: "Audit the ledger's format, ids, supersession, and immutability",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return cmdDecideValidate(reassemble(args,
+				flagVal("--format", valFormat),
 				flagPair("--json", valJSON), flagPair("--no-history", noHistory)))
 		},
 	}
-	validate.Flags().BoolVar(&valJSON, "json", false, "emit diagnostics as JSON")
+	validate.Flags().StringVar(&valFormat, "format", "text", "output format: text|json")
+	validate.Flags().BoolVar(&valJSON, "json", false, "shorthand for --format json")
 	validate.Flags().BoolVar(&noHistory, "no-history", false, "skip Git history checks; only for an explicitly unversioned audit")
 
 	c.AddCommand(list, search, add, validate)
