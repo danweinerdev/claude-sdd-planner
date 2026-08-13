@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/provision"
 )
@@ -58,6 +59,8 @@ func cmdProvision(o provisionOpts) error {
 			"floor":       floor,
 			"plugin_copy": res.PluginCopy,
 			"refreshed":   res.Refreshed,
+			"hooks_path":  res.HooksPath,
+			"hooks_wrote": res.HooksWrote,
 		}, "", "  ")
 		if marshalErr != nil {
 			return marshalErr
@@ -73,6 +76,13 @@ func cmdProvision(o provisionOpts) error {
 			state = "refreshed"
 		}
 		fmt.Printf("  plugin copy: %s (%s)\n", res.PluginCopy, state)
+	}
+	if res.HooksPath != "" {
+		state := "already current"
+		if res.HooksWrote {
+			state = "written for " + runtime.GOOS
+		}
+		fmt.Printf("  hooks: %s (%s)\n", res.HooksPath, state)
 	}
 	fmt.Printf("  floor: %s\n", floor)
 	return nil

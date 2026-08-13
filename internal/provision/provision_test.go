@@ -1,9 +1,11 @@
 package provision
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -176,5 +178,73 @@ func TestCompareVersionsRejectsMalformed(t *testing.T) {
 		if _, err := compareVersions("1.16.0", bad); err == nil {
 			t.Errorf("compareVersions(version, %q) accepted a malformed floor", bad)
 		}
+	}
+}
+
+// TestInstallHooksWritesOnePlatformCommand pins the fix for a hook error that
+// appeared on every tool call: hooks.json has no OS conditional, so a file
+// listing both a POSIX and a PowerShell command guarantees one of them fails
+// on every platform. Linux users saw `powershell: command not found`; the
+// previous shape produced `sdd.exe: No such file or directory` for the same
+// reason. Exactly one command per event must be written, naming an
+// interpreter that exists here.
+func TestInstallHooksWritesOnePlatformCommand(t *testing.T) {
+	root := t.TempDir()
+	path, wrote, err := InstallHooks(root)
+	if err != nil {
+		t.Fatalf("InstallHooks: %v", err)
+	}
+	if !wrote {
+		t.Error("the first install reported no write")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("generated hooks.json is not valid JSON: %v\n%s", err, raw)
+	}
+	for _, event := range []string{"SessionStart", "PreToolUse"} {
+		matchers, ok := doc.Hooks[event]
+		if !ok || len(matchers) != 1 {
+			t.Fatalf("%s: want one matcher, got %d", event, len(matchers))
+		}
+		cmds := matchers[0].Hooks
+		if len(cmds) != 1 {
+			t.Errorf("%s: want exactly one command for this platform, got %d — "+
+				"a command for another platform fails on every tool call", event, len(cmds))
+			continue
+		}
+		got := cmds[0].Command
+		wantWrapper := "sdd-hook.sh"
+		unwanted := "powershell"
+		if runtime.GOOS == "windows" {
+			wantWrapper, unwanted = "sdd-hook.ps1", "sh \""
+		}
+		if !strings.Contains(got, wantWrapper) {
+			t.Errorf("%s: command does not use this platform's wrapper: %q", event, got)
+		}
+		if strings.Contains(got, unwanted) {
+			t.Errorf("%s: command references another platform's interpreter: %q", event, got)
+		}
+		// The plugin root must stay a variable Claude Code expands at hook
+		// time; baking in an absolute path re-creates the staleness across
+		// upgrades that this whole mechanism removes.
+		if !strings.Contains(got, "${CLAUDE_PLUGIN_ROOT}") {
+			t.Errorf("%s: command does not defer to ${CLAUDE_PLUGIN_ROOT}: %q", event, got)
+		}
+	}
+
+	// Idempotent: an unchanged file is left alone.
+	if _, wrote, err := InstallHooks(root); err != nil || wrote {
+		t.Errorf("second install rewrote an identical file (wrote=%v, err=%v)", wrote, err)
 	}
 }

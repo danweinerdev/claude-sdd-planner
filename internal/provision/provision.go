@@ -35,6 +35,8 @@ type Result struct {
 	Version    string      // its reported version
 	PluginCopy string      // where it was placed
 	Refreshed  bool        // whether the copy was written this run
+	HooksPath  string      // the generated hooks.json
+	HooksWrote bool        // whether hooks.json changed this run
 	Candidates []Candidate // every path considered, in order
 }
 
@@ -174,6 +176,16 @@ func Provision(pluginRoot, floor string) (Result, error) {
 	}
 	dest := filepath.Join(pluginRoot, "bin", binaryName())
 	res.PluginCopy = dest
+
+	// hooks.json is generated for this platform on every run, independent of
+	// whether the binary copy needed refreshing: an upgrade brings a new
+	// plugin directory whose hooks.json must be written even when the binary
+	// it points at is already correct.
+	if hooksPath, wrote, err := InstallHooks(pluginRoot); err != nil {
+		return res, err
+	} else {
+		res.HooksPath, res.HooksWrote = hooksPath, wrote
+	}
 
 	if sameFile(res.Source, dest) {
 		return res, nil // already the copy we resolved
