@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/danweinerdev/claude-sdd-planner/internal/provision"
 	"github.com/danweinerdev/claude-sdd-planner/internal/version"
 	"os"
 	"os/exec"
@@ -33,15 +34,26 @@ type doctorReport struct {
 	Schemas           []schemaInfo `json:"schemas"`
 	HookBinary        string       `json:"hook_binary,omitempty"`
 	HookBinaryError   string       `json:"hook_binary_error,omitempty"`
+	HooksFile         string       `json:"hooks_file,omitempty"`
+	HooksFileError    string       `json:"hooks_file_error,omitempty"`
 }
 
 // cmdDoctor reports the binary's own identity, the resolved planning root (or
 // why it couldn't resolve one), and every embedded schema with how many
 // artifacts of that type exist under the root.
-func cmdDoctor(jsonOut bool) error {
+// doctorOpts controls whether doctor repairs what it finds. Repair is the
+// default because that is what makes it the one command to run; --check is for
+// CI and for anyone who wants a verdict without a side effect.
+type doctorOpts struct {
+	JSON  bool
+	Check bool
+}
+
+func cmdDoctor(o doctorOpts) error {
 
 	rep := doctorReport{Version: version.Version}
 	rep.HookBinary, rep.HookBinaryError = checkHookBinary()
+	rep.HooksFile, rep.HooksFileError = checkHooksFile(!o.Check)
 	if exe, err := os.Executable(); err == nil {
 		if abs, err2 := filepath.Abs(exe); err2 == nil {
 			rep.BinaryPath = abs
@@ -84,7 +96,7 @@ func cmdDoctor(jsonOut bool) error {
 		rep.Schemas = append(rep.Schemas, info)
 	}
 
-	if jsonOut {
+	if o.JSON {
 		if err := writeJSON(rep); err != nil {
 			return err
 		}
@@ -106,6 +118,11 @@ func printDoctorReport(r doctorReport) {
 		fmt.Printf("  hook binary: %s — %s\n", r.HookBinary, r.HookBinaryError)
 	} else if r.HookBinary != "" {
 		fmt.Printf("  hook binary: %s (OK)\n", r.HookBinary)
+	}
+	if r.HooksFileError != "" {
+		fmt.Printf("  hooks file: %s — %s\n", r.HooksFile, r.HooksFileError)
+	} else if r.HooksFile != "" {
+		fmt.Printf("  hooks file: %s (current)\n", r.HooksFile)
 	}
 	if r.PlanningRootError != "" {
 		fmt.Printf("  planning root: ERROR: %s\n", r.PlanningRootError)
@@ -135,6 +152,43 @@ func printDoctorReport(r doctorReport) {
 // hooks. What it still catches is the case worth naming: the hooks will run
 // whatever `sdd` happens to be on PATH, which may not be the version this
 // plugin was admitted against.
+// checkHooksFile reports on the generated hooks.json and, unless the caller
+// asked for a read-only report, repairs it.
+//
+// Repairing here is the point of running doctor at all. A stale hooks.json is
+// invisible by construction — the events it declares keep firing, so nothing
+// looks wrong while a newly added event never runs — and a report that only
+// tells the user to run a second command leaves the broken state in place for
+// however long it takes them to do it. The write is small, idempotent, and
+// entirely within the plugin's own directory.
+func checkHooksFile(repair bool) (path, problem string) {
+	root := os.Getenv("CLAUDE_PLUGIN_ROOT")
+	if root == "" {
+		return "", ""
+	}
+	path = provision.HooksPath(root)
+	state, err := provision.CheckHooks(root)
+	if err != nil {
+		return path, "cannot be read: " + err.Error()
+	}
+	if state == provision.HooksCurrent {
+		return path, ""
+	}
+
+	was := "absent"
+	if state == provision.HooksStale {
+		was = "did not match this version's hook set"
+	}
+	if !repair {
+		return path, was + "; run `sdd doctor` to regenerate it"
+	}
+	if _, _, err := provision.InstallHooks(root); err != nil {
+		return path, was + ", and could not be regenerated: " + err.Error()
+	}
+	return path, was + " — regenerated for " + runtime.GOOS +
+		"; restart the session for it to take effect"
+}
+
 func checkHookBinary() (path, problem string) {
 	root := os.Getenv("CLAUDE_PLUGIN_ROOT")
 	if root == "" {

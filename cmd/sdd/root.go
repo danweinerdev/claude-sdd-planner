@@ -473,16 +473,24 @@ func transitionCmd(level string) *cobra.Command {
 }
 
 func doctorCmd() *cobra.Command {
-	var jsonOut bool
+	var o doctorOpts
 	c := &cobra.Command{
 		Use:   "doctor",
-		Short: "Report binary identity, planning root, and schema set",
-		Args:  cobra.NoArgs,
+		Short: "Check the environment and repair the hook installation",
+		Long: `Reports the binary in use, the resolved planning root, and the embedded
+schema set, and regenerates hooks.json when it is absent or does not match this
+version's hook set.
+
+Run it once when starting to use sdd in a project: a stale hooks.json is
+invisible otherwise, because the events it does declare keep firing while a
+newly added one silently never runs. Pass --check to report without repairing.`,
+		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return cmdDoctor(jsonOut)
+			return cmdDoctor(o)
 		},
 	}
-	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	c.Flags().BoolVar(&o.JSON, "json", false, "emit JSON")
+	c.Flags().BoolVar(&o.Check, "check", false, "report only; do not repair the hooks file")
 	return c
 }
 

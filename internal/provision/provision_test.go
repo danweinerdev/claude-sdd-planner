@@ -248,3 +248,68 @@ func TestInstallHooksWritesOnePlatformCommand(t *testing.T) {
 		t.Errorf("second install rewrote an identical file (wrote=%v, err=%v)", wrote, err)
 	}
 }
+
+// TestCheckHooksDetectsDrift covers the question a user cannot answer by
+// looking at the file: is this hooks.json the one this plugin version
+// expects? A stale file still parses and still fires the events it declares,
+// so an upgrade that adds an event leaves no symptom — only a comparison
+// finds it.
+func TestCheckHooksDetectsDrift(t *testing.T) {
+	root := t.TempDir()
+
+	// Never provisioned: absent, which is a documented state, not drift.
+	if state, err := CheckHooks(root); err != nil || state != HooksAbsent {
+		t.Fatalf("want HooksAbsent for a fresh root, got %v (err %v)", state, err)
+	}
+
+	if _, _, err := InstallHooks(root); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := CheckHooks(root); err != nil || state != HooksCurrent {
+		t.Fatalf("want HooksCurrent right after install, got %v (err %v)", state, err)
+	}
+
+	// Simulate the dangerous case: a plugin version whose event set has since
+	// grown. The old file is valid JSON and fires its own events.
+	path := HooksPath(root)
+	var doc map[string]any
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	hooks := doc["hooks"].(map[string]any)
+	delete(hooks, "PreToolUse")
+	edited, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(path, append(edited, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := CheckHooks(root); err != nil || state != HooksStale {
+		t.Errorf("an install missing a declared event was not reported stale: %v (err %v)", state, err)
+	}
+
+	// Re-installing repairs it.
+	if _, wrote, err := InstallHooks(root); err != nil || !wrote {
+		t.Errorf("re-install did not rewrite the drifted file (wrote=%v, err=%v)", wrote, err)
+	}
+	if state, _ := CheckHooks(root); state != HooksCurrent {
+		t.Error("re-install did not restore the current hook set")
+	}
+}
+
+// A hooks.json that is not valid JSON must read as stale rather than as an
+// error the caller has to special-case: the remedy is identical.
+func TestCheckHooksTreatsGarbageAsStale(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(HooksPath(root), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := CheckHooks(root); err != nil || state != HooksStale {
+		t.Errorf("want HooksStale for unparseable content, got %v (err %v)", state, err)
+	}
+}
