@@ -166,6 +166,31 @@ func TestNoInertFlags(t *testing.T) {
 	}
 }
 
+// TestNoUnreachableFlags is the mirror of TestNoInertFlags. An inert flag is
+// advertised but unusable; an unreachable one is implemented but unreachable —
+// the handler parses it, nothing exposes it, and the feature silently does not
+// exist. Verified by deleting --no-waivers from validateCmd: every other test
+// still passed while `sdd validate --no-waivers` became an error.
+//
+// Together the two tests pin the flag surface from both sides, which is what
+// makes the cobra-to-handler adapter safe to keep: the two declarations cannot
+// disagree in either direction without a test failing.
+func TestNoUnreachableFlags(t *testing.T) {
+	for _, tc := range handlerFlagSets() {
+		cmd := findByPath(newRootCmd(), tc.path)
+		if cmd == nil {
+			t.Errorf("command %q is in the handler-flag table but not in the tree", tc.path)
+			continue
+		}
+		for _, name := range tc.handlerFlags {
+			if cmd.Flags().Lookup(name) == nil {
+				t.Errorf("%s's handler parses --%s, but no cobra flag exposes it — "+
+					"the feature is unreachable from the command line", tc.path, name)
+			}
+		}
+	}
+}
+
 // handlerFlagSets pairs each cobra command with the flag names its underlying
 // cmdX handler actually parses. When a flag is added to a handler, add it here
 // and to the cobra command; the test fails on either half alone.

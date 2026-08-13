@@ -492,6 +492,7 @@ func transitionCmd(level string) *cobra.Command {
 			},
 		}
 		approve.Flags().BoolVar(&apDry, "dry-run", false, "report the outcome without writing")
+		approve.Flags().BoolVar(&apJSON, "json", false, "emit the result as JSON")
 		c.AddCommand(approve)
 	}
 	return c
