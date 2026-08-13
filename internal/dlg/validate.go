@@ -55,6 +55,9 @@ func safeScope(value string) bool {
 	if strings.Contains(value, `\`) || driveLetterRe.MatchString(value) {
 		return false
 	}
+	// A single trailing slash is an accepted directory-scope spelling
+	// (e.g. `portable/`); trim it before checking the segments.
+	value = strings.TrimSuffix(value, "/")
 	for _, part := range strings.Split(value, "/") {
 		if part == "" || part == "." || part == ".." {
 			return false
