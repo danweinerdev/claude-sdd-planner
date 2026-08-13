@@ -143,3 +143,40 @@ func TestPayloadMayNotSkipIdentifiers(t *testing.T) {
 		t.Errorf("the refusal should name AC-02 as the identifier to use: %v", res.Refusals)
 	}
 }
+
+// TestSupersedeDoesNotCarryRetiredIdentifiers pins a bug found in review:
+// carry.next handed out the next unclaimed live identifier with no awareness
+// of --retire, so `--supersede --retire FR-02` attached FR-02 to a rewritten
+// item. The retirement loop then skipped it as already claimed, silently
+// ignoring the flag and retiring a different requirement in its place.
+func TestSupersedeDoesNotCarryRetiredIdentifiers(t *testing.T) {
+	existing := specWith("- **FR-01**: one", "- **FR-02**: two", "- **FR-03**: three")
+	payload := specWith("- rewritten a", "- rewritten b")
+
+	res := compileSpec(t, existing, payload, Options{
+		Supersede: true,
+		Retire:    map[string]bool{"FR-02": true},
+	})
+	if !res.OK() {
+		t.Fatalf("supersede with --retire refused: %v", res.Refusals)
+	}
+	// FR-02 was named for retirement, so it must not appear on any item.
+	if strings.Contains(res.Output, "**FR-02**") {
+		t.Errorf("FR-02 was retired but still appears in the output:\n%s", res.Output)
+	}
+	var retired bool
+	for _, r := range res.Retired {
+		if r == "FR-02" {
+			retired = true
+		}
+	}
+	if !retired {
+		t.Errorf("FR-02 was named in --retire but is not reported retired: %v", res.Retired)
+	}
+	// The two surviving identifiers carry onto the two rewritten items.
+	for _, want := range []string{"**FR-01**: rewritten a", "**FR-03**: rewritten b"} {
+		if !strings.Contains(res.Output, want) {
+			t.Errorf("expected %q in output:\n%s", want, res.Output)
+		}
+	}
+}

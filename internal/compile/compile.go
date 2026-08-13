@@ -669,7 +669,7 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 				// before allocating a fresh one, so a rewrite preserves the
 				// identifiers everything else cites.
 				if opts.Supersede {
-					if id, num, ok := carry.next(h.IDNamespace, live, *nsDef, payload); ok {
+					if id, num, ok := carry.next(h.IDNamespace, live, *nsDef, payload, opts.Retire); ok {
 						sec.Body[li] = insertID(line, id)
 						res.Carried = append(res.Carried,
 							fmt.Sprintf("%s kept on %q", id, snippet(line)))
@@ -728,19 +728,27 @@ func maxOf(a, b int) int {
 // that is exactly the burden supersede removes. It is reported per item
 // (`FR-01 kept on "..."`) so the author can see what inherited what and correct
 // it in the payload if the order is wrong.
-type carryState struct{ used map[string]int }
+type carryState struct{ used map[string]bool }
 
-func newCarryState() *carryState { return &carryState{used: map[string]int{}} }
+func newCarryState() *carryState { return &carryState{used: map[string]bool{}} }
 
 // next returns the next live identifier in ns that the payload has not already
 // claimed, marking it used.
-func (c *carryState) next(ns string, live identSet, def schema.Namespace, payload identSet) (string, int, bool) {
+func (c *carryState) next(ns string, live identSet, def schema.Namespace, payload identSet, retire map[string]bool) (string, int, bool) {
 	for _, id := range live.list(ns, def) {
 		_, num, ok := splitID(id)
-		if !ok || payload.has(ns, num) || c.used[id] > 0 {
+		if !ok || payload.has(ns, num) || c.used[id] {
 			continue
 		}
-		c.used[id]++
+		// An identifier the author named in --retire is not available to
+		// carry. Without this, `--supersede --retire FR-02` handed FR-02 to a
+		// rewritten item, and the retirement loop then skipped it as already
+		// claimed — so the flag was silently ignored and some other
+		// identifier was retired in its place.
+		if retire[id] {
+			continue
+		}
+		c.used[id] = true
 		return id, num, true
 	}
 	return "", 0, false

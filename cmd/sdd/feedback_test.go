@@ -413,3 +413,86 @@ func TestReviewScaffoldJSONCarriesTheEvidenceLine(t *testing.T) {
 		t.Errorf("want the four stable lane identifiers, got %v", reviewLaneIDs())
 	}
 }
+
+// TestWritesLandOnTheResolvedPath pins the review's top finding: store.Read
+// resolves a planning-root-relative spelling to its real location, but the
+// text-output write paths wrote back to the unresolved argument. The result
+// was silent data loss — a shadow file appeared at the literal path while the
+// artifact that was actually read stayed unchanged.
+func TestWritesLandOnTheResolvedPath(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "planning-config.json"), `{"planningRoot":".plans"}`)
+	artifact := filepath.Join(root, ".plans", "Specs", "Thing", "README.md")
+	mustWrite(t, artifact, specFixture("Thing"))
+	// A same-named directory at the working root, so a misdirected write
+	// succeeds instead of failing on a missing parent — which is the case
+	// that loses data silently rather than loudly.
+	if err := os.MkdirAll(filepath.Join(root, "Specs", "Thing"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+
+	// section set is the cheapest write to drive end to end.
+	stdin, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _, _ = w.WriteString("Rewritten overview body.\n"); w.Close() }()
+	oldStdin, oldStdout := os.Stdin, os.Stdout
+	devnull, _ := os.Open(os.DevNull)
+	os.Stdin, os.Stdout = stdin, devnull
+	err = cmdSectionSet("Specs/Thing/README.md", sectionSetOpts{Heading: "## Overview", Type: "spec"})
+	os.Stdin, os.Stdout = oldStdin, oldStdout
+	if devnull != nil {
+		devnull.Close()
+	}
+	if err != nil {
+		t.Fatalf("section set on a planning-root-relative path failed: %v", err)
+	}
+
+	got, err := os.ReadFile(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "Rewritten overview body.") {
+		t.Errorf("the artifact that was read was not the one written:\n%s", got)
+	}
+	// Nothing may appear at the unresolved literal path.
+	if _, err := os.Stat(filepath.Join(root, "Specs", "Thing", "README.md")); err == nil {
+		t.Error("a shadow file was written at the unresolved path; the write did not follow the read")
+	}
+}
+
+// TestGoverningDecisionsRequiresPathSegments pins the scope-matching fix: a
+// bare string prefix let a decision scoped to `Specs/Foo` be pulled into the
+// scope of the unrelated sibling `Specs/FooBar`.
+func TestGoverningDecisionsRequiresPathSegments(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "planning-config.json"), `{"planningRoot":"."}`)
+	mustWrite(t, filepath.Join(root, "Specs", "Foo", "README.md"), specFixture("Foo"))
+	mustWrite(t, filepath.Join(root, "Specs", "FooBar", "README.md"), specFixture("FooBar"))
+	// One entry, missing `rationale` (SDD112), governing only Specs/FooBar.
+	mustWrite(t, filepath.Join(root, "Decisions", "decisions.md"),
+		"---\ntitle: \"Decisions\"\ntype: decision-log\nstatus: active\n"+
+			"created: 2026-01-01\nupdated: 2026-01-01\ndecisions:\n"+
+			"  - id: D-0001\n    kind: decision\n    status: accepted\n    date: 2026-01-01\n"+
+			"    decided_by: user\n    statement: FooBar uses X.\n    scope: [\"Specs/FooBar\"]\n"+
+			"---\n\n## Decisions\nSee frontmatter.\n")
+
+	out := runValidate(t, root, "Specs/Foo")
+	if strings.Contains(out, "D-0001") {
+		t.Errorf("a decision governing Specs/FooBar leaked into the scope of Specs/Foo:\n%s", out)
+	}
+	// The sibling's own scope must still see it.
+	if outBar := runValidate(t, root, "Specs/FooBar"); !strings.Contains(outBar, "D-0001") {
+		t.Errorf("the decision governing Specs/FooBar was dropped from its own scope:\n%s", outBar)
+	}
+}

@@ -74,6 +74,18 @@ func cmdMigrate(target string, o migrateOpts) error {
 
 	rel := relPath(target)
 	if o.JSON {
+		// Perform the write before reporting it. The JSON branch used to
+		// return here without ever reaching the WriteAtomic below, so
+		// `migrate --json` reported `"wrote": true` while leaving the file
+		// untouched — a caller scripting against it would record a migration
+		// that never happened.
+		wrote := false
+		if res.OK() && !o.DryRun && res.Output != art.Source {
+			if err := store.WriteAtomic(art.Path, res.Output); err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
+			wrote = true
+		}
 		return writeJSON(struct {
 			Path        string   `json:"path"`
 			Type        string   `json:"type"`
@@ -84,7 +96,7 @@ func cmdMigrate(target string, o migrateOpts) error {
 			Refusals    []string `json:"refusals,omitempty"`
 			Wrote       bool     `json:"wrote"`
 		}{rel, resolvedType, res.OK(), res.Added, res.Corrections, res.Todos,
-			refusalStrings(res), res.OK() && !o.DryRun && res.Output != art.Source})
+			refusalStrings(res), wrote})
 	}
 
 	fmt.Printf("%s (%s)\n", rel, resolvedType)
@@ -117,7 +129,8 @@ func cmdMigrate(target string, o migrateOpts) error {
 		fmt.Printf("  would write (%d insertions)\n", len(res.Added))
 		return nil
 	}
-	if err := store.WriteAtomic(target, res.Output); err != nil {
+	// The resolved path, not the argument — see the note in apply.go.
+	if err := store.WriteAtomic(art.Path, res.Output); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	fmt.Printf("  migrated; digest %s\n", store.Digest(res.Output)[:12])

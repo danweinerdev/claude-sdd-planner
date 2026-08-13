@@ -182,7 +182,7 @@ decisions:
     reversibility: two-way
   - id: D-0016
     kind: decision
-    status: accepted
+    status: superseded
     date: 2026-08-12
     decided_by: user-approved
     statement: "The plugin ships from one repository: the repo root is the canonical hand-edited Claude plugin, and portable/ is a generated OpenCode/Codex tree produced by 'sdd plugin sync' (transforms + .portable.md variants + portable-overrides/), drift- and leak-gated by make test, with version/minSddVersion synced from .claude-plugin/plugin.json. The standalone sdd-planner repo is retired."
@@ -191,29 +191,21 @@ decisions:
     scope: [portable/, internal/portable, Makefile]
     tags: [architecture, portable, plugin, release]
     reversibility: two-way
+    superseded_by: D-0017
   - id: D-0017
     kind: decision
-    status: proposed
+    status: accepted
+    supersedes: D-0016
     date: 2026-08-13
-    decided_by: agent
-    statement: "x"
-    rejected: []
-    rationale: ""
-    scope: []
-    tags: []
-    reversibility: two-way
-  - id: D-0018
-    kind: decision
-    status: proposed
-    date: 2026-08-13
-    decided_by: agent
-    statement: "x"
-    rejected: []
-    rationale: ""
-    scope: []
-    tags: []
+    decided_by: user-approved
+    statement: "The plugin ships from one repository: the repo root is the canonical hand-edited Claude plugin, and .codex-plugin/ and .opencode-plugin/ are generated per-harness install trees produced by 'sdd plugin sync' (transforms + markers + .portable.md variants + portable-overrides/), drift- and leak-gated by make test, with version/minSddVersion synced from .claude-plugin/plugin.json. The standalone sdd-planner repo is retired."
+    rejected: [edit D-0016's scope in place, leave the stale portable/ scope and waive the diagnostic]
+    rationale: "Supersedes D-0016 to correct its scope: the generated tree was published as portable/ when D-0016 was recorded, and is now emitted as the two per-harness roots .codex-plugin/ and .opencode-plugin/, which is what Codex marketplaces and OpenCode .agents discovery actually install from. D-0016's scope names a path that no longer exists, and an accepted entry's scope is immutable, so the correction is a superseding entry rather than an edit."
+    scope: [internal/portable, Makefile]
+    tags: [architecture, portable, plugin, release]
     reversibility: two-way
 ---
+
 
 
 

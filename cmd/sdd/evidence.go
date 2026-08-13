@@ -169,7 +169,8 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 	if err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
-	if err := store.WriteAtomic(path, updated); err != nil {
+	// The resolved path, not the argument — see the note in apply.go.
+	if err := store.WriteAtomic(art.Path, updated); err != nil {
 		return fmt.Errorf("evidence add: %w", err)
 	}
 	if o.JSON {

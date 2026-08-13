@@ -448,8 +448,13 @@ func governingDecisions(r *rules.Root, inScope []string) map[string]bool {
 				}
 				ref = strings.Trim(filepath.ToSlash(ref), "/")
 				for p := range allowed {
+					// Match on path segments, never bare string prefixes: a
+					// decision scoped to `Specs/Foo` must not be pulled into
+					// the scope of `Specs/FooBar`, which a HasPrefix test
+					// treats as a match.
+					dir := strings.TrimSuffix(p, "/README.md")
 					if p == ref || strings.HasPrefix(p, ref+"/") ||
-						strings.HasPrefix(ref, strings.TrimSuffix(p, "/README.md")) {
+						ref == dir || strings.HasPrefix(ref, dir+"/") {
 						out[id] = true
 					}
 				}

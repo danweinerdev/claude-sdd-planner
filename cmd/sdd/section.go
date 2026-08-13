@@ -60,7 +60,7 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 	out, secRefs := setSection(doc, s, o.Heading, string(payload), time.Now().Format("2006-01-02"))
 	refs = append(refs, secRefs...)
 
-	rel := relPath(target)
+	rel := relPath(art.Path)
 
 	if o.JSON {
 		return emitSectionJSON(rel, art, out, refs, o.DryRun)
@@ -93,7 +93,8 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 		fmt.Printf("%s unchanged; digest %s\n", rel, art.Digest[:12])
 		return nil
 	}
-	if err := store.WriteAtomic(target, out); err != nil {
+	// The resolved path, not the argument — see the note in apply.go.
+	if err := store.WriteAtomic(art.Path, out); err != nil {
 		return fmt.Errorf("section set: %w", err)
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(out)[:12])

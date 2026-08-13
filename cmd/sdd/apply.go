@@ -76,7 +76,7 @@ func cmdApply(target string, o applyOpts) error {
 	}
 
 	res := compile.Compile(s, string(payload), opts)
-	rel := relPath(target)
+	rel := relPath(art.Path)
 
 	if o.JSON {
 		return emitJSON(rel, art, res, o.DryRun)
@@ -112,7 +112,12 @@ func cmdApply(target string, o applyOpts) error {
 		fmt.Printf("%s unchanged; digest %s\n", rel, art.Digest[:12])
 		return nil
 	}
-	if err := store.WriteAtomic(target, res.Output); err != nil {
+	// Write to the path that was actually read. store.Read resolves a
+	// planning-root-relative spelling (Specs/X/README.md) to its real
+	// location (.plans/Specs/X/README.md); writing back to the unresolved
+	// argument sends the output somewhere else entirely — creating a shadow
+	// file at the literal path while the artifact just read stays unchanged.
+	if err := store.WriteAtomic(art.Path, res.Output); err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(res.Output)[:12])
