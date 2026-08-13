@@ -94,7 +94,7 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 		return nil
 	}
 	// The resolved path, not the argument — see the note in apply.go.
-	if err := store.WriteAtomic(art.Path, out); err != nil {
+	if err := store.WriteAtomicExpecting(art.Path, out, art.Digest); err != nil {
 		return fmt.Errorf("section set: %w", err)
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(out)[:12])
@@ -124,7 +124,7 @@ func emitSectionJSON(rel string, art *store.Artifact, out string, refs []compile
 		res.Unchanged = out == art.Source
 		res.Digest = store.Digest(out)
 		if !dryRun && !res.Unchanged {
-			if err := store.WriteAtomic(art.Path, out); err != nil {
+			if err := store.WriteAtomicExpecting(art.Path, out, art.Digest); err != nil {
 				return fmt.Errorf("section set: %w", err)
 			}
 			res.Wrote = true

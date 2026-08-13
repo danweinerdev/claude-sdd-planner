@@ -37,6 +37,15 @@ func Read(path string) (*Artifact, error) {
 	// once; the returned Artifact carries the resolved path so callers report
 	// the location they actually read.
 	path = ResolveArtifactPath(path)
+
+	// Hold a shared lock across the read so a concurrent writer's rename
+	// cannot land mid-read. Readers do not block each other, and a reader
+	// that cannot acquire within the retry window proceeds anyway — see the
+	// rationale on acquireShared.
+	if l := acquireShared(path); l != nil {
+		defer l.Release()
+	}
+
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return &Artifact{Path: path}, nil
@@ -52,6 +61,46 @@ func Read(path string) (*Artifact, error) {
 // followed by a rename, so a crash or interruption never leaves a partial
 // artifact (FR-24). Same-directory placement keeps the rename on one volume.
 func WriteAtomic(path, content string) error {
+	return writeAtomicChecked(path, content, "", false)
+}
+
+// WriteAtomicExpecting writes content only if the artifact's current digest is
+// still expectDigest once the exclusive lock is held. An empty expectDigest
+// means the artifact is expected not to exist.
+//
+// This is the concurrency contract in one call: take the exclusive lock, then
+// re-check that the world the content was derived from still holds. Acquiring
+// the lock is not permission to write — it is permission to check whether
+// writing is still valid. A writer that waited behind another writer finds the
+// digest changed and returns *ErrConcurrentWrite, forcing the caller back to a
+// fresh read rather than silently overwriting the result it waited for.
+func WriteAtomicExpecting(path, content, expectDigest string) error {
+	return writeAtomicChecked(path, content, expectDigest, true)
+}
+
+func writeAtomicChecked(path, content, expectDigest string, check bool) error {
+	// The exclusive lock spans the digest re-check, the temp write, and the
+	// rename, so no reader observes a torn state and no second writer can
+	// interleave between the check and the swap. That span is what makes the
+	// pair a compare-and-swap rather than two independent operations.
+	lock, err := acquireExclusive(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
+	if check {
+		current := ""
+		if b, readErr := os.ReadFile(path); readErr == nil {
+			current = Digest(string(b))
+		} else if !os.IsNotExist(readErr) {
+			return fmt.Errorf("re-reading %s under the write lock: %w", path, readErr)
+		}
+		if current != expectDigest {
+			return &ErrConcurrentWrite{Path: path, Expected: expectDigest, Found: current}
+		}
+	}
+
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".sdd-*")
 	if err != nil {

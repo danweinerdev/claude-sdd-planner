@@ -52,3 +52,8 @@ bin/
 # `go build ./cmd/sdd` with no -o drops the binary in the repo root.
 /sdd
 /sdd.exe
+
+# Advisory lock sidecars created by `sdd` while reading or writing artifacts.
+# They carry no content — only lock state — and are recreated on demand, so a
+# stale one is harmless and none should ever be committed.
+*.sdd-lock

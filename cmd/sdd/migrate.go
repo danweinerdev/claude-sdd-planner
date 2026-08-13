@@ -81,7 +81,7 @@ func cmdMigrate(target string, o migrateOpts) error {
 		// that never happened.
 		wrote := false
 		if res.OK() && !o.DryRun && res.Output != art.Source {
-			if err := store.WriteAtomic(art.Path, res.Output); err != nil {
+			if err := store.WriteAtomicExpecting(art.Path, res.Output, art.Digest); err != nil {
 				return fmt.Errorf("migrate: %w", err)
 			}
 			wrote = true
@@ -130,7 +130,7 @@ func cmdMigrate(target string, o migrateOpts) error {
 		return nil
 	}
 	// The resolved path, not the argument — see the note in apply.go.
-	if err := store.WriteAtomic(art.Path, res.Output); err != nil {
+	if err := store.WriteAtomicExpecting(art.Path, res.Output, art.Digest); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	fmt.Printf("  migrated; digest %s\n", store.Digest(res.Output)[:12])

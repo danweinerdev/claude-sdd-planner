@@ -67,6 +67,12 @@ func TestWriteAtomic(t *testing.T) {
 		t.Fatalf("ReadDir: %v", err)
 	}
 	for _, e := range ents {
+		// The lock sidecar is expected to persist: its inode is the thing
+		// concurrent sessions contend on, so deleting it after each write
+		// would let two writers lock two different inodes and both proceed.
+		if strings.HasSuffix(e.Name(), ".sdd-lock") {
+			continue
+		}
 		if strings.Contains(e.Name(), ".sdd-") {
 			t.Errorf("leftover temp file after successful write: %s", e.Name())
 		}

@@ -124,7 +124,7 @@ func cmdApply(target string, o applyOpts) error {
 	// location (.plans/Specs/X/README.md); writing back to the unresolved
 	// argument sends the output somewhere else entirely — creating a shadow
 	// file at the literal path while the artifact just read stays unchanged.
-	if err := store.WriteAtomic(art.Path, res.Output); err != nil {
+	if err := store.WriteAtomicExpecting(art.Path, res.Output, art.Digest); err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(res.Output)[:12])
@@ -205,7 +205,7 @@ func emitJSON(rel string, art *store.Artifact, res *compile.Result, dryRun bool)
 		out.Unchanged = art.Exists && res.Output == art.Source
 		out.Digest = store.Digest(res.Output)
 		if !dryRun && !out.Unchanged {
-			if err := store.WriteAtomic(art.Path, res.Output); err != nil {
+			if err := store.WriteAtomicExpecting(art.Path, res.Output, art.Digest); err != nil {
 				return fmt.Errorf("apply: %w", err)
 			}
 			out.Wrote = true
