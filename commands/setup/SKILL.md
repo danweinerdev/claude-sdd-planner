@@ -35,10 +35,13 @@ sdd provision --plugin-root "${CLAUDE_PLUGIN_ROOT}"
 This resolves a binary (plugin-root copy first, then `PATH`), admits it only
 at or above the plugin's `minSddVersion`, and places or refreshes
 `${CLAUDE_PLUGIN_ROOT}/bin/sdd[.exe]` on **every** run — including when the
-resolved binary was already on `PATH`. `hooks.json` can interpolate only
-`${CLAUDE_PLUGIN_ROOT}` and cannot resolve `PATH`, so without that copy the
-hooks fail open silently while every skill keeps working: a failure with no
-symptom.
+resolved binary was already on `PATH`.
+
+The copy pins which binary the hooks use: `hooks/sdd-hook.sh` and its
+PowerShell counterpart prefer it over `PATH`, so a session keeps running the
+binary setup admitted even if a different version appears earlier on `PATH`
+later. The hooks still work without it — they fall back to `PATH` — so a
+missing copy degrades version pinning, not function.
 
 Then verify through the plugin-root path specifically, not through `PATH`:
 

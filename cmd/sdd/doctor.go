@@ -126,14 +126,15 @@ func printDoctorReport(r doctorReport) {
 	}
 }
 
-// checkHookBinary reports whether ${CLAUDE_PLUGIN_ROOT}/bin/sdd exists and
-// runs — the path hooks.json executes.
+// checkHookBinary reports on ${CLAUDE_PLUGIN_ROOT}/bin/sdd — the copy the
+// hook wrappers prefer.
 //
-// This is the dead-hook state F-02 identified: hooks.json can interpolate only
-// ${CLAUDE_PLUGIN_ROOT} and cannot resolve PATH, so a user whose binary lives
-// only on PATH has working skills and silently dead hooks. Nothing else
-// surfaces that, because every skill keeps working — the failure has no
-// symptom until a guard that should have denied something doesn't.
+// It is no longer the dead-hook state F-02 identified. The wrappers
+// (hooks/sdd-hook.sh and .ps1) resolve the plugin copy first and fall back to
+// PATH, so a missing copy degrades version pinning rather than killing the
+// hooks. What it still catches is the case worth naming: the hooks will run
+// whatever `sdd` happens to be on PATH, which may not be the version this
+// plugin was admitted against.
 func checkHookBinary() (path, problem string) {
 	root := os.Getenv("CLAUDE_PLUGIN_ROOT")
 	if root == "" {
@@ -145,7 +146,11 @@ func checkHookBinary() (path, problem string) {
 	}
 	p := filepath.Join(root, "bin", name)
 	if _, err := os.Stat(p); err != nil {
-		return p, "absent — hooks.json points here and will fail open silently; run `sdd provision`"
+		if onPath, lookErr := exec.LookPath("sdd"); lookErr == nil {
+			return p, "absent — the hooks will use " + onPath +
+				" from PATH instead; run `sdd provision` to pin this plugin's binary"
+		}
+		return p, "absent, and no `sdd` on PATH — the hooks are a silent no-op; run `sdd provision`"
 	}
 	if err := exec.Command(p, "version").Run(); err != nil {
 		return p, "present but not executable: " + err.Error()

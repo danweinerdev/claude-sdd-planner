@@ -160,10 +160,13 @@ func releaseCore(v string) (string, error) {
 // Provision resolves a binary and refreshes the plugin-root copy (FR-37).
 //
 // The copy is unconditional on every run, and it is a copy rather than a
-// symlink: hooks.json can interpolate only ${CLAUDE_PLUGIN_ROOT} and cannot
-// resolve PATH, and Windows symlink creation needs elevated privilege. A hook
-// trusting PATH would fail open silently while every skill kept working — a
-// failure with no symptom, which is what this guards against.
+// symlink because Windows symlink creation needs elevated privilege.
+//
+// Its purpose is version pinning, not reachability: the hook wrappers resolve
+// this copy first and fall back to PATH, so the hooks work without it. What
+// the copy buys is that a session keeps running the binary this plugin was
+// admitted against — at or above its minSddVersion — rather than whatever
+// `sdd` happens to be earlier on PATH after an unrelated upgrade.
 func Provision(pluginRoot, floor string) (Result, error) {
 	res, err := Resolve(pluginRoot, floor)
 	if err != nil {

@@ -1,4 +1,14 @@
 {
+  "_comment": [
+    "Both variants of each event are listed because hooks.json has no OS",
+    "conditional: on POSIX the .sh runs and the PowerShell line fails to",
+    "start, and on Windows the reverse. That was already true of the",
+    "previous bin/sdd + bin/sdd.exe pair; what changed is that the",
+    "surviving side now RESOLVES the binary at hook time (plugin copy",
+    "first, then PATH) instead of naming one static path that a version",
+    "bump invalidates. Every wrapper exits 0 so a missing binary is a",
+    "silent no-op rather than an error on every tool call (D-0013, D-0014)."
+  ],
   "hooks": {
     "SessionStart": [
       {
@@ -6,13 +16,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd\" hook sessionstart",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-hook.sh\" sessionstart",
             "timeout": 10,
             "statusMessage": "Loading decision ledger..."
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd.exe\" hook sessionstart",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-hook.ps1\" sessionstart",
             "timeout": 10,
             "statusMessage": "Loading decision ledger..."
           }
@@ -25,12 +35,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd\" hook pretooluse",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-hook.sh\" pretooluse",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/sdd.exe\" hook pretooluse",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/sdd-hook.ps1\" pretooluse",
             "timeout": 10
           }
         ]
