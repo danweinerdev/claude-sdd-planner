@@ -12,8 +12,6 @@ One repository, three harnesses:
 
 The Codex/OpenCode trees are **generated** from the canonical Claude tree by `sdd plugin sync` and released in lockstep — same lifecycle, same conventions, same validator. See [the portable README](portable-overrides/README.md) for details on those runtimes.
 
-For an HTML dashboard over the artifacts, install the companion [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) plugin.
-
 ## How It Works
 
 Skills guide the planning lifecycle and write Markdown artifacts whose YAML frontmatter is the machine-readable layer. The `sdd` binary enforces the contracts deterministically — artifact structure, status transitions, completion evidence, decision-ledger consistency — so "done" is a verdict, not a vibe.
@@ -186,8 +184,6 @@ Local absolute paths go in gitignored `planning-config.local.json`:
 { "repositories": { "my-app": { "path": "/home/user/Code/my-app" } } }
 ```
 
-The `sdd-dashboard` companion reads optional `dashboard: true` plus `title`/`description`; the fields are ignored without it.
-
 ## Repository Layout
 
 ```
@@ -224,7 +220,6 @@ Semver in `.claude-plugin/plugin.json` — the single source; the binary's versi
 
 - One of: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, or OpenCode
 - The `sdd` binary (Go toolchain at install time only)
-- Optional: the [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin) companion plugin
 
 ## License
 

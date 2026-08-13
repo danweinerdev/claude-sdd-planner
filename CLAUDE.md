@@ -5,8 +5,6 @@ A spec-driven development toolchain: structured project planning with lifecycle 
 - **Repo root** — the canonical, hand-edited Claude Code plugin (`commands/`, `agents/`, `skills/`, `shared/`, `hooks/`).
 - **`.codex-plugin/` and `.opencode-plugin/`** — generated plugin trees for Codex and OpenCode, produced by `sdd plugin sync`. Never hand-edited; drift fails `make test`.
 
-The optional HTML dashboard lives in a companion plugin: [sdd-dashboard](https://github.com/danweinerdev/sdd-dashboard-plugin).
-
 ## Directory Structure
 
 ```
@@ -67,7 +65,7 @@ Four mechanisms, in order of preference:
 ## Conventions
 
 ### Frontmatter
-All artifacts use YAML frontmatter as the machine-readable data layer. See `shared/frontmatter-schema.md` for the complete schema. The companion `sdd-dashboard` plugin reads exclusively from frontmatter — no markdown table parsing.
+All artifacts use YAML frontmatter as the machine-readable data layer. See `shared/frontmatter-schema.md` for the complete schema. Frontmatter is the only interface tools read — no markdown table parsing.
 
 ### Sensitive data
 Artifacts never capture credentials, private hostnames/IPs, usernames, or machine-specific absolute paths (`/home/<user>/...`, `C:\Users\...`). Paths are repo/planning-root-relative by default; `~/...`/`$HOME/...` are acceptable generic forms where a path outside the root is needed; scrub pasted command output. Single source of truth: `shared/frontmatter-schema.md` § Sensitive Data.
@@ -175,7 +173,7 @@ Agents without `tools:` frontmatter (`researcher`, `code-implementer`, `quality-
 ```
 /sdd-planner:setup → research → brainstorm → specify → design → plan → implement → code-review → debrief
 ```
-Use `poke-holes` before approving any artifact, `decide` to record or audit decided truths at any point (`decide check` is the ledger hygiene net), and `validate` before implementation, before any completion transition, or in CI. Install the companion `sdd-dashboard` plugin for `/sdd-dashboard:dashboard` and `/sdd-dashboard:status`.
+Use `poke-holes` before approving any artifact, `decide` to record or audit decided truths at any point (`decide check` is the ledger hygiene net), and `validate` before implementation, before any completion transition, or in CI.
 
 ## The `sdd` Binary
 
@@ -189,7 +187,7 @@ go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
 
 ## Configuration
 
-`planning-config.json` at the planning root drives path resolution: `planningRoot` (a path — `"."`, a relative subdirectory, or an absolute external directory), `repositories` (repo keys → GitHub URLs), `planMapping` (plan names → repo keys), `planRepository`. Local absolute paths live in gitignored `planning-config.local.json`. The dashboard companion reads optional `dashboard` / `title` / `description`. This repo's own planning root is `.plans/`.
+`planning-config.json` at the planning root drives path resolution: `planningRoot` (a path — `"."`, a relative subdirectory, or an absolute external directory), `repositories` (repo keys → GitHub URLs), `planMapping` (plan names → repo keys), `planRepository`, optional `title` / `description`. Local absolute paths live in gitignored `planning-config.local.json`. This repo's own planning root is `.plans/`.
 
 ## Maintenance Rules
 

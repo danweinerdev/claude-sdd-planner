@@ -28,7 +28,7 @@ Before opening `shared/...`, follow symlinks in this loaded file's path, then de
 2. Determine `planningRoot`: explicit user value, existing `planning-config.json`, inherited worktree value, then `"."`. Preserve the chosen value exactly in config; resolve relative paths only for filesystem operations.
 3. Write or preserve `<target>/planning-config.json`. Include optional `title`, and `description` only when requested.
 4. Create missing planning directories: `Plans/`, `Research/`, `Brainstorm/`, `Specs/`, `Designs/`, and `Decisions/`.
-5. For Git or Perforce, ensure the appropriate ignore file contains `Dashboard/` without duplicating entries. Repository mappings and paths belong in `planning-config.json`; do not create a local companion config.
+5. Repository mappings and paths belong in `planning-config.json`; do not create a local companion config.
 6. Offer, but do not unprompted create, `AGENTS.md` guidance. Use the full template for a dedicated planning repository; append the snippet for an existing project. Preserve existing user instructions.
 7. Do not create Claude launchers, `CLAUDE.md`, `.claude/` folders, plugin symlinks, or copies of the plugin, skills, or shared resources. The runtime discovers and reads the installed plugin through its own skill-discovery paths; setup writes only SDD configuration, artifact directories, ignore entries, and user-approved `AGENTS.md` guidance to the target.
 

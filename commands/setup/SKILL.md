@@ -16,7 +16,6 @@ What setup does **not** do: resolve paths (user-given paths are stored verbatim 
 ## Arguments
 - **target path** — directory to configure (defaults to cwd). A non-path name is looked up in the current directory's `planning-config.local.json` under `repositories.<name>.path`.
 - **--planning-root `<path>`** — where planning artifacts live; stored as-given.
-- **--dashboard** — set `"dashboard": true` for the companion `sdd-dashboard` plugin.
 
 ## Process
 
@@ -71,13 +70,11 @@ Priority order — the chosen value is stored **verbatim**, never resolved to ab
 3. Sibling inheritance (`git-worktree` only): check `git -C <target> worktree list --porcelain` siblings for a `planning-config.json` and inherit its `planningRoot`, reporting which sibling.
 4. Ask (skip when context makes it obvious): at the target root (`"."`, default), a relative subdirectory (e.g., `Planning`), or an absolute external path. **Never default to the plugin directory** — the marketplace cache is deleted on plugin updates.
 
-Also ask about the dashboard opt-in unless `--dashboard` was passed or inherited.
-
 ### 4. Write planning-config.json
 ```json
 { "planningRoot": "<verbatim>" }
 ```
-With the dashboard opt-in, also include `"dashboard": true`, `"title"`, and `"description"` (read by the companion `sdd-dashboard` plugin; ignored otherwise). Overwrite only when `planningRoot` differs from an existing config — but still add/update `dashboard` when explicitly requested.
+Optionally include `"title"` and `"description"` when the user asks for them. Overwrite only when `planningRoot` differs from an existing config.
 
 ### 5. Bootstrap Planning Directories
 Resolve the planning root for this step only (relative → joined with target; absolute → as-is) and `mkdir -p`:
@@ -103,13 +100,13 @@ claude --add-dir="<planning-root verbatim>" %*
 ```
 
 ### 7. Ignore File
-`git`/`git-worktree` → `.gitignore`; `perforce` → `.p4ignore` (its syntax: one path per line, no leading slash); `none` → skip. Ensure these entries exist without duplicating: `Dashboard/` (generated HTML, harmless if the dashboard plugin isn't installed) and `planning-config.local.json` (local filesystem paths).
+`git`/`git-worktree` → `.gitignore`; `perforce` → `.p4ignore` (its syntax: one path per line, no leading slash); `none` → skip. Ensure `planning-config.local.json` (local filesystem paths) is present without duplicating it.
 
 ### 8. Offer CLAUDE.md Guidance (optional)
 Ask before writing anything. For a dedicated planning-only repo, instantiate `shared/templates/claude-md-full.md`; for an existing project, append `shared/templates/claude-md-snippet.md`. Skip silently if declined.
 
 ### 9. Report
-Summarize: target path (as given), detected VCS, planning root (verbatim, noting relative/absolute), dashboard flag, files created/updated (config, directories, launchers, ignore file, CLAUDE.md guidance created/appended/skipped), and the next step: `cd <target> && ./claude.sh`.
+Summarize: target path (as given), detected VCS, planning root (verbatim, noting relative/absolute), files created/updated (config, directories, launchers, ignore file, CLAUDE.md guidance created/appended/skipped), and the next step: `cd <target> && ./claude.sh`.
 
 ## Context
 - VCS detection: `shared/vcs-detection.md`

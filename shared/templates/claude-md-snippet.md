@@ -20,4 +20,3 @@ Planning artifacts live at the planning root defined by `planning-config.json` (
 
 Typical lifecycle: `setup → research → brainstorm → specify → design → plan → implement → code-review → debrief` (all `/sdd-planner:*`).
 
-Optional: install the companion `sdd-dashboard` plugin for `/sdd-dashboard:dashboard` (HTML) and `/sdd-dashboard:status` (text summary); opt in with `"dashboard": true` in `planning-config.json`.

@@ -76,7 +76,7 @@ phases:
 ```
 
 Body contains: Overview, Architecture, Key Decisions, Dependencies, Open Questions (omit when empty — a plan cannot be `approved` while an in-scope question is unanswered).
-No status tables in the body — the dashboard reads phases from frontmatter.
+No status tables in the body — consumers read phases from frontmatter.
 
 ### Phase Doc (01-Phase-Title.md)
 
@@ -197,9 +197,9 @@ related: []
 ---
 ```
 
-## Dashboard Color Mapping
+## Status Color Mapping
 
-Consumed by the companion `sdd-dashboard` plugin; inline Mermaid diagrams in artifacts may use the same status styling (`classDef` colors):
+Inline Mermaid diagrams in artifacts use this status styling (`classDef` colors); frontmatter-reading tools may adopt the same mapping:
 
 - `complete` / `approved` / `implemented` -> green
 - `in-progress` / `active` / `review` -> amber

@@ -25,13 +25,12 @@ This repository holds planning artifacts managed by the `sdd-planner` Claude Cod
 │           └── 01-Phase-Name.md  # Debrief for Phase 1
 ├── Decisions/                    # Decision ledger (single canonical file)
 │   └── decisions.md              # decisions[] frontmatter array of decided truths
-└── Dashboard/                    # Generated HTML (gitignored, written by the optional sdd-dashboard plugin)
 ```
 
 ## Conventions
 
 ### Frontmatter
-All artifacts use YAML frontmatter as the machine-readable data layer. See the sdd-planner plugin's `shared/frontmatter-schema.md` (in the plugin directory, not this repo) for the complete schema. Companion tools like the optional `sdd-dashboard` plugin read exclusively from frontmatter — no markdown table parsing.
+All artifacts use YAML frontmatter as the machine-readable data layer. See the sdd-planner plugin's `shared/frontmatter-schema.md` (in the plugin directory, not this repo) for the complete schema. Frontmatter is the only interface tools read — no markdown table parsing.
 
 ### Plan Hierarchy
 ```
@@ -79,13 +78,6 @@ AI commands filter by `status` to scope what they read.
 | `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories, creates launcher |
 
-If the optional `sdd-dashboard` plugin is installed:
-
-| Skill | Purpose |
-|-------|---------|
-| `/sdd-dashboard:dashboard` | Regenerate HTML dashboard into `Dashboard/` |
-| `/sdd-dashboard:status` | Quick text status summary (read-only) |
-
 ## Agents
 
 | Agent | Model | Role |
@@ -109,7 +101,6 @@ The typical flow through skills:
 /sdd-planner:setup → /sdd-planner:research → /sdd-planner:brainstorm → /sdd-planner:specify → /sdd-planner:design → /sdd-planner:plan → /sdd-planner:implement → /sdd-planner:code-review → /sdd-planner:debrief
 ```
 Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point. Use `/sdd-planner:validate` before implementation, before completion transitions, or in CI.
-If the `sdd-dashboard` plugin is installed, use `/sdd-dashboard:dashboard` or `/sdd-dashboard:status` at any point to check progress.
 
 ## Artifact Status Values
 
@@ -129,14 +120,9 @@ The planning root's `planning-config.json` drives all path resolution:
 - `repositories`: map of external repo keys to GitHub URLs (used when plans target code in other repos)
 - `planMapping`: map of plan names to target repos
 - `planRepository`: key for the planning repo itself
-- `dashboard` (optional): `true` to enable HTML generation by the companion `sdd-dashboard` plugin (off by default; ignored if the plugin isn't installed)
 
 ### planning-config.local.json (gitignored)
 Local filesystem paths for external repositories:
 ```json
 { "repositories": { "repo-key": { "path": "/absolute/path" } } }
 ```
-
-## Dashboard
-
-The HTML dashboard is provided by the optional companion plugin [`sdd-dashboard`](https://github.com/danweinerdev/sdd-dashboard-plugin). Set `"dashboard": true` in `planning-config.json` to opt in, then run `/sdd-dashboard:dashboard` from Claude. Output lands in `Dashboard/` (gitignored).
