@@ -7,4 +7,4 @@
 package version
 
 // Version is the plugin version this binary was built at.
-const Version = "2.0.5"
+const Version = "2.1.0"
