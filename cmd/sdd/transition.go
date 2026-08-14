@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -206,17 +207,41 @@ func setEntryStatus(lines []string, id, value string) bool {
 // because of an unrelated defect elsewhere would make the verb unusable in a
 // root that is not already perfect, and those findings are `sdd validate`'s to
 // report.
+//
+// Both runs are scoped to the transitioned artifact's plan (plus everything
+// outside Plans/ and other plans' READMEs) via rules.ScopeToPlan. The scope
+// is provably diff-neutral — see ScopeToPlan's contract — and removes the
+// dominant cost of the gate on mature roots: re-verifying every other plan's
+// completed tasks against the repository, twice, only to subtract the
+// findings out again.
 func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 	root, repoRoot, err := resolveRoots(".", "")
 	if err != nil {
 		return nil, err
 	}
-	before, err := rules.LoadRootRepo(root, repoRoot)
+	planRel := ""
+	if abs, absErr := filepath.Abs(path); absErr == nil {
+		if rel, relErr := filepath.Rel(root, abs); relErr == nil {
+			planRel = rules.PlanRelOf(filepath.ToSlash(rel))
+		}
+	}
+	run := func() ([]rules.Diagnostic, error) {
+		loaded, err := rules.LoadRootRepo(root, repoRoot)
+		if err != nil {
+			return nil, err
+		}
+		if planRel != "" {
+			loaded = rules.ScopeToPlan(loaded, planRel)
+		}
+		return rules.Run(loaded), nil
+	}
+
+	beforeDiags, err := run()
 	if err != nil {
 		return nil, err
 	}
 	existing := map[string]bool{}
-	for _, d := range rules.Run(before) {
+	for _, d := range beforeDiags {
 		existing[diagKey(d)] = true
 	}
 
@@ -229,12 +254,12 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 	}
 	defer store.WriteAtomic(path, string(original))
 
-	after, err := rules.LoadRootRepo(root, repoRoot)
+	afterDiags, err := run()
 	if err != nil {
 		return nil, err
 	}
 	var introduced []rules.Diagnostic
-	for _, d := range rules.Run(after) {
+	for _, d := range afterDiags {
 		if !existing[diagKey(d)] {
 			introduced = append(introduced, d)
 		}

@@ -117,6 +117,24 @@ type Repo interface {
 // whose operations all report ErrUnsupported, so callers need no nil check and
 // cannot accidentally treat "no VCS" as "checks passed".
 func Detect(dir string) Repo {
+	if memoEnabled {
+		detectMu.Lock()
+		r, ok := detectCache[dir]
+		detectMu.Unlock()
+		if ok {
+			return r
+		}
+	}
+	r := memoize(detect(dir))
+	if memoEnabled {
+		detectMu.Lock()
+		detectCache[dir] = r
+		detectMu.Unlock()
+	}
+	return r
+}
+
+func detect(dir string) Repo {
 	for _, probe := range probes {
 		if r := probe(dir); r != nil {
 			return r

@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
 )
 
 // idDeclRe matches an identifier declaration in a list item, capturing the
@@ -19,6 +21,15 @@ import (
 var idDeclRe = regexp.MustCompile(`^\s*[-*+]\s*(?:\[[ xX]\]\s*)?(~~)?\*\*([A-Z]+-\d+)\*\*(~~)?\s*:`)
 
 func main() {
+	// sdd is a short-lived process that never mutates repository state (no
+	// subcommand commits, stages, or moves refs), so repository object state
+	// and VCS detection are constant for the process lifetime and safe to
+	// memoize. This collapses the O(completed tasks × evidence checks)
+	// subprocess fan-out that dominates `validate` and the transition gates
+	// on mature planning roots. Working-state queries (clean worktree, index
+	// content) are never cached — see internal/vcs/cache.go.
+	vcs.EnableMemoization()
+
 	root := newRootCmd()
 	root.SetArgs(os.Args[1:])
 	err := root.Execute()
