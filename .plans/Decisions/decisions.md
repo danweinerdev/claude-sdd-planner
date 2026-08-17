@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-13
+updated: 2026-08-16
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -215,7 +215,31 @@ decisions:
     confirmation: "shared/decision-log.md carries the write-gate callout and shared/autonomy.md lists ledger writes under 'Stops for the user'."
     tags: [decision-ledger, autonomy, approval]
     reversibility: two-way
+  - id: D-0019
+    kind: decision
+    status: accepted
+    date: 2026-08-16
+    decided_by: user-approved
+    statement: "SDD lifecycle records commit once per affected root at closeout boundaries: commit the verified feature slice first, then record planning artifacts and ledgers in one boundary commit per root at task closeout, at the end of a contiguous spec/design/plan session, or at phase/plan close — never per edit and never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies an immediate commit."
+    rejected: []
+    rationale: "Backfill: the plugin's skills and templates have cited D-0019 for this rule since it was adopted, but the entry was never recorded in the ledger. Recording it under the cited id repairs the dangling references without re-binding them."
+    scope: []
+    tags: []
+    reversibility: two-way
+  - id: D-0020
+    kind: decision
+    status: accepted
+    date: 2026-08-16
+    decided_by: user-approved
+    statement: "Phase-gate reviews freeze at resolution, never at creation: sdd review scaffold writes frozen: false + status: open; only sdd review resolve sets frozen: true and status: resolved, atomically, after verifying the SDD167 gate. A frozen review is immutable through every supported command; post-resolution changes supersede it with a fresh scaffolded review."
+    rejected: []
+    rationale: "Freezing at scaffold time made status: open permanently unresolvable — SPK050 blocked every write path and no transition verb existed, so a valid final review could never close its phase without a forbidden hand edit."
+    scope: []
+    tags: []
+    reversibility: two-way
 ---
+
+
 
 
 
