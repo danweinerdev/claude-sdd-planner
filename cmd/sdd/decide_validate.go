@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/dlg"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/dlg"
 )
 
 // `sdd decide validate` runs the decision-ledger validator on its own (FR-02).

@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/hook"
-	"github.com/danweinerdev/claude-sdd-planner/internal/provision"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/hook"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/provision"
 )
 
 // `sdd hook` implements the plugin's Claude Code hooks (FR-27/28/44),

@@ -1,4 +1,4 @@
-module github.com/danweinerdev/claude-sdd-planner
+module github.com/danweinerdev/claude-sdd-planner/v2
 
 go 1.26
 

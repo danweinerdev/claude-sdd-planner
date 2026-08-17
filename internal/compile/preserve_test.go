@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 // planSrc is a minimally valid `plan` artifact whose frontmatter carries a

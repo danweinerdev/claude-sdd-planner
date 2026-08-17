@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/version"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/version"
 	"github.com/spf13/cobra"
 )
 

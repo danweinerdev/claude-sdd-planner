@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 // Family (k): Validator._ledger — SDD110-118, the decision-log entry schema.

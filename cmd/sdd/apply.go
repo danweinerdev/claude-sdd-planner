@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/compile"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // applyOpts is what `sdd apply` needs from the command line. Cobra binds

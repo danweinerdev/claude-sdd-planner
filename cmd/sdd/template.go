@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 // `sdd template` generates an artifact template from its schema (task 6.2).

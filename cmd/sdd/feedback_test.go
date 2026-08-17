@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // TestDistinguishingDigestsExposeTheDifference pins the reported failure: two

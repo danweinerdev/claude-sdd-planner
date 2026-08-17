@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 // Every generated template must be free of SCHEMA-SHAPE violations. The

@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // idDeclRe matches an identifier declaration in a list item, capturing the

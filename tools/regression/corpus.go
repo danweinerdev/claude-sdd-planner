@@ -36,7 +36,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 // Diagnostic is the identity of one finding. Message text is deliberately not

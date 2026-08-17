@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Family (i): Validator._evidence/_task_review_evidence/

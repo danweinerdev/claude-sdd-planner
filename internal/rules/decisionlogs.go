@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/dlg"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/dlg"
 )
 
 // FocusedDecisionLogs ports Validator._focused_decision_logs: it runs the

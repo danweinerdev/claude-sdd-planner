@@ -44,7 +44,7 @@ graph LR
 The skills and hooks drive one cross-platform Go binary. The plugin does not ship or build it — install it once per machine:
 
 ```bash
-go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
+go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 ```
 
 Go and network access are needed at install time only. Setup verifies the binary against the plugin's `minSddVersion` before touching anything and stops with the exact command if it's missing or too old.

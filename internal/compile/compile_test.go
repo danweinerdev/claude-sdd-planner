@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 func load(t *testing.T) *schema.Schema {

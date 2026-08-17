@@ -161,7 +161,7 @@ func TestCompareVersionsIgnoresPrerelease(t *testing.T) {
 // exact command that satisfies it.
 func TestInstallCommandNamesTheFloor(t *testing.T) {
 	got := InstallCommand("1.16.0")
-	want := "go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v1.16.0"
+	want := "go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@v1.16.0"
 	if got != want {
 		t.Errorf("InstallCommand = %q, want %q", got, want)
 	}

@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // nextEntry is the most advanced actionable point in one plan.

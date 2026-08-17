@@ -71,4 +71,4 @@ Harnesses cache plugins by version — a content change without a bump is invisi
 
 ## The `sdd` binary contract
 
-Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries (D-0015). Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run.
+Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries (D-0015). Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run.

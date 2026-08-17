@@ -9,9 +9,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
-	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // `sdd evidence add` records a completion-evidence section as structured data

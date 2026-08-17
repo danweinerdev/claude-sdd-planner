@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
-	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // `sdd review scaffold` writes the phase-completion review artifact the

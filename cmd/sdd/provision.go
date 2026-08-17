@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/provision"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/provision"
 )
 
 // `sdd provision` performs FR-37/40: resolve a binary, admit it against the

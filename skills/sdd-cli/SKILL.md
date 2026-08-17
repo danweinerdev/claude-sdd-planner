@@ -112,5 +112,5 @@ to report without repairing.
   exactly this allowlist for the plugin's read-only agents.)
 - **Missing or outdated binary is a stop.** If `sdd` is absent or below the
   plugin's `minSddVersion`, report the exact remedy —
-  `go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest` —
+  `go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest` —
   and do not substitute hand edits or model judgment for its checks.

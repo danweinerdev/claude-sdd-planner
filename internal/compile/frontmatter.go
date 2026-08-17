@@ -3,7 +3,7 @@ package compile
 import (
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"gopkg.in/yaml.v3"
 )
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 )
 
 // TestRenderFrontmatterRefusesUnmodelableValue pins the guard that a first

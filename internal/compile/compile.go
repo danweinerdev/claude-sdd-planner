@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
 // Refusal is a reason the payload cannot be committed. All refusals are

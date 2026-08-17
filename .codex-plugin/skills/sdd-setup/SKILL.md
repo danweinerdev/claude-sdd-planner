@@ -21,7 +21,7 @@ Before opening `shared/...`, follow symlinks in this loaded file's path, then de
    never compiles, downloads, or installs anything:
 
    ```bash
-   go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
+   go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
    ```
 
 1. Determine the target directory. Use the user-provided path verbatim where possible; otherwise use the current directory. Stop for a bare git repository.

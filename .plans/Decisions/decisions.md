@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-16
+updated: 2026-08-17
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -171,7 +171,8 @@ decisions:
     reversibility: two-way
   - id: D-0015
     kind: decision
-    status: accepted
+    status: superseded
+    superseded_by: D-0021
     date: 2026-08-03
     decided_by: user
     statement: "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v<version>` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`."
@@ -236,6 +237,19 @@ decisions:
     rationale: "Freezing at scaffold time made status: open permanently unresolvable — SPK050 blocked every write path and no transition verb existed, so a valid final review could never close its phase without a forbidden hand edit."
     scope: []
     tags: []
+    reversibility: two-way
+  - id: D-0021
+    kind: decision
+    status: accepted
+    date: 2026-08-17
+    decided_by: user
+    supersedes: D-0015
+    statement: "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@v<version>` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`."
+    rejected: [keeping the unversioned Go module path after v2.0.0, committing prebuilt per-platform binaries to the plugin payload, building from source during /setup, exact plugin-version/binary-version lockstep, /setup installing a Go toolchain via package manager]
+    rationale: "Go semantic import versioning rejects v2+ tags whose go.mod module path lacks the /v2 suffix, causing @latest to resolve v1.16.0 from before cmd/sdd existed. The /v2 module path aligns Go's tag resolution with the binary's 2.x release line while retaining user-run go install as the sole provisioning mechanism."
+    confirmation: "A released v2 tag resolves with `go list -m github.com/danweinerdev/claude-sdd-planner/v2@v<version>`, and every in-repo Go import and install instruction uses the /v2 path."
+    scope: [go.mod, README.md, AGENTS.md, CLAUDE.md, commands/setup/SKILL.portable.md, skills/sdd-cli/SKILL.md, internal/provision/provision.go]
+    tags: [golang, distribution, versioning, setup, modules]
     reversibility: two-way
 ---
 

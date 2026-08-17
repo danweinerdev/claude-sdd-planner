@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/danweinerdev/claude-sdd-planner/internal/provision"
-	"github.com/danweinerdev/claude-sdd-planner/internal/version"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/provision"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/version"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // schemaInfo is one embedded schema's diagnostic summary.

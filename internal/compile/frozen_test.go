@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 )
 
 // FR-46: a `complete` artifact is history-bearing and must not be silently

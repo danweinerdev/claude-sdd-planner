@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/schema"
-	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // cmdShow exposes an artifact's state without requiring the caller to parse

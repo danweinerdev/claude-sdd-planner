@@ -241,5 +241,5 @@ func Floor(pluginRoot string) (string, error) {
 
 // InstallCommand is the exact command that satisfies the floor (FR-41).
 func InstallCommand(floor string) string {
-	return "go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v" + floor
+	return "go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@v" + floor
 }

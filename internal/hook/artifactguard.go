@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 )
 
 // FR-28: a read-only agent may not Write or Edit a schema-recognized artifact

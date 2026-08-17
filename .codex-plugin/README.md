@@ -26,7 +26,7 @@ All skills drive one cross-platform Go binary for deterministic validation,
 artifact writes, and lifecycle transitions. Install it once per machine:
 
 ```bash
-go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
+go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 ```
 
 `sdd-setup` verifies the binary against the manifest's `minSddVersion` before

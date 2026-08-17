@@ -40,7 +40,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 func main() {

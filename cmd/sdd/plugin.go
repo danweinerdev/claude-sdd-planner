@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/portable"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/portable"
 )
 
 // cmdPlugin maintains the generated portable (OpenCode/Codex) plugin tree.

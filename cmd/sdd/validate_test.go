@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 // writeConfig and writeArtifact are shared test fixtures for cmdValidate,

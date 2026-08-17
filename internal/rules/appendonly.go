@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Family: Validator._append_only_repository_history — SDD154/155/156 (a

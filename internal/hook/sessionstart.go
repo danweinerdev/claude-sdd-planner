@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 )
 
 // maxLedgerEntries bounds the injected context. A ledger grows without limit

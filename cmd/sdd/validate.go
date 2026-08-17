@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 // outDiagnostic's field order matches sdd_validate.py's `json.dumps(...,
