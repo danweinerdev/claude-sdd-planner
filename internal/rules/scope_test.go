@@ -138,9 +138,69 @@ func TestScopeGateEquivalence(t *testing.T) {
 	}
 }
 
+// A SPEC or DESIGN status flip must produce the same introduced-diagnostics
+// set whether the gate sees the whole root or ScopeToDoc's subset. Docs live
+// outside Plans/, so PlanRelOf yielded nothing for them and their transitions
+// validated everything twice — a design submit on a 224-artifact root took
+// 17.8s, long enough to read as a hang.
+func TestScopeToDocGateEquivalence(t *testing.T) {
+	files := scopeFixture()
+	// A pre-existing defect in a foreign plan's PHASE DOC — exactly what the
+	// doc scope drops. Its findings must cancel in the diff either way.
+	files["Plans/Beta/01-One.md"] = strings.Replace(files["Plans/Beta/01-One.md"],
+		"status: planned\n    verification", "status: complete\n    verification", 1)
+	// A design whose flip introduces a real finding: approving it with a
+	// blocking open question trips SDD153.
+	files["Designs/Sample/README.md"] = strings.Replace(
+		validDesign("Text."), "## Open Questions\n\nNone.\n",
+		"## Open Questions\n\n- Should we do this at all?\n", 1)
+	dir := writeFixture(t, files)
+
+	before := files["Designs/Sample/README.md"]
+	after := strings.Replace(before, "status: draft", "status: approved", 1)
+	if after == before {
+		t.Fatal("fixture flip did not apply")
+	}
+
+	full := introducedByFlip(t, dir, "", "Designs/Sample/README.md", before, after)
+	scoped := introducedByFlipDoc(t, dir, "Designs/Sample/README.md", before, after)
+
+	if len(full) == 0 {
+		t.Fatal("fixture flip should introduce diagnostics (approved design with a blocking open question)")
+	}
+	if len(full) != len(scoped) {
+		t.Fatalf("introduced sets differ:\nfull:   %v\nscoped: %v", full, scoped)
+	}
+	for i := range full {
+		if full[i] != scoped[i] {
+			t.Fatalf("introduced sets differ:\nfull:   %v\nscoped: %v", full, scoped)
+		}
+	}
+}
+
+// introducedByFlipDoc is introducedByFlip with ScopeToDoc applied.
+func introducedByFlipDoc(t *testing.T, dir, flipPath, before, after string) []string {
+	t.Helper()
+	return introducedByFlipWith(t, dir, flipPath, before, after, func(r *Root) *Root {
+		return ScopeToDoc(r, flipPath)
+	})
+}
+
 // introducedByFlip runs the before/after gate diff over dir, optionally
 // scoped, flipping flipPath's content from before to after between the runs.
 func introducedByFlip(t *testing.T, dir, scopedTo, flipPath, before, after string) []string {
+	t.Helper()
+	return introducedByFlipWith(t, dir, flipPath, before, after, func(r *Root) *Root {
+		if scopedTo == "" {
+			return r
+		}
+		return ScopeToPlan(r, scopedTo)
+	})
+}
+
+// introducedByFlipWith is introducedByFlip parameterized by the scoping
+// function, so the plan and doc scopes are proven by the same harness.
+func introducedByFlipWith(t *testing.T, dir, flipPath, before, after string, scope func(*Root) *Root) []string {
 	t.Helper()
 	diff := map[string]int{}
 	run := func(sign int) {
@@ -148,9 +208,7 @@ func introducedByFlip(t *testing.T, dir, scopedTo, flipPath, before, after strin
 		if err != nil {
 			t.Fatalf("LoadRoot: %v", err)
 		}
-		if scopedTo != "" {
-			root = ScopeToPlan(root, scopedTo)
-		}
+		root = scope(root)
 		for _, d := range Run(root) {
 			diff[d.Code+"\x00"+d.Path+"\x00"+d.Message] += sign
 		}

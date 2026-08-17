@@ -106,3 +106,59 @@ func PlanRelOf(rel string) string {
 	}
 	return parts[0] + "/" + parts[1]
 }
+
+// ScopeToDoc returns a shallow copy of r restricted to what a SPEC or DESIGN
+// status transition can influence: everything outside Plans/, plus plan
+// READMEs, minus other plans' phase docs and reviews.
+//
+// The soundness argument is ScopeToPlan's, and a doc flip is strictly more
+// contained than a plan's. Flipping a spec or design's status changes:
+//
+//   - SDD012 status grammar and SDD153 open-question gating, on the artifact
+//     itself;
+//   - SDD178/SDD179 supersession, which read the artifact and its `related`
+//     targets — specs, designs, and plan READMEs, all kept;
+//   - SDD121 (a live artifact citing a retired decision) and the citation
+//     family, which read the ledger and the `related` closure, all kept;
+//   - SDD160-162 traceability, anchored on PLANS: a plan README is kept, and
+//     the rules read the specs and designs it reaches, which are kept.
+//
+// Nothing about a spec or design's status makes another plan's PHASE DOC
+// produce a different finding — phase docs carry completion evidence, which
+// responds to task/phase/plan status, not to a spec's. Those findings are
+// identical in both gate runs and cancel in the diff.
+//
+// This matters because docs live outside Plans/, so PlanRelOf returned "" for
+// them and their transitions validated the entire root twice, unscoped: a
+// `design submit` on a 224-artifact root took 17.8s — long enough to look
+// like a hang and to exceed a caller's timeout.
+func ScopeToDoc(r *Root, docRel string) *Root {
+	scoped := &Root{
+		Dir:               r.Dir,
+		RepoRoot:          r.RepoRoot,
+		PlanRepos:         r.PlanRepos,
+		ConfigDiagnostics: r.ConfigDiagnostics,
+		ByPath:            map[string]*Artifact{},
+	}
+	for _, a := range r.Artifacts {
+		if keepForDocScope(a.Rel) {
+			scoped.Artifacts = append(scoped.Artifacts, a)
+		}
+	}
+	for rel, a := range r.ByPath {
+		if keepForDocScope(rel) {
+			scoped.ByPath[rel] = a
+		}
+	}
+	return scoped
+}
+
+// keepForDocScope keeps everything outside Plans/ plus plan READMEs. Foreign
+// phase docs and reviews — the expensive, repository-verifying half — are
+// dropped, because no spec/design status flip changes what they report.
+func keepForDocScope(rel string) bool {
+	if !strings.HasPrefix(rel, "Plans/") {
+		return true
+	}
+	return path.Base(rel) == "README.md" && strings.Count(rel, "/") == 2
+}

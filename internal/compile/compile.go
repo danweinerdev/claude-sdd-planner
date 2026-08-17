@@ -647,13 +647,25 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 		// yet (fresh creation, Existing == nil) still claims that number: a
 		// later unidentified item in the same section must not collide with
 		// it.
+		// Every identifier the payload declares ANYWHERE in this section is
+		// claimed up front, before a single one is handed out. Reserving them
+		// only as the body loop reached each line meant an unnumbered item
+		// could be given an id that a LATER line already declared: a supersede
+		// payload adding two unnumbered items mid-list silently produced two
+		// AC-03s and two AC-04s, reported as "carried forward", corrupting
+		// every downstream citation. Claiming first makes that impossible.
+		declared := identSet{}
 		for _, line := range sec.Body {
 			m := idDecl.FindStringSubmatch(line)
 			if m == nil {
 				continue
 			}
 			ns, num, ok := splitID(m[2])
-			if ok && ns == h.IDNamespace && num > nextFree {
+			if !ok || ns != h.IDNamespace {
+				continue
+			}
+			declared.add(ns, num)
+			if num > nextFree {
 				nextFree = num
 			}
 		}
@@ -687,7 +699,15 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 					// after it, so the only stated remedy named no option.
 					// Anything beyond the next number is still refused: a gap
 					// is an authoring mistake, not an intent.
-					if num == nextFreeIn(live, ns, *nsDef)+1 {
+					//
+					// "Next" counts the identifiers this payload itself
+					// introduces, not just the live ones. Measuring against
+					// the live set alone capped a revision at ONE new item:
+					// appending AC-06 and AC-07 together refused AC-07 and
+					// told the author to use AC-06 — which the line above it
+					// already used — so growing a section by two needed two
+					// sequential applies.
+					if newIDAcceptable(live, declared, ns, *nsDef, num) {
 						res.Allocations = append(res.Allocations,
 							fmt.Sprintf("%s assigned to %q (declared in the payload)", m[2], snippetAfterID(line, m[2])))
 						continue
@@ -706,7 +726,7 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 				// before allocating a fresh one, so a rewrite preserves the
 				// identifiers everything else cites.
 				if opts.Supersede {
-					if id, num, ok := carry.next(h.IDNamespace, live, *nsDef, payload, opts.Retire); ok {
+					if id, num, ok := carry.next(h.IDNamespace, live, *nsDef, declared, opts.Retire); ok {
 						sec.Body[li] = insertID(line, id)
 						res.Carried = append(res.Carried,
 							fmt.Sprintf("%s kept on %q", id, snippet(line)))
@@ -714,7 +734,11 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 						continue
 					}
 				}
-				nextFree++
+				// Skip anything the payload already declares: nextFree starts
+				// past the highest declared id, but a gap below it could still
+				// collide with a declared one.
+				for nextFree++; declared.has(h.IDNamespace, nextFree); nextFree++ {
+				}
 				id := nsDef.Format(nextFree)
 				sec.Body[li] = insertID(line, id)
 				res.Allocations = append(res.Allocations,
@@ -1010,6 +1034,27 @@ func nextFreeIn(live identSet, ns string, def schema.Namespace) int {
 		}
 	}
 	return highest
+}
+
+// newIDAcceptable reports whether a payload may declare `num` as a new
+// identifier in ns. The rule is a CONTIGUOUS run above the highest live id:
+// every number from live-max+1 up to num must be declared by this payload.
+//
+// Measuring against the live set alone capped a revision at one new item —
+// appending AC-06 and AC-07 together refused AC-07 and told the author to use
+// AC-06, which the line above it already used. Requiring contiguity still
+// refuses a jump to AC-09, because a gap is an authoring mistake, not intent.
+func newIDAcceptable(live, declared identSet, ns string, def schema.Namespace, num int) bool {
+	first := nextFreeIn(live, ns, def) + 1
+	if num < first {
+		return false
+	}
+	for n := first; n < num; n++ {
+		if !declared.has(ns, n) {
+			return false
+		}
+	}
+	return true
 }
 
 // joinOrNone renders an identifier list, saying so explicitly when it is

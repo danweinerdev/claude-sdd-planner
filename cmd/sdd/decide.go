@@ -323,10 +323,35 @@ func significantTokens(s string) map[string]bool {
 // comprehension. It reports |intersection| / |smaller set|, so two
 // statements sharing most of the shorter one's vocabulary score high even
 // when the longer statement adds unrelated detail.
+// minOverlapTokens is the floor below which the ratio stops meaning anything.
+// Dividing by the SMALLER token set makes a short statement match on almost
+// nothing: a 2-token statement sharing one common word scores 0.50, over the
+// scoped threshold, so a terse probe collided with nine unrelated entries and
+// a legitimately brief decision could be unaddable without a spurious
+// --supersedes. Below the floor, only a near-total overlap counts.
+const minOverlapTokens = 4
+
 func termOverlapScore(a, b string) float64 {
 	ta, tb := significantTokens(a), significantTokens(b)
 	if len(ta) == 0 || len(tb) == 0 {
 		return 0
+	}
+	// A statement too short to be characterized by its vocabulary is compared
+	// against the LARGER set instead, which is the honest question for it:
+	// "is this substantially the same statement?" rather than "are its few
+	// words present somewhere in that paragraph?".
+	if len(ta) < minOverlapTokens || len(tb) < minOverlapTokens {
+		shared := 0
+		for w := range ta {
+			if tb[w] {
+				shared++
+			}
+		}
+		larger := len(ta)
+		if len(tb) > larger {
+			larger = len(tb)
+		}
+		return float64(shared) / float64(larger)
 	}
 	shared := 0
 	small := ta
@@ -418,7 +443,30 @@ func flowList(items []string) string {
 	if len(items) == 0 {
 		return "[]"
 	}
-	return "[" + strings.Join(items, ", ") + "]"
+	quoted := make([]string, 0, len(items))
+	for _, it := range items {
+		quoted = append(quoted, flowScalar(it))
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+// flowScalar renders one flow-sequence item, quoting it when plain style
+// would not round-trip. An unquoted item containing `: ` parses as a nested
+// mapping, so `--rejected "re-render (vacuous: no changes)"` was written as
+// YAML the ledger's own validator then rejected (DLG028). Brackets, braces,
+// commas, and quotes are equally structural inside a flow sequence.
+func flowScalar(s string) string {
+	if s == "" {
+		return `""`
+	}
+	needsQuote := strings.ContainsAny(s, `[]{},"'#&*!|>%@`+"`") ||
+		strings.Contains(s, ": ") || strings.HasSuffix(s, ":") ||
+		strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") ||
+		strings.ContainsAny(s, "\n\r\t")
+	if !needsQuote {
+		return s
+	}
+	return quoteYAML(s)
 }
 
 // emptyListLine returns the index of a top-level `key: []` line (the empty

@@ -222,10 +222,19 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 	if err != nil {
 		return nil, err
 	}
-	planRel := ""
+	planRel, docRel := "", ""
 	if abs, absErr := filepath.Abs(path); absErr == nil {
 		if rel, relErr := filepath.Rel(root, abs); relErr == nil {
-			planRel = rules.PlanRelOf(filepath.ToSlash(rel))
+			slash := filepath.ToSlash(rel)
+			planRel = rules.PlanRelOf(slash)
+			// A spec or design lives outside Plans/, so PlanRelOf yields
+			// nothing for it and the gate validated the whole root twice.
+			// ScopeToDoc drops the half that cannot respond to a doc's status
+			// flip — other plans' phase docs and reviews, whose completion
+			// evidence is re-verified against the repository on every run.
+			if planRel == "" {
+				docRel = slash
+			}
 		}
 	}
 	run := func() ([]rules.Diagnostic, error) {
@@ -233,8 +242,11 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		if err != nil {
 			return nil, err
 		}
-		if planRel != "" {
+		switch {
+		case planRel != "":
 			loaded = rules.ScopeToPlan(loaded, planRel)
+		case docRel != "":
+			loaded = rules.ScopeToDoc(loaded, docRel)
 		}
 		return rules.Run(loaded), nil
 	}

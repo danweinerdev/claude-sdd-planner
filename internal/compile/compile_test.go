@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -530,5 +531,58 @@ func TestRealCreatedDateIsPreserved(t *testing.T) {
 	mustOK(t, r)
 	if !strings.Contains(r.Output, "created: 2020-01-15") {
 		t.Errorf("an existing created date must be preserved:\n%s", r.Output)
+	}
+}
+
+// A supersede payload adding unnumbered items mid-list must not hand them
+// identifiers that later lines already declare. It did: two new ACs inserted
+// after AC-02 were "carried forward" as AC-03 and AC-04 while the originals
+// kept those ids, so the artifact held two AC-03s and two AC-04s — silent
+// corruption of every downstream citation.
+func TestSupersedeDoesNotDuplicateDeclaredIDs(t *testing.T) {
+	base := compileNew(t, payload(map[string]string{
+		"## Acceptance Criteria": "- [ ] **AC-01**: one\n- [ ] **AC-02**: two\n- [ ] **AC-03**: three",
+	}))
+	mustOK(t, base)
+
+	r := Compile(load(t), payload(map[string]string{
+		"## Acceptance Criteria": "- [ ] **AC-01**: one\n- [ ] fresh item\n- [ ] **AC-02**: two\n- [ ] **AC-03**: three",
+	}), Options{Today: "2026-08-17", Existing: artifact.Parse(base.Output), Supersede: true})
+	mustOK(t, r)
+
+	seen := map[string]int{}
+	for _, m := range regexp.MustCompile(`AC-\d+`).FindAllString(r.Output, -1) {
+		seen[m]++
+	}
+	for id, n := range seen {
+		if n > 1 {
+			t.Errorf("%s appears %d times — supersede duplicated an identifier:\n%s", id, n, r.Output)
+		}
+	}
+}
+
+// A revision may append more than one new identifier at a time. SPK030
+// measured each declared id against the artifact's live set alone, so
+// appending AC-04 and AC-05 refused AC-05 and told the author to use AC-04 —
+// which the line above already used.
+func TestPayloadMayDeclareSeveralNewIDs(t *testing.T) {
+	base := compileNew(t, payload(map[string]string{
+		"## Acceptance Criteria": "- [ ] **AC-01**: one\n- [ ] **AC-02**: two\n- [ ] **AC-03**: three",
+	}))
+	mustOK(t, base)
+
+	r := Compile(load(t), payload(map[string]string{
+		"## Acceptance Criteria": "- [ ] **AC-01**: one\n- [ ] **AC-02**: two\n- [ ] **AC-03**: three\n" +
+			"- [ ] **AC-04**: four\n- [ ] **AC-05**: five",
+	}), Options{Today: "2026-08-17", Existing: artifact.Parse(base.Output)})
+	mustOK(t, r)
+
+	// A GAP is still an authoring mistake, not an intent.
+	gap := Compile(load(t), payload(map[string]string{
+		"## Acceptance Criteria": "- [ ] **AC-01**: one\n- [ ] **AC-02**: two\n- [ ] **AC-03**: three\n" +
+			"- [ ] **AC-09**: jumped",
+	}), Options{Today: "2026-08-17", Existing: artifact.Parse(base.Output)})
+	if gap.OK() || !hasCode(gap, "SPK030") {
+		t.Errorf("a gap must still refuse; codes=%v", codes(gap))
 	}
 }
