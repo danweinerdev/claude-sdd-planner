@@ -160,7 +160,9 @@ Per-finding statuses (entry-level, not artifact statuses): `open`, `fixed`, `def
 
 A phase-completion review additionally requires `review_scope: phase`,
 `frozen: true`, `verdict: Aligned`, and `review_mode` of `independent`, `mixed`,
-or `single-agent`. Its `lane_results` is exactly four mappings, one for every
+or `single-agent`. `frozen` starts `false` at scaffold time and is set to
+`true` only by `sdd review resolve`, atomically with `status: resolved` — the
+required values here describe the resolved review the phase gate reads. Its `lane_results` is exactly four mappings, one for every
 stable lane: `review_plan_drift`, `review_quality`, `review_spec_compliance`,
 and `review_blind_spots` (the data-layer identifiers for `drift-detector`,
 `quality-scanner`, `spec-compliance`, and `blind-spot-finder`). Each mapping has

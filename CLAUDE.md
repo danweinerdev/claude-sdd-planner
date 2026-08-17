@@ -185,7 +185,7 @@ Every skill and both hooks drive one cross-platform Go binary. The plugin does n
 go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@latest
 ```
 
-`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `decide`, `review scaffold`, `template`, `hook`, `provision`, `plugin sync|check|status`, `doctor`.
+`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `decide`, `review scaffold|evidence set|resolve`, `template`, `hook`, `provision`, `plugin sync|check|status`, `doctor`.
 
 ## Configuration
 

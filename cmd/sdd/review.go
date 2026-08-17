@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
 	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
 )
@@ -27,13 +29,32 @@ import (
 // observation, not a conclusion), so a scaffolded review cannot close a phase
 // until a human or an agent records what each lane actually observed. The
 // command builds the structure; it does not manufacture the review.
+//
+// The review's own lifecycle is a transition, not an edit. A scaffold starts
+// `frozen: false` + `status: open` so `sdd review evidence set` (and, for
+// findings work, `apply`/`section set`) can still write it. `sdd review
+// resolve` is the closing transition: it verifies the same schema SDD167
+// enforces and sets `frozen: true` + `status: resolved` atomically. Freezing
+// at resolution rather than at scaffold time is what keeps FR-46 coherent —
+// the earlier shape (`frozen: true` at birth) made the artifact immutable
+// while still `open`, so no supported command could ever resolve it.
 
 const reviewUsage = `sdd review scaffold <phase-path> --frozen <base>..<endpoint>
                      [--out PATH] [--mode independent|mixed|single-agent]
+sdd review evidence set <review-path> --lane <id> [--evidence TEXT]
+sdd review resolve <review-path> [--accept-followups] [--dry-run]
 
-Writes the four-lane phase-completion review artifact the gate requires, with
-each lane's evidence left as a placeholder the validator refuses until it is
-replaced by what the lane actually observed.`
+scaffold writes the four-lane phase-completion review artifact the gate
+requires, with each lane's evidence left as a placeholder the validator
+refuses until it is replaced by what the lane actually observed.
+
+evidence set records one lane's concrete observation (from --evidence or
+stdin) on an open review.
+
+resolve is the closing transition: it refuses unless every lane carries real
+evidence, the verdict is Aligned, and every finding has a terminal
+disposition, then sets frozen: true and status: resolved atomically. After
+resolve the review is immutable (SPK050).`
 
 // stableLanes are the data-layer lane identifiers the validator checks, in the
 // order shared/review-artifacts.md lists them. Frontmatter always uses these
@@ -104,8 +125,15 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 	if dest == "" {
 		dest = defaultReviewPath(phasePath, endpoint)
 	}
-	if existing, err := store.Read(dest); err == nil && existing.Exists && !o.Force {
-		return fmt.Errorf("review scaffold: %s already exists; pass --force to replace it", dest)
+	if existing, err := store.Read(dest); err == nil && existing.Exists {
+		// A resolved review is frozen history (FR-46); --force must not be a
+		// back door that rewrites it. A fresh review goes in a new file.
+		if isFrozenSource(existing.Source) {
+			return fmt.Errorf("review scaffold: %s is a frozen (resolved) review and may not be replaced, even with --force; scaffold a new review at a new path", dest)
+		}
+		if !o.Force {
+			return fmt.Errorf("review scaffold: %s already exists; pass --force to replace it", dest)
+		}
 	}
 
 	// References inside an artifact are planning-root-relative, not relative to
@@ -153,8 +181,11 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 
 	fmt.Printf("scaffolded %s for %s\n", dest, phasePath)
 	fmt.Printf("  frozen: %s\n", o.Frozen)
-	fmt.Printf("  next: replace each lane's evidence with what it observed, then\n")
-	fmt.Printf("        add `- Final aligned review: %s; frozen: %s`\n",
+	fmt.Printf("  next: record each lane's observation via\n")
+	fmt.Printf("          sdd review evidence set %s --lane <id> --evidence \"...\"\n", filepath.ToSlash(dest))
+	fmt.Printf("        then close the review with\n")
+	fmt.Printf("          sdd review resolve %s\n", filepath.ToSlash(dest))
+	fmt.Printf("        and add `- Final aligned review: %s; frozen: %s`\n",
 		filepath.ToSlash(dest), o.Frozen)
 	fmt.Printf("        to the phase's Phase Completion Evidence section.\n")
 	return nil
@@ -300,7 +331,10 @@ func renderPhaseReview(in phaseReviewInput) string {
 	fmt.Fprintf(&b, "review_of: \"%s\"\n", in.ReviewOf)
 	fmt.Fprintf(&b, "rev: \"%s\"\n", in.Frozen)
 	b.WriteString("review_scope: phase\n")
-	b.WriteString("frozen: true\n")
+	// Not yet frozen: the artifact must stay writable while evidence and
+	// findings are recorded. `sdd review resolve` flips this to true together
+	// with `status: resolved`; from then on SPK050 makes the bytes immutable.
+	b.WriteString("frozen: false\n")
 	b.WriteString("verdict: Aligned\n")
 	fmt.Fprintf(&b, "reviewed_planning_revision: \"%s\"\n", in.PlanningRev)
 	fmt.Fprintf(&b, "review_mode: %s\n", in.Mode)
@@ -330,4 +364,297 @@ func reviewLaneIDs() []string {
 		out = append(out, l.lane)
 	}
 	return out
+}
+
+// isFrozenSource reports whether an artifact's frontmatter carries
+// `frozen: true` — the FR-46 immutability marker.
+func isFrozenSource(source string) bool {
+	v, ok := artifact.Parse(source).FM("frozen")
+	return ok && strings.EqualFold(strings.TrimSpace(strings.Trim(v, `"'`)), "true")
+}
+
+// --- sdd review evidence set ------------------------------------------------
+
+type reviewEvidenceOpts struct {
+	Lane     string
+	Evidence string
+	DryRun   bool
+	JSON     bool
+}
+
+// reviewEvidenceResult is the machine-readable outcome of `review evidence
+// set` (FR-04).
+type reviewEvidenceResult struct {
+	Path   string `json:"path"`
+	OK     bool   `json:"ok"`
+	Wrote  bool   `json:"wrote,omitempty"`
+	Lane   string `json:"lane"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+// cmdReviewEvidenceSet records one lane's concrete observation on an open,
+// not-yet-frozen phase review. It is the supported write path between
+// `review scaffold` and `review resolve`: the placeholder the scaffold left is
+// replaced here, and the same evidence-quality check SDD167 applies is
+// enforced at write time so a refusal happens where it can still be fixed.
+func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
+	if !isStableLane(o.Lane) {
+		return fmt.Errorf("review evidence set: --lane must be one of %s",
+			strings.Join(reviewLaneIDs(), ", "))
+	}
+
+	art, err := store.Read(path)
+	if err != nil {
+		return fmt.Errorf("review evidence set: %w", err)
+	}
+	if !art.Exists {
+		return fmt.Errorf("review evidence set: %s does not exist", path)
+	}
+	doc := artifact.Parse(art.Source)
+	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
+		return fmt.Errorf("review evidence set: %s is not a review artifact", path)
+	}
+	if isFrozenSource(art.Source) {
+		return fmt.Errorf("review evidence set: %s is frozen (resolved); frozen reviews are immutable — scaffold a fresh review for new work", path)
+	}
+	if status, _ := doc.FM("status"); strings.Trim(status, `"'`) == "resolved" {
+		return fmt.Errorf("review evidence set: %s is already resolved", path)
+	}
+
+	evidence := strings.TrimSpace(o.Evidence)
+	if evidence == "" {
+		raw, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("review evidence set: reading stdin: %w", err)
+		}
+		evidence = strings.TrimSpace(string(raw))
+	}
+	if evidence == "" {
+		return fmt.Errorf("review evidence set: no evidence given; pass --evidence or write it on stdin")
+	}
+	if strings.ContainsAny(evidence, "\n\r") {
+		return fmt.Errorf("review evidence set: evidence must be a single line; fold the observation into one sentence")
+	}
+	// The same bar SDD167 sets: a placeholder or a conclusory "no findings"
+	// is not an observation. Refusing here keeps the gate honest without
+	// making the caller round-trip through `sdd validate`.
+	if !rules.UsefulLaneEvidence(evidence) {
+		return fmt.Errorf("review evidence set: evidence must be a specific concrete observation (inspected paths, behaviors, or results), not a placeholder or a generic conclusion")
+	}
+
+	lines := strings.Split(art.Source, "\n")
+	if !setLaneEvidence(lines, o.Lane, evidence) {
+		return fmt.Errorf("review evidence set: no lane_results entry for lane %q in %s", o.Lane, path)
+	}
+	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
+
+	res := reviewEvidenceResult{Path: relPath(path), Lane: o.Lane, DryRun: o.DryRun, OK: true}
+	if o.DryRun {
+		if o.JSON {
+			return writeJSON(res)
+		}
+		fmt.Printf("review evidence set: would record %s evidence on %s\n", o.Lane, path)
+		return nil
+	}
+	if err := store.WriteAtomic(path, updated); err != nil {
+		return fmt.Errorf("review evidence set: %w", err)
+	}
+	res.Wrote = true
+	if o.JSON {
+		return writeJSON(res)
+	}
+	fmt.Printf("recorded %s evidence on %s\n", o.Lane, path)
+	return nil
+}
+
+func isStableLane(lane string) bool {
+	for _, l := range stableLanes {
+		if l.lane == lane {
+			return true
+		}
+	}
+	return false
+}
+
+// setLaneEvidence rewrites the named lane's `evidence:` line inside the
+// frontmatter's lane_results block, leaving every other byte untouched. It
+// scans only the frontmatter — the body may legitimately quote lane lines.
+func setLaneEvidence(lines []string, lane, evidence string) bool {
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return false
+	}
+	inLane := false
+	for i := 1; i < len(lines); i++ {
+		l := lines[i]
+		if strings.TrimSpace(l) == "---" {
+			return false
+		}
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "- lane:") {
+			v := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "- lane:")), `"'`)
+			inLane = v == lane
+			continue
+		}
+		if inLane && strings.HasPrefix(trimmed, "evidence:") {
+			indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+			lines[i] = indent + `evidence: "` + yamlEscape(evidence) + `"`
+			return true
+		}
+	}
+	return false
+}
+
+// yamlEscape makes a string safe inside a double-quoted YAML scalar.
+func yamlEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return strings.ReplaceAll(s, `"`, `\"`)
+}
+
+// --- sdd review resolve -----------------------------------------------------
+
+type reviewResolveOpts struct {
+	AcceptFollowups bool
+	DryRun          bool
+	JSON            bool
+}
+
+// reviewResolveResult is the machine-readable outcome of `review resolve`
+// (FR-04). Blocking carries the refusal reasons so a scripted phase close can
+// see why the review is not yet resolvable.
+type reviewResolveResult struct {
+	Path     string   `json:"path"`
+	OK       bool     `json:"ok"`
+	Wrote    bool     `json:"wrote,omitempty"`
+	From     string   `json:"from,omitempty"`
+	To       string   `json:"to,omitempty"`
+	DryRun   bool     `json:"dry_run,omitempty"`
+	Already  bool     `json:"already,omitempty"`
+	Blocking []string `json:"blocking,omitempty"`
+}
+
+// terminalFindingStatus mirrors shared/review-artifacts.md: `resolved`
+// requires every finding to carry a terminal disposition.
+var terminalFindingStatus = map[string]bool{
+	"fixed": true, "deferred": true, "rejected": true, "answered": true,
+}
+
+// cmdReviewResolve is the closing transition for a phase-gate review: it
+// verifies the review would satisfy the same schema SDD167 enforces, then
+// sets `frozen: true` and `status: resolved` in one write. Freezing happens
+// here — at resolution — never at scaffold time, so the artifact stays
+// editable exactly while it is open and becomes immutable exactly when its
+// content starts backing a phase completion.
+func cmdReviewResolve(path string, o reviewResolveOpts) error {
+	art, err := store.Read(path)
+	if err != nil {
+		return fmt.Errorf("review resolve: %w", err)
+	}
+	if !art.Exists {
+		return fmt.Errorf("review resolve: %s does not exist", path)
+	}
+	doc := artifact.Parse(art.Source)
+	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
+		return fmt.Errorf("review resolve: %s is not a review artifact", path)
+	}
+	if scope, _ := doc.FM("review_scope"); strings.Trim(scope, `"'`) != "phase" {
+		return fmt.Errorf("review resolve: %s is not a phase-gate review (review_scope: phase); ordinary reviews are not frozen and are edited via apply/section set", path)
+	}
+
+	status, _ := doc.FM("status")
+	status = strings.Trim(status, `"'`)
+	res := reviewResolveResult{Path: relPath(path), From: status, To: "resolved", DryRun: o.DryRun}
+	if status == "resolved" && isFrozenSource(art.Source) {
+		res.OK, res.Already = true, true
+		if o.JSON {
+			return writeJSON(res)
+		}
+		fmt.Printf("review resolve: already resolved and frozen\n")
+		return nil
+	}
+	if status != "open" {
+		return fmt.Errorf("review resolve: %s has status %q; resolve moves an open review to resolved", path, status)
+	}
+
+	// The gate: refuse on every reason the validator would reject the
+	// resolved review. This is the same reuse discipline as the lifecycle
+	// completion verbs — a second opinion on "what makes a review resolvable"
+	// would drift from SDD167.
+	var blocking []string
+	if verdict, _ := doc.FM("verdict"); strings.Trim(verdict, `"'`) != "Aligned" {
+		blocking = append(blocking, "verdict must be Aligned; a non-Aligned review is superseded by a fresh review after fixes land, not resolved")
+	}
+	if rev, _ := doc.FM("rev"); strings.Trim(rev, `"'`) == "" {
+		blocking = append(blocking, "rev must carry the frozen reviewed identity")
+	}
+	blocking = append(blocking, rules.PhaseReviewSchemaErrors(fmMeta(doc.FrontmatterRaw))...)
+	for _, f := range fmSequence(doc.FrontmatterRaw, "findings") {
+		if s := f.Str("status"); !terminalFindingStatus[s] {
+			blocking = append(blocking, fmt.Sprintf("finding %s has status %q; every finding needs a terminal disposition (fixed, deferred, rejected, answered)", f.Str("id"), s))
+		}
+	}
+	if !o.AcceptFollowups {
+		for _, fu := range fmSequence(doc.FrontmatterRaw, "followups") {
+			if fu.Str("tracked_in") == "" {
+				blocking = append(blocking, fmt.Sprintf("followup %s is not tracked in a plan task; fill tracked_in, or pass --accept-followups after the user explicitly accepts it floating", fu.Str("id")))
+			}
+		}
+	}
+	if len(blocking) > 0 {
+		res.Blocking = blocking
+		if o.JSON {
+			if err := writeJSON(res); err != nil {
+				return err
+			}
+			return &refusedError{n: len(blocking)}
+		}
+		var b strings.Builder
+		b.WriteString("review resolve: refused — the review is not resolvable:\n")
+		for _, m := range blocking {
+			fmt.Fprintf(&b, "  - %s\n", m)
+		}
+		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+	}
+
+	lines := strings.Split(art.Source, "\n")
+	if !setTopLevelStatus(lines, "resolved") {
+		return fmt.Errorf("review resolve: no top-level `status:` field to advance")
+	}
+	if !setTopLevelScalar(lines, "frozen", "true") {
+		return fmt.Errorf("review resolve: no top-level `frozen:` field to advance — was this review scaffolded by `sdd review scaffold`?")
+	}
+	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
+
+	res.OK = true
+	if o.DryRun {
+		if o.JSON {
+			return writeJSON(res)
+		}
+		fmt.Printf("review resolve: gate met; would mark %s resolved and frozen\n", path)
+		return nil
+	}
+	if err := store.WriteAtomic(path, updated); err != nil {
+		return fmt.Errorf("review resolve: %w", err)
+	}
+	res.Wrote = true
+	if o.JSON {
+		return writeJSON(res)
+	}
+	fmt.Printf("review resolve: %s is now resolved and frozen\n", path)
+	return nil
+}
+
+// setTopLevelScalar rewrites a top-level frontmatter scalar line in place,
+// same discipline as setTopLevelStatus: text surgery on one line, every other
+// byte untouched.
+func setTopLevelScalar(lines []string, key, value string) bool {
+	for i, l := range lines {
+		if i > 0 && strings.TrimSpace(l) == "---" {
+			return false
+		}
+		if strings.HasPrefix(l, key+":") {
+			lines[i] = key + ": " + value
+			return true
+		}
+	}
+	return false
 }

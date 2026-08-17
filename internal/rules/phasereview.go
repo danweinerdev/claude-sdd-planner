@@ -171,6 +171,20 @@ func phaseReviewSchemaErrors(meta map[string]any) []string {
 	return errs
 }
 
+// PhaseReviewSchemaErrors exposes the phase-gate schema check to lifecycle
+// verbs. `sdd review resolve` refuses on the same reasons the validator would
+// report, so a review can never be resolved into a state SDD167 rejects.
+func PhaseReviewSchemaErrors(meta map[string]any) []string {
+	return phaseReviewSchemaErrors(meta)
+}
+
+// UsefulLaneEvidence exposes the lane-evidence quality check so `sdd review
+// evidence set` refuses placeholder or conclusory text at write time instead
+// of leaving it for the validator to reject later.
+func UsefulLaneEvidence(v any) bool {
+	return usefulLaneEvidence(v)
+}
+
 // isValidPhaseReview ports _is_valid_phase_review: every property a review
 // must hold to close the phase it reviews.
 func isValidPhaseReview(review, phase *Artifact) bool {

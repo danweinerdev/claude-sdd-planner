@@ -49,7 +49,8 @@ Artifact `status`: `open` while any finding is `open`; `resolved` when every fin
 
 When a review is used to complete a phase, it is a persisted final gate, not a
 general advisory review. Freeze a concrete native-SCM phase revision/range, run
-all four `/code-review` lanes, and record these frontmatter fields:
+all four `/code-review` lanes, and record these frontmatter fields (this is the
+**resolved** end state — see the lifecycle below for how a review gets here):
 
 ```yaml
 review_scope: phase
@@ -89,6 +90,31 @@ blank or a generic conclusion such as `passed`, `ok`, `aligned`, `success`, `No
 findings`, or `No blocking findings`). Record inspected paths, behaviors, or
 observations even when a lane is clean. `review_mode` records how the lanes ran:
 `independent` (fresh-context agents), `mixed`, or `single-agent`.
+
+**Review lifecycle — freeze at resolution, never at birth.** The review is a
+transition chain driven by the binary, mirroring `task|phase|plan complete`:
+
+1. `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` creates the
+   artifact with `status: open` and `frozen: false`, each lane's evidence a
+   placeholder the validator refuses. Open means writable: lane evidence goes
+   in via `sdd review evidence set`, findings and Resolution Log entries via
+   the normal write path (`apply` / `section set`).
+2. `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]`
+   records what one lane actually observed. It enforces the same
+   evidence-quality bar as the validator: a placeholder, a blank, or a
+   conclusory "no findings" is refused at write time.
+3. `sdd review resolve <review-path>` is the closing transition. It refuses
+   unless the verdict is `Aligned`, every lane carries real evidence, the
+   schema is valid, every finding has a terminal disposition, and no follow-up
+   floats untracked (`--accept-followups` only after the user explicitly
+   accepts one). When the gate is met it sets `frozen: true` and
+   `status: resolved` in one write.
+
+`frozen: true` therefore marks a *finished* review: from that moment the
+artifact is immutable through every supported command (SPK050 refuses
+rewrites, and `review scaffold --force` refuses to replace it). Material
+changes after resolution never edit the frozen review — they supersede it with
+a fresh scaffold of the new frozen range.
 
 `reviewed_planning_revision` is required and is the full Git commit in the
 planning repository at which the phase and plan README were reviewed. Before

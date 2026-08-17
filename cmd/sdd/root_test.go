@@ -211,6 +211,8 @@ func handlerFlagSets() []struct {
 			"tool", "tool-context", "tool-result", "focused-review",
 			"final-review", "date", "revision", "dry-run", "json"}},
 		{"sdd review scaffold", []string{"frozen", "out", "mode", "force", "json"}},
+		{"sdd review evidence set", []string{"lane", "evidence", "dry-run", "json"}},
+		{"sdd review resolve", []string{"accept-followups", "dry-run", "json"}},
 		{"sdd decide list", []string{"status", "json"}},
 		{"sdd decide search", []string{"json"}},
 		{"sdd decide add", []string{

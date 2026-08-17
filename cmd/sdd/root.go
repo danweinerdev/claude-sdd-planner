@@ -355,8 +355,40 @@ func reviewCmd() *cobra.Command {
 	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	_ = scaffold.MarkFlagRequired("frozen")
 
+	var eo reviewEvidenceOpts
+	evidenceSet := &cobra.Command{
+		Use:   "set <review-path>",
+		Short: "Record one lane's concrete observation on an open review",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return cmdReviewEvidenceSet(args[0], eo)
+		},
+	}
+	ef := evidenceSet.Flags()
+	ef.StringVar(&eo.Lane, "lane", "", "stable lane identifier (review_plan_drift | review_quality | review_spec_compliance | review_blind_spots)")
+	ef.StringVar(&eo.Evidence, "evidence", "", "the lane's observation (default: read from stdin)")
+	ef.BoolVar(&eo.DryRun, "dry-run", false, "check without writing")
+	ef.BoolVar(&eo.JSON, "json", false, "emit the result as JSON")
+	_ = evidenceSet.MarkFlagRequired("lane")
+	evidence := &cobra.Command{Use: "evidence", Short: "Lane evidence on an open review"}
+	evidence.AddCommand(evidenceSet)
+
+	var ro reviewResolveOpts
+	resolve := &cobra.Command{
+		Use:   "resolve <review-path>",
+		Short: "Close an open phase-gate review: verify the gate, then set frozen: true and status: resolved",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return cmdReviewResolve(args[0], ro)
+		},
+	}
+	rf := resolve.Flags()
+	rf.BoolVar(&ro.AcceptFollowups, "accept-followups", false, "resolve despite untracked followups the user explicitly accepted as floating")
+	rf.BoolVar(&ro.DryRun, "dry-run", false, "report the verdict without writing")
+	rf.BoolVar(&ro.JSON, "json", false, "emit the result as JSON")
+
 	c := &cobra.Command{Use: "review", Short: "Persisted review artifacts"}
-	c.AddCommand(scaffold)
+	c.AddCommand(scaffold, evidence, resolve)
 	return c
 }
 

@@ -8,7 +8,9 @@ tags: [review]
 related: [{{TARGET_PATH}}]
 review_of: "{{TARGET_PATH}}"
 rev: "{{REV}}"
-# For a phase-completion review, set review_scope: phase, frozen: true, verdict:
+# For a phase-completion review, prefer `sdd review scaffold` over this template:
+# it writes this shape with review_scope: phase, frozen: false (flipped to true by
+# `sdd review resolve` together with status: resolved — never by hand), verdict:
 # Aligned, a valid review_mode, and exactly one result for each stable lane below.
 # Every reviewed_identity exactly equals rev and every evidence value is a specific
 # concrete observation naming inspected paths, behaviors, or observations, not a
@@ -18,7 +20,7 @@ rev: "{{REV}}"
 # commit at which the phase and plan intent were reviewed. Other reviews may omit
 # these fields or record their actual non-phase state.
 # review_scope: phase
-# frozen: true
+# frozen: false            # `sdd review resolve` sets true at resolution
 # verdict: Aligned
 # reviewed_planning_revision: "<full40 planning Git commit>"
 # review_mode: independent  # independent | mixed | single-agent

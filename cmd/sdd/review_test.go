@@ -131,3 +131,163 @@ func TestReviewScaffoldWritesIntoPlanReviewsDir(t *testing.T) {
 		t.Fatalf("second scaffold should take the next sequence slot %s: %v", second, err)
 	}
 }
+
+// scaffoldedReview builds a git-backed planning root with one phase, scaffolds
+// its review, and returns the review path. Shared by the lifecycle tests.
+func scaffoldedReview(t *testing.T) (dir, review string) {
+	t.Helper()
+	dir = t.TempDir()
+	planDir := filepath.Join(dir, "Plans", "Sample Plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	phase := filepath.Join(planDir, "01-First-Phase.md")
+	phaseDoc := "---\ntitle: \"First Phase\"\ntype: phase\nstatus: in-progress\n---\n\n# First Phase\n"
+	if err := os.WriteFile(phase, []byte(phaseDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, dir, "init", "-q")
+	gitOK(t, dir, "add", ".")
+	gitOK(t, dir, "commit", "-q", "-m", "base")
+	base := gitOK(t, dir, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, dir, "add", ".")
+	gitOK(t, dir, "commit", "-q", "-m", "work")
+	endpoint := gitOK(t, dir, "rev-parse", "HEAD")
+
+	opts := reviewScaffoldOpts{Frozen: base + ".." + endpoint, Mode: "independent"}
+	if err := cmdReviewScaffold(phase, opts); err != nil {
+		t.Fatalf("cmdReviewScaffold: %v", err)
+	}
+	return dir, filepath.Join(planDir, "reviews",
+		"01-sample-plan-code-review-"+endpoint[:7]+".md")
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// A scaffold must start writable: frozen: false, status: open. The original
+// shape froze the artifact at birth, which made `status: open` permanently
+// unresolvable through supported commands (no write path survived SPK050).
+func TestReviewScaffoldStartsUnfrozen(t *testing.T) {
+	_, review := scaffoldedReview(t)
+	src := readFile(t, review)
+	if !strings.Contains(src, "\nfrozen: false\n") {
+		t.Fatalf("scaffold must write frozen: false; got:\n%s", src)
+	}
+	if !strings.Contains(src, "\nstatus: open\n") {
+		t.Fatalf("scaffold must write status: open; got:\n%s", src)
+	}
+}
+
+func TestReviewEvidenceSetGates(t *testing.T) {
+	_, review := scaffoldedReview(t)
+
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "not_a_lane", Evidence: "Inspected cmd/sdd/review.go for drift"}); err == nil {
+		t.Fatal("evidence set must refuse an unknown lane")
+	}
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "review_quality", Evidence: "No findings"}); err == nil {
+		t.Fatal("evidence set must refuse conclusory evidence")
+	}
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "review_quality", Evidence: "line one\nline two"}); err == nil {
+		t.Fatal("evidence set must refuse multi-line evidence")
+	}
+
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane:     "review_quality",
+		Evidence: `Inspected cmd/sdd/review.go error paths; "resolve" refuses on open findings`,
+	}); err != nil {
+		t.Fatalf("evidence set: %v", err)
+	}
+	src := readFile(t, review)
+	if !strings.Contains(src, `\"resolve\" refuses`) {
+		t.Fatalf("evidence with quotes must be YAML-escaped; got:\n%s", src)
+	}
+	if strings.Count(src, "<REPLACE:") != 3 {
+		t.Fatalf("exactly one placeholder should have been replaced; got:\n%s", src)
+	}
+}
+
+// The full lifecycle: scaffold -> four evidence sets -> resolve. Resolve must
+// refuse while any placeholder remains, then set frozen: true and
+// status: resolved atomically, after which the artifact is immutable.
+func TestReviewResolveLifecycle(t *testing.T) {
+	_, review := scaffoldedReview(t)
+
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err == nil {
+		t.Fatal("resolve must refuse while lane evidence is still the placeholder")
+	}
+
+	for _, lane := range reviewLaneIDs() {
+		if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+			Lane:     lane,
+			Evidence: "Inspected cmd/sdd/review.go and internal/rules/phasereview.go; diff matches the task scope with no unplanned changes",
+		}); err != nil {
+			t.Fatalf("evidence set %s: %v", lane, err)
+		}
+	}
+
+	if err := cmdReviewResolve(review, reviewResolveOpts{DryRun: true}); err != nil {
+		t.Fatalf("resolve --dry-run: %v", err)
+	}
+	if src := readFile(t, review); !strings.Contains(src, "\nfrozen: false\n") {
+		t.Fatalf("--dry-run must not write; got:\n%s", src)
+	}
+
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	src := readFile(t, review)
+	if !strings.Contains(src, "\nfrozen: true\n") || !strings.Contains(src, "\nstatus: resolved\n") {
+		t.Fatalf("resolve must set frozen: true and status: resolved together; got:\n%s", src)
+	}
+
+	// Resolved means frozen means immutable: further writes are refused, and
+	// a repeated resolve is a no-op success, matching the other transitions.
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "review_quality", Evidence: "Re-inspected the diff after resolution and found drift"}); err == nil {
+		t.Fatal("evidence set must refuse a frozen resolved review")
+	}
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("second resolve should be an already-resolved no-op: %v", err)
+	}
+}
+
+// --force replaces an abandoned open scaffold, but a frozen (resolved) review
+// is FR-46 history and must survive even --force.
+func TestReviewScaffoldForceCannotReplaceFrozenReview(t *testing.T) {
+	dir, review := scaffoldedReview(t)
+	for _, lane := range reviewLaneIDs() {
+		if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+			Lane:     lane,
+			Evidence: "Inspected cmd/sdd/review.go and internal/rules/phasereview.go; behavior matches the reviewed range",
+		}); err != nil {
+			t.Fatalf("evidence set %s: %v", lane, err)
+		}
+	}
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	base := gitOK(t, dir, "rev-parse", "HEAD~1")
+	endpoint := gitOK(t, dir, "rev-parse", "HEAD")
+	phase := filepath.Join(dir, "Plans", "Sample Plan", "01-First-Phase.md")
+	err := cmdReviewScaffold(phase, reviewScaffoldOpts{
+		Frozen: base + ".." + endpoint, Mode: "independent",
+		Out: review, Force: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "frozen") {
+		t.Fatalf("scaffold --force onto a frozen review must be refused; got %v", err)
+	}
+}

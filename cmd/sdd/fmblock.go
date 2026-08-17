@@ -153,6 +153,18 @@ func nodeValue(n *yaml.Node) any {
 	}
 }
 
+// fmMeta decodes raw frontmatter lines into the map[string]any shape the
+// internal/rules checks consume, via nodeValue so scalars keep the text the
+// author wrote (except genuine !!bool values, which rules compare as bool).
+func fmMeta(fm []string) map[string]any {
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(strings.Join(fm, "\n")), &node); err != nil {
+		return nil
+	}
+	m, _ := nodeValue(&node).(map[string]any)
+	return m
+}
+
 // fmSequenceBlock decodes a bare block sequence — the lines fmBlockBounds
 // returns, with no owning `key:` line above them. Entries that are not
 // mappings decode to nil so a caller's index still lines up with the source

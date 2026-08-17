@@ -49,12 +49,18 @@ name or description field; do not request an agent or model.
 3. Render and run all four lanes, preserving their input isolation. Consolidate
    only actual findings and give `Aligned`, `Needs changes`, `Blocked`, or `No
    reviewable diff` with actual verification results.
-4. Persist the review using `shared/templates/review.md`. A phase gate sets
-   `review_of` to the phase, `review_scope: phase`, `frozen: true`, `verdict:
-   Aligned`, `reviewed_planning_revision` to the exact full planning Git commit
+4. Persist the review using `shared/templates/review.md`. A phase gate is
+   driven through the binary: `sdd review scaffold <phase-path> --frozen
+   <base>..<endpoint>` creates it open and unfrozen with `review_of` set to the
+   phase, `review_scope: phase`, `verdict: Aligned`,
+   `reviewed_planning_revision` set to the exact full planning Git commit
    containing the reviewed phase and plan README, a valid `review_mode`, and
-   exactly four `lane_results`. Each lane occurs once with `PASS/Aligned`, a
-   `reviewed_identity` equal to `rev`, and a specific observation.
+   exactly four `lane_results`. Record each lane's specific observation with
+   `sdd review evidence set <review-path> --lane <id>`, then close the gate
+   with `sdd review resolve <review-path>`, which verifies every lane occurs
+   once with `PASS/Aligned` and a `reviewed_identity` equal to `rev` and sets
+   `frozen: true` + `status: resolved` atomically. Never hand-edit those two
+   fields; a resolved review is immutable.
 5. Validate the persisted gate with `sdd validate --scope Plans/<PlanName>
    --format json` before handing the result back to `sdd-implement`, and cite
    the gate from phase evidence as `- Final aligned review: <artifact

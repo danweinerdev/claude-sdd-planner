@@ -59,6 +59,8 @@ to report without repairing.
 | Record completion evidence | `sdd evidence add <path> --task ID\|--phase\|--plan --verified-by CMD --result TEXT [--working-dir PATH]` |
 | Transition a status (evidence-gated) | `sdd task complete <phase-path> --id ID` · `sdd phase complete <phase-path>` · `sdd plan complete <plan-path>` |
 | Scaffold a phase-gate review | `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` |
+| Record one review lane's observation | `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]` (or evidence on stdin) |
+| Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |
 | Ledger: add / list / search / audit | `sdd decide add --statement TEXT [--accept] …` · `sdd decide list\|search` · `sdd decide validate [<ledger>]` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment and repair the hooks | `sdd doctor [--check] [--json]` |
@@ -69,6 +71,12 @@ to report without repairing.
   complete` enforce the completion-evidence gate; setting `status: complete`
   by editing frontmatter forges a completion. If the transition refuses,
   the evidence or a child status is genuinely missing.
+- **A phase-gate review is a transition chain, not an edit.** `review
+  scaffold` starts it open and unfrozen; `review evidence set` records each
+  lane's real observation; `review resolve` verifies the gate and sets
+  `frozen: true` + `status: resolved` in one write. After resolve the
+  artifact is immutable (SPK050) — new work gets a fresh review, never an
+  edit of the frozen one.
 - **Evidence records what actually ran.** `evidence add` takes the exact
   command and its observed result — never a paraphrase of what should have
   happened. Fabricated evidence is worse than pending evidence.
