@@ -231,11 +231,27 @@ func applyWaivers(r *Root, diags []Diagnostic) []Diagnostic {
 // staleness (SDD177) depends on. Malformedness (SDD176) needs no findings at
 // all, only the waiver text.
 func waiverDiagnostics(r *Root, code string, emit func(Diagnostic)) {
-	for _, d := range applyWaivers(r, runBare(r)) {
+	for _, d := range applyWaivers(r, bareOnce(r)) {
 		if d.Code == code {
 			emit(d)
 		}
 	}
+}
+
+// bareOnce is runBare memoized per Root. Both waiver rules need the same
+// sweep, and each recomputing it made `sdd validate` evaluate every rule three
+// times over (and a lifecycle transition six times) on a root where one sweep
+// already dominates the runtime.
+//
+// Safe because a Root is immutable once loaded: LoadRoot/LoadRootRepo build it
+// and the rules only read from it. Callers that need fresh results build a new
+// Root, which is exactly what the transition verbs already do.
+func bareOnce(r *Root) []Diagnostic {
+	if !r.bareComputed {
+		r.bareDiagnostics = runBare(r)
+		r.bareComputed = true
+	}
+	return r.bareDiagnostics
 }
 
 // waiverRuleCodes are the rules implemented by waiverDiagnostics. runBare skips

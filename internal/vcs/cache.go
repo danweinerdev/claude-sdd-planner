@@ -67,6 +67,26 @@ type memoEntry struct {
 // it from tests or any long-lived process.
 func EnableMemoization() { memoEnabled = true }
 
+// InvalidateWorkingState drops cached WORKING-state answers (the index and
+// worktree), keeping immutable object state.
+//
+// It exists for the one caller that legitimately mutates the worktree
+// mid-process: a lifecycle transition writes its candidate artifact to disk
+// between the before and after validation runs, and the second run must
+// observe that write. Within a single run the index does not move, so caching
+// FileInIndex across it is safe — and worth a great deal, because the
+// append-only rules query the index once per artifact and were re-execing git
+// for every one of them.
+func InvalidateWorkingState() {
+	memoMu.Lock()
+	for k := range memoCache {
+		if strings.Contains(k, "\x00file-in-index\x00") {
+			delete(memoCache, k)
+		}
+	}
+	memoMu.Unlock()
+}
+
 // memoize wraps a detected adapter in the caching decorator. NoRepo is left
 // bare: its every operation is a constant answer already.
 func memoize(r Repo) Repo {
@@ -127,8 +147,15 @@ func (m *memoRepo) Kind() Kind                        { return m.r.Kind() }
 func (m *memoRepo) Root() string                      { return m.r.Root() }
 func (m *memoRepo) RevisionSyntaxValid(s string) bool { return m.r.RevisionSyntaxValid(s) }
 func (m *memoRepo) Clean() (bool, []string, error)    { return m.r.Clean() }
+
+// FileInIndex is working state, but it is queried once per artifact by the
+// append-only rules, so an uncached call meant one `git show :path` exec per
+// artifact per validation run. It is cached under a key the transition verbs
+// can drop via InvalidateWorkingState between their before/after runs.
 func (m *memoRepo) FileInIndex(relPath string) ([]byte, error) {
-	return m.r.FileInIndex(relPath)
+	return memoSlice(memoKey(m.prefix, "file-in-index", relPath), func() ([]byte, error) {
+		return m.r.FileInIndex(relPath)
+	})
 }
 
 // Object/ref-state operations are memoized.

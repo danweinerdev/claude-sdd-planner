@@ -10,6 +10,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/internal/rules"
 	"github.com/danweinerdev/claude-sdd-planner/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/internal/vcs"
 )
 
 // Lifecycle transition verbs (FR-21): `sdd task complete`, `sdd phase
@@ -255,6 +256,12 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		return nil, err
 	}
 	defer store.WriteAtomic(path, string(original))
+
+	// The candidate write above is the one legitimate mid-process worktree
+	// mutation, and the rules that read the index must see it rather than the
+	// answer cached during the `before` run.
+	vcs.InvalidateWorkingState()
+	defer vcs.InvalidateWorkingState()
 
 	afterDiags, err := run()
 	if err != nil {

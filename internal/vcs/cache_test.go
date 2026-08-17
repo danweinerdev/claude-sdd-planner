@@ -146,17 +146,31 @@ func TestDecoratorMemoizesObjectStateOnly(t *testing.T) {
 		for _, op := range []string{
 			"RevisionExists", "Head", "IsAncestor", "Parents", "FileAt",
 			"ChangedPaths", "RevisionsAfter", "TrackedPaths",
+			// FileInIndex is working state, but the append-only rules query it
+			// once per artifact, so an uncached call cost one git exec per
+			// artifact per run. It is cached WITHIN a run and dropped by
+			// InvalidateWorkingState, which the transition gate calls around
+			// its candidate write — see the Clean check below for the
+			// always-live case.
+			"FileInIndex",
 		} {
 			if stub.calls[op] != 1 {
 				t.Errorf("%s: %d underlying calls, want 1 (memoized)", op, stub.calls[op])
 			}
 		}
-		// Working-state queries must observe every change the process makes
-		// (the transition gate temp-writes artifacts between runs).
-		for _, op := range []string{"Clean", "FileInIndex"} {
-			if stub.calls[op] != 3 {
-				t.Errorf("%s: %d underlying calls, want 3 (uncached)", op, stub.calls[op])
-			}
+		// Clean() is never cached: it reports whole-worktree state that the
+		// transition gate's temp write changes, and no key identifies it.
+		if stub.calls["Clean"] != 3 {
+			t.Errorf("Clean: %d underlying calls, want 3 (uncached)", stub.calls["Clean"])
+		}
+		// The invalidation contract FileInIndex's caching rests on: after it,
+		// the next query hits the underlying repo again.
+		InvalidateWorkingState()
+		repo.FileInIndex("f.md")
+		if stub.calls["FileInIndex"] != 2 {
+			t.Errorf("FileInIndex after InvalidateWorkingState: %d underlying calls, want 2 — "+
+				"the transition gate depends on this to observe its candidate write",
+				stub.calls["FileInIndex"])
 		}
 	})
 }

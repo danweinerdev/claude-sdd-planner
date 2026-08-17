@@ -18,6 +18,15 @@ var specDefinitionRe = map[string]*regexp.Regexp{
 // deduplicated. Shared with the citations family (h), which needs the same
 // index without re-deriving it per document.
 func specDefinedIDs(spec *Artifact) map[string]map[string]bool {
+	// Memoized on the artifact: SDD122 asks this for every related spec, of
+	// every family, of every citing artifact, and the answer is a pure
+	// function of the spec's body. On a root with a couple of hundred
+	// artifacts the repeated full-body regex scans dominated `sdd validate`.
+	// Artifacts are immutable for the lifetime of a Root, so one scan serves
+	// every caller.
+	if spec.definedIDs != nil {
+		return spec.definedIDs
+	}
 	body := noComments(spec.Body)
 	out := map[string]map[string]bool{}
 	for _, family := range []string{"FR", "NFR", "AC"} {
@@ -27,6 +36,7 @@ func specDefinedIDs(spec *Artifact) map[string]map[string]bool {
 		}
 		out[family] = set
 	}
+	spec.definedIDs = out
 	return out
 }
 

@@ -3,6 +3,7 @@ package rules
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // mdLine pairs a body line's raw source with its "visible" rendering: HTML
@@ -247,8 +248,15 @@ type sectionInfo struct {
 // the given depth, keyed by its trimmed title, mapped to its 1-indexed source
 // line and the visible text between it and the next same-depth heading.
 func sections(a *Artifact, level int) map[string]sectionInfo {
+	// Memoized per (artifact, level): the rule sweep asks for an artifact's
+	// sections from many rules, and each call re-split the body, re-scanned
+	// every line, and — worst — recompiled the heading regex. All three are
+	// pure functions of the immutable body.
+	if cached, ok := a.sectionCache[level]; ok {
+		return cached
+	}
 	lines := markdownLines(a.Body)
-	pattern := regexp.MustCompile(`^ {0,3}` + strings.Repeat("#", level) + `\s+(.+?)\s*$`)
+	pattern := headingPattern(level)
 	type match struct {
 		index   int
 		heading string
@@ -272,5 +280,28 @@ func sections(a *Artifact, level int) map[string]sectionInfo {
 		}
 		result[m.heading] = sectionInfo{Line: line, Body: b.String(), Order: idx}
 	}
+	if a.sectionCache == nil {
+		a.sectionCache = map[int]map[string]sectionInfo{}
+	}
+	a.sectionCache[level] = result
 	return result
 }
+
+// headingPattern returns the compiled matcher for a heading depth. Compiling
+// it inside sections() meant a fresh regexp.MustCompile on every call, which
+// on a large root is thousands of compilations of a handful of patterns.
+func headingPattern(level int) *regexp.Regexp {
+	headingPatternMu.Lock()
+	defer headingPatternMu.Unlock()
+	if p, ok := headingPatterns[level]; ok {
+		return p
+	}
+	p := regexp.MustCompile(`^ {0,3}` + strings.Repeat("#", level) + `\s+(.+?)\s*$`)
+	headingPatterns[level] = p
+	return p
+}
+
+var (
+	headingPatternMu sync.Mutex
+	headingPatterns  = map[int]*regexp.Regexp{}
+)

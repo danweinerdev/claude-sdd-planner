@@ -37,6 +37,16 @@ type Root struct {
 	// Python's Validator.__init__ calling _configure_repositories
 	// immediately) so every other rule sees a populated PlanRepos.
 	ConfigDiagnostics []Diagnostic
+
+	// bareDiagnostics memoizes runBare's result for this Root. The waiver
+	// rules (SDD176/SDD177) each need the full non-waiver rule sweep to know
+	// which codes actually fire, and each was re-running it: `sdd validate`
+	// evaluated every rule THREE times, and a lifecycle transition — which
+	// validates before and after — six. The sweep is a pure function of the
+	// loaded Root, which is never mutated after loading, so one evaluation
+	// serves every caller.
+	bareDiagnostics []Diagnostic
+	bareComputed    bool
 }
 
 // Artifact mirrors the Python validator's Artifact dataclass plus the parse
@@ -63,6 +73,15 @@ type Artifact struct {
 	MetaRaw  []string // raw frontmatter lines, between the `---` delimiters
 	Body     string
 	BodyLine int // 1-indexed source line of the first body line
+
+	// definedIDs memoizes specDefinedIDs for this artifact. SDD122 queries it
+	// once per citing artifact per identifier family, so on a large root the
+	// same full-body regex scan ran hundreds of times. An Artifact is
+	// immutable once loaded, so the first scan is the only one needed.
+	definedIDs map[string]map[string]bool
+	// sectionCache memoizes sections(a, level) per heading depth, for the same
+	// reason: many rules ask for the same artifact's sections.
+	sectionCache map[int]map[string]sectionInfo
 }
 
 // Kind returns the `type:` frontmatter field, or "" when absent/non-string.
