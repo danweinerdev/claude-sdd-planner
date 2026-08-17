@@ -102,7 +102,7 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 
 	dest := o.Out
 	if dest == "" {
-		dest = defaultReviewPath(phasePath)
+		dest = defaultReviewPath(phasePath, endpoint)
 	}
 	if existing, err := store.Read(dest); err == nil && existing.Exists && !o.Force {
 		return fmt.Errorf("review scaffold: %s already exists; pass --force to replace it", dest)
@@ -215,18 +215,70 @@ func headOf(dir string) (string, error) {
 	return repo.Head()
 }
 
-// defaultReviewPath places the review beside the planning root's other
-// retrospective artifacts, named for the phase it reviews.
-func defaultReviewPath(phasePath string) string {
-	name := strings.TrimSuffix(filepath.Base(phasePath), ".md")
-	dir := filepath.Dir(phasePath)
-	for i := 0; i < 4 && dir != "." && dir != string(filepath.Separator); i++ {
-		if filepath.Base(dir) == "Plans" {
-			return filepath.Join(filepath.Dir(dir), "Retro", name+"-review.md")
-		}
-		dir = filepath.Dir(dir)
+// defaultReviewPath places the review where shared/review-artifacts.md says
+// reviews live — a reviews/ directory beside the reviewed artifact — named
+// <NN>-<target-slug>-code-review-<shortrev>.md per that file's § Naming.
+func defaultReviewPath(phasePath, endpoint string) string {
+	planDir := filepath.Dir(phasePath)
+	reviewsDir := filepath.Join(planDir, "reviews")
+	slug := kebabSlug(filepath.Base(planDir))
+	if slug == "" {
+		slug = kebabSlug(strings.TrimSuffix(filepath.Base(phasePath), ".md"))
 	}
-	return filepath.Join("Retro", name+"-review.md")
+	short := endpoint
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	return filepath.Join(reviewsDir,
+		fmt.Sprintf("%02d-%s-code-review-%s.md", nextReviewSequence(reviewsDir), slug, short))
+}
+
+// kebabSlug lowercases a name and collapses every non-alphanumeric run to a
+// single hyphen, the target-slug form review-artifacts.md § Naming specifies.
+func kebabSlug(name string) string {
+	var b strings.Builder
+	pendingHyphen := false
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			if pendingHyphen && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			pendingHyphen = false
+			b.WriteRune(r)
+		default:
+			pendingHyphen = true
+		}
+	}
+	return b.String()
+}
+
+// nextReviewSequence returns the next zero-padded sequence number within a
+// reviews/ directory: one past the highest NN- prefix already present.
+func nextReviewSequence(reviewsDir string) int {
+	max := 0
+	entries, err := os.ReadDir(reviewsDir)
+	if err != nil {
+		return 1
+	}
+	for _, e := range entries {
+		name := e.Name()
+		i := 0
+		for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+			i++
+		}
+		if i == 0 || i >= len(name) || name[i] != '-' {
+			continue
+		}
+		n := 0
+		for _, c := range name[:i] {
+			n = n*10 + int(c-'0')
+		}
+		if n > max {
+			max = n
+		}
+	}
+	return max + 1
 }
 
 type phaseReviewInput struct {

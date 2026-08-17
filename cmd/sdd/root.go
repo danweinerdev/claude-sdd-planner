@@ -349,7 +349,7 @@ func reviewCmd() *cobra.Command {
 	}
 	f := scaffold.Flags()
 	f.StringVar(&o.Frozen, "frozen", "", "the reviewed identity: <full40>..<full40>")
-	f.StringVar(&o.Out, "out", "", "output path (default: Retro/<phase>-review.md)")
+	f.StringVar(&o.Out, "out", "", "output path (default: <plan>/reviews/<NN>-<plan>-code-review-<rev>.md)")
 	f.StringVar(&o.Mode, "mode", "independent", "independent | mixed | single-agent")
 	f.BoolVar(&o.Force, "force", false, "overwrite an existing review artifact")
 	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
