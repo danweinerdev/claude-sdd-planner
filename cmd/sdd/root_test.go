@@ -199,6 +199,9 @@ func handlerFlagSets() []struct {
 		path         string
 		handlerFlags []string
 	}{
+		{"sdd schema", []string{"json"}},
+		{"sdd schema list", []string{"json"}},
+		{"sdd schema show", []string{"json"}},
 		{"sdd show", []string{"json", "type"}},
 		{"sdd list", []string{"json", "root"}},
 		{"sdd apply", []string{"dry-run", "quiet", "diff", "create", "json", "retire", "expect", "type", "supersede"}},

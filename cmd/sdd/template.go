@@ -156,6 +156,13 @@ func templateFieldValue(f schema.Field, artifactType string) string {
 		return f.Default
 	case len(f.Enum) > 0:
 		return f.Enum[0]
+	case f.Entry != nil:
+		// A block-sequence field (decisions[], phases[], tasks[], findings[])
+		// is a list, so its empty form is `[]`. Emitting `""` produced a
+		// scalar that the first `sdd decide add` could not splice into: it
+		// appended a second `decisions:` key, and the duplicate made the
+		// ledger unparseable YAML on the very first write.
+		return "[]"
 	default:
 		return `""`
 	}

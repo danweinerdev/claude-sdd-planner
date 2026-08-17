@@ -399,6 +399,16 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 	if by != "" && verb != "supersede" {
 		return fmt.Errorf("%s %s: --by only applies to supersede", kind, verb)
 	}
+	if by != "" {
+		// A successor that does not resolve is almost always a typo, and the
+		// link is the whole point of passing --by: recording a dangling path
+		// silently produces a supersession chain that goes nowhere.
+		if succ, err := store.Read(by); err != nil || !succ.Exists {
+			return fmt.Errorf("%s supersede: --by %s does not resolve to an artifact; "+
+				"pass the successor's planning-root-relative path, or omit --by and link it once the replacement exists",
+				kind, by)
+		}
+	}
 
 	art, err := store.Read(path)
 	if err != nil {
@@ -418,7 +428,14 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 		Path: relPath(path), Kind: kind, Verb: verb,
 		From: current, To: tr.to, DryRun: dryRun,
 	}
-	if current == tr.to {
+	// Already in the target state is a no-op — except when supersede is asked
+	// to record a successor the artifact does not yet carry. Superseding
+	// without --by and linking the replacement afterwards is a normal
+	// sequence (the successor often does not exist yet at supersede time);
+	// treating it as a no-op silently discarded the link and reported success.
+	linkOnly := verb == "supersede" && by != "" &&
+		strings.Trim(metaOf(doc, "superseded_by"), `"'`) != filepath.ToSlash(by)
+	if current == tr.to && !linkOnly {
 		res.OK, res.Already = true, true
 		if jsonOut {
 			return emitTransitionJSON(res)
@@ -426,7 +443,7 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 		fmt.Printf("%s %s: already %s\n", kind, verb, tr.to)
 		return nil
 	}
-	allowed := false
+	allowed := current == tr.to // linkOnly: already there, recording the successor
 	for _, f := range tr.from {
 		allowed = allowed || current == f
 	}
@@ -483,6 +500,12 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 	}
 	fmt.Printf("%s %s: %s is now %s\n", kind, verb, path, tr.to)
 	return nil
+}
+
+// metaOf returns a frontmatter scalar, or "" when absent.
+func metaOf(doc *artifact.Doc, key string) string {
+	v, _ := doc.FM(key)
+	return v
 }
 
 func quotedList(items []string) string {

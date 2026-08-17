@@ -427,10 +427,33 @@ func compileFrontmatter(s *schema.Schema, doc *artifact.Doc, opts Options, res *
 					fmt.Sprintf("add %s: to the payload frontmatter, or run `sdd migrate`", f.Key))
 				continue
 			}
+			// The payload is authoritative for author fields, so an empty value
+			// legitimately clears one — but doing it silently is how populated
+			// `tags:`/`related:` lists vanish from a revision whose author only
+			// meant to edit the body. Emptying a field that held a value is
+			// reported, not refused: the write is still what was asked for, and
+			// the note is what makes it reviewable.
+			if opts.Existing != nil && isEmptyFMValue(v) {
+				if prev, had := opts.Existing.FM(f.Key); had && !isEmptyFMValue(prev) {
+					res.Notes = append(res.Notes, fmt.Sprintf(
+						"frontmatter %s: cleared (was %s) — the payload is authoritative; restate the value to keep it",
+						f.Key, strings.TrimSpace(prev)))
+				}
+			}
 			out = append(out, artifact.FMEntry{Key: f.Key, Value: v})
 		}
 	}
 	return append(out, carried...)
+}
+
+// isEmptyFMValue reports whether a frontmatter scalar carries no information:
+// blank, an empty list/flow, or an empty quoted string.
+func isEmptyFMValue(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "", "[]", "{}", `""`, "''", "~", "null":
+		return true
+	}
+	return false
 }
 
 // upgradeFrontmatter adds each required author field the upgrade path can fill

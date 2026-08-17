@@ -414,11 +414,12 @@ func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
 	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
 		return fmt.Errorf("review evidence set: %s is not a review artifact", path)
 	}
+	// Frozen is the immutability marker, not status: a review that reached
+	// `resolved` without freezing (interrupted resolve, hand edit) is still
+	// repairable, and refusing here would strand it — `review resolve` could
+	// then never be satisfied because its evidence could never be filled.
 	if isFrozenSource(art.Source) {
 		return fmt.Errorf("review evidence set: %s is frozen (resolved); frozen reviews are immutable — scaffold a fresh review for new work", path)
-	}
-	if status, _ := doc.FM("status"); strings.Trim(status, `"'`) == "resolved" {
-		return fmt.Errorf("review evidence set: %s is already resolved", path)
 	}
 
 	evidence := strings.TrimSpace(o.Evidence)
@@ -571,7 +572,12 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 		fmt.Printf("review resolve: already resolved and frozen\n")
 		return nil
 	}
-	if status != "open" {
+	// `resolved` but not frozen is an inconsistent half-state — the artifact
+	// claims to be closed while the freeze that makes it immutable never
+	// landed (an interrupted resolve, or a hand edit). Re-running the gate
+	// completes it rather than refusing: refusing would strand the review in
+	// exactly the un-closable state this verb exists to prevent.
+	if status != "open" && status != "resolved" {
 		return fmt.Errorf("review resolve: %s has status %q; resolve moves an open review to resolved", path, status)
 	}
 

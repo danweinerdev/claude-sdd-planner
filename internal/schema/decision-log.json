@@ -42,7 +42,8 @@
     {
       "key": "related",
       "ownership": "author",
-      "required": false
+      "required": false,
+      "default": "[]"
     },
     {
       "key": "decisions",

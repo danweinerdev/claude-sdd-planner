@@ -190,8 +190,21 @@ func cmdDecideAdd(o decideAddOpts) error {
 			fmt.Fprintln(os.Stderr, "pass --supersedes D-NNNN to resolve one of them, or rephrase --statement to avoid the overlap")
 			return &refusedError{n: len(candidates)}
 		}
-	} else if _, ok := findEntry(entries, o.Supersedes); !ok {
+	} else if target, ok := findEntry(entries, o.Supersedes); !ok {
 		return fmt.Errorf("decide add: --supersedes %s does not name an existing entry", o.Supersedes)
+	} else if target.Status == "superseded" {
+		// Superseding an already-superseded entry forks the chain: the target
+		// gains a second `superseded_by`, which is duplicate-key YAML and made
+		// the ledger unparseable for every later `decide add`. Supersession is
+		// one-step by design (shared/decision-log.md) — point at the live
+		// successor instead.
+		successor := target.SupersededBy
+		if successor == "" {
+			successor = "its recorded successor"
+		}
+		return fmt.Errorf("decide add: --supersedes %s is already superseded by %s; "+
+			"supersession is one-step — supersede the live entry (%s) instead",
+			o.Supersedes, successor, successor)
 	}
 
 	s, err := schema.Load("decision-log")
@@ -408,6 +421,19 @@ func flowList(items []string) string {
 	return "[" + strings.Join(items, ", ") + "]"
 }
 
+// emptyListLine returns the index of a top-level `key: []` line (the empty
+// form of a block sequence), or -1. A ledger that has never had an entry
+// declares its list this way, and it must be converted into a block header
+// rather than duplicated.
+func emptyListLine(fm []string, key string) int {
+	for i, l := range fm {
+		if strings.TrimRight(l, " \t\r") == key+": []" {
+			return i
+		}
+	}
+	return -1
+}
+
 // applyLedgerEdits restamps `updated` to today, inserts the new entry's lines
 // at the end of the decisions[] block, and — when supersedes names an
 // existing entry — flips that entry's status and appends its superseded_by
@@ -424,9 +450,19 @@ func applyLedgerEdits(doc *artifact.Doc, today string, newLines []string, supers
 
 	start, end, found := fmBlockBounds(fm, "decisions")
 	if !found {
-		// No decisions[] yet: append the key and the block at the end.
-		fm = append(fm, "decisions:")
-		fm = append(fm, newLines...)
+		// An empty ledger declares `decisions: []` (the list's empty form,
+		// what the template and schema emit). fmBlockBounds only recognizes a
+		// bare `decisions:` header, so appending here added a SECOND
+		// `decisions:` key and the duplicate made the ledger unparseable YAML
+		// on the very first `decide add`. Convert the placeholder in place.
+		if i := emptyListLine(fm, "decisions"); i >= 0 {
+			fm[i] = "decisions:"
+			fm = insertAt(fm, i+1, newLines)
+		} else {
+			// No decisions[] at all: append the key and the block at the end.
+			fm = append(fm, "decisions:")
+			fm = append(fm, newLines...)
+		}
 	} else if supersedes == "" {
 		fm = insertAt(fm, end, newLines)
 	} else {

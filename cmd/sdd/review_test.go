@@ -264,6 +264,42 @@ func TestReviewResolveLifecycle(t *testing.T) {
 	}
 }
 
+// `status: resolved` with `frozen: false` is an inconsistent half-state — an
+// interrupted resolve or a hand edit. Both verbs must still work on it: the
+// freeze is what makes a review immutable, not the status. Refusing on status
+// alone stranded the artifact in exactly the un-closable state the resolve
+// verb exists to prevent.
+func TestReviewHalfResolvedStateIsRecoverable(t *testing.T) {
+	_, review := scaffoldedReview(t)
+
+	src := readFile(t, review)
+	if err := os.WriteFile(review,
+		[]byte(strings.Replace(src, "\nstatus: open\n", "\nstatus: resolved\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Evidence must still be recordable — otherwise resolve can never be met.
+	for _, lane := range reviewLaneIDs() {
+		if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+			Lane:     lane,
+			Evidence: "Inspected cmd/sdd/review.go and internal/rules/phasereview.go; the half-state is repairable",
+		}); err != nil {
+			t.Fatalf("evidence set %s on a half-resolved review: %v", lane, err)
+		}
+	}
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("resolve must complete a half-resolved review: %v", err)
+	}
+	if src := readFile(t, review); !strings.Contains(src, "\nfrozen: true\n") {
+		t.Fatalf("recovery must land the freeze; got:\n%s", src)
+	}
+	// Freezing still closes the door.
+	if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "review_quality", Evidence: "Re-inspected after the freeze and found drift"}); err == nil {
+		t.Fatal("evidence set must refuse once the review is frozen")
+	}
+}
+
 // --force replaces an abandoned open scaffold, but a frozen (resolved) review
 // is FR-46 history and must survive even --force.
 func TestReviewScaffoldForceCannotReplaceFrozenReview(t *testing.T) {

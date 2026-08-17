@@ -70,7 +70,36 @@ compilation, digest tracking, and the refusal gates the workflow depends on.`,
 	for _, level := range []string{"task", "phase", "plan"} {
 		root.AddCommand(transitionCmd(level))
 	}
+	refuseUnknownSubcommands(root)
 	return root
+}
+
+// refuseUnknownSubcommands makes every command group error on an unrecognized
+// verb instead of printing help and exiting 0.
+//
+// Cobra's default for a group with no RunE is to show help successfully, so
+// `sdd spec bogus path.md` — a typo'd verb — looked like a no-op success and
+// scripted callers saw exit 0 with the artifact untouched. A group invoked
+// bare still prints help (that is a real request for it); a group given
+// arguments it cannot dispatch now names the bad verb and exits non-zero.
+func refuseUnknownSubcommands(root *cobra.Command) {
+	var walk func(*cobra.Command)
+	walk = func(c *cobra.Command) {
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+		if !c.HasSubCommands() || c.RunE != nil || c.Run != nil {
+			return
+		}
+		c.RunE = func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return fmt.Errorf("%s: unknown subcommand %q\n\n%s",
+				cmd.CommandPath(), args[0], cmd.UsageString())
+		}
+	}
+	walk(root)
 }
 
 func versionCmd() *cobra.Command {
@@ -85,6 +114,7 @@ func versionCmd() *cobra.Command {
 }
 
 func schemaCmd() *cobra.Command {
+	var schemaJSON, listJSON, showJSON bool
 	c := &cobra.Command{
 		Use:   "schema",
 		Short: "Inspect the embedded artifact schemas",
@@ -97,25 +127,29 @@ func schemaCmd() *cobra.Command {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return cmdSchema("show", args[0])
+			return cmdSchema("show", args[0], schemaJSON)
 		},
 	}
-	c.AddCommand(
-		&cobra.Command{
-			Use:   "list",
-			Short: "List every artifact type and its section counts",
-			Args:  cobra.NoArgs,
-			RunE:  func(_ *cobra.Command, _ []string) error { return cmdSchema("list", "") },
+	c.Flags().BoolVar(&schemaJSON, "json", false, "emit the schema as JSON")
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List every artifact type and its section counts",
+		Args:  cobra.NoArgs,
+		RunE:  func(_ *cobra.Command, _ []string) error { return cmdSchema("list", "", listJSON) },
+	}
+	list.Flags().BoolVar(&listJSON, "json", false, "emit the type list as JSON")
+
+	show := &cobra.Command{
+		Use:   "show <type>",
+		Short: "Show one type's frontmatter fields and required sections",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return cmdSchema("show", args[0], showJSON)
 		},
-		&cobra.Command{
-			Use:   "show <type>",
-			Short: "Show one type's frontmatter fields and required sections",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(_ *cobra.Command, args []string) error {
-				return cmdSchema("show", args[0])
-			},
-		},
-	)
+	}
+	show.Flags().BoolVar(&showJSON, "json", false, "emit the schema as JSON")
+
+	c.AddCommand(list, show)
 	return c
 }
 
@@ -549,8 +583,16 @@ func docCmd(kind string) *cobra.Command {
 			Use:   fmt.Sprintf("%s <%s-path>", verb.name, kind),
 			Short: verb.short,
 			Args:  cobra.ExactArgs(1),
-			RunE: func(_ *cobra.Command, args []string) error {
-				return docLifecycle(kind, verb.name, args[0], by, dry, js)
+			RunE: func(c *cobra.Command, args []string) error {
+				// An explicitly empty --by is a mistake, not "no successor":
+				// it silently produced `superseded_by: ""`, indistinguishable
+				// from an intentional unlinked supersession. Omit the flag for
+				// that.
+				if c.Flags().Changed("by") && strings.TrimSpace(by) == "" {
+					return fmt.Errorf("%s supersede: --by was given an empty value; "+
+						"omit the flag entirely to supersede without linking a successor", kind)
+				}
+				return docLifecycle(kind, verb.name, args[0], strings.TrimSpace(by), dry, js)
 			},
 		}
 		if verb.name == "supersede" {

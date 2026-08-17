@@ -137,6 +137,98 @@ func TestDecideAdd_AdvancesUpdated(t *testing.T) {
 	}
 }
 
+// A fresh ledger declares `decisions: []` — the list's empty form, which is
+// what the template and schema emit. The splice logic recognized only a bare
+// `decisions:` block header, so the first add appended a SECOND `decisions:`
+// key and the duplicate made the ledger unparseable YAML from then on.
+func TestDecideAdd_EmptyListLedgerAcceptsFirstEntry(t *testing.T) {
+	root := chdirTemp(t)
+	writeArtifact(t, root, "Decisions", "decisions.md", `---
+title: "Decision Ledger"
+type: decision-log
+status: active
+created: 2026-07-01
+updated: 2026-07-01
+tags: [decisions]
+related: []
+decisions: []
+---
+
+# Decision Ledger
+
+Machine-readable record of decided truths.
+`)
+
+	if err := cmdDecideAdd(decideAddOpts{
+		Statement: "Widget storage uses the alpha approach for durability",
+		Rationale: "Because.", Accept: true,
+	}); err != nil {
+		t.Fatalf("first add on an empty-list ledger: %v", err)
+	}
+
+	path, _ := ledgerPath()
+	b, _ := os.ReadFile(path)
+	if n := strings.Count(string(b), "\ndecisions:"); n != 1 {
+		t.Fatalf("ledger must carry exactly one `decisions:` key, found %d:\n%s", n, b)
+	}
+	if !strings.Contains(string(b), "id: D-0001") {
+		t.Fatalf("the entry was not written:\n%s", b)
+	}
+}
+
+// Supersession is one-step: superseding an already-superseded entry forked the
+// chain and stamped a second `superseded_by` onto the target — duplicate-key
+// YAML that made every later add fail.
+func TestDecideAdd_RefusesSupersedingASupersededEntry(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, `  - id: D-0001
+    kind: decision
+    status: superseded
+    date: 2026-07-01
+    decided_by: user
+    statement: "Widget storage uses the alpha approach for durability."
+    rejected: []
+    rationale: "Because."
+    scope: []
+    tags: []
+    reversibility: two-way
+    superseded_by: D-0002
+  - id: D-0002
+    kind: decision
+    status: accepted
+    date: 2026-07-02
+    decided_by: user
+    statement: "Widget storage uses the beta approach for durability instead."
+    rejected: []
+    rationale: "Better."
+    scope: []
+    tags: []
+    reversibility: two-way
+    supersedes: D-0001`)
+
+	err := cmdDecideAdd(decideAddOpts{
+		Statement:  "Widget storage moves to the gamma approach for durability outright",
+		Rationale:  "Newer.",
+		Supersedes: "D-0001",
+		Accept:     true,
+	})
+	if err == nil {
+		t.Fatal("superseding an already-superseded entry must be refused")
+	}
+	if !strings.Contains(err.Error(), "D-0002") {
+		t.Errorf("the refusal must name the live successor; got %v", err)
+	}
+
+	path, _ := ledgerPath()
+	b, _ := os.ReadFile(path)
+	if n := strings.Count(string(b), "superseded_by:"); n != 1 {
+		t.Fatalf("a refused add must not stamp a second superseded_by (found %d):\n%s", n, b)
+	}
+	if strings.Contains(string(b), "D-0003") {
+		t.Errorf("a refused add must not have written anything: %s", b)
+	}
+}
+
 // TestDecideAdd_CollisionRefusesWithoutSupersedes: a statement that
 // substantially overlaps an accepted entry's statement must refuse, exit
 // non-nil, and never silently proceed (D-0003).

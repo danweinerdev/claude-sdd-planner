@@ -59,12 +59,14 @@
     {
       "key": "findings",
       "ownership": "author",
-      "required": false
+      "required": false,
+      "default": "[]"
     },
     {
       "key": "followups",
       "ownership": "author",
-      "required": false
+      "required": false,
+      "default": "[]"
     },
     {
       "key": "review_scope",
@@ -94,7 +96,8 @@
     {
       "key": "lane_results",
       "ownership": "author",
-      "required": false
+      "required": false,
+      "default": "[]"
     },
     {
       "key": "superseded_by",
@@ -105,7 +108,8 @@
       "key": "waivers",
       "ownership": "author",
       "required": false,
-      "doc": "Accepted exceptions: entries of {code, reason, accepted}. A listed finding is still reported, as WAIVED with its reason, but stops making the root invalid. Waiving a parse-stage code is refused, an unexplained waiver is refused (SDD176), and a waiver matching nothing is reported as stale (SDD177)."
+      "doc": "Accepted exceptions: entries of {code, reason, accepted}. A listed finding is still reported, as WAIVED with its reason, but stops making the root invalid. Waiving a parse-stage code is refused, an unexplained waiver is refused (SDD176), and a waiver matching nothing is reported as stale (SDD177).",
+      "default": "[]"
     }
   ],
   "headings": [
