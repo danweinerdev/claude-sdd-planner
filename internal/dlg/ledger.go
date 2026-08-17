@@ -30,7 +30,26 @@ const (
 	Error       Severity = "error"
 	Operational Severity = "operational"
 	Candidate   Severity = "candidate"
+	// Warning is a real defect that does not invalidate the ledger — the
+	// compiler model: an error stops the build, a warning is reported and
+	// compilation continues. It exists for conditions that are genuinely
+	// wrong but cannot threaten correctness, and — critically — for ones a
+	// legacy ledger may be unable to repair at all, because append-only
+	// history forbids the renumbering their "fix" would require.
+	Warning Severity = "warning"
+	// Waived is a finding a human explicitly excepted in the ledger's
+	// frontmatter. Reported like any other, never invalidating. Distinct from
+	// a dropped diagnostic so "nothing found" and "found and excused" can
+	// never look the same.
+	Waived Severity = "waived"
 )
+
+// Invalidating reports whether a severity makes the ledger invalid. Only
+// errors and operational failures do; warnings, candidates, and waived
+// findings are reported and moved past.
+func (s Severity) Invalidating() bool {
+	return s == Error || s == Operational
+}
 
 // Diagnostic is one finding, shaped to match the Python dataclass so the
 // differential oracle can compare them field for field.

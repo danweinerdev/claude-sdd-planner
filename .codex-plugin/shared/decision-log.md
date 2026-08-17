@@ -78,6 +78,41 @@ below. Exit `1` means error diagnostics are authoritative structural findings,
 and exit `2` means the validator could not run. A dependency or operational
 failure is a stop, not permission to substitute model parsing.
 
+Severities follow the compiler model: `error` and `operational` invalidate;
+`warning`, `candidate`, and `waived` are reported and do not gate. A run that
+reports only non-blocking findings still says `Valid`, with their count — "no
+findings" and "findings, none blocking" are different states and must not be
+collapsed.
+
+### Accepted exceptions (`waivers`)
+
+A ledger may carry conditions it is *forbidden* to repair: append-only rules
+refuse renumbering and reordering, so an id gap (`DLG064`) or out-of-order
+entries (`DLG065`) inherited from before sequencing was enforced have no fix.
+Those two are warnings for that reason, and a `waivers:` entry records that
+the condition was seen, judged, and accepted:
+
+```yaml
+waivers:
+  - code: DLG064
+    reason: "ids D-0051..D-0055 predate this ledger's sequencing; renumbering would rewrite accepted history"
+    accepted: 2026-08-17
+```
+
+Rules, all deliberate:
+
+- **Only `DLG064` and `DLG065` are waivable.** Every other code describes a
+  ledger that cannot be read or trusted — duplicate ids, broken supersession,
+  parse failures. Hiding those is not the same as accepting history.
+- **A waiver states a reason.** An unexplained or placeholder one is an error
+  (`DLG078`): an exception nobody can evaluate is exactly what the mechanism
+  exists to prevent.
+- **A waived finding is still reported**, as `waived`, carrying its reason.
+- **A stale waiver is reported** (`DLG079`) once its condition is gone, so a
+  silenced check cannot quietly become permanent.
+- **Adding a waiver is a ledger write.** It needs the user's explicit approval
+  of the exact text, exactly like a decision entry.
+
 `--no-history` disables only the Git-backed immutability comparison and is for
 unversioned fixtures or an explicitly historical/non-worktree inspection. Do
 not use it during a normal ledger write.

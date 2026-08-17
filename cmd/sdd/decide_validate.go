@@ -54,32 +54,57 @@ func cmdDecideValidate(ledgerArg string, o decideValidateOpts) error {
 		}
 		fmt.Println(string(out))
 	} else {
+		blocking := 0
 		for _, d := range diagnostics {
 			fmt.Printf("%s %s %s:%d: %s\n",
 				severityLabel(d.Severity), d.Code, d.Path, d.Line, d.Message)
 			fmt.Printf("  fix: %s\n", d.Correction)
+			if d.Severity.Invalidating() {
+				blocking++
+			}
 		}
-		if len(diagnostics) == 0 {
+		switch {
+		case len(diagnostics) == 0:
 			fmt.Printf("Valid: %s\n", path)
+		case blocking == 0:
+			// The compiler distinction: warnings and waived findings are
+			// reported, the ledger is still valid, and the exit status says
+			// so. Saying "Valid" only when nothing was reported at all would
+			// make a warning indistinguishable from a failure.
+			fmt.Printf("Valid: %s (%d non-blocking finding(s))\n", path, len(diagnostics))
 		}
 	}
 
-	// Candidate and operational findings are advisory: a candidate is a signal
-	// for a human to judge, and an operational one reports that a check could
-	// not run rather than that the ledger is wrong. Neither makes the ledger
-	// invalid, so neither sets a failing exit status.
+	// Only errors and operational failures invalidate. A candidate is a signal
+	// for a human to judge, a warning is a real defect that cannot threaten
+	// correctness (and may be unrepairable inherited history), and a waived
+	// finding is one a human explicitly excepted. None sets a failing status.
 	for _, d := range diagnostics {
-		if d.Severity == dlg.Error {
-			return &refusedError{n: len(diagnostics)}
+		if d.Severity.Invalidating() {
+			return &refusedError{n: countInvalidating(diagnostics)}
 		}
 	}
 	return nil
+}
+
+func countInvalidating(diags []dlg.Diagnostic) int {
+	n := 0
+	for _, d := range diags {
+		if d.Severity.Invalidating() {
+			n++
+		}
+	}
+	return n
 }
 
 func severityLabel(s dlg.Severity) string {
 	switch s {
 	case dlg.Error:
 		return "ERROR"
+	case dlg.Warning:
+		return "WARNING"
+	case dlg.Waived:
+		return "WAIVED"
 	case dlg.Candidate:
 		return "CANDIDATE"
 	default:

@@ -54,6 +54,11 @@ func Validate(primary string, history bool) []Diagnostic {
 		out = append(out, ValidateHistory(primary, ledgers, entriesByLedger)...)
 	}
 
+	// Waivers apply last, over the complete finding set, so no rule can forget
+	// to honor an exception and the set of waivable codes is decided in one
+	// place — the same arrangement the artifact validator uses.
+	out = applyWaivers(ledgers, out)
+
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Path != out[j].Path {
 			return out[i].Path < out[j].Path

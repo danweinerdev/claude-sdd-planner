@@ -6,6 +6,11 @@ created: {{DATE}}
 updated: {{DATE}}
 tags: [decisions]
 related: []
+# Accepted exceptions. Only DLG064/DLG065 (id-sequence gaps and ordering
+# inherited from before sequencing was enforced) may be waived, each with a
+# reason stating why — see shared/decision-log.md § Accepted exceptions.
+# Adding one is a ledger write: it needs the user's explicit approval.
+waivers: []
 decisions: []
 ---
 

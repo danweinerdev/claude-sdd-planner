@@ -46,6 +46,13 @@
       "default": "[]"
     },
     {
+      "key": "waivers",
+      "ownership": "author",
+      "required": false,
+      "default": "[]",
+      "doc": "Accepted exceptions: entries of {code, reason, accepted}. Only DLG064/DLG065 (id-sequence gaps and ordering inherited from before sequencing was enforced) may be waived — append-only rules forbid the renumbering their fix would require. A waived finding is still reported, as WAIVED with its reason. An unexplained waiver is refused (DLG078); one matching nothing is reported as stale (DLG079)."
+    },
+    {
       "key": "decisions",
       "ownership": "author",
       "required": false,

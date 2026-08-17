@@ -253,3 +253,11 @@ day-to-day signal.
 Waivers are excluded from lifecycle normalization, so declaring one does not
 invalidate the phase review that surfaced the finding. Every other byte is
 still compared — a scope edit made in the same commit is still caught.
+
+**The decision ledger has the same mechanism, narrowly scoped.** A ledger's
+`waivers:` may excuse only `DLG064`/`DLG065` — the id-sequence and ordering
+conditions that append-only history can forbid repairing — under the same
+reason requirement (`DLG078` for an unexplained one, `DLG079` for a stale
+one). `shared/decision-log.md` § Accepted exceptions is its source of truth.
+Ledger severities follow the same compiler model as artifact ones: only
+`error` and `operational` gate; `warning`, `candidate`, and `waived` report.

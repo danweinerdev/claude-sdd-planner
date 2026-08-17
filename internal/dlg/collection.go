@@ -68,8 +68,9 @@ func ValidateCollection(ledgers []*Ledger, entriesByLedger map[string][]map[stri
 			}
 			out = append(out, diag(indexed[lowest].Ledger, "DLG064",
 				fmt.Sprintf("Decision id sequence jumps from `D-%04d` to `D-%04d`.", prev, n),
-				"Restore retained entries or renumber an uncommitted later entry to the next sequential id.",
-				1, "", Error))
+				"Restore retained entries, renumber an uncommitted later entry to the next sequential id, "+
+					"or waive DLG064 if the gap predates this ledger's sequencing.",
+				1, "", Warning))
 			break
 		}
 		prev = n
@@ -85,7 +86,9 @@ func ValidateCollection(ledgers []*Ledger, entriesByLedger map[string][]map[stri
 		}
 		if !ascending(ordered) {
 			out = append(out, diag(l, "DLG065", "Decision entries are not in ascending id order.",
-				"Keep append-only entries ordered by their sequential ids.", l.Line("decisions:"), "", Error))
+				"Keep append-only entries ordered by their sequential ids, or waive DLG065 if the "+
+					"disorder is inherited history that append-only rules forbid rewriting.",
+				l.Line("decisions:"), "", Warning))
 		}
 	}
 

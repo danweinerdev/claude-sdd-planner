@@ -35,6 +35,14 @@ to report without repairing.
   findings · `2` malformed invocation or the operation could not run. Exit
   `1` means the gate is doing its job — fix the input or complete the
   missing prerequisite; never work around it by editing the file directly.
+- **Severities follow the compiler model.** Only `error` (and `operational`,
+  meaning a check could not run) makes a root or ledger invalid and sets a
+  failing exit status. `warning` is a real defect that cannot threaten
+  correctness — including one inherited history forbids repairing;
+  `candidate` is a signal for a human to judge; `waived` is a finding
+  someone explicitly excepted. All three are reported and none gates. A
+  clean run with non-blocking findings still says `Valid`, with the count —
+  treat "no findings" and "findings, none blocking" as different states.
 - **Machine reads**: prefer `--json` over parsing rendered markdown.
 - **Preview before mutate**: `--dry-run` and `--diff` are available on the
   writing commands; use them when the change is non-obvious.
@@ -87,6 +95,16 @@ to report without repairing.
 - **The ledger is append-through-the-tool.** `decide add` runs the collision
   check; a collision with an accepted entry stops for the user. Never
   append to `decisions.md` by hand and never auto-resolve a collision.
+- **Silence a check only with a reasoned waiver, never by editing around it.**
+  A `waivers:` entry (`code` + `reason`) marks a finding as accepted; it is
+  still reported, as `waived`, with the reason attached. Ledger waivers cover
+  only `DLG064`/`DLG065`, the sequencing conditions append-only history can
+  forbid repairing — everything else describes a ledger that cannot be
+  trusted, and hiding that is not the same as accepting it. An unexplained
+  waiver is an error (`DLG078`); one that matches nothing is reported stale
+  (`DLG079`), because an exception outliving its cause disables a check
+  silently. **Adding a waiver to the ledger is a ledger write: it needs the
+  user's explicit approval of the exact text, like any other entry.**
 - **Read-only contexts stay read-only.** Review and research agents may run
   `validate`, `show`, `list`, `next`, `schema`, `decide list|search|validate`,
   `version`, and `doctor` — never `apply`, `section set`, `evidence add`,
