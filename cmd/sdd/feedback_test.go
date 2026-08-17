@@ -17,6 +17,30 @@ import (
 // digests sharing a 12-character prefix rendered as
 // "expected 2900a4afce7b, found 2900a4afce7b" — a mismatch error whose own
 // evidence claimed the values were equal.
+// The --expect guard must accept the digest the tool itself hands out:
+// `sdd show`'s text mode prints a 12-character prefix, so a caller passing
+// that prefix back was refused with "expected 77dcab6d082a, found
+// 77dcab6d082a" — a stale-read error whose own evidence claims equality.
+func TestDigestMatchesAcceptsPrintedPrefix(t *testing.T) {
+	full := "77dcab6d082a00112233445566778899aabbccddeeff00112233445566778899"
+	cases := []struct {
+		expect string
+		want   bool
+	}{
+		{full, true},            // full digest
+		{full[:12], true},       // exactly what text mode prints
+		{full[:16], true},       // any longer prefix
+		{full[:8], false},       // too short to be unambiguous
+		{"77dcab6d082b", false}, // 12 chars but not a prefix
+		{"", false},             // empty never matches (callers gate on it anyway)
+	}
+	for _, tc := range cases {
+		if got := digestMatches(tc.expect, full); got != tc.want {
+			t.Errorf("digestMatches(%q) = %v, want %v", tc.expect, got, tc.want)
+		}
+	}
+}
+
 func TestDistinguishingDigestsExposeTheDifference(t *testing.T) {
 	cases := []struct{ a, b string }{
 		{"2900a4afce7b0000000000000000000000000000000000000000000000000000",

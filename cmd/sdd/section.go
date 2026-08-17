@@ -48,7 +48,7 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 	if !art.Exists {
 		return fmt.Errorf("section set: %s does not exist", target)
 	}
-	if o.Expect != "" && o.Expect != art.Digest {
+	if o.Expect != "" && !digestMatches(o.Expect, art.Digest) {
 		return &staleError{path: target, want: o.Expect, got: art.Digest}
 	}
 

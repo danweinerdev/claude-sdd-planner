@@ -32,6 +32,8 @@ sdd plan activate <plan-path>
 sdd task complete <phase-path> --id ID
 sdd phase complete <phase-path>
 sdd plan complete <plan-path>
+sdd spec submit|approve|implement|supersede <spec-path> [--by PATH]
+sdd design submit|approve|implement|supersede <design-path> [--by PATH]
 
 Each verb refuses unless the gate its schema declares is met, evaluated by the
 same rules sdd validate runs. Pass --dry-run to see the verdict without
@@ -359,6 +361,156 @@ func planLifecycle(verb, path string, dryRun, jsonOut bool) error {
 	}
 	fmt.Printf("plan %s: %s is now %s\n", verb, path, want)
 	return nil
+}
+
+// docTransitions is the spec/design lifecycle verb table. Every entry names
+// the statuses a verb may leave, so skipping a state (draft straight to
+// approved) is refused for the same reason plan activate refuses it: an
+// artifact that skips a state leaves no record it was ever in it. Supersede
+// is the exception — historical documents get replaced from any live state.
+var docTransitions = map[string]struct {
+	from []string
+	to   string
+}{
+	"submit":    {[]string{"draft"}, "review"},
+	"approve":   {[]string{"review"}, "approved"},
+	"implement": {[]string{"approved"}, "implemented"},
+	"supersede": {[]string{"draft", "review", "approved", "implemented"}, "superseded"},
+}
+
+// docLifecycle implements `sdd spec|design submit|approve|implement|supersede`.
+//
+// These close the gap that made spec/design statuses unreachable: `status` is
+// tool-owned (FR-18) so `apply` refuses it in payloads, but no verb existed to
+// move it — the specify/design skills' "set status: review/approved" had no
+// supported write path at all. Every verb validates the would-be result and
+// refuses on diagnostics the transition itself would introduce, which is what
+// gives `approve` its teeth: SDD153 rejects an approved artifact with a
+// blocking or unexplained open question.
+//
+// `supersede` optionally records the replacing artifact via --by; because the
+// gate only counts *introduced* diagnostics, a legacy document can be
+// superseded as-is without first migrating it into schema shape.
+func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
+	tr, ok := docTransitions[verb]
+	if !ok {
+		return fmt.Errorf("%s %s: unknown verb", kind, verb)
+	}
+	if by != "" && verb != "supersede" {
+		return fmt.Errorf("%s %s: --by only applies to supersede", kind, verb)
+	}
+
+	art, err := store.Read(path)
+	if err != nil {
+		return fmt.Errorf("%s %s: %w", kind, verb, err)
+	}
+	if !art.Exists {
+		return fmt.Errorf("%s %s: %s does not exist", kind, verb, path)
+	}
+	doc := artifact.Parse(art.Source)
+	if typ, _ := doc.FM("type"); strings.Trim(typ, `"'`) != kind {
+		return fmt.Errorf("%s %s: %s is not a %s artifact", kind, verb, path, kind)
+	}
+	current, _ := doc.FM("status")
+	current = strings.Trim(current, `"'`)
+
+	res := transitionResult{
+		Path: relPath(path), Kind: kind, Verb: verb,
+		From: current, To: tr.to, DryRun: dryRun,
+	}
+	if current == tr.to {
+		res.OK, res.Already = true, true
+		if jsonOut {
+			return emitTransitionJSON(res)
+		}
+		fmt.Printf("%s %s: already %s\n", kind, verb, tr.to)
+		return nil
+	}
+	allowed := false
+	for _, f := range tr.from {
+		allowed = allowed || current == f
+	}
+	if !allowed {
+		return fmt.Errorf("%s %s: artifact is %q; %s moves a %s from %s to %q. "+
+			"An artifact that skips a state leaves no record it was ever in it",
+			kind, verb, current, verb, kind, quotedList(tr.from), tr.to)
+	}
+
+	today := time.Now().Format("2006-01-02")
+	lines := strings.Split(art.Source, "\n")
+	if !setTopLevelStatus(lines, tr.to) {
+		return fmt.Errorf("%s %s: no top-level `status:` field to advance", kind, verb)
+	}
+	if verb == "supersede" && by != "" {
+		lines = upsertTopLevelScalar(lines, "superseded_by", fmt.Sprintf("%q", filepath.ToSlash(by)))
+	}
+	updated := restampUpdated(strings.Join(lines, "\n"), today)
+
+	blocking, err := gateDiagnostics(path, updated)
+	if err != nil {
+		return fmt.Errorf("%s %s: %w", kind, verb, err)
+	}
+	var pending []rules.Diagnostic
+	blocking, pending = splitCommitPending(blocking)
+	res.Blocking, res.Pending = toGateFindings(blocking), toGateFindings(pending)
+	if len(blocking) > 0 {
+		if jsonOut {
+			return emitTransitionJSON(res)
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s %s: refused — the transition introduces findings:\n", kind, verb)
+		for _, d := range blocking {
+			fmt.Fprintf(&b, "  %s %s:%d: %s\n", d.Code, d.Path, d.Line, d.Message)
+			fmt.Fprintf(&b, "      fix: %s\n", d.Correction)
+		}
+		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+	}
+	res.OK = true
+
+	if dryRun {
+		if jsonOut {
+			return emitTransitionJSON(res)
+		}
+		fmt.Printf("%s %s: would move %s from %s to %s\n", kind, verb, path, current, tr.to)
+		return nil
+	}
+	if err := store.WriteAtomic(path, updated); err != nil {
+		return fmt.Errorf("%s %s: %w", kind, verb, err)
+	}
+	res.Wrote = true
+	if jsonOut {
+		return emitTransitionJSON(res)
+	}
+	fmt.Printf("%s %s: %s is now %s\n", kind, verb, path, tr.to)
+	return nil
+}
+
+func quotedList(items []string) string {
+	quoted := make([]string, 0, len(items))
+	for _, s := range items {
+		quoted = append(quoted, fmt.Sprintf("%q", s))
+	}
+	return strings.Join(quoted, "|")
+}
+
+// upsertTopLevelScalar rewrites a top-level frontmatter scalar, or inserts it
+// after the `status:` line when absent — the caller has just set status, so
+// the anchor is guaranteed to exist.
+func upsertTopLevelScalar(lines []string, key, value string) []string {
+	if setTopLevelScalar(lines, key, value) {
+		return lines
+	}
+	for i, l := range lines {
+		if i > 0 && strings.TrimSpace(l) == "---" {
+			break
+		}
+		if strings.HasPrefix(l, "status:") {
+			out := append([]string{}, lines[:i+1]...)
+			out = append(out, key+": "+value)
+			return append(out, lines[i+1:]...)
+		}
+	}
+	return lines
 }
 
 // transitionResult is the machine-readable outcome of a lifecycle transition

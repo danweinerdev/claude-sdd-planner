@@ -20,6 +20,7 @@ type applyOpts struct {
 	Diff      bool
 	Create    bool
 	Supersede bool
+	Quiet     bool
 	JSON      bool
 	Retire    string
 	Expect    string
@@ -64,7 +65,7 @@ func cmdApply(target string, o applyOpts) error {
 	// FR-48: isolation, not just atomicity. A caller that read the artifact in an
 	// earlier turn passes the digest it saw; if another writer has landed since,
 	// the write is refused rather than silently discarding their work.
-	if o.Expect != "" && o.Expect != art.Digest {
+	if o.Expect != "" && !digestMatches(o.Expect, art.Digest) {
 		got := art.Digest
 		if !art.Exists {
 			got = "<absent>"
@@ -110,7 +111,15 @@ func cmdApply(target string, o applyOpts) error {
 	}
 	if o.DryRun {
 		if !unchanged && !o.Diff {
-			fmt.Print(res.Output)
+			// Dumping the whole would-be document scrolled the verdict and
+			// report off screen for long artifacts; --quiet keeps the dry run
+			// to its answer (the report above plus this one line).
+			if o.Quiet {
+				fmt.Printf("dry-run: would write %s (%d lines); use --diff or drop --quiet to see the content\n",
+					rel, strings.Count(res.Output, "\n"))
+			} else {
+				fmt.Print(res.Output)
+			}
 		}
 		return nil
 	}
@@ -129,6 +138,19 @@ func cmdApply(target string, o applyOpts) error {
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(res.Output)[:12])
 	return nil
+}
+
+// digestMatches accepts the full digest or any prefix of at least 12 hex
+// characters — the length `sdd show`'s text output prints. Requiring the
+// full 64-character digest while the tool itself only ever displayed 12
+// meant every round-trip through the text interface was refused, and the
+// refusal truncated both values to the same 12 characters: "expected
+// 77dcab6d082a, found 77dcab6d082a".
+func digestMatches(expect, full string) bool {
+	if len(expect) >= 12 && strings.HasPrefix(full, expect) {
+		return true
+	}
+	return expect == full
 }
 
 type staleError struct {

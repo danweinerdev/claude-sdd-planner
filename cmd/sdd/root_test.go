@@ -59,6 +59,7 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 		"hook": true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
 		"review": true, "schema": true, "section": true, "show": true,
+		"spec": true, "design": true,
 		"task": true, "template": true, "validate": true, "version": true,
 	}
 	got := map[string]bool{}
@@ -200,7 +201,7 @@ func handlerFlagSets() []struct {
 	}{
 		{"sdd show", []string{"json", "type"}},
 		{"sdd list", []string{"json", "root"}},
-		{"sdd apply", []string{"dry-run", "diff", "create", "json", "retire", "expect", "type", "supersede"}},
+		{"sdd apply", []string{"dry-run", "quiet", "diff", "create", "json", "retire", "expect", "type", "supersede"}},
 		{"sdd section set", []string{"heading", "dry-run", "diff", "json", "expect", "type"}},
 		{"sdd template", []string{"out", "check", "dir", "for-apply", "json"}},
 		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "no-stub-sections", "type", "all"}},
@@ -228,6 +229,15 @@ func handlerFlagSets() []struct {
 		{"sdd phase complete", []string{"dry-run", "json"}},
 		{"sdd plan complete", []string{"dry-run", "json"}},
 		{"sdd plan approve", []string{"dry-run", "json"}},
+		{"sdd plan activate", []string{"dry-run", "json"}},
+		{"sdd spec submit", []string{"dry-run", "json"}},
+		{"sdd spec approve", []string{"dry-run", "json"}},
+		{"sdd spec implement", []string{"dry-run", "json"}},
+		{"sdd spec supersede", []string{"by", "dry-run", "json"}},
+		{"sdd design submit", []string{"dry-run", "json"}},
+		{"sdd design approve", []string{"dry-run", "json"}},
+		{"sdd design implement", []string{"dry-run", "json"}},
+		{"sdd design supersede", []string{"by", "dry-run", "json"}},
 	}
 }
 

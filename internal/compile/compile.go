@@ -822,12 +822,20 @@ func checkCitations(s *schema.Schema, matched map[string]*artifact.Section, live
 					text = text[i:]
 				}
 			}
-			for _, m := range idTok.FindAllStringSubmatch(text, -1) {
-				ns := m[1]
+			for _, idx := range idTok.FindAllStringSubmatchIndex(text, -1) {
+				ns, digits := text[idx[2]:idx[3]], text[idx[4]:idx[5]]
 				if !known[ns] {
 					continue
 				}
-				num, err := strconv.Atoi(m[2])
+				// A qualified citation names another artifact's identifier:
+				// `ProductSystemV2:FR-23`. It is exempt from local resolution
+				// — the id belongs to the named artifact's namespace, and the
+				// old escape (backticks) dropped the reference from any link
+				// graph a consumer might build.
+				if isQualifiedCitation(text, idx[0]) {
+					continue
+				}
+				num, err := strconv.Atoi(digits)
 				if err != nil {
 					continue
 				}
@@ -836,12 +844,32 @@ func checkCitations(s *schema.Schema, matched map[string]*artifact.Section, live
 				}
 				def := nsDef[ns]
 				res.refuse("SPK040", sec.Line+1+vl.Offset,
-					fmt.Sprintf("citation %s-%s does not resolve", ns, m[2]),
-					fmt.Sprintf("available %s identifiers: %s (wrap a literal in backticks to exempt it)",
-						ns, strings.Join(live.list(ns, def), ", ")))
+					fmt.Sprintf("citation %s-%s does not resolve", ns, digits),
+					fmt.Sprintf("available %s identifiers: %s (qualify an external reference as <Artifact>:%s-NN, or wrap a literal in backticks)",
+						ns, strings.Join(live.list(ns, def), ", "), ns))
 			}
 		}
 	}
+}
+
+// isQualifiedCitation reports whether the token starting at `start` is
+// prefixed by a `<Qualifier>:` — a word of identifier characters ending in a
+// colon, as in `ProductSystemV2:FR-23`. The qualifier must itself start at a
+// word boundary so a stray colon alone does not exempt anything.
+func isQualifiedCitation(text string, start int) bool {
+	if start < 2 || text[start-1] != ':' {
+		return false
+	}
+	i := start - 1
+	for i > 0 && isIdentChar(text[i-1]) {
+		i--
+	}
+	return i < start-1
+}
+
+func isIdentChar(c byte) bool {
+	return c == '_' || c == '-' ||
+		('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
 }
 
 // emit renders the canonical artifact: LF endings, declared heading order,

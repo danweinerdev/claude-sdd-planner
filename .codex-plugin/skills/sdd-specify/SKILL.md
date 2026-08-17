@@ -52,14 +52,14 @@ When you need to define the requirements for a feature before designing or imple
    - Set status to `draft`
 
 3. **Review**
-   - Set `status: review` when dispatching the reviewer
+   - Run `sdd spec submit <spec-path>` when dispatching the reviewer — statuses move through the binary's transition verbs, never by editing frontmatter
    - Dispatch a collaboration subagent in a fresh non-inheriting context rendering `shared/agent-prompts/spec-reviewer.md` (if collaboration is unavailable, perform the review yourself following that prompt and label it **self-review**) to review the specification
    - Address critical and major issues
 
 4. **Present for Approval**
    - Show the user the review results and final spec
-   - **Open questions gate approval.** Before setting `status: approved`, every remaining open question must be either resolved or explicitly marked **non-blocking** with a one-line rationale for why the requirements hold regardless of its answer. A question whose answer could change in-scope requirements blocks approval — leave the spec at `review` and name the question to the user. A "⚠️ pending confirmation" annotation is not a gate.
-   - After findings are addressed and the user explicitly approves, set `status: approved`. If the user declines or defers, leave it at `review`.
+   - **Open questions gate approval.** Before approving, every remaining open question must be either resolved or explicitly marked **non-blocking** with a one-line rationale for why the requirements hold regardless of its answer. A question whose answer could change in-scope requirements blocks approval — leave the spec at `review` and name the question to the user. A "⚠️ pending confirmation" annotation is not a gate. (`sdd spec approve` enforces the mechanically checkable part: it refuses on an introduced SDD153 finding.)
+   - After findings are addressed and the user explicitly approves, run `sdd spec approve <spec-path>`. If the user declines or defers, leave it at `review`. (Later transitions: `sdd spec implement` once built; `sdd spec supersede --by <successor>` when replaced.)
    - Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
 
 5. **Record Decisions**

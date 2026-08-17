@@ -144,6 +144,9 @@ func TestSddAllowlistCoversEverySubcommand(t *testing.T) {
 		"decide":   false, // sub-verbs classified separately
 		"hook":     true,  // reads a payload and decides; writes nothing
 		"evidence": false, "task": false, "phase": false, "plan": false,
+		"spec": false, "design": false, // lifecycle transition verbs mutate
+		"review": false, "template": false, // scaffold/resolve and --out write files
+		"provision": false, "plugin": false,
 	}
 	for verb, readOnly := range classified {
 		if verb == "decide" || verb == "hook" {

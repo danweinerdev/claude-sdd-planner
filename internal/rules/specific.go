@@ -126,6 +126,17 @@ func init() {
 		}}},
 	})
 
+	// questionSnippet renders an open-question bullet for a diagnostic:
+	// whitespace collapsed and truncated, so multiple findings from one
+	// section stay distinguishable without dumping a whole paragraph.
+	questionSnippet := func(q string) string {
+		s := []rune(strings.Join(strings.Fields(q), " "))
+		if len(s) > 80 {
+			return "`" + string(s[:80]) + "…`"
+		}
+		return "`" + string(s) + "`"
+	}
+
 	Register(&Rule{
 		Code: "SDD153", Severity: Error, PyFunc: "_open_questions",
 		What: "an approved/active spec, design, or plan has a blocking or unexplained open question",
@@ -154,9 +165,13 @@ func init() {
 					valid = prompt != "" && rationale != ""
 				}
 				if !valid {
+					// Name the offending bullet: several bad questions in one
+					// section previously produced N verbatim-identical findings
+					// at the same line, which read as a duplicate-emission bug
+					// and gave no way to tell which bullet each meant.
 					emit(Diagnostic{
 						Code: "SDD153", Severity: Error, Path: a.Rel, Line: info.Line,
-						Message:    "Approved artifact contains a blocking or unexplained open question.",
+						Message:    "Approved artifact contains a blocking or unexplained open question: " + questionSnippet(question) + ".",
 						Correction: "Resolve it or mark the bullet `**non-blocking** — <rationale>`.",
 					})
 				}

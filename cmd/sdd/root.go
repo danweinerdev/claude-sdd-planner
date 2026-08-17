@@ -64,6 +64,8 @@ compilation, digest tracking, and the refusal gates the workflow depends on.`,
 		pluginCmd(),
 		hookCmd(),
 	)
+	// spec/design lifecycle verbs share one kind-parameterized handler.
+	root.AddCommand(docCmd("spec"), docCmd("design"))
 	// task/phase/plan are three sibling roots sharing one handler.
 	for _, level := range []string{"task", "phase", "plan"} {
 		root.AddCommand(transitionCmd(level))
@@ -86,6 +88,17 @@ func schemaCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "schema",
 		Short: "Inspect the embedded artifact schemas",
+		Args:  cobra.MaximumNArgs(1),
+		// A bare type name (`sdd schema spec`) used to fall through to
+		// cobra's help text with exit 0 — indistinguishable from "this type
+		// has no schema". Treat it as shorthand for `schema show <type>`;
+		// an unknown type is then a real error from cmdSchema.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cmdSchema("show", args[0])
+		},
 	}
 	c.AddCommand(
 		&cobra.Command{
@@ -167,6 +180,7 @@ reads as every identifier being deleted at once.`,
 	}
 	f := c.Flags()
 	f.BoolVar(&o.DryRun, "dry-run", false, "print what would be written and write nothing")
+	f.BoolVar(&o.Quiet, "quiet", false, "with --dry-run: report the verdict without dumping the whole document")
 	f.BoolVar(&o.Diff, "diff", false, "show a line diff against the artifact on disk")
 	f.BoolVar(&o.Create, "create", false, "treat the target as new even if it exists")
 	f.BoolVar(&o.Supersede, "supersede", false, "replace the artifact's content, carrying its identifiers forward")
@@ -490,16 +504,61 @@ func transitionCmd(level string) *cobra.Command {
 	c.AddCommand(complete)
 
 	if level == "plan" {
-		var apDry, apJSON bool
-		approve := &cobra.Command{
-			Use: "approve <plan-path>", Short: "Mark a plan approved", Args: cobra.ExactArgs(1),
+		// approve and activate were both implemented in planLifecycle from the
+		// start, but only approve was ever wired — `sdd plan activate` existed
+		// in the usage text and nowhere else.
+		for _, verb := range []struct{ name, short string }{
+			{"approve", "Mark a plan approved"},
+			{"activate", "Mark an approved plan active"},
+		} {
+			verb := verb
+			var dry, js bool
+			cmd := &cobra.Command{
+				Use: verb.name + " <plan-path>", Short: verb.short, Args: cobra.ExactArgs(1),
+				RunE: func(_ *cobra.Command, args []string) error {
+					return planLifecycle(verb.name, args[0], dry, js)
+				},
+			}
+			cmd.Flags().BoolVar(&dry, "dry-run", false, "report the outcome without writing")
+			cmd.Flags().BoolVar(&js, "json", false, "emit the result as JSON")
+			c.AddCommand(cmd)
+		}
+	}
+	return c
+}
+
+// docCmd builds the `sdd spec` / `sdd design` lifecycle command: the status
+// chain draft → review → approved → implemented (→ superseded) driven by
+// verbs, mirroring the plan lifecycle, so spec/design statuses finally have a
+// supported write path.
+func docCmd(kind string) *cobra.Command {
+	c := &cobra.Command{
+		Use:   kind,
+		Short: fmt.Sprintf("Lifecycle transitions for a %s", kind),
+	}
+	for _, verb := range []struct{ name, short string }{
+		{"submit", fmt.Sprintf("Move a draft %s into review", kind)},
+		{"approve", fmt.Sprintf("Mark a reviewed %s approved (validation-gated)", kind)},
+		{"implement", fmt.Sprintf("Mark an approved %s implemented", kind)},
+		{"supersede", fmt.Sprintf("Mark a %s superseded, optionally linking its replacement", kind)},
+	} {
+		verb := verb
+		var by string
+		var dry, js bool
+		cmd := &cobra.Command{
+			Use:   fmt.Sprintf("%s <%s-path>", verb.name, kind),
+			Short: verb.short,
+			Args:  cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
-				return planLifecycle("approve", args[0], apDry, apJSON)
+				return docLifecycle(kind, verb.name, args[0], by, dry, js)
 			},
 		}
-		approve.Flags().BoolVar(&apDry, "dry-run", false, "report the outcome without writing")
-		approve.Flags().BoolVar(&apJSON, "json", false, "emit the result as JSON")
-		c.AddCommand(approve)
+		if verb.name == "supersede" {
+			cmd.Flags().StringVar(&by, "by", "", "planning-root-relative path of the replacing artifact (recorded as superseded_by)")
+		}
+		cmd.Flags().BoolVar(&dry, "dry-run", false, "report the outcome without writing")
+		cmd.Flags().BoolVar(&js, "json", false, "emit the result as JSON")
+		c.AddCommand(cmd)
 	}
 	return c
 }

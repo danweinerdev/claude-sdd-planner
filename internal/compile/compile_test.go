@@ -406,6 +406,28 @@ func TestRefusesUnresolvableCitation(t *testing.T) {
 	}
 }
 
+// A qualified citation names another artifact's identifier and is exempt
+// from local resolution — previously `ProductSystemV2 FR-23` was
+// indistinguishable from a dangling local citation and had to be
+// backtick-escaped, dropping it from any link graph.
+func TestQualifiedCitationExemptsExternalReference(t *testing.T) {
+	r := compileNew(t, payload(map[string]string{
+		"## Constraints": "- must honor ProductSystemV2:FR-99 from the upstream spec",
+	}))
+	mustOK(t, r)
+}
+
+// A colon alone is not a qualifier: `: FR-99` and a line-leading token still
+// resolve locally, so prose punctuation cannot smuggle a dangling citation.
+func TestBareColonDoesNotQualifyCitation(t *testing.T) {
+	r := compileNew(t, payload(map[string]string{
+		"## Constraints": "- see the following: FR-99 stays a local citation",
+	}))
+	if r.OK() || !hasCode(r, "SPK040") {
+		t.Errorf("codes = %v, want SPK040 for an unqualified dangling citation", codes(r))
+	}
+}
+
 func TestCodeSpanExemptsCitation(t *testing.T) {
 	r := compileNew(t, payload(map[string]string{
 		"## Constraints": "- a hypothetical `FR-99` is a literal, not a citation",

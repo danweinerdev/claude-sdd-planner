@@ -28,14 +28,14 @@ When you need to define the technical architecture for a component or system bef
    - Set status to `draft`
 
 3. **Review**
-   - Set `status: review` when dispatching the reviewer
+   - Run `sdd design submit <design-path>` when dispatching the reviewer — statuses move through the binary's transition verbs, never by editing frontmatter
    - Invoke the `sdd-planner:plan-reviewer` agent to review the design
    - Address critical and major issues
 
 4. **Present for Approval**
    - Show the user the review results and final design
-   - **Open questions gate approval.** Before setting `status: approved`, every remaining open question must be either resolved or explicitly marked **non-blocking** with a one-line rationale for why the design holds regardless of its answer. A question whose answer could change the architecture blocks approval — leave the design at `review` and name the question to the user. A "⚠️ pending confirmation" annotation is not a gate.
-   - After findings are addressed and the user explicitly approves, set `status: approved`. If the user declines or defers, leave it at `review`.
+   - **Open questions gate approval.** Before approving, every remaining open question must be either resolved or explicitly marked **non-blocking** with a one-line rationale for why the design holds regardless of its answer. A question whose answer could change the architecture blocks approval — leave the design at `review` and name the question to the user. A "⚠️ pending confirmation" annotation is not a gate. (`sdd design approve` enforces the mechanically checkable part: it refuses on an introduced SDD153 finding.)
+   - After findings are addressed and the user explicitly approves, run `sdd design approve <design-path>`. If the user declines or defers, leave it at `review`. (Later transitions: `sdd design implement` once built; `sdd design supersede --by <successor>` when replaced.)
    - Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
 
 5. **Record Decisions**
