@@ -52,7 +52,7 @@ See `shared/templates/design.md`:
 - **Overview**: Component role in the system
 - **Non-Goals**: What the component deliberately does not do, and which responsibilities belong elsewhere
 - **Architecture**: Components, data flow, interfaces
-- **Design Decisions**: Each with context, options, decision, rationale
+- **Design Decisions**: Each numbered `### DD-N — Title` with context, options, decision, rationale. The ids are stable and append-only (`shared/frontmatter-schema.md` § Stable Identifiers): plans and phases cite them, and `sdd validate` resolves each citation against the related design (SDD122). Cite another component's decision in qualified form — `ComponentName:DD-3`.
 - **Error Handling**: Detection, reporting, recovery
 - **Testing Strategy**: How to validate
 - **Migration / Rollout**: Transition plan

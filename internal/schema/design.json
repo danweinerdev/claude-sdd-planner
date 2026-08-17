@@ -148,5 +148,11 @@
       "freeProse": true
     }
   ],
-  "namespaces": []
+  "namespaces": [
+    {
+      "name": "DD",
+      "prefix": "DD",
+      "width": 1
+    }
+  ]
 }

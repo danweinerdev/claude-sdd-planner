@@ -12,6 +12,32 @@ var specDefinitionRe = map[string]*regexp.Regexp{
 	"FR":  regexp.MustCompile(`(?m)^\s*-\s+\*\*(FR-\d{2,})\*\*\s*:`),
 	"NFR": regexp.MustCompile(`(?m)^\s*-\s+\*\*(NFR-\d{2,})\*\*\s*:`),
 	"AC":  regexp.MustCompile(`(?m)^\s*-\s+\[[ xX]\]\s+\*\*(AC-\d{2,})\*\*\s*:`),
+	// A design's numbered Design Decisions. Unlike the spec families this one
+	// is written two ways in practice — as a heading (`### DD-1 — Title`) and
+	// as a bold bullet (`- **DD-1 — Title**:`) — and the separator is an em
+	// dash as often as a colon, so the pattern accepts a heading OR a bullet
+	// and does not require any particular punctuation after the id. A trailing
+	// letter (`DD-6a`) is part of the id.
+	"DD": regexp.MustCompile(`(?m)^\s*(?:#{2,4}\s+|-\s+\*\*)(DD-\d{1,4}[a-z]?)\b`),
+}
+
+// designFamilies are the identifier families a DESIGN artifact defines, and
+// citing artifacts may therefore resolve against it. Kept separate from
+// specFamilies because the two artifact kinds own different namespaces.
+var designFamilies = []string{"DD"}
+
+// specFamilies are the identifier families a SPEC artifact defines.
+var specFamilies = []string{"FR", "NFR", "AC"}
+
+// definedFamiliesFor returns the families the given artifact kind declares.
+func definedFamiliesFor(kind string) []string {
+	switch kind {
+	case "spec":
+		return specFamilies
+	case "design":
+		return designFamilies
+	}
+	return nil
 }
 
 // specDefinedIDs returns the id sets a spec artifact declares per family,
@@ -29,9 +55,12 @@ func specDefinedIDs(spec *Artifact) map[string]map[string]bool {
 	}
 	body := noComments(spec.Body)
 	out := map[string]map[string]bool{}
-	for _, family := range []string{"FR", "NFR", "AC"} {
+	// Index every family, not just the artifact's own: callers ask by family
+	// name, and an empty set is the correct answer for a family this kind does
+	// not define.
+	for family, re := range specDefinitionRe {
 		set := map[string]bool{}
-		for _, m := range specDefinitionRe[family].FindAllStringSubmatch(body, -1) {
+		for _, m := range re.FindAllStringSubmatch(body, -1) {
 			set[m[1]] = true
 		}
 		out[family] = set

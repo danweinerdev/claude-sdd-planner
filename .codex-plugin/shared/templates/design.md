@@ -41,7 +41,13 @@ Public APIs, events, or contracts.
 
 ## Design Decisions
 
-### Decision 1: [Title]
+<!-- Number each decision `DD-N` and never renumber it: plans, phases, and
+     other designs cite these ids, and `sdd validate` resolves them against
+     this section (SDD122). Cite another component's decision in qualified
+     form — `ComponentName:DD-3` — so it resolves to that design, not this
+     one. -->
+
+### DD-1 — [Title]
 **Context:**
 **Options Considered:**
 1.

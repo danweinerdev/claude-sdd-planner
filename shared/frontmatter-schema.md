@@ -142,6 +142,7 @@ Numbered elements carry stable, per-document identifiers so artifacts can cite e
 | Non-functional requirement | `NFR-NN` | spec Requirements |
 | Acceptance criterion | `AC-NN` | spec Acceptance Criteria |
 | Phase / task | `N` / `N.M` | plan frontmatter (existing convention) |
+| Design decision | `DD-N` | design (`## Design Decisions`) |
 | Decision | `D-NNNN` | decision ledger |
 | Review finding | `F-NN` | review artifact |
 | Review follow-up | `FU-NN` | review artifact |
@@ -149,7 +150,8 @@ Numbered elements carry stable, per-document identifiers so artifacts can cite e
 Rules:
 
 - **Ids are append-only and never renumbered.** Removing an item leaves its id retired (strike the line or note "removed — see <reason/citation>") so existing cross-references never silently re-bind to a different item.
-- **Cross-artifact citations are qualified.** An id belonging to *another* artifact is written `<ArtifactName>:FR-NN` (e.g. `ProductSystemV2:FR-23`). The qualifier exempts it from local resolution (`sdd apply` refuses an unqualified id that doesn't resolve in the citing artifact) while keeping the reference greppable — never backtick-escape an external reference, that drops it from the link graph.
+- **Cross-artifact citations are qualified.** An id belonging to *another* artifact is written `<ArtifactName>:FR-NN` (e.g. `ProductSystemV2:FR-23`, `ArkBootstrapApi:DD-4`). The qualifier exempts it from local resolution — both `sdd apply` (SPK040) and `sdd validate` (SDD122) — while keeping the reference greppable; never backtick-escape an external reference, that drops it from the link graph. The space-separated form (`ArkBootstrapApi DD-4`) is also accepted when the qualifier reads as an artifact name, but the colon form is canonical and is what the templates and skills write.
+- **Where each family resolves.** `FR-NN`/`NFR-NN`/`AC-NN` resolve against the **specs** reachable through the citing artifact's `related` graph; `DD-N` resolves against the **designs** on that same graph. A design is both a citation source (it owns `DD`) and a hop on the way to the specs it realizes, so a plan related to a design can cite that design's decisions and the spec's requirements alike.
 - **Cross-reference by id.** A plan task's `verification` (or its body section) names the `AC-NN`/`FR-NN` ids it satisfies; a design section that realizes a requirement cites its `FR-NN`; governed sections cite ledger ids (`D-NNNN`) per `shared/decision-log.md`. These citations are what make drift detectable — without them every reconciliation check is blind.
 - **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade). `/validate` audits for unnumbered elements and dangling id citations.
 

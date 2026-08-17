@@ -728,3 +728,10 @@ Text.
 None.
 `
 }
+
+// designWithDecisions returns a valid design whose `## Design Decisions`
+// section carries the caller's text — the DD ids SDD122 resolves against.
+func designWithDecisions(decisions string) string {
+	return replaceFirst(validDesign("Text."),
+		"## Design Decisions\n\nText.\n", "## Design Decisions\n\n"+decisions)
+}
