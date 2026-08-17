@@ -347,6 +347,13 @@ func compileFrontmatter(s *schema.Schema, doc *artifact.Doc, opts Options, res *
 			if opts.Existing != nil {
 				v, _ = opts.Existing.FM(f.Key)
 			}
+			// An unreplaced template placeholder is not a value. `sdd template`
+			// seeds `created: "{{DATE}}"`, and preserving it verbatim meant a
+			// template-seeded artifact carried the placeholder through every
+			// later revision — `updated` got stamped, `created` never did.
+			if isPlaceholderValue(v) {
+				v = ""
+			}
 			if v == "" {
 				switch f.Key {
 				case "created":
@@ -444,6 +451,13 @@ func compileFrontmatter(s *schema.Schema, doc *artifact.Doc, opts Options, res *
 		}
 	}
 	return append(out, carried...)
+}
+
+// isPlaceholderValue reports whether a value is still an unreplaced template
+// marker such as `{{DATE}}` or `"{{TITLE}}"`.
+func isPlaceholderValue(v string) bool {
+	t := strings.Trim(strings.TrimSpace(v), `"'`)
+	return strings.HasPrefix(t, "{{") && strings.HasSuffix(t, "}}")
 }
 
 // isEmptyFMValue reports whether a frontmatter scalar carries no information:

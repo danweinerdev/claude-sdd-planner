@@ -506,3 +506,29 @@ func TestCRLFAndBOMReportedAsCorrections(t *testing.T) {
 		t.Error("output contains CR; NFR-05 requires LF on every platform")
 	}
 }
+
+// `sdd template` seeds `created: "{{DATE}}"`. Preserving that verbatim meant
+// a template-seeded artifact carried the placeholder through every later
+// revision while `updated` got a real date. An unreplaced marker is not a
+// value: it must be stamped on the first compile.
+func TestCreatedPlaceholderIsStamped(t *testing.T) {
+	existing := artifact.Parse("---\ntitle: \"S\"\ntype: spec\nstatus: draft\ncreated: \"{{DATE}}\"\nupdated: \"{{DATE}}\"\ntags: []\n---\n\n# S\n")
+	r := Compile(load(t), payload(nil), Options{Today: "2026-08-16", Existing: existing})
+	mustOK(t, r)
+	if strings.Contains(r.Output, "{{DATE}}") {
+		t.Errorf("the placeholder survived compilation:\n%s", r.Output)
+	}
+	if !strings.Contains(r.Output, "created: 2026-08-16") {
+		t.Errorf("created was not stamped:\n%s", r.Output)
+	}
+}
+
+// A real created date is history: it is preserved, never restamped.
+func TestRealCreatedDateIsPreserved(t *testing.T) {
+	existing := artifact.Parse("---\ntitle: \"S\"\ntype: spec\nstatus: draft\ncreated: 2020-01-15\nupdated: 2020-01-15\ntags: []\n---\n\n# S\n")
+	r := Compile(load(t), payload(nil), Options{Today: "2026-08-16", Existing: existing})
+	mustOK(t, r)
+	if !strings.Contains(r.Output, "created: 2020-01-15") {
+		t.Errorf("an existing created date must be preserved:\n%s", r.Output)
+	}
+}

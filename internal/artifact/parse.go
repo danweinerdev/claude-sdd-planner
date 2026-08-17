@@ -106,13 +106,37 @@ func Parse(src string) *Doc {
 				continue // comment or blank
 			}
 			if raw != strings.TrimLeft(raw, " \t") {
-				continue // nested/continuation line: out of spike scope
+				continue // nested/continuation line: handled by the block scan below
 			}
 			if k, v, ok := strings.Cut(raw, ":"); ok {
+				key, val, keyLine := strings.TrimSpace(k), strings.TrimSpace(v), i+1
+				// A key with no inline value may still hold a BLOCK sequence:
+				//
+				//   tags:
+				//   - alpha
+				//   - beta
+				//
+				// Reading only the key line reported such a field as present
+				// but empty, so the payload-authoritative merge cleared the
+				// author's populated list without even a note — the same
+				// symptom whether the author wrote a block list or omitted the
+				// field. Fold the items into the flow form the rest of the
+				// pipeline already understands. Nested block MAPPINGS (phases,
+				// tasks, decisions) are left alone: they are carried by the
+				// YAML node tree, not by these flat entries.
+				if val == "" {
+					if items, next := blockSequenceItems(lines, i+1); len(items) > 0 {
+						val = "[" + strings.Join(items, ", ") + "]"
+						for j := i + 1; j < next; j++ {
+							d.FrontmatterRaw = append(d.FrontmatterRaw, lines[j])
+						}
+						i = next - 1
+					}
+				}
 				d.Frontmatter = append(d.Frontmatter, FMEntry{
-					Key:   strings.TrimSpace(k),
-					Value: strings.TrimSpace(v),
-					Line:  i + 1,
+					Key:   key,
+					Value: val,
+					Line:  keyLine,
 				})
 			}
 		}
@@ -243,4 +267,35 @@ func StripCodeSpans(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// blockSequenceItems reads a YAML block sequence starting at `from`, returning
+// its scalar items and the index just past the block. It returns no items when
+// the block is absent, or when any entry is a block MAPPING (`- key: value`) —
+// those are nested structures (phases, tasks, decisions, lane_results) that
+// the flat FMEntry list must not flatten.
+func blockSequenceItems(lines []string, from int) ([]string, int) {
+	var items []string
+	i := from
+	for ; i < len(lines); i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue // blank lines and comments do not end a block
+		}
+		if t == "---" || !strings.HasPrefix(t, "- ") {
+			break // end of the sequence (next key, or the closing fence)
+		}
+		item := strings.TrimSpace(strings.TrimPrefix(t, "- "))
+		// `- key: value` is a mapping entry: this is a nested structure, not a
+		// scalar list. Leave the whole block to the YAML node tree.
+		if k, _, ok := strings.Cut(item, ":"); ok && !strings.HasPrefix(item, `"`) &&
+			!strings.HasPrefix(item, "'") && !strings.Contains(k, " ") {
+			return nil, from
+		}
+		items = append(items, item)
+	}
+	if len(items) == 0 {
+		return nil, from
+	}
+	return items, i
 }

@@ -170,3 +170,41 @@ func TestParseUnterminatedFrontmatter(t *testing.T) {
 		t.Errorf("Frontmatter = %+v, want none", d.Frontmatter)
 	}
 }
+
+// A block-list frontmatter value must parse the same as the inline form.
+// The parser previously read `tags:` with items beneath it as an empty
+// scalar and discarded the items, so a populated list silently became empty
+// on every apply — indistinguishable from the author omitting the field.
+func TestBlockSequenceFrontmatterParses(t *testing.T) {
+	d := Parse("---\ntitle: \"T\"\ntags:\n- alpha\n- beta\nrelated:\n  - Designs/C/README.md\nstatus: draft\n---\n\n# T\n")
+	for _, tc := range []struct{ key, want string }{
+		{"tags", "[alpha, beta]"},
+		{"related", "[Designs/C/README.md]"},
+		{"status", "draft"},
+		{"title", `"T"`},
+	} {
+		got, ok := d.FM(tc.key)
+		if !ok {
+			t.Errorf("%s missing", tc.key)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+	if line := d.FMLine("tags"); line != 3 {
+		t.Errorf("tags line = %d, want 3 (the key line, not the block end)", line)
+	}
+}
+
+// Block MAPPINGS are nested structures carried by the YAML node tree; folding
+// them into a flat value would corrupt plans, ledgers, and reviews.
+func TestBlockMappingFrontmatterIsNotFlattened(t *testing.T) {
+	d := Parse("---\ntitle: \"P\"\nphases:\n  - id: \"1\"\n    title: One\n  - id: \"2\"\n    title: Two\nstatus: draft\n---\n\n# P\n")
+	if v, _ := d.FM("phases"); v != "" {
+		t.Errorf("phases = %q, want \"\" — a block mapping must stay with the node tree", v)
+	}
+	if v, _ := d.FM("status"); v != "draft" {
+		t.Errorf("status = %q, want draft — keys after a block mapping must still parse", v)
+	}
+}
