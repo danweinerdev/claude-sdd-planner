@@ -412,7 +412,7 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 		// silently produces a supersession chain that goes nowhere.
 		if succ, err := store.Read(by); err != nil || !succ.Exists {
 			return fmt.Errorf("%s supersede: --by %s does not resolve to an artifact; "+
-				"pass the successor's planning-root-relative path, or omit --by and link it once the replacement exists",
+				"pass the successor's planning-root-relative path, or supersede it once the replacement exists",
 				kind, by)
 		}
 	}
@@ -458,6 +458,16 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 		return fmt.Errorf("%s %s: artifact is %q; %s moves a %s from %s to %q. "+
 			"An artifact that skips a state leaves no record it was ever in it",
 			kind, verb, current, verb, kind, quotedList(tr.from), tr.to)
+	}
+
+	// A superseded artifact must name its successor: SDD178 refuses the
+	// status without the link, so allowing a bare supersede would have the
+	// verb write a state its own validator rejects. Recording the link later
+	// is still supported — `supersede --by` on an already-superseded artifact
+	// fills it in — but the first transition has to establish it.
+	if verb == "supersede" && by == "" && metaOf(doc, "superseded_by") == "" {
+		return fmt.Errorf("%s supersede: --by is required; a superseded %s must name the "+
+			"artifact that replaces it (SDD178). Pass --by <successor-path>", kind, kind)
 	}
 
 	today := time.Now().Format("2006-01-02")

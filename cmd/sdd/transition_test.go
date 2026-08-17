@@ -84,34 +84,56 @@ func TestDocLifecycleChain(t *testing.T) {
 	}
 }
 
-// Superseding without --by and linking the successor afterwards is normal —
-// the replacement often does not exist yet at supersede time. Treating the
-// second call as an already-there no-op silently discarded the link while
-// reporting success, making the successor permanently unrecordable.
-func TestDocSupersedeLinksSuccessorAfterTheFact(t *testing.T) {
+// A superseded artifact must name its successor (SDD178), so the first
+// supersede requires --by: without it the verb would write a status its own
+// validator rejects. Re-pointing the link afterwards is still supported.
+func TestDocSupersedeRequiresSuccessor(t *testing.T) {
+	path := writeSpecFixture(t, "draft", "")
+	err := docLifecycle("spec", "supersede", path, "", false, false)
+	if err == nil || !strings.Contains(err.Error(), "--by is required") {
+		t.Fatalf("a bare supersede must be refused; got %v", err)
+	}
+	if src := readFile(t, path); !strings.Contains(src, "\nstatus: draft\n") {
+		t.Fatalf("a refused supersede must not write; got:\n%s", src)
+	}
+}
+
+// Re-pointing the successor on an already-superseded artifact must write the
+// new link rather than hitting the already-in-target-state no-op, which
+// previously reported success while silently discarding it.
+func TestDocSupersedeRelinksSuccessor(t *testing.T) {
 	path := writeSpecFixture(t, "draft", "")
 
-	if err := docLifecycle("spec", "supersede", path, "", false, false); err != nil {
-		t.Fatalf("supersede: %v", err)
-	}
-	if src := readFile(t, path); strings.Contains(src, "superseded_by:") {
-		t.Fatalf("supersede without --by must not invent a link; got:\n%s", src)
-	}
-
 	if err := docLifecycle("spec", "supersede", path, "Specs/Sample-v2/README.md", false, false); err != nil {
-		t.Fatalf("late --by: %v", err)
+		t.Fatalf("supersede: %v", err)
 	}
 	src := readFile(t, path)
 	if !strings.Contains(src, "\nsuperseded_by: \"Specs/Sample-v2/README.md\"\n") {
-		t.Fatalf("late --by must record the successor; got:\n%s", src)
+		t.Fatalf("supersede --by must record the successor; got:\n%s", src)
 	}
 	if !strings.Contains(src, "\nstatus: superseded\n") {
-		t.Fatalf("late --by must leave status superseded; got:\n%s", src)
+		t.Fatalf("supersede must set status superseded; got:\n%s", src)
+	}
+
+	// Re-pointing at a DIFFERENT successor must rewrite the link, not no-op.
+	successor := filepath.Join(filepath.Dir(filepath.Dir(path)), "Sample-v3")
+	if err := os.MkdirAll(successor, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(successor, "README.md"),
+		[]byte(minimalSpec("draft", "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := docLifecycle("spec", "supersede", path, "Specs/Sample-v3/README.md", false, false); err != nil {
+		t.Fatalf("re-point: %v", err)
+	}
+	if src := readFile(t, path); !strings.Contains(src, "\nsuperseded_by: \"Specs/Sample-v3/README.md\"\n") {
+		t.Fatalf("re-pointing must overwrite the successor link; got:\n%s", src)
 	}
 
 	// Re-running with the same successor is a genuine no-op.
 	before := readFile(t, path)
-	if err := docLifecycle("spec", "supersede", path, "Specs/Sample-v2/README.md", false, false); err != nil {
+	if err := docLifecycle("spec", "supersede", path, "Specs/Sample-v3/README.md", false, false); err != nil {
 		t.Fatalf("idempotent supersede: %v", err)
 	}
 	if readFile(t, path) != before {

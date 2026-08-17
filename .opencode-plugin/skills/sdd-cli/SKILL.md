@@ -58,7 +58,7 @@ to report without repairing.
 | Validate (deterministic layer) | `sdd validate [--root PATH] [--scope PATH] [--format json]` |
 | Record completion evidence | `sdd evidence add <path> --task ID\|--phase\|--plan --verified-by CMD --result TEXT [--working-dir PATH]` |
 | Transition a status (evidence-gated) | `sdd task complete <phase-path> --id ID` · `sdd phase complete <phase-path>` · `sdd plan approve\|activate\|complete <plan-path>` |
-| Transition a spec/design status | `sdd spec\|design submit\|approve\|implement\|supersede <path>` (`supersede` takes `--by <successor>`) |
+| Transition a spec/design status | `sdd spec\|design submit\|approve\|implement\|supersede <path>` (`supersede` **requires** `--by <successor>`) |
 | Scaffold a phase-gate review | `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` |
 | Record one review lane's observation | `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]` (or evidence on stdin) |
 | Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |

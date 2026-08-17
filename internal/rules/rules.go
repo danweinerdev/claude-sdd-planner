@@ -199,9 +199,54 @@ func RunWithWaivers(r *Root) []Diagnostic {
 	// waiver problem twice.
 	diags := runBare(r)
 	diags = append(diags, applyWaivers(r, diags)...)
+	diags = demoteRetiredFindings(r, diags)
 	SortDiagnostics(diags)
 	return diags
 }
+
+// demoteRetiredFindings re-tags findings ON a superseded or archived artifact
+// as Waived: still reported, no longer invalidating.
+//
+// A retired artifact is history. Holding it to the current schema means a root
+// can never go green without editing documents whose whole point is that they
+// are no longer edited — and the noise buries the findings on live work. This
+// is the same treatment a declared waiver gets, for the same reason: the
+// finding is real, but it is not a reason to fail.
+//
+// Two deliberate exclusions. The supersession family itself (SDD178/SDD179) is
+// how an artifact is *told* its retirement metadata is wrong, so demoting it
+// would make the rule unenforceable. And parse-stage failures stay errors: an
+// unreadable or malformed file is a tooling problem, not a historical record.
+func demoteRetiredFindings(r *Root, diags []Diagnostic) []Diagnostic {
+	retired := map[string]bool{}
+	for _, a := range r.Artifacts {
+		if a.Meta == nil || a.ParseStage != "" {
+			continue
+		}
+		if a.Status() == "archived" || isSupersededArtifact(a) {
+			retired[a.Rel] = true
+		}
+	}
+	if len(retired) == 0 {
+		return diags
+	}
+	for i := range diags {
+		if diags[i].Severity != Error || !retired[diags[i].Path] {
+			continue
+		}
+		if supersessionCodes[diags[i].Code] {
+			continue
+		}
+		diags[i].Severity = Waived
+		diags[i].WaivedReason = "on a retired artifact (superseded or archived); " +
+			"reported for visibility, not blocking"
+	}
+	return diags
+}
+
+// supersessionCodes stay errors on a retired artifact: they are what report
+// the retirement metadata being wrong in the first place.
+var supersessionCodes = map[string]bool{"SDD178": true, "SDD179": true}
 
 // Explain renders the implemented-rule table, so `sdd validate --explain` can
 // show what the tool checks and what it does not.
