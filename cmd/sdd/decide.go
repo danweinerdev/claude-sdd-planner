@@ -107,10 +107,7 @@ func cmdDecideList(status string, jsonOut bool) error {
 		}{out})
 	}
 	for _, e := range out {
-		stmt := e.Statement
-		if len(stmt) > 80 {
-			stmt = stmt[:80] + "…"
-		}
+		stmt := ellipsize(e.Statement, 80)
 		fmt.Printf("%-8s %-10s %-10s %s\n", e.ID, e.Status, e.Date, stmt)
 	}
 	return nil
@@ -185,7 +182,11 @@ func cmdDecideAdd(o decideAddOpts) error {
 		if len(candidates) > 0 {
 			fmt.Fprintln(os.Stderr, "decide add: refused — candidate collision(s) with accepted entries:")
 			for _, c := range candidates {
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", c.ID, c.Statement)
+				// Truncated: a ledger's statements are often paragraphs, and
+				// printing several in full turned a refusal into tens of
+				// kilobytes of terminal. The id is what the caller acts on —
+				// `sdd decide list` or `search` shows the rest.
+				fmt.Fprintf(os.Stderr, "  %s: %s\n", c.ID, ellipsize(c.Statement, 120))
 			}
 			fmt.Fprintln(os.Stderr, "pass --supersedes D-NNNN to resolve one of them, or rephrase --statement to avoid the overlap")
 			return &refusedError{n: len(candidates)}
@@ -659,4 +660,14 @@ func leadingSpaceCount(s string) int {
 		i++
 	}
 	return i
+}
+
+// ellipsize shortens a string to at most n runes, marking the cut. Rune-based
+// so a multi-byte character is never split mid-encoding.
+func ellipsize(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
