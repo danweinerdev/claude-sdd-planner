@@ -28,7 +28,7 @@ tags: [tag1, tag2]
 related: [Specs/FeatureName, Research/topic-slug.md]
 ```
 
-`related` entries are planning-root-relative: use the **directory** path for specs, designs, and plans (`Specs/FeatureName`, `Designs/ComponentName`, `Plans/PlanName`), and the **file** path for flat artifacts (`Research/topic-slug.md`, `Brainstorm/topic-slug.md`). Legacy `Retro/` review references remain valid for read compatibility (reviews lived there before `Plans/<Plan>/reviews/`); the retired `retro` and `diagram` artifact types are no longer recognized. Consumers that need the document behind a directory entry append `/README.md`.
+`related` entries are planning-root-relative: use the **directory** path for specs, designs, and plans (`Specs/FeatureName`, `Designs/ComponentName`, `Plans/PlanName`), and the **file** path for flat artifacts (`Research/topic-slug.md`, `Brainstorm/topic-slug.md`). Legacy `Retro/YYYY-MM-DD-slug.md` and `Diagrams/slug.md` references remain valid for read compatibility; artifacts of the retired `retro` and `diagram` types are ignored by validation — they still resolve as references but are never checked and are no longer created. Consumers that need the document behind a directory entry append `/README.md`.
 
 Any artifact may additionally declare an optional `refresh_when` field — a list of event-shaped trigger descriptions that force a refresh (e.g., `refresh_when: ["dependency X ships v3", "Specs/Payments changes", "vendor answers the webhooks question"]`). A fired trigger makes the artifact stale regardless of its `updated` date (lifecycle skills honor known-fired triggers; `/decide check` audits them on `assumption` ledger entries); demonstrably-unfired triggers exempt it from the default 30-day staleness rule.
 

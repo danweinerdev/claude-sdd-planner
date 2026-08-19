@@ -30,13 +30,12 @@ var pluginSourceDirs = map[string]bool{
 	"scripts": true, "hooks": true, "internal": true, "cmd": true, "tools": true,
 }
 
-// artifactDirs mirror the directories the validator walks. `Retro/` is
-// read-only legacy (pre-Plans/<Plan>/reviews/ review artifacts); `Diagrams/`
-// is not an artifact directory any more — the diagram type was retired with
-// its skill.
+// artifactDirs mirror the directories the validator walks. `Retro/` and
+// `Diagrams/` are read-only legacy: retired-type artifacts there are ignored
+// by the validator but the directories stay guarded against agent writes.
 var artifactDirs = map[string]bool{
 	"Research": true, "Brainstorm": true, "Specs": true, "Designs": true,
-	"Plans": true, "Decisions": true, "Retro": true,
+	"Plans": true, "Decisions": true, "Retro": true, "Diagrams": true,
 }
 
 // CheckWrite returns the verdict for a Write or Edit on path by agent.

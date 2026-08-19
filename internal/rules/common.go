@@ -34,6 +34,13 @@ var statusValues = map[string][]string{
 	"reference":    {"draft", "active", "archived"},
 }
 
+// retiredTypes are artifact types whose skills were cut (the compact-core
+// streamline removed /retro and /diagram). Artifacts carrying them are
+// ignored outright: discovered for `related:` reference resolution, never
+// validated — a legacy artifact nobody can create or edit any more must not
+// be an error source either.
+var retiredTypes = map[string]bool{"retro": true, "diagram": true}
+
 var taskStatusValues = []string{"blocked", "complete", "deferred", "in-progress", "planned"}
 
 var commonFields = []string{"title", "type", "status", "created", "updated"}

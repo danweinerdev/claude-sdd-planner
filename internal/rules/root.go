@@ -15,12 +15,12 @@ import (
 )
 
 // artifactDirs is the top-level directories under a planning root that are
-// walked for `*.md` artifacts. `Retro/` is retained for reading only: it is
-// where review artifacts lived before Plans/<Plan>/reviews/, and legacy
-// reviews there must keep validating. `Diagrams/` is not walked — the diagram
-// artifact type was retired with its skill, and files there are simply not
-// planning artifacts any more.
-var artifactDirs = []string{"Research", "Brainstorm", "Specs", "Designs", "Plans", "Decisions", "Retro"}
+// walked for `*.md` artifacts. The legacy directories stay walked — `Retro/`
+// held review artifacts before Plans/<Plan>/reviews/ and those must keep
+// validating; `Diagrams/` held retired diagram artifacts — but artifacts of
+// a retired TYPE are ignored at load (see retiredTypes): resolvable as
+// references, never validated.
+var artifactDirs = []string{"Research", "Brainstorm", "Specs", "Designs", "Plans", "Decisions", "Retro", "Diagrams"}
 
 // Root is every artifact discovered under a planning root, plus the index
 // rules need to resolve cross-artifact references.
@@ -188,6 +188,16 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 		}
 		rel = filepath.ToSlash(rel)
 		a := parseArtifact(p, rel)
+		// A retired type (retro, diagram) is ignored, not validated: it stays
+		// resolvable as a `related:` reference target, but no rule ever sees
+		// it — legacy artifacts nobody can create or edit must not be error
+		// sources.
+		if retiredTypes[a.Kind()] {
+			if a.ParseStage == "" || a.ParseStage == "SDD003" {
+				r.ByPath[rel] = a
+			}
+			continue
+		}
 		r.Artifacts = append(r.Artifacts, a)
 		if a.ParseStage == "" || a.ParseStage == "SDD003" {
 			r.ByPath[rel] = a
