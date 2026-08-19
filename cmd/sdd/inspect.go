@@ -102,8 +102,22 @@ func showArtifact(path, typ string) (*showOut, error) {
 		Path: relPath(path), Digest: art.Digest, Type: typ,
 		Frontmatter: map[string]any{},
 	}
-	for _, e := range doc.Frontmatter {
-		out.Frontmatter[e.Key] = yamlValue(e.Value)
+	// Parse the frontmatter as a full YAML tree rather than from the flat
+	// line-scan entries: the flat model deliberately leaves nested
+	// block-mapping sequences (a review's findings[]/followups[], a plan's
+	// phases[]) to the node tree, so serializing it rendered every populated
+	// structured list as "" (B-3). The flat entries remain the fallback so a
+	// malformed frontmatter still shows what is actually in the file.
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(strings.Join(doc.FrontmatterRaw, "\n")), &node); err == nil {
+		if m, ok := yamlTreeValue(&node).(map[string]any); ok && len(m) > 0 {
+			out.Frontmatter = m
+		}
+	}
+	if len(out.Frontmatter) == 0 {
+		for _, e := range doc.Frontmatter {
+			out.Frontmatter[e.Key] = yamlValue(e.Value)
+		}
 	}
 
 	s, err := schema.Load(typ)
@@ -264,6 +278,51 @@ func cmdList(artifactType string, o listOpts) error {
 // Values that do not parse as YAML fall back to the raw text rather than
 // failing: show is a read-only inspection command, and a malformed field is
 // exactly what someone runs it to find.
+// yamlTreeValue converts a parsed YAML node tree into plain Go values for
+// JSON emission, with the same scalar discipline as yamlValue: timestamps
+// keep their source spelling (a schema date field says `2026-08-02`, not
+// `2026-08-02T00:00:00Z`), and a scalar that fails to decode reports its
+// source text rather than failing — show is a read-only inspection command.
+func yamlTreeValue(n *yaml.Node) any {
+	switch n.Kind {
+	case yaml.DocumentNode:
+		if len(n.Content) > 0 {
+			return yamlTreeValue(n.Content[0])
+		}
+		return nil
+	case yaml.MappingNode:
+		m := map[string]any{}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			m[n.Content[i].Value] = yamlTreeValue(n.Content[i+1])
+		}
+		return m
+	case yaml.SequenceNode:
+		out := make([]any, 0, len(n.Content))
+		for _, c := range n.Content {
+			out = append(out, yamlTreeValue(c))
+		}
+		return out
+	case yaml.AliasNode:
+		if n.Alias != nil {
+			return yamlTreeValue(n.Alias)
+		}
+		return nil
+	default: // ScalarNode
+		var v any
+		if err := n.Decode(&v); err != nil {
+			return n.Value
+		}
+		switch v.(type) {
+		case nil:
+			return n.Value
+		case time.Time:
+			return n.Value
+		default:
+			return v
+		}
+	}
+}
+
 func yamlValue(raw string) any {
 	var v any
 	if err := yaml.Unmarshal([]byte(raw), &v); err != nil {
