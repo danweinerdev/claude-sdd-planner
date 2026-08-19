@@ -33,8 +33,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
@@ -82,6 +84,14 @@ var setupEnv = []string{
 
 // Check validates every root in the manifest against its recorded expectation,
 // returning one human-readable failure per regressed root.
+//
+// Roots are checked concurrently: each is fully isolated (its own prepared
+// copy under scratch, named by root path hash), the rules run in-process on
+// per-root state, and the dominant cost is process spawns (fixture SETUP git
+// commands plus the git-verifying rules). Serial execution multiplied that
+// spawn latency by 130+ roots — nine minutes on Windows. Failures are
+// reported in manifest order regardless of completion order, so output stays
+// deterministic.
 func Check(manifestPath, expectationsPath, fixturesDir string) ([]string, error) {
 	expectations, err := loadExpectations(expectationsPath)
 	if err != nil {
@@ -102,30 +112,58 @@ func Check(manifestPath, expectationsPath, fixturesDir string) ([]string, error)
 	}
 	defer os.RemoveAll(scratch)
 
-	var failures []string
-	for _, root := range roots {
-		key, err := expectationKey(root, absFixtures)
-		if err != nil {
-			return nil, err
-		}
-		want, ok := expectations[key]
-		if !ok {
-			// A root with no recorded expectation proves nothing, and skipping
-			// it silently would let a fixture drift out of coverage unnoticed.
-			failures = append(failures, key+": no recorded expectation")
-			continue
-		}
+	type result struct {
+		failure string
+		err     error
+	}
+	results := make([]result, len(roots))
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	var wg sync.WaitGroup
+	for i, root := range roots {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		prepared, err := prepare(root, scratch)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
+			key, err := expectationKey(root, absFixtures)
+			if err != nil {
+				results[i] = result{err: err}
+				return
+			}
+			want, ok := expectations[key]
+			if !ok {
+				// A root with no recorded expectation proves nothing, and
+				// skipping it silently would let a fixture drift out of
+				// coverage unnoticed.
+				results[i] = result{failure: key + ": no recorded expectation"}
+				return
+			}
+
+			prepared, err := prepare(root, scratch)
+			if err != nil {
+				results[i] = result{err: fmt.Errorf("%s: %w", key, err)}
+				return
+			}
+			gotExit, got, err := validate(prepared)
+			if err != nil {
+				results[i] = result{err: fmt.Errorf("%s: %w", key, err)}
+				return
+			}
+			if diff := compare(want, gotExit, got); diff != "" {
+				results[i] = result{failure: key + ":\n" + diff}
+			}
+		}()
+	}
+	wg.Wait()
+
+	var failures []string
+	for _, res := range results {
+		if res.err != nil {
+			return nil, res.err
 		}
-		gotExit, got, err := validate(prepared)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		if diff := compare(want, gotExit, got); diff != "" {
-			failures = append(failures, key+":\n"+diff)
+		if res.failure != "" {
+			failures = append(failures, res.failure)
 		}
 	}
 	return failures, nil

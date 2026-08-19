@@ -55,10 +55,18 @@ func TestEveryRuleHasGoodAndBadExamples(t *testing.T) {
 // Each Bad example must produce its rule's code, and each Good example must not.
 // This is the substantive per-rule test: the registry gives it for free for every
 // code, so a newly ported rule is exercised the moment it is registered.
+//
+// The subtests run in parallel: each example is fully isolated in its own
+// t.TempDir planning root, Run(root) touches no package-level mutable state
+// (vcs memoization is opt-in and off under test), and the dominant cost is
+// process spawns (git Setup plus the git-verifying rules) — serial execution
+// multiplied that spawn latency by ~260 examples, which on Windows meant a
+// forty-minute suite.
 func TestExamplesBehaveAsDeclared(t *testing.T) {
 	for _, r := range All() {
 		for _, ex := range r.Bad {
 			t.Run(r.Code+"/bad/"+ex.Name, func(t *testing.T) {
+				t.Parallel()
 				diags := runExample(t, ex)
 				found := false
 				for _, d := range diags {
@@ -76,6 +84,7 @@ func TestExamplesBehaveAsDeclared(t *testing.T) {
 		}
 		for _, ex := range r.Good {
 			t.Run(r.Code+"/good/"+ex.Name, func(t *testing.T) {
+				t.Parallel()
 				for _, d := range runExample(t, ex) {
 					if d.Code == r.Code {
 						t.Errorf("good example produced %s at %s:%d — %s",
@@ -90,22 +99,29 @@ func TestExamplesBehaveAsDeclared(t *testing.T) {
 // A rule must not depend on evaluation order: running the whole registry over a
 // rule's own examples must produce the same finding as the rule alone would.
 // Order dependence would make the parity comparison unstable.
+//
+// Parallel per example for the same reason as TestExamplesBehaveAsDeclared;
+// the four runs WITHIN one example stay serial because their comparison is
+// the point of the test.
 func TestRunIsDeterministic(t *testing.T) {
 	for _, r := range All() {
 		for _, ex := range r.Bad {
-			first := codesOf(runExample(t, ex))
-			for i := 0; i < 3; i++ {
-				again := codesOf(runExample(t, ex))
-				if len(first) != len(again) {
-					t.Fatalf("%s/%s: diagnostic count varies between runs (%d vs %d)",
-						r.Code, ex.Name, len(first), len(again))
-				}
-				for j := range first {
-					if first[j] != again[j] {
-						t.Fatalf("%s/%s: diagnostic order varies between runs", r.Code, ex.Name)
+			t.Run(r.Code+"/"+ex.Name, func(t *testing.T) {
+				t.Parallel()
+				first := codesOf(runExample(t, ex))
+				for i := 0; i < 3; i++ {
+					again := codesOf(runExample(t, ex))
+					if len(first) != len(again) {
+						t.Fatalf("%s/%s: diagnostic count varies between runs (%d vs %d)",
+							r.Code, ex.Name, len(first), len(again))
+					}
+					for j := range first {
+						if first[j] != again[j] {
+							t.Fatalf("%s/%s: diagnostic order varies between runs", r.Code, ex.Name)
+						}
 					}
 				}
-			}
+			})
 		}
 	}
 }
