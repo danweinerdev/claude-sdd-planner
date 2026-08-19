@@ -49,7 +49,10 @@ credentials from any pasted output before it lands in an evidence row.
 
 Record the exact command, working directory, exit status, and observable result.
 At least one command or tool/inspection row is required. Every final check must
-pass. Every evidence label shown above occurs exactly once as a visible list
+pass. A deliberate expected-failure run (a hypothesis-refutation experiment
+whose nonzero exit IS the evidence) is recorded as a command row with
+`PASS (exit N, expected)` — the exact observed status, named, so the row stays
+honest while the check passes. Every evidence label shown above occurs exactly once as a visible list
 item; labels in comments and fenced blocks do not count. The focused review is
 of the complete task diff, not a later phase gate.
 
@@ -80,8 +83,28 @@ at that task commit.
 Record completion status and evidence through the planning root's validated
 lifecycle SCM adapter in a separate scoped lifecycle commit. The current Git
 planning adapter is strict: lifecycle artifacts and final phase reviews must be
-committed at planning `HEAD`. Perforce or another SCM may complete only after a
-validated native revision and lifecycle adapter exists. No-SCM cannot complete.
+committed at planning `HEAD`. Another SCM may complete only after a validated
+native revision and lifecycle adapter exists. No-SCM cannot complete.
+
+### Perforce adapter
+
+The tested identity is one submitted changelist number, recorded bare as
+`Revision / checkpoint` (e.g. `56834931`). A shelved or pending changelist is
+mutable — a shelf can be re-shelved in place — so it is not a durable identity;
+submit the work first. The target repository must be a Perforce client
+workspace and the changelist must exist on the server. Perforce has no commit
+DAG, so there is no ancestor-of-current-state check: a submitted changelist
+number is server-global and immutable, which is the durability the git
+ancestry check exists to establish. `Reviewed candidate / final` must exactly
+equal the recorded changelist number, and the identity recheck must name it.
+
+Task-level lifecycle bookkeeping is durable when the planning artifact's
+have-revision in the depot carries the completed status, checked subtasks, and
+identical evidence: submit the scoped lifecycle changelist after the
+transition, exactly as the Git adapter expects its scoped lifecycle commit.
+Phase-gate machinery (frozen four-lane review ranges) remains Git-validated;
+a Perforce phase completes only when a validated Perforce phase-review
+identity adapter exists.
 
 ## Phase evidence
 

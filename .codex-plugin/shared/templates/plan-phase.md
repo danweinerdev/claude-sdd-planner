@@ -102,7 +102,8 @@ no credentials or user-identifying paths anywhere in evidence
 The exact table columns are
 `Command | Working directory | Result | Observable evidence` or
 `Tool / inspection | Context | Result | Observable evidence`. Command results
-use `PASS (exit 0)`; tool/inspection results use `PASS`. `Identity recheck`
+use `PASS (exit 0)` — or `PASS (exit N, expected)` for a deliberate
+expected-failure run; tool/inspection results use `PASS`. `Identity recheck`
 names the tool, an ISO date/time through minutes, and a matched/matching
 identity. Follow shared/completion-evidence.md for identity, concise child
 gate, and durability rules. On phase completion, add `- Final aligned review:

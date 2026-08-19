@@ -63,7 +63,21 @@ func markdownScalar(value string, ok bool) string {
 
 var evidenceHex40Re = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
+// p4RevisionRe is Perforce's durable-identity grammar: a bare submitted
+// changelist number. Mirrors internal/vcs's p4Changelist — a shelved or
+// pending changelist is mutable (a shelf can be re-shelved in place), so only
+// a submitted numbered changelist identifies a point in history (G-2).
+var p4RevisionRe = regexp.MustCompile(`^[0-9]+$`)
+
 var evidenceExitZeroRe = regexp.MustCompile(`(?i)\bexit\s+0\b`)
+
+// evidenceExpectedExitRe accepts a deliberate expected-failure run recorded
+// honestly: `PASS (exit 2, expected)` names the exact nonzero status the
+// experiment was designed to produce. Refusing anything but `exit 0` forced
+// hypothesis-refutation runs (a normal part of spikes) out of the command
+// table entirely (G-6). The expected status must be named — a bare "expected
+// failure" would drop the exact-exit-status invariant every other row keeps.
+var evidenceExpectedExitRe = regexp.MustCompile(`(?i)\bexit\s+[1-9]\d*\s*[,(]?\s*expected\b`)
 
 // evidenceRows ports evidence_rows(): the four-column Command/Tool result
 // table rows an evidence section must carry, requiring every cell populated
@@ -180,6 +194,11 @@ func stripEvidenceRows(body string) string {
 // lowercase `exit <nonzero>` word. Returns the leftmost qualifying match,
 // mirroring re.search's leftmost-first semantics.
 func findFailingEvidence(s string) (string, bool) {
+	// An annotated expected failure (`exit 2, expected`) is a recorded
+	// hypothesis-refutation result, not stray failing output; neutralize the
+	// annotation before scanning so honest narration of a deliberate failure
+	// does not read as SDD073 evidence (G-6).
+	s = evidenceExpectedExitRe.ReplaceAllString(s, "[expected nonzero status]")
 	bestStart := -1
 	bestText := ""
 	for i := 0; i < len(s); i++ {
@@ -403,12 +422,18 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 	}
 	revision := markdownScalar(evidenceValue(body, "Revision / checkpoint"))
 	isGitVCS := vcsVal == "git" || vcsVal == "git-worktree"
-	if t.Status == "complete" && taskCompletionEvidenceNameRe.MatchString(name) {
-		taskReviewEvidence(r, a, name, body, revision, vcsVal, line, emit)
+	if taskCompletionEvidenceNameRe.MatchString(name) {
+		taskReviewEvidence(r, a, name, body, revision, vcsVal, line, t.Status == "complete", emit)
 	}
 	if isGitVCS && revision != "" && !evidenceHex40Re.MatchString(revision) {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` has invalid Git revision/checkpoint `" + revision + "`.", Correction: "Record exactly one clean full native Git revision/checkpoint."})
+	}
+	isP4VCS := vcsVal == "perforce"
+	if isP4VCS && revision != "" && !p4RevisionRe.MatchString(revision) {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message:    "`" + name + "` has invalid Perforce revision/checkpoint `" + revision + "`.",
+			Correction: "Record exactly one submitted changelist number; a shelved or pending changelist is mutable and is not a durable native identity."})
 	}
 	if vcsVal == "none" && revision != "" && revision != "none" {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
@@ -442,9 +467,15 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 			Message:    "`" + name + "` uses removed `Revision / base` identity evidence.",
 			Correction: "Use only `Revision / checkpoint` with the native SCM identity."})
 	}
-	if isGitVCS && revision != "" {
+	switch {
+	case isGitVCS && revision != "":
 		verifyCleanGitIdentity(r, a, revision, name, line, true, emit)
-	} else if t.Status == "complete" {
+	case isP4VCS && revision != "" && p4RevisionRe.MatchString(revision):
+		// The Perforce identity adapter (G-2): a submitted changelist number
+		// is the durable native identity. Syntax was already checked above;
+		// existence is verified against the target workspace.
+		verifyCleanP4Identity(r, a, revision, name, line, emit)
+	case t.Status == "complete":
 		label := vcsVal
 		if label == "" {
 			label = "missing"
@@ -466,9 +497,9 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 				emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 					Message: "`" + name + "` contains non-passing result `" + row.Row[2] + "`.", Correction: "Every required command and inspection row must record PASS."})
 			}
-			if row.Kind == "command" && !evidenceExitZeroRe.MatchString(row.Row[2]) {
+			if row.Kind == "command" && !evidenceExitZeroRe.MatchString(row.Row[2]) && !evidenceExpectedExitRe.MatchString(row.Row[2]) {
 				emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
-					Message: "`" + name + "` command row lacks explicit `exit 0`.", Correction: "Record PASS with the command exit status."})
+					Message: "`" + name + "` command row lacks explicit `exit 0`.", Correction: "Record PASS with the command exit status: `PASS (exit 0)`, or `PASS (exit N, expected)` for a deliberate expected-failure run."})
 			}
 		}
 	}
@@ -487,6 +518,11 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 		emit(Diagnostic{Code: "SDD075", Severity: Error, Path: a.Rel, Line: line,
 			Message:    "`" + name + "` recheck does not name tested Git revision/checkpoint `" + revision + "`.",
 			Correction: "Record the exact tested Git revision/checkpoint in the identity-recheck procedure and result."})
+	}
+	if isP4VCS && revision != "" && !strings.Contains(recheck, revision) {
+		emit(Diagnostic{Code: "SDD075", Severity: Error, Path: a.Rel, Line: line,
+			Message:    "`" + name + "` recheck does not name tested Perforce changelist `" + revision + "`.",
+			Correction: "Record the exact tested submitted changelist number in the identity-recheck procedure and result."})
 	}
 }
 
@@ -533,19 +569,42 @@ func verifyCleanGitIdentity(r *Root, a *Artifact, revision, name string, line in
 	}
 }
 
+// verifyCleanP4Identity is the Perforce counterpart of
+// verifyCleanGitIdentity (G-2): the target repository must be a Perforce
+// client workspace and the recorded changelist must be a submitted changelist
+// the server knows. Perforce has no HEAD and no commit DAG, so there is no
+// ancestor-of-current-state check — changelists are server-global and a
+// submitted number cannot be rewritten, which is the durability the git
+// ancestry check exists to establish.
+func verifyCleanP4Identity(r *Root, a *Artifact, revision, name string, line int, emit func(Diagnostic)) {
+	repository := r.RepoForArtifact(a.Rel)
+	repo := vcs.Detect(repository)
+	if repo.Kind() != vcs.Perforce {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` records Perforce but `" + repository + "` is not a Perforce client workspace.", Correction: "Correct the repository/VCS evidence."})
+		return
+	}
+	if ok, _ := repo.RevisionExists(revision); !ok {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` Perforce revision/checkpoint `" + revision + "` is not a submitted changelist known to `" + repository + "`.", Correction: "Record the exact submitted changelist number; submit the pending or shelved work first."})
+	}
+}
+
 // verifyEvidenceCommitted ports Validator._verify_evidence_committed, which
 // dispatches by the PLANNING ROOT's own SCM (not the artifact's target
 // repository — the question is whether the lifecycle bookkeeping itself was
 // committed, which happens in the planning root).
 func verifyEvidenceCommitted(r *Root, a *Artifact, name, body string, line int, emit func(Diagnostic)) {
-	scm := detectedSCM(r.Dir)
-	if scm == "git" {
+	switch scm := detectedSCM(r.Dir); scm {
+	case "git":
 		verifyGitEvidenceCommitted(r, a, name, body, line, emit)
-		return
+	case "perforce":
+		verifyP4EvidenceCommitted(r, a, name, body, line, emit)
+	default:
+		emit(Diagnostic{Code: "SDD171", Severity: Error, Path: a.Rel, Line: line,
+			Message:    "`" + name + "` is complete but no validated durable lifecycle adapter is available for planning-root SCM `" + scm + "`.",
+			Correction: "Keep the entity non-complete until a validated durable lifecycle adapter is available."})
 	}
-	emit(Diagnostic{Code: "SDD171", Severity: Error, Path: a.Rel, Line: line,
-		Message:    "`" + name + "` is complete but no validated durable lifecycle adapter is available for planning-root SCM `" + scm + "`.",
-		Correction: "Keep the entity non-complete until a validated durable lifecycle adapter is available."})
 }
 
 // verifyGitEvidenceCommitted ports Validator._verify_git_evidence_committed.
@@ -575,6 +634,81 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 			Message: "`" + name + "` committed planning artifact is malformed.", Correction: "Commit a valid populated lifecycle artifact before finalizing completion."})
 		return
 	}
+	planCommitted := func(planName string) *Artifact {
+		planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
+		planRepository := gitRootFS(planPath)
+		if planRepository == "" || planRepository != repo.Root() {
+			return nil
+		}
+		planRelative, relErr := filepath.Rel(planRepository, planPath)
+		if relErr != nil {
+			return nil
+		}
+		planRepo := vcs.Detect(planRepository)
+		planAtHead, ferr := planRepo.FileAt("HEAD", filepath.ToSlash(planRelative))
+		if ferr != nil {
+			return nil
+		}
+		return ParseArtifactBytes(planAtHead, filepath.ToSlash(planRelative))
+	}
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "committed at HEAD", emit)
+}
+
+// verifyP4EvidenceCommitted is the Perforce durable-lifecycle adapter (G-2):
+// the same question as the git path — is the lifecycle bookkeeping itself
+// submitted? — answered against the client's have-revision of the planning
+// artifact. `#have` is what this workspace's state is actually based on: a
+// submit from this workspace advances it, while an unsubmitted edit (or a
+// file never added) makes the depot copy differ from disk, which is exactly
+// the not-yet-durable condition the check exists to catch.
+func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int, emit func(Diagnostic)) {
+	repo := vcs.Detect(r.Dir)
+	if repo.Kind() != vcs.Perforce {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` is complete but the planning root is not a Perforce client workspace.", Correction: "Submit the lifecycle/evidence artifact from a Perforce client workspace before finalizing completion."})
+		return
+	}
+	relative, err := filepath.Rel(resolveSymlinks(repo.Root()), resolveSymlinks(a.AbsPath))
+	if err != nil || strings.HasPrefix(relative, "..") {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` planning artifact cannot be resolved inside its Perforce client workspace.", Correction: "Submit the lifecycle/evidence artifact before finalizing completion."})
+		return
+	}
+	relative = filepath.ToSlash(relative)
+	tracked, err := repo.FileAt("have", relative)
+	if err != nil {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` completion evidence is not submitted to the depot.", Correction: "Submit the separate scoped lifecycle/evidence changelist before finalizing completion."})
+		return
+	}
+	committed := ParseArtifactBytes(tracked, a.Rel)
+	if committed.Meta == nil {
+		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
+			Message: "`" + name + "` submitted planning artifact is malformed.", Correction: "Submit a valid populated lifecycle artifact before finalizing completion."})
+		return
+	}
+	planCommitted := func(planName string) *Artifact {
+		planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
+		planRelative, relErr := filepath.Rel(resolveSymlinks(repo.Root()), resolveSymlinks(planPath))
+		if relErr != nil || strings.HasPrefix(planRelative, "..") {
+			return nil
+		}
+		planAtHave, ferr := repo.FileAt("have", filepath.ToSlash(planRelative))
+		if ferr != nil {
+			return nil
+		}
+		return ParseArtifactBytes(planAtHave, filepath.ToSlash(planRelative))
+	}
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "submitted to the depot", emit)
+}
+
+// verifyCommittedLifecycle is the SCM-independent half of the durable
+// lifecycle check: given the committed/submitted copy of the planning
+// artifact, verify the lifecycle status flip, checked criteria/subtasks, and
+// evidence body all landed. commitDesc names the SCM's durability state in
+// diagnostics ("committed at HEAD", "submitted to the depot") — transition
+// verbs recognize both spellings as commit-pending rather than refusals.
+func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committed *Artifact, planCommitted func(planName string) *Artifact, commitDesc string, emit func(Diagnostic)) {
 	var committedBody string
 	haveBody := false
 	lifecycleComplete := false
@@ -609,34 +743,21 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 		criteria := headingBodies(committed.Body, 2, "Acceptance Criteria")
 		lifecycleComplete = lifecycleComplete && len(criteria) > 0 && !hasUncheckedCheckbox(criteria[0])
 		planName := planNameFor(a)
-		var planRepository string
+		planComplete := false
 		if planName != "" {
-			planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
-			planRepository = gitRootFS(planPath)
-		}
-		if planName == "" || planRepository == "" || planRepository != repo.Root() {
-			lifecycleComplete = false
-		} else {
-			planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
-			planRelative, relErr := filepath.Rel(planRepository, planPath)
-			planComplete := false
-			if relErr == nil {
-				planRepo := vcs.Detect(planRepository)
-				if planAtHead, ferr := planRepo.FileAt("HEAD", filepath.ToSlash(planRelative)); ferr == nil {
-					planArtifact := ParseArtifactBytes(planAtHead, filepath.ToSlash(planRelative))
-					if phases, ok := planArtifact.Meta["phases"].([]any); ok {
-						for _, p := range phases {
-							pm := planEntry(p)
-							if pm != nil && metaStr(pm, "id") == metaStr(a.Meta, "phase") && metaStr(pm, "status") == "complete" {
-								planComplete = true
-								break
-							}
+			if planArtifact := planCommitted(planName); planArtifact != nil {
+				if phases, ok := planArtifact.Meta["phases"].([]any); ok {
+					for _, p := range phases {
+						pm := planEntry(p)
+						if pm != nil && metaStr(pm, "id") == metaStr(a.Meta, "phase") && metaStr(pm, "status") == "complete" {
+							planComplete = true
+							break
 						}
 					}
 				}
 			}
-			lifecycleComplete = lifecycleComplete && planComplete
 		}
+		lifecycleComplete = lifecycleComplete && planComplete
 	} else if name == "Plan Completion Evidence" {
 		lifecycleComplete = committed.Status() == "complete"
 		blocks := headingBodies(committed.Body, 2, name)
@@ -646,7 +767,7 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 	}
 	if !lifecycleComplete || !haveBody {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
-			Message:    "`" + name + "` lifecycle completion is not committed at HEAD.",
+			Message:    "`" + name + "` lifecycle completion is not " + commitDesc + ".",
 			Correction: "Commit the complete status, checked criteria/subtasks, and evidence in the scoped lifecycle commit."})
 		return
 	}
@@ -708,7 +829,15 @@ func oneOf(values []string) (string, bool) {
 // taskReviewEvidence ports Validator._task_review_evidence: a complete task
 // needs a durable, auditable focused review distinct from the plain identity
 // evidence above.
-func taskReviewEvidence(r *Root, a *Artifact, name, body, revision, vcsVal string, line int, emit func(Diagnostic)) {
+//
+// The format layer (label completeness, focused-review syntax, PASS/Aligned
+// result, string-equality identity shape) runs on any status once the author
+// has started writing the review labels — deferring every check to the
+// completion transition meant evidence validated clean while in-progress and
+// then produced rounds of format findings the moment the status flipped
+// (G-5). The identity layer (git object existence, parentage, ancestry) stays
+// complete-only: an in-progress task legitimately has no final commit yet.
+func taskReviewEvidence(r *Root, a *Artifact, name, body, revision, vcsVal string, line int, complete bool, emit func(Diagnostic)) {
 	focusedValues := evidenceValues(body, "Focused review")
 	reviewedValues := evidenceValues(body, "Reviewed candidate / final")
 	resultValues := evidenceValues(body, "Review result")
@@ -716,6 +845,12 @@ func taskReviewEvidence(r *Root, a *Artifact, name, body, revision, vcsVal strin
 	focused := markdownScalar(focusedRaw, haveFocusedRaw)
 	reviewed := markdownScalar(oneOf(reviewedValues))
 	result := markdownScalar(oneOf(resultValues))
+
+	// Nothing drafted yet on a non-complete task: presence is enforced by
+	// the completion transition, not while the work is still open.
+	if !complete && len(focusedValues) == 0 && len(reviewedValues) == 0 && len(resultValues) == 0 {
+		return
+	}
 
 	var missing []string
 	if len(focusedValues) != 1 || focused == "" {
@@ -739,12 +874,18 @@ func taskReviewEvidence(r *Root, a *Artifact, name, body, revision, vcsVal strin
 			Correction: "Use `Focused review: `<exact command/tool>`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary`."})
 	}
 	isGitVCS := vcsVal == "git" || vcsVal == "git-worktree"
-	if isGitVCS && revision != "" && !strings.HasSuffix(revision, "-dirty") {
+	switch {
+	case complete && isGitVCS && revision != "" && !strings.HasSuffix(revision, "-dirty"):
 		validGitTaskReviewIdentity(r, a, name, focused, reviewed, revision, line, emit)
-	} else if reviewed != revision {
-		emit(Diagnostic{Code: "SDD169", Severity: Error, Path: a.Rel, Line: line,
-			Message:    "`" + name + "` reviewed candidate/final `" + reviewed + "` does not exactly equal native `Revision / checkpoint` `" + revision + "`.",
-			Correction: "For this SCM, record the exact native revision/checkpoint reviewed; no deterministic alternate review-identity adapter is available."})
+	case complete, !isGitVCS && revision != "":
+		// Complete non-git (or empty-revision) identity equality — and the
+		// same pure string comparison as early feedback on a non-complete
+		// non-git task once both labels are written.
+		if reviewed != revision {
+			emit(Diagnostic{Code: "SDD169", Severity: Error, Path: a.Rel, Line: line,
+				Message:    "`" + name + "` reviewed candidate/final `" + reviewed + "` does not exactly equal native `Revision / checkpoint` `" + revision + "`.",
+				Correction: "For this SCM, record the exact native revision/checkpoint reviewed; no deterministic alternate review-identity adapter is available."})
+		}
 	}
 	if result != "PASS/Aligned" {
 		emit(Diagnostic{Code: "SDD169", Severity: Error, Path: a.Rel, Line: line,
@@ -978,14 +1119,37 @@ func init() {
 		Code: "SDD072", Severity: Error, PyFunc: "_evidence",
 		What:      "completion evidence has an invalid date/VCS/revision/repository, no PASS row, or an unmet Git identity/lifecycle-commit check",
 		CheckRoot: evidenceCheckRoot("SDD072"),
-		Bad: []Example{{Name: "invalid-vcs", Files: map[string]string{
-			"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
+		Bad: []Example{
+			{Name: "invalid-vcs", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
 - Repository: {{REPO}}
 - VCS: bogus
 - Revision / checkpoint: none
 - Identity recheck: none`),
-		}}},
-		Good: []Example{validGitTaskEvidenceExample("clean-git-identity")},
+			}},
+			// G-2: a shelved/pending changelist is mutable, not a durable
+			// Perforce identity — only a bare submitted changelist number is.
+			{Name: "invalid-p4-revision", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("planned", `- Verified: 2024-01-01
+- Repository: {{REPO}}
+- VCS: perforce
+- Revision / checkpoint: pending CL 56834931, shelf of 2026-08-17
+- Identity recheck: none`),
+			}},
+		},
+		Good: []Example{
+			validGitTaskEvidenceExample("clean-git-identity"),
+			// G-6: a deliberate expected-failure experiment is first-class
+			// command evidence when the Result cell names the exact status:
+			// `PASS (exit N, expected)`.
+			{Name: "expected-failure-row", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("planned", "- Verified: 2024-01-01\n"+
+					"\n"+
+					"| Command | Working directory | Result | Observable evidence |\n"+
+					"| --- | --- | --- | --- |\n"+
+					"| `go test ./... -run TestMustRefuse` | . | PASS (exit 1, expected) | refusal path fires as designed |\n"),
+			}},
+		},
 	})
 
 	Register(&Rule{
@@ -1041,16 +1205,41 @@ func init() {
 
 	Register(&Rule{
 		Code: "SDD169", Severity: Error, PyFunc: "_task_review_evidence",
-		What:      "a complete task's focused review/reviewed-identity/review-result evidence is missing or does not resolve",
+		What: "a task's focused review/reviewed-identity/review-result evidence is malformed — or, on a complete task, missing or unresolvable",
+		// The format layer (label completeness once any review label is
+		// written, focused-review syntax, PASS/Aligned result) runs on every
+		// status so evidence is written correctly the first time (G-5); the
+		// git identity layer runs only on complete tasks.
 		CheckRoot: evidenceCheckRoot("SDD169"),
-		Bad: []Example{{Name: "missing-review-labels", Files: map[string]string{
-			"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
+		Bad: []Example{
+			{Name: "missing-review-labels", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
 - Repository: {{REPO}}
 - VCS: none
 - Revision / checkpoint: none
 - Identity recheck: none`),
-		}}},
-		Good: []Example{validGitTaskEvidenceExample("resolved-clean-git-review")},
+			}},
+			// G-5: a malformed focused-review line is caught while the task
+			// is still in-progress, not first at the completion transition.
+			{Name: "in-progress-bad-format", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("in-progress", `- Verified: 2024-01-01
+- Focused review: looked at the diff, seemed fine
+- Reviewed candidate / final: none
+- Review result: PASS/Aligned`),
+			}},
+		},
+		Good: []Example{
+			validGitTaskEvidenceExample("resolved-clean-git-review"),
+			// No review labels drafted yet on an in-progress task: presence
+			// is the completion transition's concern, not the format layer's.
+			{Name: "in-progress-not-yet-drafted", Files: map[string]string{
+				"Plans/Sample/01-One.md": taskEvidencePhase("in-progress", `- Verified: 2024-01-01
+
+| Command | Working directory | Result | Observable evidence |
+| --- | --- | --- | --- |
+| `+"`go test ./...`"+` | . | PASS (exit 0) | ok |`),
+			}},
+		},
 	})
 
 	Register(&Rule{

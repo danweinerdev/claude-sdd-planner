@@ -133,11 +133,12 @@ func cmdComplete(kind, path string, o completeOpts) error {
 }
 
 // splitCommitPending separates genuine refusals from the checks that inspect
-// the committed copy at HEAD and therefore cannot pass before the transition
-// is committed.
+// the committed/submitted copy of the planning artifact and therefore cannot
+// pass before the transition itself is committed (git) or submitted (p4).
 func splitCommitPending(all []rules.Diagnostic) (blocking, pending []rules.Diagnostic) {
 	for _, d := range all {
 		if strings.Contains(d.Message, "is not committed at HEAD") ||
+			strings.Contains(d.Message, "is not submitted to the depot") ||
 			strings.Contains(d.Message, "requires the current target worktree to be clean") {
 			pending = append(pending, d)
 			continue

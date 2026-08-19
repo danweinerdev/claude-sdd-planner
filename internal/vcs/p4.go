@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -26,16 +27,44 @@ var p4Changelist = regexp.MustCompile(`^[0-9]+$`)
 type p4Repo struct{ root string }
 
 // probeP4 implements shared/vcs-detection.md step 6: `p4 info` must succeed
-// and `p4 where //...` must resolve at least one line inside dir.
+// and dir must lie inside the client's root. The containment check is what
+// makes the probe honest — `p4 info` succeeds anywhere the server is
+// reachable and `p4 where //...` resolves the client view regardless of dir,
+// so without it every directory on a machine with a configured P4 client
+// "detected" as Perforce.
 func probeP4(dir string) Repo {
-	if _, err := runP4(dir, "info"); err != nil {
+	out, err := runP4(dir, "info")
+	if err != nil {
 		return nil
 	}
-	out, err := runP4(dir, "where", "//...")
-	if err != nil || strings.TrimSpace(string(out)) == "" {
+	clientRoot := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "Client root:") {
+			clientRoot = strings.TrimSpace(strings.TrimPrefix(line, "Client root:"))
+			break
+		}
+	}
+	if clientRoot == "" {
+		return nil
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil
+	}
+	if !pathWithin(filepath.Clean(clientRoot), filepath.Clean(absDir)) {
 		return nil
 	}
 	return &p4Repo{root: dir}
+}
+
+// pathWithin reports whether dir equals root or lives beneath it, comparing
+// case-insensitively because Perforce reports client roots with the casing
+// the client spec was written in, not the filesystem's.
+func pathWithin(root, dir string) bool {
+	if len(dir) < len(root) || !strings.EqualFold(dir[:len(root)], root) {
+		return false
+	}
+	return len(dir) == len(root) || dir[len(root)] == filepath.Separator || root[len(root)-1] == filepath.Separator
 }
 
 func runP4(dir string, args ...string) ([]byte, error) {
@@ -91,6 +120,17 @@ func (p *p4Repo) Parents(rev string) ([]string, error) {
 }
 
 func (p *p4Repo) FileAt(rev, relPath string) ([]byte, error) {
+	// `have` and `head` are Perforce's own symbolic file revisions: the
+	// revision this client is synced to, and the depot tip. The durable
+	// lifecycle adapter reads the planning artifact at #have — the state this
+	// workspace is actually based on — the way the git adapter reads HEAD.
+	if rev == "have" || rev == "head" {
+		out, err := runP4(p.root, "print", "-q", fmt.Sprintf("%s#%s", relPath, rev))
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s#%s", ErrNotFound, relPath, rev)
+		}
+		return out, nil
+	}
 	if !p.RevisionSyntaxValid(rev) {
 		return nil, fmt.Errorf("%w: not a changelist number: %s", ErrUnsupported, rev)
 	}

@@ -75,7 +75,8 @@ no credentials or user-identifying paths anywhere in evidence
  bookkeeping separately. Dirty Git, no-SCM, and unsupported SCM adapters remain
  non-complete. The exact table columns are `Command | Working directory | Result | Observable evidence`
 or `Tool / inspection | Context | Result | Observable evidence`. Command
-results use `PASS (exit 0)`; tool/inspection results use `PASS`. `Identity
+results use `PASS (exit 0)` — or `PASS (exit N, expected)` for a deliberate
+expected-failure run; tool/inspection results use `PASS`. `Identity
 recheck` names the tool, an ISO date/time through minutes, and a
 matched/matching identity. Follow shared/completion-evidence.md for identity and
 durability rules. A complete plan uses `### Completed phase identities` with one
