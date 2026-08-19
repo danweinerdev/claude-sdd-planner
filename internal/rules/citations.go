@@ -50,7 +50,7 @@ func allDecisions(r *Root) map[string]decisionEntry {
 
 // isLiveArtifact mirrors Validator._is_live.
 func isLiveArtifact(a *Artifact) bool {
-	if a.Kind() == "debrief" || a.Kind() == "retro" {
+	if a.Kind() == "debrief" {
 		return false
 	}
 	return a.Status() != "archived" && a.Status() != "superseded"

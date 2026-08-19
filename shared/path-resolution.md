@@ -4,7 +4,7 @@ Single source of truth for how sdd-planner skills and agents resolve the three r
 
 ## Planning Root (artifacts)
 
-Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`, `Decisions/`) are read from and written to the **planning root**. Legacy `Retro/` and `Diagrams/` directories remain readable but are no longer created.
+Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`, `Decisions/`) are read from and written to the **planning root**. A legacy `Retro/` directory remains readable for the review artifacts that lived there before `Plans/<Plan>/reviews/`; the retired `retro` and `diagram` artifact types (and `Diagrams/`) are no longer recognized.
 
 1. Find `planning-config.json`: look in the current working directory; if absent, walk up parent directories to the repository root.
 2. If no `planning-config.json` exists anywhere, the planning root is the repository root (treat `planningRoot` as `"."`).

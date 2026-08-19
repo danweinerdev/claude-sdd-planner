@@ -14,9 +14,13 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
-// artifactDirs mirrors sdd_validate.py's ARTIFACT_DIRS: the top-level
-// directories under a planning root that are walked for `*.md` artifacts.
-var artifactDirs = []string{"Research", "Brainstorm", "Specs", "Designs", "Plans", "Decisions", "Retro", "Diagrams"}
+// artifactDirs is the top-level directories under a planning root that are
+// walked for `*.md` artifacts. `Retro/` is retained for reading only: it is
+// where review artifacts lived before Plans/<Plan>/reviews/, and legacy
+// reviews there must keep validating. `Diagrams/` is not walked — the diagram
+// artifact type was retired with its skill, and files there are simply not
+// planning artifacts any more.
+var artifactDirs = []string{"Research", "Brainstorm", "Specs", "Designs", "Plans", "Decisions", "Retro"}
 
 // Root is every artifact discovered under a planning root, plus the index
 // rules need to resolve cross-artifact references.

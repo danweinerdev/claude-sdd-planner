@@ -30,10 +30,13 @@ var pluginSourceDirs = map[string]bool{
 	"scripts": true, "hooks": true, "internal": true, "cmd": true, "tools": true,
 }
 
-// artifactDirs mirror the directories the validator walks.
+// artifactDirs mirror the directories the validator walks. `Retro/` is
+// read-only legacy (pre-Plans/<Plan>/reviews/ review artifacts); `Diagrams/`
+// is not an artifact directory any more — the diagram type was retired with
+// its skill.
 var artifactDirs = map[string]bool{
 	"Research": true, "Brainstorm": true, "Specs": true, "Designs": true,
-	"Plans": true, "Decisions": true, "Retro": true, "Diagrams": true,
+	"Plans": true, "Decisions": true, "Retro": true,
 }
 
 // CheckWrite returns the verdict for a Write or Edit on path by agent.

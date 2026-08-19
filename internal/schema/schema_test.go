@@ -93,8 +93,8 @@ func TestLoadUnknownType(t *testing.T) {
 // artifact types) must load without error.
 func TestAllEmbeddedSchemasLoad(t *testing.T) {
 	types := Types()
-	if len(types) != 17 {
-		t.Fatalf("Types() = %v, want 17 embedded schema types", types)
+	if len(types) != 16 {
+		t.Fatalf("Types() = %v, want 16 embedded schema types (retro was retired with its skill)", types)
 	}
 	for _, ty := range types {
 		t.Run(ty, func(t *testing.T) {

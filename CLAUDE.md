@@ -104,7 +104,6 @@ Plan (README.md)       <- like a Jira Project
 | research / brainstorm | `draft`, `active`, `archived` |
 | spec / design | `draft`, `review`, `approved`, `implemented`, `superseded` |
 | debrief | `draft`, `complete` |
-| retro / diagram (legacy, read-only) | `draft`, `complete` / `draft`, `active`, `archived` |
 
 ### Completion Evidence
 `complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically.

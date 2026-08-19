@@ -7,13 +7,14 @@ import (
 )
 
 // statusValues is the allowed `status:` values per artifact `type:`
-// (originally mirroring sdd_validate.py's STATUS). Every type the schema
-// registry serves must appear here with the schema's own status enum —
-// TestStatusValuesAgreeWithSchemaRegistry enforces that. A type the tool can
+// (originally mirroring sdd_validate.py's STATUS). It agrees with the schema
+// registry in both directions — every schema-served type appears here with
+// the schema's own status enum, and every entry here is backed by a schema —
+// TestStatusValuesAgreeWithSchemaRegistry enforces both. A type the tool can
 // scaffold (`sdd template <type>`, `apply --create`) but the validator calls
-// "unknown" (SDD011) is a registry drift bug (B-4). `diagram` is the one
-// validator-only legacy entry: it predates the schema registry and has no
-// schema file.
+// "unknown" (SDD011) is a registry drift bug (B-4); the retired `retro` and
+// `diagram` skills' types were dropped outright rather than kept as
+// validator-only legacy entries.
 var statusValues = map[string][]string{
 	"research":     {"draft", "active", "archived"},
 	"brainstorm":   {"draft", "active", "archived"},
@@ -23,8 +24,6 @@ var statusValues = map[string][]string{
 	"phase":        {"planned", "in-progress", "complete", "blocked", "deferred"},
 	"plan-phase":   {"planned", "in-progress", "complete", "blocked", "deferred"},
 	"debrief":      {"draft", "complete"},
-	"retro":        {"draft", "complete"},
-	"diagram":      {"draft", "active", "archived"},
 	"decision-log": {"active", "archived"},
 	"review":       {"open", "resolved", "superseded"},
 	"note":         {"draft", "in-progress", "complete"},

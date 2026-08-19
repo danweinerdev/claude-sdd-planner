@@ -10,12 +10,15 @@ import (
 // The validator's statusValues map and the embedded schema registry are two
 // independent lists of artifact types. When they drift, a type the tool
 // itself scaffolds (`sdd template note`, `apply --create`) is refused by
-// `sdd validate` with SDD011 "Unknown type" (B-4). This pins the agreement:
-// every schema-served type must be registered in statusValues with exactly
-// the schema's own status enum. statusValues may carry validator-only legacy
-// extras (`diagram`) — the agreement is one-way by design.
+// `sdd validate` with SDD011 "Unknown type" (B-4) — or the validator accepts
+// a type no other command can serve. This pins the agreement in both
+// directions: every schema-served type is registered in statusValues with
+// exactly the schema's own status enum, and every statusValues entry is
+// backed by a schema.
 func TestStatusValuesAgreeWithSchemaRegistry(t *testing.T) {
+	schemaTypes := map[string]bool{}
 	for _, typ := range schema.Types() {
+		schemaTypes[typ] = true
 		s, err := schema.Load(typ)
 		if err != nil {
 			t.Fatalf("schema.Load(%q): %v", typ, err)
@@ -31,6 +34,11 @@ func TestStatusValuesAgreeWithSchemaRegistry(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, f.Enum) {
 			t.Errorf("statusValues[%q] = %v, want the schema's enum %v", typ, got, f.Enum)
+		}
+	}
+	for typ := range statusValues {
+		if !schemaTypes[typ] {
+			t.Errorf("statusValues registers %q but no schema serves it; the validator accepts a type no other command can create or edit", typ)
 		}
 	}
 }
