@@ -41,6 +41,7 @@ SDD068/incomplete-task
 SDD069/unchecked-criteria
 SDD070/complete-but-pending
 SDD071/missing-labels
+SDD072/invalid-p4-revision
 SDD072/invalid-vcs
 SDD073/stray-fail
 SDD074/fallback-reason
@@ -82,6 +83,7 @@ SDD117/unknown-decided-by
 SDD118/agent-accepted
 SDD120/unresolved-decision
 SDD121/cites-rejected
+SDD122/unresolved-dd
 SDD122/unresolved-fr
 SDD130/unknown-phase-dep
 SDD131/self-dep
@@ -121,6 +123,7 @@ SDD166/missing-final-aligned-review
 SDD167/phase-review-bad-schema
 SDD167/review-not-aligned
 SDD168/frozen-rev-mismatch
+SDD169/in-progress-bad-format
 SDD169/missing-review-labels
 SDD170/review-not-committed
 SDD171/no-git-planning-root
@@ -128,3 +131,8 @@ SDD172/no-adapter-for-none-vcs
 SDD173/dirty-target-after-review
 SDD174/planning-revision-absent-from-history
 SDD175/plan-checkpoint-not-full-hex
+SDD176/waiver-for-unwaivable-parse-code
+SDD176/waiver-without-reason
+SDD177/stale-waiver
+SDD178/superseded-by-without-status
+SDD179/live-plan-relates-superseded-design

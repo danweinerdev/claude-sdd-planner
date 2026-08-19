@@ -1013,6 +1013,47 @@
     ],
     "exit": 1
   },
+  "SDD072/invalid-p4-revision": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD075",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
   "SDD072/invalid-vcs": {
     "diagnostics": [
       {
@@ -2677,6 +2718,17 @@
         "code": "SDD121",
         "line": 13,
         "path": "Research/bad.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD122/unresolved-dd": {
+    "diagnostics": [
+      {
+        "code": "SDD122",
+        "line": 13,
+        "path": "Research/bad-dd.md",
         "severity": "error"
       }
     ],
@@ -4371,6 +4423,59 @@
     ],
     "exit": 1
   },
+  "SDD169/in-progress-bad-format": {
+    "diagnostics": [
+      {
+        "code": "SDD163",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD122",
+        "line": 15,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD071",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD072",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD169",
+        "line": 26,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
   "SDD169/missing-review-labels": {
     "diagnostics": [
       {
@@ -4862,6 +4967,109 @@
       {
         "code": "SDD175",
         "line": 32,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD176/waiver-for-unwaivable-parse-code": {
+    "diagnostics": [
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD176",
+        "line": 10,
+        "path": "Research/topic.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD176/waiver-without-reason": {
+    "diagnostics": [
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD020",
+        "line": 1,
+        "path": "Research/topic.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD176",
+        "line": 10,
+        "path": "Research/topic.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD177/stale-waiver": {
+    "diagnostics": [
+      {
+        "code": "SDD177",
+        "line": 10,
+        "path": "Research/topic.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD178/superseded-by-without-status": {
+    "diagnostics": [
+      {
+        "code": "SDD178",
+        "line": 1,
+        "path": "Designs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD179/live-plan-relates-superseded-design": {
+    "diagnostics": [
+      {
+        "code": "SDD179",
+        "line": 8,
         "path": "Plans/Sample/README.md",
         "severity": "error"
       }
