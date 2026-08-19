@@ -5,10 +5,19 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+// modeBitsSupported reports whether the platform can represent POSIX
+// permission bits at all. On Windows os.Chmod expresses only the read-only
+// flag, so assertions about distinctive modes are meaningless there — the
+// gated behavior is a platform no-op, not a missing feature.
+func modeBitsSupported() bool {
+	return runtime.GOOS != "windows"
+}
 
 // Digest must be stable for identical content and differ for differing
 // content, since FR-48's isolation precondition depends on both properties.
@@ -43,18 +52,25 @@ func TestWriteAtomic(t *testing.T) {
 	}
 
 	// Give the file a distinctive mode, then overwrite and check it survives.
-	if err := os.Chmod(path, 0o640); err != nil {
-		t.Fatalf("Chmod: %v", err)
-	}
-	if err := WriteAtomic(path, "second content"); err != nil {
+	// Unix-only: Windows has no POSIX permission bits — os.Chmod there can
+	// express only the read-only flag, so a "distinctive mode" cannot exist
+	// and the preservation branch in WriteAtomic is a platform no-op.
+	if modeBitsSupported() {
+		if err := os.Chmod(path, 0o640); err != nil {
+			t.Fatalf("Chmod: %v", err)
+		}
+		if err := WriteAtomic(path, "second content"); err != nil {
+			t.Fatalf("WriteAtomic (overwrite): %v", err)
+		}
+		fi, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if fi.Mode().Perm() != 0o640 {
+			t.Errorf("mode = %o, want %o (overwrite must preserve mode)", fi.Mode().Perm(), 0o640)
+		}
+	} else if err := WriteAtomic(path, "second content"); err != nil {
 		t.Fatalf("WriteAtomic (overwrite): %v", err)
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if fi.Mode().Perm() != 0o640 {
-		t.Errorf("mode = %o, want %o (overwrite must preserve mode)", fi.Mode().Perm(), 0o640)
 	}
 	got, err = os.ReadFile(path)
 	if err != nil {
