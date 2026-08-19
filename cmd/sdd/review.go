@@ -51,10 +51,13 @@ refuses until it is replaced by what the lane actually observed.
 evidence set records one lane's concrete observation (from --evidence or
 stdin) on an open review.
 
-resolve is the closing transition: it refuses unless every lane carries real
-evidence, the verdict is Aligned, and every finding has a terminal
-disposition, then sets frozen: true and status: resolved atomically. After
-resolve the review is immutable (SPK050).`
+resolve is the closing transition. On a phase-gate review (review_scope:
+phase) it refuses unless every lane carries real evidence, the verdict is
+Aligned, and every finding has a terminal disposition, then sets frozen: true
+and status: resolved atomically; after resolve the review is immutable
+(SPK050). On an ordinary review it runs the reduced gate — every finding has
+a terminal disposition and no follow-up floats untracked — and sets
+status: resolved without freezing.`
 
 // stableLanes are the data-layer lane identifiers the validator checks, in the
 // order shared/review-artifacts.md lists them. Frontmatter always uses these
@@ -539,12 +542,21 @@ var terminalFindingStatus = map[string]bool{
 	"fixed": true, "deferred": true, "rejected": true, "answered": true,
 }
 
-// cmdReviewResolve is the closing transition for a phase-gate review: it
-// verifies the review would satisfy the same schema SDD167 enforces, then
-// sets `frozen: true` and `status: resolved` in one write. Freezing happens
-// here — at resolution — never at scaffold time, so the artifact stays
-// editable exactly while it is open and becomes immutable exactly when its
-// content starts backing a phase completion.
+// cmdReviewResolve is the closing transition for a review.
+//
+// For a phase-gate review (review_scope: phase) it verifies the review would
+// satisfy the same schema SDD167 enforces, then sets `frozen: true` and
+// `status: resolved` in one write. Freezing happens here — at resolution —
+// never at scaffold time, so the artifact stays editable exactly while it is
+// open and becomes immutable exactly when its content starts backing a phase
+// completion.
+//
+// For an ordinary review it runs the reduced gate — every finding carries a
+// terminal disposition, no follow-up floats untracked — and sets
+// `status: resolved` without freezing. `status` is tool-owned, so without
+// this branch an ordinary review could never legally leave `open`: this verb
+// refused on scope while pointing at apply/section set, and apply refused the
+// status key with SPK021 (G-1).
 func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	art, err := store.Read(path)
 	if err != nil {
@@ -557,19 +569,22 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
 		return fmt.Errorf("review resolve: %s is not a review artifact", path)
 	}
-	if scope, _ := doc.FM("review_scope"); strings.Trim(scope, `"'`) != "phase" {
-		return fmt.Errorf("review resolve: %s is not a phase-gate review (review_scope: phase); ordinary reviews are not frozen and are edited via apply/section set", path)
-	}
+	scope, _ := doc.FM("review_scope")
+	isPhaseGate := strings.Trim(scope, `"'`) == "phase"
 
 	status, _ := doc.FM("status")
 	status = strings.Trim(status, `"'`)
 	res := reviewResolveResult{Path: relPath(path), From: status, To: "resolved", DryRun: o.DryRun}
-	if status == "resolved" && isFrozenSource(art.Source) {
+	if status == "resolved" && (!isPhaseGate || isFrozenSource(art.Source)) {
 		res.OK, res.Already = true, true
 		if o.JSON {
 			return writeJSON(res)
 		}
-		fmt.Printf("review resolve: already resolved and frozen\n")
+		if isPhaseGate {
+			fmt.Printf("review resolve: already resolved and frozen\n")
+		} else {
+			fmt.Printf("review resolve: already resolved\n")
+		}
 		return nil
 	}
 	// `resolved` but not frozen is an inconsistent half-state — the artifact
@@ -584,15 +599,19 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	// The gate: refuse on every reason the validator would reject the
 	// resolved review. This is the same reuse discipline as the lifecycle
 	// completion verbs — a second opinion on "what makes a review resolvable"
-	// would drift from SDD167.
+	// would drift from SDD167. The verdict/rev/four-lane checks are the
+	// phase-gate machinery; an ordinary review's reduced gate is only the
+	// scope-independent hygiene below (terminal findings, tracked followups).
 	var blocking []string
-	if verdict, _ := doc.FM("verdict"); strings.Trim(verdict, `"'`) != "Aligned" {
-		blocking = append(blocking, "verdict must be Aligned; a non-Aligned review is superseded by a fresh review after fixes land, not resolved")
+	if isPhaseGate {
+		if verdict, _ := doc.FM("verdict"); strings.Trim(verdict, `"'`) != "Aligned" {
+			blocking = append(blocking, "verdict must be Aligned; a non-Aligned review is superseded by a fresh review after fixes land, not resolved")
+		}
+		if rev, _ := doc.FM("rev"); strings.Trim(rev, `"'`) == "" {
+			blocking = append(blocking, "rev must carry the frozen reviewed identity")
+		}
+		blocking = append(blocking, rules.PhaseReviewSchemaErrors(fmMeta(doc.FrontmatterRaw))...)
 	}
-	if rev, _ := doc.FM("rev"); strings.Trim(rev, `"'`) == "" {
-		blocking = append(blocking, "rev must carry the frozen reviewed identity")
-	}
-	blocking = append(blocking, rules.PhaseReviewSchemaErrors(fmMeta(doc.FrontmatterRaw))...)
 	for _, f := range fmSequence(doc.FrontmatterRaw, "findings") {
 		if s := f.Str("status"); !terminalFindingStatus[s] {
 			blocking = append(blocking, fmt.Sprintf("finding %s has status %q; every finding needs a terminal disposition (fixed, deferred, rejected, answered)", f.Str("id"), s))
@@ -625,17 +644,23 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	if !setTopLevelStatus(lines, "resolved") {
 		return fmt.Errorf("review resolve: no top-level `status:` field to advance")
 	}
-	if !setTopLevelScalar(lines, "frozen", "true") {
+	// Only phase-gate reviews freeze at resolution; an ordinary review stays
+	// an editable record (and is scaffolded without a `frozen:` field).
+	if isPhaseGate && !setTopLevelScalar(lines, "frozen", "true") {
 		return fmt.Errorf("review resolve: no top-level `frozen:` field to advance — was this review scaffolded by `sdd review scaffold`?")
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
 
+	outcome := "resolved"
+	if isPhaseGate {
+		outcome = "resolved and frozen"
+	}
 	res.OK = true
 	if o.DryRun {
 		if o.JSON {
 			return writeJSON(res)
 		}
-		fmt.Printf("review resolve: gate met; would mark %s resolved and frozen\n", path)
+		fmt.Printf("review resolve: gate met; would mark %s %s\n", path, outcome)
 		return nil
 	}
 	if err := store.WriteAtomic(path, updated); err != nil {
@@ -645,7 +670,7 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	if o.JSON {
 		return writeJSON(res)
 	}
-	fmt.Printf("review resolve: %s is now resolved and frozen\n", path)
+	fmt.Printf("review resolve: %s is now %s\n", path, outcome)
 	return nil
 }
 

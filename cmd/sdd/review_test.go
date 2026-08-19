@@ -327,3 +327,79 @@ func TestReviewScaffoldForceCannotReplaceFrozenReview(t *testing.T) {
 		t.Fatalf("scaffold --force onto a frozen review must be refused; got %v", err)
 	}
 }
+
+// ordinaryReview writes a non-phase-gate review (no review_scope: phase, no
+// frozen: field — the shape an agent authors for a task-level code review).
+func ordinaryReview(t *testing.T, findingStatus, trackedIn string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "02-sample-code-review.md")
+	src := `---
+title: "Sample Code Review"
+type: review
+status: open
+created: 2026-08-01
+updated: 2026-08-01
+review_of: Plans/Sample/01-One.md
+findings:
+  - id: F-01
+    severity: minor
+    status: ` + findingStatus + `
+followups:
+  - id: FU-01
+    tracked_in: ` + trackedIn + `
+---
+
+# Sample Code Review
+
+## Findings
+- F-01
+
+## Resolution Log
+- F-01: recorded
+`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// G-1: an ordinary review must be resolvable through the tool with the
+// reduced gate — terminal findings, tracked followups — and without freezing.
+// The old refusal pointed at apply/section set, which refuse `status` as
+// tool-owned (SPK021), leaving open -> resolved unreachable.
+func TestReviewResolveOrdinaryReducedGate(t *testing.T) {
+	// Non-terminal finding: refused.
+	review := ordinaryReview(t, "open", `"Plans/Sample/README.md task 1.2"`)
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err == nil {
+		t.Fatal("resolve must refuse an ordinary review with a non-terminal finding")
+	}
+
+	// Untracked followup: refused without --accept-followups.
+	review = ordinaryReview(t, "fixed", `""`)
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err == nil {
+		t.Fatal("resolve must refuse an ordinary review with an untracked followup")
+	}
+	if err := cmdReviewResolve(review, reviewResolveOpts{AcceptFollowups: true}); err != nil {
+		t.Fatalf("resolve --accept-followups: %v", err)
+	}
+
+	// Reduced gate met: resolves, no freeze, no phase-gate demands
+	// (verdict/rev/lane_results are absent by design on an ordinary review).
+	review = ordinaryReview(t, "fixed", `"Plans/Sample/README.md task 1.2"`)
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("resolve on a gate-met ordinary review: %v", err)
+	}
+	src := readFile(t, review)
+	if !strings.Contains(src, "\nstatus: resolved\n") {
+		t.Fatalf("resolve must set status: resolved; got:\n%s", src)
+	}
+	if strings.Contains(src, "frozen:") {
+		t.Fatalf("ordinary reviews are not frozen; got:\n%s", src)
+	}
+
+	// Idempotent close, same as the other transitions.
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("second resolve should be an already-resolved no-op: %v", err)
+	}
+}
