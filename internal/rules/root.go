@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // artifactDirs mirrors sdd_validate.py's ARTIFACT_DIRS: the top-level
@@ -148,6 +150,13 @@ func LoadRoot(dir string) (*Root, error) {
 // distinct from the planning root when a plan's target repository is not the
 // one holding the planning artifacts.
 func LoadRootRepo(dir, repoRoot string) (*Root, error) {
+	// Canonicalize both roots at the single entry point: every artifact
+	// AbsPath, gitRootFS walk, and worktree-containment comparison derives
+	// from them, and the git/p4 adapters report canonical spellings on their
+	// side. Without this, a short-named TMP (Windows) or /tmp symlink (macOS)
+	// planning root failed every containment check against the SCM's answer.
+	dir = vcs.CanonPath(dir)
+	repoRoot = vcs.CanonPath(repoRoot)
 	r := &Root{Dir: dir, ByPath: map[string]*Artifact{}, RepoRoot: repoRoot}
 	r.PlanRepos, r.ConfigDiagnostics = configureRepositories(repoRoot, dir)
 	var paths []string

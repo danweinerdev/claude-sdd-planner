@@ -51,7 +51,9 @@ func probeP4(dir string) Repo {
 	if err != nil {
 		return nil
 	}
-	if !pathWithin(filepath.Clean(clientRoot), filepath.Clean(absDir)) {
+	// Canonicalize both sides: the client spec's root and the probed dir can
+	// spell the same directory differently (8.3 short names, symlinks).
+	if !pathWithin(CanonPath(clientRoot), CanonPath(absDir)) {
 		return nil
 	}
 	return &p4Repo{root: dir}

@@ -58,7 +58,11 @@ func newGitRepo(dir string, kind Kind) Repo {
 			}
 		}
 	}
-	return &gitRepo{kind: kind, dir: dir, root: root}
+	// Root() is compared against OS-derived paths by every containment
+	// check; git reports the long-form, forward-slash spelling while the OS
+	// side may be short-named (Windows 8.3) or unresolved (/tmp on macOS).
+	// Canonicalize once here so callers compare like with like.
+	return &gitRepo{kind: kind, dir: dir, root: CanonPath(filepath.FromSlash(root))}
 }
 
 // runGit builds an argv slice and execs git directly — never a shell — so no

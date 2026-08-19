@@ -442,10 +442,14 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 	repository := markdownScalar(evidenceValue(body, "Repository"))
 	expectedRepository := r.RepoForArtifact(a.Rel)
 	if repository != "" {
-		recordedRepository := cleanAbs(expandHome(repository))
-		if recordedRepository != cleanAbs(expectedRepository) {
+		// Canonicalize both sides: the recorded label and the resolved target
+		// may spell the same directory differently (8.3 short names on
+		// Windows, /tmp symlinks on macOS), and the label's author copied
+		// whichever spelling their shell handed them.
+		recordedRepository := vcs.CanonPath(cleanAbs(expandHome(repository)))
+		if recordedRepository != vcs.CanonPath(cleanAbs(expectedRepository)) {
 			emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
-				Message:    "`" + name + "` repository `" + recordedRepository + "` does not match target `" + cleanAbs(expectedRepository) + "`.",
+				Message:    "`" + name + "` repository `" + recordedRepository + "` does not match target `" + vcs.CanonPath(cleanAbs(expectedRepository)) + "`.",
 				Correction: "Record the exact resolved target repository root."})
 		}
 	}
