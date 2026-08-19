@@ -6,8 +6,14 @@ import (
 	"strings"
 )
 
-// statusValues mirrors sdd_validate.py's STATUS: the allowed `status:` values
-// per artifact `type:`.
+// statusValues is the allowed `status:` values per artifact `type:`
+// (originally mirroring sdd_validate.py's STATUS). Every type the schema
+// registry serves must appear here with the schema's own status enum —
+// TestStatusValuesAgreeWithSchemaRegistry enforces that. A type the tool can
+// scaffold (`sdd template <type>`, `apply --create`) but the validator calls
+// "unknown" (SDD011) is a registry drift bug (B-4). `diagram` is the one
+// validator-only legacy entry: it predates the schema registry and has no
+// schema file.
 var statusValues = map[string][]string{
 	"research":     {"draft", "active", "archived"},
 	"brainstorm":   {"draft", "active", "archived"},
@@ -15,11 +21,18 @@ var statusValues = map[string][]string{
 	"design":       {"draft", "review", "approved", "implemented", "superseded"},
 	"plan":         {"draft", "approved", "active", "complete", "archived"},
 	"phase":        {"planned", "in-progress", "complete", "blocked", "deferred"},
+	"plan-phase":   {"planned", "in-progress", "complete", "blocked", "deferred"},
 	"debrief":      {"draft", "complete"},
 	"retro":        {"draft", "complete"},
 	"diagram":      {"draft", "active", "archived"},
 	"decision-log": {"active", "archived"},
 	"review":       {"open", "resolved", "superseded"},
+	"note":         {"draft", "in-progress", "complete"},
+	"notes":        {"draft", "in-progress", "complete"},
+	"notes-index":  {"draft", "in-progress", "complete"},
+	"findings":     {"draft", "in-progress", "complete"},
+	"drift-log":    {"draft", "in-progress", "complete"},
+	"reference":    {"draft", "active", "archived"},
 }
 
 var taskStatusValues = []string{"blocked", "complete", "deferred", "in-progress", "planned"}
