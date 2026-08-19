@@ -491,10 +491,14 @@ func upgradeFrontmatter(s *schema.Schema, doc *artifact.Doc, out []string, res *
 
 // toolFieldConsistent reports whether a tool-owned field in the payload matches
 // what the artifact already says. On creation there is nothing to verify
-// against, so any tool-owned field is an attempted override.
+// against, so a tool-owned field is an attempted override — with one
+// exception: a `type:` that matches the schema's fixed value is a verified
+// assertion, not an override. Creation payloads carry it legitimately (it is
+// what apply resolves the schema FROM when --type is not given), and refusing
+// it forced authors to strip the one field that identifies the artifact.
 func toolFieldConsistent(opts Options, f schema.Field, payloadValue string, toolValue func(schema.Field) string) bool {
 	if opts.Existing == nil {
-		return false
+		return f.Key == "type" && payloadValue == toolValue(f)
 	}
 	onDisk, ok := opts.Existing.FM(f.Key)
 	if !ok {

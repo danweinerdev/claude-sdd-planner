@@ -19,13 +19,16 @@ type FMEntry struct {
 	Line  int
 }
 
-// Section is one heading and the body lines beneath it, up to the next heading
-// at the same or shallower depth.
+// Section is one heading and the body lines beneath it, up to the next
+// heading of any depth. Every ATX heading opens a new Section — subsections
+// are flat siblings, not children; consumers that need a section's full
+// extent (heading to the next same-or-shallower heading) must compose it from
+// the following deeper-depth run, or fold with FoldDeeper.
 type Section struct {
 	Heading string // full heading line as written, trimmed
 	Depth   int
 	Line    int      // 1-indexed line of the heading
-	Body    []string // lines between this heading and the next slot-depth heading
+	Body    []string // lines between this heading and the next heading
 }
 
 // Title is the heading text without leading hashes or trailing whitespace.

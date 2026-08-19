@@ -44,11 +44,6 @@ func cmdApply(target string, o applyOpts) error {
 		}
 	}
 
-	s, err := schema.Load(o.Type)
-	if err != nil {
-		return err
-	}
-
 	payload, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("apply: reading payload from stdin: %w", err)
@@ -58,6 +53,33 @@ func cmdApply(target string, o applyOpts) error {
 	}
 
 	art, err := store.Read(target)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the schema from the artifact itself when --type is not given.
+	// A blind default (historically `spec`) compiled every review, note, and
+	// plan against the spec schema, refusing them with spec-only requirements
+	// (B-2). The artifact on disk is authoritative for an edit; the payload's
+	// own `type:` covers creation.
+	resolvedType := o.Type
+	if resolvedType == "" {
+		if art.Exists && !o.Create {
+			if t, ok := artifact.Parse(art.Source).FM("type"); ok {
+				resolvedType = strings.Trim(strings.TrimSpace(t), `"`)
+			}
+		}
+		if resolvedType == "" {
+			if t, ok := artifact.Parse(string(payload)).FM("type"); ok {
+				resolvedType = strings.Trim(strings.TrimSpace(t), `"`)
+			}
+		}
+		if resolvedType == "" {
+			return fmt.Errorf("apply: cannot determine the artifact type for %s; "+
+				"neither the artifact nor the payload declares `type:` frontmatter — pass --type <type>", relPath(target))
+		}
+	}
+	s, err := schema.Load(resolvedType)
 	if err != nil {
 		return err
 	}

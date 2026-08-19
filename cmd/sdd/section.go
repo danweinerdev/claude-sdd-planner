@@ -31,11 +31,6 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 		return fmt.Errorf("section set: --heading is required")
 	}
 
-	s, err := schema.Load(o.Type)
-	if err != nil {
-		return err
-	}
-
 	payload, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("section set: reading payload from stdin: %w", err)
@@ -53,6 +48,22 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 	}
 
 	doc := artifact.Parse(art.Source)
+
+	// Resolve the schema from the artifact's own `type:` when --type is not
+	// given. A blind `spec` default checked reviews and notes against the
+	// spec schema's slot model (B-2).
+	resolvedType := o.Type
+	if resolvedType == "" {
+		t, ok := doc.FM("type")
+		if !ok || strings.TrimSpace(t) == "" {
+			return fmt.Errorf("section set: %s has no `type:` frontmatter; pass --type <type>", relPath(target))
+		}
+		resolvedType = strings.Trim(strings.TrimSpace(t), `"`)
+	}
+	s, err := schema.Load(resolvedType)
+	if err != nil {
+		return err
+	}
 
 	var refs []compile.Refusal
 	refs = append(refs, compile.CheckFrozen(doc, false)...)
@@ -142,6 +153,15 @@ func emitSectionJSON(rel string, art *store.Artifact, out string, refs []compile
 // setSection replaces exactly one section's body, leaving the frontmatter
 // (aside from `updated`) and every other section byte-identical (FR-22).
 // Returns the compiled bytes and any refusals; on refusal, output is "".
+//
+// The replaced extent is the full section: heading to the next heading at the
+// same or shallower depth, subsections included. The parser models every
+// heading as a flat sibling Section, so the target's own subsections arrive
+// as separate entries immediately after it — those are part of what the
+// caller sees as "the section" and must yield to the replacement body.
+// Re-emitting them after the new body merged old and new content instead of
+// replacing it (B-1), silently duplicating every subsection the payload
+// restated.
 func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today string) (string, []compile.Refusal) {
 	target, actual := findSection(doc, heading)
 	if target == nil {
@@ -173,6 +193,21 @@ func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today str
 		}}
 	}
 
+	// The target's subsections parse as flat sibling Sections immediately
+	// after it; they belong to the replaced extent and must not be re-emitted
+	// after the new body (B-1).
+	ti := -1
+	for i := range doc.Sections {
+		if &doc.Sections[i] == target {
+			ti = i
+			break
+		}
+	}
+	consumedTo := ti
+	for consumedTo+1 < len(doc.Sections) && doc.Sections[consumedTo+1].Depth > target.Depth {
+		consumedTo++
+	}
+
 	var b strings.Builder
 	b.WriteString("---\n")
 	for _, l := range fmLines {
@@ -183,6 +218,9 @@ func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today str
 		b.WriteString(l + "\n")
 	}
 	for i := range doc.Sections {
+		if i > ti && i <= consumedTo {
+			continue // subsection of the target: replaced by the new body
+		}
 		sec := &doc.Sections[i]
 		b.WriteString(sec.Heading + "\n")
 		body := sec.Body
@@ -196,7 +234,7 @@ func setSection(doc *artifact.Doc, s *schema.Schema, heading, rawBody, today str
 			for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
 				body = body[:len(body)-1]
 			}
-			if i < len(doc.Sections)-1 {
+			if consumedTo < len(doc.Sections)-1 {
 				body = append(body, "")
 			}
 		}

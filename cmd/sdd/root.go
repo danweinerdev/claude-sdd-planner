@@ -221,7 +221,7 @@ reads as every identifier being deleted at once.`,
 	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	f.StringVar(&o.Retire, "retire", "", "comma-separated identifiers being deliberately retired")
 	f.StringVar(&o.Expect, "expect", "", "refuse unless the artifact's current digest equals this value")
-	f.StringVar(&o.Type, "type", "spec", "artifact type schema to compile against")
+	f.StringVar(&o.Type, "type", "", "artifact type schema to compile against (default: resolved from the artifact's or payload's `type:` frontmatter)")
 	return c
 }
 
@@ -243,7 +243,7 @@ frontmatter (aside from 'updated') byte-identical.`,
 	f.BoolVar(&o.Diff, "diff", false, "show a line diff against the artifact on disk")
 	f.BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	f.StringVar(&o.Expect, "expect", "", "refuse unless the artifact's current digest equals this value")
-	f.StringVar(&o.Type, "type", "spec", "artifact type schema to check against")
+	f.StringVar(&o.Type, "type", "", "artifact type schema to check against (default: resolved from the artifact's `type:` frontmatter)")
 	_ = set.MarkFlagRequired("heading")
 
 	c := &cobra.Command{Use: "section", Short: "Section-scoped artifact edits"}
