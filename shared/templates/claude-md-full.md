@@ -35,7 +35,7 @@ All artifacts use YAML frontmatter as the machine-readable data layer. See the s
 ### Plan Hierarchy
 ```
 Plan (README.md)       <- like a Jira Project
- └── Phase (01-*.md)   <- like a Jira Epic
+ └── Phase (01-*.md)   <- a milestone-sized slice of the plan
       └── Task          <- defined in phase frontmatter
            └── Subtask  <- checklist items in body
 ```
