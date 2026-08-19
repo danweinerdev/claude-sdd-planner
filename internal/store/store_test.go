@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -262,4 +264,44 @@ func equalUnordered(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// G-4: a JSON syntax error in planning-config.json must name the line and
+// column of the offending byte — a bare "invalid character '}'" hard-fails
+// every sdd command while pointing at nothing.
+func TestDescribeJSONErrorNamesLineAndColumn(t *testing.T) {
+	raw := []byte("{\n  \"planningRoot\": \".\",\n}\n")
+	var c Config
+	err := json.Unmarshal(raw, &c)
+	if err == nil {
+		t.Fatal("expected a syntax error from the trailing comma")
+	}
+	got := DescribeJSONError(raw, err)
+	if !strings.Contains(got, "line 3") {
+		t.Errorf("message lacks the offending line: %q", got)
+	}
+	if !strings.Contains(got, "invalid character") {
+		t.Errorf("message lost the underlying error: %q", got)
+	}
+}
+
+// A positionless error passes through untouched.
+func TestDescribeJSONErrorPassthrough(t *testing.T) {
+	err := errors.New("something else")
+	if got := DescribeJSONError([]byte("{}"), err); got != "something else" {
+		t.Errorf("got %q, want passthrough", got)
+	}
+}
+
+// FindPlanningRoot surfaces the position in its own error.
+func TestFindPlanningRootReportsParsePosition(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "{\n  \"planningRoot\": \".\",\n}\n")
+	_, err := FindPlanningRoot(dir)
+	if err == nil {
+		t.Fatal("expected a parse error")
+	}
+	if !strings.Contains(err.Error(), "line 3") {
+		t.Errorf("error lacks position: %v", err)
+	}
 }

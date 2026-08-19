@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 // Prerequisite A (target-repo resolution): ports sdd_validate.py's
@@ -42,7 +44,7 @@ func configureRepositories(repoRoot, diagPath string) (map[string]string, []Diag
 		Repositories map[string]any `json:"repositories"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return planRepos, []Diagnostic{sdd000(diagPath, "Cannot parse `"+configPath+"`: "+err.Error(), "Correct planning-config.json before validation.")}
+		return planRepos, []Diagnostic{sdd000(diagPath, "Cannot parse `"+configPath+"`: "+store.DescribeJSONError(raw, err), "Correct planning-config.json before validation.")}
 	}
 	// json.Unmarshal leaves doc.PlanMapping/Repositories nil (not an error) when
 	// the key is absent or not a JSON object into which map[string]any decodes;

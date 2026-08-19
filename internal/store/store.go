@@ -4,9 +4,11 @@
 package store
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -141,6 +143,33 @@ type Config struct {
 	PlanningRoot string `json:"planningRoot"`
 }
 
+// DescribeJSONError renders a JSON decode error with the line and column of
+// the offending byte when the error carries an offset. encoding/json's bare
+// "invalid character '}' looking for beginning of object key string" names no
+// location, so a trailing comma in planning-config.json sent authors hunting
+// the whole file (G-4).
+func DescribeJSONError(raw []byte, err error) string {
+	var off int64
+	var syn *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &syn):
+		off = syn.Offset
+	case errors.As(err, &typ):
+		off = typ.Offset
+	}
+	if off <= 0 || off > int64(len(raw)) {
+		return err.Error()
+	}
+	prefix := raw[:off]
+	line := 1 + bytes.Count(prefix, []byte("\n"))
+	col := int(off)
+	if nl := bytes.LastIndexByte(prefix, '\n'); nl >= 0 {
+		col = int(off) - nl - 1
+	}
+	return fmt.Sprintf("line %d, column %d: %s", line, col, err.Error())
+}
+
 // FindPlanningRoot walks upward from start looking for planning-config.json and
 // resolves the planning root it declares. `planningRoot` may be ".", a relative
 // subdirectory, or an absolute path.
@@ -154,7 +183,7 @@ func FindPlanningRoot(start string) (string, error) {
 		if b, err := os.ReadFile(cfgPath); err == nil {
 			var c Config
 			if err := json.Unmarshal(b, &c); err != nil {
-				return "", fmt.Errorf("%s: %w", cfgPath, err)
+				return "", fmt.Errorf("%s: %s", cfgPath, DescribeJSONError(b, err))
 			}
 			if c.PlanningRoot == "" {
 				return "", fmt.Errorf("%s: planningRoot is empty", cfgPath)
