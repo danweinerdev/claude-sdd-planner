@@ -47,15 +47,30 @@ def bump(version: str, part: str) -> str:
     raise ValueError(f"Unknown part: {part}")
 
 
+# All file IO pins encoding and newlines explicitly: Path.write_text with the
+# defaults uses the platform locale encoding (cp1252 on Windows, which mangles
+# the em-dash in the version.go header into an illegal-UTF-8 byte and broke
+# the build) and translates "\n" to os.linesep (CRLF churn in committed files).
+
+
+def read_utf8(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def write_utf8(path: Path, content: str) -> None:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+
+
 def update_json(path: Path, new_version: str) -> None:
-    data = json.loads(path.read_text())
+    data = json.loads(read_utf8(path))
     data["version"] = new_version
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    write_utf8(path, json.dumps(data, indent=2) + "\n")
 
 
 def update_version_go(path: Path, new_version: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(VERSION_GO_TEMPLATE.format(version=new_version))
+    write_utf8(path, VERSION_GO_TEMPLATE.format(version=new_version))
 
 
 def usage() -> None:
@@ -76,10 +91,10 @@ def usage() -> None:
 def main() -> None:
     args = sys.argv[1:]
     if len(args) == 1 and args[0] in ("patch", "minor", "major"):
-        current = json.loads(PLUGIN_JSON.read_text())["version"]
+        current = json.loads(read_utf8(PLUGIN_JSON))["version"]
         new_version = bump(current, args[0])
     elif len(args) == 2 and args[0] == "set":
-        current = json.loads(PLUGIN_JSON.read_text())["version"]
+        current = json.loads(read_utf8(PLUGIN_JSON))["version"]
         new_version = args[1]
         parse(new_version)  # validate shape
         if parse(new_version) <= parse(current):
@@ -92,7 +107,7 @@ def main() -> None:
     elif len(args) == 2 and args[0] == "set-floor":
         floor = args[1]
         parse(floor)  # validate shape
-        data = json.loads(PLUGIN_JSON.read_text())
+        data = json.loads(read_utf8(PLUGIN_JSON))
         if parse(floor) < parse(data.get("minSddVersion", "0.0.0")):
             print(
                 f"ERROR: set-floor {floor} lowers the floor from {data['minSddVersion']} — "
@@ -108,7 +123,7 @@ def main() -> None:
             )
             sys.exit(1)
         data["minSddVersion"] = floor
-        PLUGIN_JSON.write_text(json.dumps(data, indent=2) + "\n")
+        write_utf8(PLUGIN_JSON, json.dumps(data, indent=2) + "\n")
         print(floor)
         return
     else:
