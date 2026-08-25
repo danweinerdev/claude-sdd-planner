@@ -137,15 +137,21 @@ func TestResolveArtifactPathAcceptsBothSpellings(t *testing.T) {
 	if got := store.ResolveArtifactPath("Specs/Feature/README.md"); got != "Specs/Feature/README.md" {
 		t.Errorf("existing literal path was redirected: %q", got)
 	}
-	// Planning-root-relative path with no literal counterpart: resolved.
+	// Planning-root-relative path with no counterpart anywhere: a CREATE,
+	// anchored to the planning root. Returning the literal spelling here is
+	// how stray ./Specs trees appeared in working directories.
 	got := store.ResolveArtifactPath("Specs/Other/README.md")
-	if got != "Specs/Other/README.md" {
-		t.Errorf("absent path should be reported as given, got %q", got)
+	if filepath.ToSlash(got) != ".plans/Specs/Other/README.md" {
+		t.Errorf("create path was not anchored to the planning root, got %q", got)
 	}
 	mustWrite(t, filepath.Join(root, ".plans", "Specs", "Other", "README.md"), "# y\n")
 	got = store.ResolveArtifactPath("Specs/Other/README.md")
 	if filepath.ToSlash(got) != ".plans/Specs/Other/README.md" {
 		t.Errorf("planning-root-relative path did not resolve, got %q", got)
+	}
+	// An in-root relative spelling of a create is kept as given.
+	if got := store.ResolveArtifactPath(filepath.Join(".plans", "Specs", "New", "README.md")); filepath.ToSlash(got) != ".plans/Specs/New/README.md" {
+		t.Errorf("in-root create spelling was rewritten: %q", got)
 	}
 	// Absolute paths are never rewritten.
 	abs := filepath.Join(root, ".plans", "Specs", "Feature", "README.md")

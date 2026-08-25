@@ -95,6 +95,10 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 	if !phaseArt.Exists {
 		return fmt.Errorf("review scaffold: %s does not exist", phasePath)
 	}
+	// Use the resolved location from here on: the default review path is
+	// derived from the phase's directory, so deriving it from the unresolved
+	// argument would scaffold the review beside a path that may not exist.
+	phasePath = phaseArt.Path
 	phaseDoc := artifact.Parse(phaseArt.Source)
 	if kind, _ := phaseDoc.FM("type"); strings.Trim(kind, `"'`) != "phase" {
 		return fmt.Errorf("review scaffold: %s is not a phase artifact", phasePath)
@@ -127,6 +131,15 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 	dest := o.Out
 	if dest == "" {
 		dest = defaultReviewPath(phasePath, endpoint)
+	} else {
+		// --out accepts the same spellings every other command does; resolve
+		// it so the scaffold can never be created at a literal ./Plans/...
+		// path outside the planning root, and refuse the escapes resolution
+		// cannot redirect (absolute out-of-root paths, `..`).
+		dest = store.ResolveArtifactPath(dest)
+		if err := store.CheckCreatePath(dest); err != nil {
+			return fmt.Errorf("review scaffold: %w", err)
+		}
 	}
 	if existing, err := store.Read(dest); err == nil && existing.Exists {
 		// A resolved review is frozen history (FR-46); --force must not be a
@@ -413,6 +426,7 @@ func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
 	if !art.Exists {
 		return fmt.Errorf("review evidence set: %s does not exist", path)
 	}
+	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)
 	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
 		return fmt.Errorf("review evidence set: %s is not a review artifact", path)
@@ -565,6 +579,7 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	if !art.Exists {
 		return fmt.Errorf("review resolve: %s does not exist", path)
 	}
+	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)
 	if kind, _ := doc.FM("type"); strings.Trim(kind, `"'`) != "review" {
 		return fmt.Errorf("review resolve: %s is not a review artifact", path)

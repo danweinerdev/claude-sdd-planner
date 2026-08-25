@@ -272,8 +272,15 @@ func rel(root, p string) string {
 // Resolution order is deliberate: the literal path wins when it exists, so a
 // real file is never shadowed by a same-named artifact under the planning
 // root. Only when the literal path is absent is the planning-root form tried.
-// Absolute paths and paths that exist are returned untouched, so this is
-// additive — no previously working invocation changes meaning.
+// Absolute paths and paths that exist are returned untouched.
+//
+// A path that exists NOWHERE is a create, and a create is always anchored to
+// the planning root: returning the literal spelling made `apply --create
+// Specs/X/README.md` (the planning-root-relative form every other command
+// accepts and every diagnostic prints) manufacture ./Specs/... in whatever
+// directory the caller happened to be in. The only relative spelling not
+// redirected is one that already points inside the planning root (e.g.
+// `.plans/Specs/X/README.md` from the repo root), which is equivalent anyway.
 func ResolveArtifactPath(path string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
@@ -287,18 +294,68 @@ func ResolveArtifactPath(path string) string {
 	}
 	candidate := filepath.Join(root, path)
 	if _, err := os.Stat(candidate); err == nil {
-		// Prefer the relative spelling when the planning root is inside the
-		// working directory, so what the tool echoes back stays
-		// copy-pasteable. Rel is computed from the absolute cwd rather than
-		// ".", because a cwd reached through a symlink (the common case for
-		// temp dirs, and for $HOME on some systems) makes Rel(".", abs)
-		// return an absolute-looking result.
-		if wd, err := os.Getwd(); err == nil {
-			if rel, err := filepath.Rel(wd, candidate); err == nil && !strings.HasPrefix(rel, "..") {
-				return rel
-			}
-		}
-		return candidate
+		return preferRelative(candidate)
 	}
-	return path
+	// Neither spelling exists: the caller is creating this artifact. Anchor
+	// the create to the planning root unless the literal spelling already
+	// resolves inside it.
+	if abs, err := filepath.Abs(path); err == nil && insideRoot(root, abs) {
+		return path
+	}
+	return preferRelative(candidate)
+}
+
+// preferRelative renders an in-root path relative to the working directory
+// when the planning root is inside it, so what the tool echoes back stays
+// copy-pasteable. Rel is computed from the absolute cwd rather than ".",
+// because a cwd reached through a symlink (the common case for temp dirs, and
+// for $HOME on some systems) makes Rel(".", abs) return an absolute-looking
+// result.
+func preferRelative(candidate string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, candidate); err == nil && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+	}
+	return candidate
+}
+
+// insideRoot reports whether abs is root itself or a descendant of it.
+func insideRoot(root, abs string) bool {
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return false // different volume: certainly outside
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+// CheckCreatePath refuses to create an artifact outside the planning root.
+// It is a no-op for paths that already exist (editing a real file the caller
+// named is always allowed — the literal-path-wins contract above) and when no
+// planning root is resolvable (nothing to anchor to; the caller is operating
+// outside a planning workspace). What it catches is the residue resolution
+// cannot redirect: an absolute path outside the root, and a relative path
+// whose `..` segments escape it. Creating those silently is how stray
+// ./Plans, ./Designs trees appear in repositories.
+func CheckCreatePath(path string) error {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	root, err := FindPlanningRoot(".")
+	if err != nil {
+		return nil
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving %s: %w", path, err)
+	}
+	if insideRoot(root, abs) {
+		return nil
+	}
+	return fmt.Errorf("refusing to create %s outside the planning root %s; "+
+		"artifacts are created under the planning root — pass a planning-root-relative path (e.g. Specs/Feature/README.md)",
+		path, root)
 }

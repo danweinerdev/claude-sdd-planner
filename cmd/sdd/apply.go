@@ -56,6 +56,14 @@ func cmdApply(target string, o applyOpts) error {
 	if err != nil {
 		return err
 	}
+	// A create must land inside the planning root. Read's resolution already
+	// anchors relative spellings there; what remains is an absolute path (or
+	// a `..` escape) pointing elsewhere, which is refused rather than obeyed.
+	if !art.Exists {
+		if err := store.CheckCreatePath(art.Path); err != nil {
+			return fmt.Errorf("apply: %w", err)
+		}
+	}
 
 	// Resolve the schema from the artifact itself when --type is not given.
 	// A blind default (historically `spec`) compiled every review, note, and

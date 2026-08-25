@@ -321,3 +321,104 @@ func TestFindPlanningRootReportsParsePosition(t *testing.T) {
 		t.Errorf("error lacks position: %v", err)
 	}
 }
+
+// chdirTemp switches the working directory to a fresh temp dir for the test's
+// duration and returns it. ResolveArtifactPath and CheckCreatePath resolve
+// the planning root from ".", so these tests are cwd-sensitive by nature.
+func chdirTemp(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A create (path existing nowhere) must be anchored to the planning root:
+// returning the literal spelling is how `apply --create Specs/X/README.md`
+// manufactured ./Specs in the caller's working directory.
+func TestResolveArtifactPathAnchorsCreatesToPlanningRoot(t *testing.T) {
+	root := chdirTemp(t)
+	writeConfig(t, root, `{"planningRoot": ".plans"}`)
+	if err := os.MkdirAll(filepath.Join(root, ".plans"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ResolveArtifactPath("Specs/New/README.md")
+	if filepath.ToSlash(got) != ".plans/Specs/New/README.md" {
+		t.Errorf("create was not anchored to the planning root: %q", got)
+	}
+
+	// An in-root spelling of a create is kept as given.
+	inRoot := filepath.Join(".plans", "Specs", "New", "README.md")
+	if got := ResolveArtifactPath(inRoot); got != inRoot {
+		t.Errorf("in-root create spelling was rewritten: %q", got)
+	}
+
+	// Resolution must not create anything on disk.
+	if _, err := os.Stat(filepath.Join(root, "Specs")); !os.IsNotExist(err) {
+		t.Error("resolution created ./Specs as a side effect")
+	}
+}
+
+// CheckCreatePath refuses creates outside the planning root (absolute paths
+// and `..` escapes), allows in-root creates and existing files anywhere, and
+// fails open when no planning root is resolvable.
+func TestCheckCreatePath(t *testing.T) {
+	root := chdirTemp(t)
+	writeConfig(t, root, `{"planningRoot": ".plans"}`)
+	if err := os.MkdirAll(filepath.Join(root, ".plans"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CheckCreatePath(filepath.Join(".plans", "Specs", "X", "README.md")); err != nil {
+		t.Errorf("in-root create refused: %v", err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "Specs", "X", "README.md")
+	if err := CheckCreatePath(outside); err == nil {
+		t.Error("absolute out-of-root create was not refused")
+	}
+
+	if err := CheckCreatePath(filepath.Join("..", "escape.md")); err == nil {
+		t.Error("`..` escape was not refused")
+	}
+
+	// An existing file outside the root may still be written (the
+	// literal-path-wins contract for edits).
+	existing := filepath.Join(root, "notes.md")
+	mustWriteFile(t, existing, "# notes\n")
+	if err := CheckCreatePath(existing); err != nil {
+		t.Errorf("existing out-of-root file refused: %v", err)
+	}
+}
+
+// CheckCreatePath must not block work outside any planning workspace.
+func TestCheckCreatePathFailsOpenWithoutConfig(t *testing.T) {
+	chdirTemp(t)
+	if err := CheckCreatePath("anything.md"); err != nil {
+		t.Errorf("no-config case must fail open, got: %v", err)
+	}
+}
+
+// Reading a nonexistent path must not create its directory chain: the shared
+// lock's MkdirAll manufactured ./Specs/Demo (plus a lock sidecar) even when
+// the command that probed the path was refused and wrote nothing.
+func TestReadDoesNotCreateDirectories(t *testing.T) {
+	dir := chdirTemp(t)
+	art, err := Read(filepath.Join("Specs", "Demo", "README.md"))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if art.Exists {
+		t.Fatal("artifact should not exist")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Specs")); !os.IsNotExist(err) {
+		t.Error("Read created the target's directory chain as a side effect")
+	}
+}

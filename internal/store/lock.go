@@ -127,13 +127,14 @@ func (l *fileLock) Release() {
 	_ = l.f.Close()
 }
 
-// openLockFile opens (creating if needed) the sidecar for path. A directory
-// that does not exist yet is not an error the lock layer should raise: the
-// caller is creating a new artifact and will fail on its own terms.
+// openLockFile opens (creating if needed) the sidecar for path. It never
+// creates directories: a MkdirAll here ran on READ locks too, so merely
+// probing a nonexistent path (`store.Read` on a create target, a refused
+// apply) manufactured the target's whole directory chain as a side effect —
+// including at wrong, unresolved locations. A directory that does not exist
+// is the writer's to create (acquireExclusive), and for a reader it simply
+// means there is nothing to lock.
 func openLockFile(path string) (*os.File, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
 	return os.OpenFile(lockPath(path), os.O_CREATE|os.O_RDWR, 0o644)
 }
 
@@ -160,8 +161,14 @@ func acquireShared(path string) *fileLock {
 	}
 }
 
-// acquireExclusive takes a write lock, waiting up to writeLockTimeout.
+// acquireExclusive takes a write lock, waiting up to writeLockTimeout. The
+// writer is the one party entitled to create the target's directory (it is
+// about to create the artifact itself), so the MkdirAll lives here rather
+// than in openLockFile where reads would inherit it.
 func acquireExclusive(path string) (*fileLock, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("creating directory for %s: %w", path, err)
+	}
 	f, err := openLockFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening lock for %s: %w", path, err)

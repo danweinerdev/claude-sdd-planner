@@ -62,6 +62,11 @@ func cmdComplete(kind, path string, o completeOpts) error {
 	if !art.Exists {
 		return fmt.Errorf("%s complete: %s does not exist", kind, path)
 	}
+	// Write where the artifact was actually read. Read resolves a
+	// planning-root-relative spelling; writing back to the unresolved
+	// argument would create a shadow file at the literal path (./Plans/...)
+	// while the artifact just read stays unchanged.
+	path = art.Path
 
 	today := time.Now().Format("2006-01-02")
 	updated, err := applyTransition(art.Source, kind, o.ID, today)
@@ -309,6 +314,7 @@ func planLifecycle(verb, path string, dryRun, jsonOut bool) error {
 	if !art.Exists {
 		return fmt.Errorf("plan %s: %s does not exist", verb, path)
 	}
+	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)
 	current, _ := doc.FM("status")
 	current = strings.Trim(current, `"'`)
@@ -437,6 +443,7 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 	if !art.Exists {
 		return fmt.Errorf("%s %s: %s does not exist", kind, verb, path)
 	}
+	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)
 	if typ, _ := doc.FM("type"); strings.Trim(typ, `"'`) != kind {
 		return fmt.Errorf("%s %s: %s is not a %s artifact", kind, verb, path, kind)
