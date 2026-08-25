@@ -145,19 +145,85 @@ func init() {
 `),
 			}},
 		},
-		Good: []Example{{Name: "no-legacy-heading", Files: map[string]string{
-			"Plans/Sample/01-One.md": validPhase(),
-		}}},
+		Good: []Example{
+			{Name: "no-legacy-heading", Files: map[string]string{
+				"Plans/Sample/01-One.md": validPhase(),
+			}},
+			// The layout the tool's own workflow produces: identity entries
+			// (optionally annotated), a blank separator, and the `Final
+			// aligned review` entry that `review resolve`'s completion hint
+			// appends to the same section — all inside the depth-3 block
+			// because no heading follows. None of it may invalidate.
+			{Name: "conventional-identities-layout", Files: map[string]string{
+				"Plans/Sample/01-One.md": strings.Replace(
+					strings.Replace(checkedPhase("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+						"### Completion Evidence\n\nPending — not complete.",
+						"### Completion Evidence\n\n- Revision / checkpoint: `1111111111111111111111111111111111111111`",
+						1),
+					"## Phase Completion Evidence\n\nPending — not complete.",
+					"## Phase Completion Evidence\n\n"+
+						"- Verified: 2024-01-02\n\n"+
+						"### Completed task identities\n"+
+						"- `1.1`: `1111111111111111111111111111111111111111` (task fix commit)\n\n"+
+						"- Final aligned review: `reviews/01-sample-code-review-abc.md`; frozen: `a..b`\n",
+					1),
+			}},
+		},
 	})
 }
 
-var completedTaskIdentityRe = regexp.MustCompile("^\\s*-\\s+`([^`\\s]+)`: `([^`;]+)`\\s*$")
+// completedTaskIdentityRe accepts an optional trailing parenthetical
+// annotation after the checkpoint — "- `1.1`: `<sha>` (pull-forward series
+// endpoint)" is the established completed-phase convention and the
+// annotation carries no identity content.
+var completedTaskIdentityRe = regexp.MustCompile(
+	"^\\s*-\\s+`([^`\\s]+)`: `([^`;]+)`(?:\\s+\\([^()]*\\))?\\s*$")
+
+// identityCheckpoint extracts the checkpoint token from a `Revision /
+// checkpoint` evidence value for identity comparison: the whole value when
+// it is a single backticked scalar, else the LEADING backticked token when
+// the value carries a trailing annotation — the established convention for
+// pull-forward and re-verification notes, e.g.
+// "`<sha>` (pull-forward series `a..b`); continuously re-verified through
+// `<sha2>`". Without this, an annotated checkpoint could never match its
+// (bare) identity entry.
+func identityCheckpoint(value string, ok bool) string {
+	if !ok {
+		return ""
+	}
+	v := strings.TrimSpace(value)
+	if strings.HasPrefix(v, "`") {
+		if end := strings.Index(v[1:], "`"); end >= 0 {
+			return strings.TrimSpace(v[1 : 1+end])
+		}
+	}
+	return markdownScalar(value, ok)
+}
+
+// finalAlignedReviewLineRe recognizes the `Final aligned review` evidence
+// entry that SDD166 requires in the SAME `Phase Completion Evidence`
+// section — `review resolve`'s own completion hint tells the author to
+// append it there, which by convention lands after the identity entries
+// and therefore INSIDE the `### Completed task identities` block (the
+// block runs to the next heading). The identity scan must tolerate it, or
+// the two rules contradict each other on the layout the tool itself
+// produces.
+var finalAlignedReviewLineRe = regexp.MustCompile(`^\s*-\s+Final aligned review:`)
 
 // completedTaskIdentitiesCheck ports Validator._completed_identities' `kind
 // == "task"` call from _phase: a complete phase must carry exactly one
 // `### Completed task identities` section whose entries exactly match every
 // completed task's recorded `Revision / checkpoint`, one line each, in the
-// "- `<task id>`: `<checkpoint>`" shape.
+// "- `<task id>`: `<checkpoint>`" shape. Blank lines, a trailing
+// parenthetical annotation on an entry, and the section's `Final aligned
+// review` entry (see finalAlignedReviewLineRe) are tolerated; any other
+// non-entry line still invalidates.
 func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 	if a.Status() != "complete" {
 		return
@@ -186,7 +252,7 @@ func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 		if heading != "" {
 			blocks := headingBodies(secs[heading].Body, 3, "Completion Evidence")
 			if len(blocks) == 1 {
-				revision = markdownScalar(evidenceValue(blocks[0], "Revision / checkpoint"))
+				revision = identityCheckpoint(evidenceValue(blocks[0], "Revision / checkpoint"))
 			}
 		}
 		expected[id] = revision
@@ -196,6 +262,9 @@ func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 	entries := map[string]string{}
 	if len(blocks) == 1 {
 		for _, line := range strings.Split(blocks[0], "\n") {
+			if strings.TrimSpace(line) == "" || finalAlignedReviewLineRe.MatchString(line) {
+				continue
+			}
 			m := completedTaskIdentityRe.FindStringSubmatch(line)
 			if m == nil {
 				invalid = true
@@ -231,9 +300,10 @@ func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 
 // completedPhaseIdentityRe is the phase form of the identity line: a phase
 // records both its checkpoint and the final review that closed it, where a
-// task records only a checkpoint.
+// task records only a checkpoint. Like the task form, an optional trailing
+// parenthetical annotation is tolerated.
 var completedPhaseIdentityRe = regexp.MustCompile(
-	"^\\s*-\\s+`([^`\\s]+)`: `([^`;]+)`; review: `([^`;]+)`\\s*$")
+	"^\\s*-\\s+`([^`\\s]+)`: `([^`;]+)`; review: `([^`;]+)`(?:\\s+\\([^()]*\\))?\\s*$")
 
 // completedPhaseIdentitiesCheck is SDD158's second emission site, the plan-side
 // analogue of completedTaskIdentitiesCheck. Python reaches both through one
@@ -275,7 +345,7 @@ func completedPhaseIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) 
 			review = reviewPath
 		}
 		expected[metaStr(m, "id")] = phaseIdentity{
-			checkpoint: markdownScalar(evidenceValue(body, "Revision / checkpoint")),
+			checkpoint: identityCheckpoint(evidenceValue(body, "Revision / checkpoint")),
 			review:     review,
 		}
 	}
@@ -285,6 +355,9 @@ func completedPhaseIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) 
 	entries := map[string]phaseIdentity{}
 	if len(blocks) == 1 {
 		for _, line := range strings.Split(blocks[0], "\n") {
+			if strings.TrimSpace(line) == "" || finalAlignedReviewLineRe.MatchString(line) {
+				continue
+			}
 			m := completedPhaseIdentityRe.FindStringSubmatch(line)
 			if m == nil {
 				invalid = true
