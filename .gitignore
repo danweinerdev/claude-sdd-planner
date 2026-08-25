@@ -19,6 +19,10 @@ __pycache__/
 .vscode
 .vscode/
 
+# code-graph artifacts
+.code-graph/
+.code-graph.db
+
 # Claude Code sandbox artifacts.
 # The sandbox mounts the user's shell/tool config into the repo root, so these
 # surface as untracked noise and can be swept into a commit by `git add -A`.
