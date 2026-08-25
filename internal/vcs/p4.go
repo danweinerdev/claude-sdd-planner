@@ -3,6 +3,7 @@ package vcs
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -32,7 +33,22 @@ type p4Repo struct{ root string }
 // reachable and `p4 where //...` resolves the client view regardless of dir,
 // so without it every directory on a machine with a configured P4 client
 // "detected" as Perforce.
+//
+// SDD_VCS_DISABLE_P4 (any non-empty value) skips the probe entirely. `p4
+// info` is a network RPC to whatever server the machine is configured for,
+// paid on EVERY detection of a non-git directory before the containment
+// check can reject it. The test suites run hundreds of validation passes
+// over temp-dir fixture roots that can never be inside a client mapping, so
+// on a workstation with a reachable Perforce server that probe alone
+// dominated suite wall-clock (measured ~130-200ms per detect, thousands of
+// detects). The hot test packages set it in TestMain; production never sets
+// it, and no test asserts positive Perforce detection (that would need a
+// live server, which CI does not have — the knob makes a P4-configured
+// workstation behave like CI, not differently from it).
 func probeP4(dir string) Repo {
+	if os.Getenv("SDD_VCS_DISABLE_P4") != "" {
+		return nil
+	}
 	out, err := runP4(dir, "info")
 	if err != nil {
 		return nil

@@ -394,7 +394,7 @@ func verifyGitPhaseReviewCommitted(r *Root, ctx phaseGateContext, review *Artifa
 		})
 	}
 
-	repo := vcs.Detect(r.Dir)
+	repo := r.Repo(r.Dir)
 	if !gitCapable(repo) {
 		fail("Final aligned review cannot be checked because the Git planning root is not a worktree.",
 			"Use a Git worktree and commit the phase review before phase completion.")
@@ -444,7 +444,7 @@ func init() {
 			// Python guards this behind `self._planning_root_scm() == "git"`,
 			// so a non-git planning root reports nothing here; SDD171 already
 			// covers the missing-adapter case.
-			if detectedSCM(r.Dir) != "git" {
+			if detectedSCM(r, r.Dir) != "git" {
 				return
 			}
 			for _, ctx := range completePhasesWithEvidence(r) {
@@ -515,7 +515,7 @@ func taskEvidenceBodies(a *Artifact) map[string]string {
 // first ported — the other two live in the generic evidence path.
 func phaseTaskGitIdentities(r *Root, phase *Artifact, line int, emit func(Diagnostic)) []taskIdentity {
 	var identities []taskIdentity
-	if detectedSCM(r.RepoForArtifact(phase.Rel)) != "git" {
+	if detectedSCM(r, r.RepoForArtifact(phase.Rel)) != "git" {
 		return identities
 	}
 	evidence := taskEvidenceBodies(phase)
@@ -613,7 +613,7 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	}
 
 	repository := r.RepoForArtifact(ctx.Phase.Rel)
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	if !gitCapable(repo) {
 		fail("Git phase completion target `"+repository+"` is not a Git worktree.",
 			"Use a target Git worktree for phase completion.")
@@ -760,7 +760,7 @@ func init() {
 				}
 				// Python runs both halves only when the target repository is
 				// git; the missing-adapter case is SDD172's.
-				if detectedSCM(r.RepoForArtifact(ctx.Phase.Rel)) != "git" {
+				if detectedSCM(r, r.RepoForArtifact(ctx.Phase.Rel)) != "git" {
 					continue
 				}
 				// The task identities are collected first, because the range
@@ -776,7 +776,7 @@ func init() {
 				if len(identities) == 0 {
 					continue
 				}
-				repo := vcs.Detect(r.RepoForArtifact(ctx.Phase.Rel))
+				repo := r.Repo(r.RepoForArtifact(ctx.Phase.Rel))
 				allExist := true
 				for _, id := range identities {
 					if ok, err := repo.RevisionExists(id); err != nil || !ok {
@@ -824,7 +824,7 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 		})
 	}
 	repository := r.RepoForArtifact(ctx.Phase.Rel)
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	exists := func(rev string) bool {
 		ok, err := repo.RevisionExists(rev)
 		return err == nil && ok
@@ -915,7 +915,7 @@ func verifyPhaseReviewPlanningRevision(r *Root, ctx phaseGateContext, review *Ar
 		return
 	}
 
-	repo := vcs.Detect(r.Dir)
+	repo := r.Repo(r.Dir)
 	if !gitCapable(repo) {
 		fail("Phase review requires a Git planning-root lifecycle adapter.",
 			"Keep the phase non-complete until the planning root is a Git worktree.")
@@ -1028,12 +1028,12 @@ func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line in
 		return
 	}
 	repository := r.RepoForArtifact(plan.Rel)
-	if detectedSCM(repository) != "git" {
+	if detectedSCM(r, repository) != "git" {
 		fail("Git plan evidence targets `"+repository+"`, which has no Git identity adapter.",
 			"Record plan Git evidence only for its Git target repository.")
 		return
 	}
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	exists := func(rev string) bool {
 		ok, err := repo.RevisionExists(rev)
 		return err == nil && ok

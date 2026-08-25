@@ -61,7 +61,7 @@ func FocusedDecisionLogs(r *Root, historical bool) []Diagnostic {
 
 		// History comparison is meaningless for an archival audit, which is
 		// reconstructing a past state rather than checking the current one.
-		history := !historical && hasGitRoot(path)
+		history := !historical && hasGitRoot(r, path)
 		for _, d := range dlg.Validate(path, history) {
 			out = append(out, Diagnostic{
 				Code:       d.Code,
@@ -124,6 +124,6 @@ func relativeToRoot(root, path string) string {
 
 // hasGitRoot reports whether a ledger's directory sits in a git repository,
 // which is what Python's `git_root(path) is not None` guard tests.
-func hasGitRoot(path string) bool {
-	return detectedSCM(filepath.Dir(path)) == "git"
+func hasGitRoot(r *Root, path string) bool {
+	return detectedSCM(r, filepath.Dir(path)) == "git"
 }

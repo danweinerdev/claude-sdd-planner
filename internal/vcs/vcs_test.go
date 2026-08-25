@@ -349,3 +349,16 @@ func TestP4UnsupportedOperations(t *testing.T) {
 		t.Errorf("ChangedPaths(bad syntax): err = %v, want ErrUnsupported", err)
 	}
 }
+
+// SDD_VCS_DISABLE_P4 must short-circuit the probe before any subprocess or
+// network activity: the test suites set it because `p4 info` is a network
+// RPC paid per detection of every non-git fixture directory.
+func TestP4ProbeDisabledByEnv(t *testing.T) {
+	t.Setenv("SDD_VCS_DISABLE_P4", "1")
+	if r := probeP4(t.TempDir()); r != nil {
+		t.Fatalf("probeP4 must return nil when disabled, got %v", r.Kind())
+	}
+	if r := Detect(t.TempDir()); r.Kind() == Perforce {
+		t.Fatal("Detect fabricated a Perforce repo with the probe disabled")
+	}
+}

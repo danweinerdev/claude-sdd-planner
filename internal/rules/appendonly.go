@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Family: Validator._append_only_repository_history — SDD154/155/156 (a
@@ -129,7 +127,7 @@ type appendOnlyFinding struct {
 // the rules agree on exactly what one scan found.
 func appendOnlyHistory(r *Root) []appendOnlyFinding {
 	var out []appendOnlyFinding
-	repo := vcs.Detect(r.Dir)
+	repo := r.Repo(r.Dir)
 	if !gitCapable(repo) {
 		return out
 	}

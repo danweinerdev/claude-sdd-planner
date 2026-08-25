@@ -267,8 +267,8 @@ func validFocusedReviewSyntax(value string) bool {
 // rules that are legitimately git-specific") — these evidence rules are
 // exactly that case, since Perforce has no adapter for the identity
 // operations below and the message must name which SCM was found.
-func detectedSCM(dir string) string {
-	switch vcs.Detect(dir).Kind() {
+func detectedSCM(r *Root, dir string) string {
+	switch r.Repo(dir).Kind() {
 	case vcs.Git, vcs.GitWorktree:
 		return "git"
 	case vcs.Perforce:
@@ -553,7 +553,7 @@ func cleanAbs(p string) string {
 // verifyCleanGitIdentity ports Validator._verify_clean_git_identity.
 func verifyCleanGitIdentity(r *Root, a *Artifact, revision, name string, line int, compareCurrent bool, emit func(Diagnostic)) {
 	repository := r.RepoForArtifact(a.Rel)
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	if !gitCapable(repo) {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` records Git but `" + repository + "` is not a Git worktree.", Correction: "Correct the repository/VCS evidence."})
@@ -582,7 +582,7 @@ func verifyCleanGitIdentity(r *Root, a *Artifact, revision, name string, line in
 // ancestry check exists to establish.
 func verifyCleanP4Identity(r *Root, a *Artifact, revision, name string, line int, emit func(Diagnostic)) {
 	repository := r.RepoForArtifact(a.Rel)
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	if repo.Kind() != vcs.Perforce {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` records Perforce but `" + repository + "` is not a Perforce client workspace.", Correction: "Correct the repository/VCS evidence."})
@@ -599,7 +599,7 @@ func verifyCleanP4Identity(r *Root, a *Artifact, revision, name string, line int
 // repository — the question is whether the lifecycle bookkeeping itself was
 // committed, which happens in the planning root).
 func verifyEvidenceCommitted(r *Root, a *Artifact, name, body string, line int, emit func(Diagnostic)) {
-	switch scm := detectedSCM(r.Dir); scm {
+	switch scm := detectedSCM(r, r.Dir); scm {
 	case "git":
 		verifyGitEvidenceCommitted(r, a, name, body, line, emit)
 	case "perforce":
@@ -613,7 +613,7 @@ func verifyEvidenceCommitted(r *Root, a *Artifact, name, body string, line int, 
 
 // verifyGitEvidenceCommitted ports Validator._verify_git_evidence_committed.
 func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line int, emit func(Diagnostic)) {
-	repo := vcs.Detect(r.Dir)
+	repo := r.Repo(r.Dir)
 	if !gitCapable(repo) {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` is complete but the Git planning root is not a worktree.", Correction: "Use a Git worktree and commit the lifecycle/evidence artifact before finalizing completion."})
@@ -648,7 +648,7 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 		if relErr != nil {
 			return nil
 		}
-		planRepo := vcs.Detect(planRepository)
+		planRepo := r.Repo(planRepository)
 		planAtHead, ferr := planRepo.FileAt("HEAD", filepath.ToSlash(planRelative))
 		if ferr != nil {
 			return nil
@@ -666,7 +666,7 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 // file never added) makes the depot copy differ from disk, which is exactly
 // the not-yet-durable condition the check exists to catch.
 func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int, emit func(Diagnostic)) {
-	repo := vcs.Detect(r.Dir)
+	repo := r.Repo(r.Dir)
 	if repo.Kind() != vcs.Perforce {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` is complete but the planning root is not a Perforce client workspace.", Correction: "Submit the lifecycle/evidence artifact from a Perforce client workspace before finalizing completion."})
@@ -905,7 +905,7 @@ var gitDiffRangeRe = regexp.MustCompile(`^diff: ([0-9a-fA-F]{40})\.\.([0-9a-fA-F
 // repository via the vcs.Repo seam rather than exec'd git.
 func validGitTaskReviewIdentity(r *Root, a *Artifact, name, focused, reviewed, revision string, line int, emit func(Diagnostic)) bool {
 	repository := r.RepoForArtifact(a.Rel)
-	repo := vcs.Detect(repository)
+	repo := r.Repo(repository)
 	var identities []string
 	var expectedReviewIdentity string
 	if reviewed == revision {

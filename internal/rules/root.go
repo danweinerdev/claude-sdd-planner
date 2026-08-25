@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
@@ -43,6 +44,21 @@ type Root struct {
 	// Python's Validator.__init__ calling _configure_repositories
 	// immediately) so every other rule sees a populated PlanRepos.
 	ConfigDiagnostics []Diagnostic
+
+	// repoCache memoizes vcs.Detect per directory for this Root's lifetime.
+	// One validation pass detects the same handful of directories (the
+	// planning root, each plan's target repository) over and over — every
+	// evidence/phase-review rule re-asked — and each uncached detection is
+	// 1-3 subprocess probes (git rev-parse, and historically a `p4 info`
+	// network RPC). Production sdd hides this behind vcs.EnableMemoization,
+	// but that is process-lifetime and deliberately off under `go test`
+	// (fixtures mutate repositories BETWEEN passes). Detection cannot change
+	// WITHIN one pass — nothing in a rule sweep creates or destroys a
+	// repository, and a Root is never mutated after loading — so caching at
+	// Root scope is sound in both worlds and cuts the dominant spawn cost of
+	// the test suites. Access via Repo(), never directly.
+	repoMu    sync.Mutex
+	repoCache map[string]vcs.Repo
 
 	// bareDiagnostics memoizes runBare's result for this Root. The waiver
 	// rules (SDD176/SDD177) each need the full non-waiver rule sweep to know
@@ -88,6 +104,23 @@ type Artifact struct {
 	// sectionCache memoizes sections(a, level) per heading depth, for the same
 	// reason: many rules ask for the same artifact's sections.
 	sectionCache map[int]map[string]sectionInfo
+}
+
+// Repo returns the VCS adapter for dir, detecting at most once per directory
+// for this Root's lifetime (see repoCache). Rules must call this instead of
+// vcs.Detect directly.
+func (r *Root) Repo(dir string) vcs.Repo {
+	r.repoMu.Lock()
+	defer r.repoMu.Unlock()
+	if repo, ok := r.repoCache[dir]; ok {
+		return repo
+	}
+	repo := vcs.Detect(dir)
+	if r.repoCache == nil {
+		r.repoCache = map[string]vcs.Repo{}
+	}
+	r.repoCache[dir] = repo
+	return repo
 }
 
 // Kind returns the `type:` frontmatter field, or "" when absent/non-string.
