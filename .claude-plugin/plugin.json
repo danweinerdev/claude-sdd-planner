@@ -1,6 +1,6 @@
 {
   "name": "sdd-planner",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "minSddVersion": "1.16.0",
   "description": "Spec-driven development planning: lifecycle skills and review agents for structured plans, specs, designs, and research",
   "author": {
