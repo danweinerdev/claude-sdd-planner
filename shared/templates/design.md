@@ -45,15 +45,13 @@ Public APIs, events, or contracts.
      other designs cite these ids, and `sdd validate` resolves them against
      this section (SDD122). Cite another component's decision in qualified
      form — `ComponentName:DD-3` — so it resolves to that design, not this
-     one. -->
+     one. Declare each decision as a top-level bold bullet (`- **DD-N**: …`)
+     — that is the declaration form `sdd apply` collects and allocates;
+     indented sub-lines belong to the decision above them. -->
 
-### DD-1 — [Title]
-**Context:**
-**Options Considered:**
-1.
-2.
-**Decision:**
-**Rationale:**
+- **DD-1**: [Title].
+  Context: [what forces this decision]. Options considered: (a) […]; (b) […].
+  Decision: [chosen option]. Rationale: [why this over the alternatives].
 
 ## Error Handling
 How errors are detected, reported, and recovered from.

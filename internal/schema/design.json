@@ -114,7 +114,7 @@
       "text": "## Design Decisions",
       "depth": 2,
       "required": true,
-      "freeProse": true,
+      "idNamespace": "DD",
       "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
     },
     {
