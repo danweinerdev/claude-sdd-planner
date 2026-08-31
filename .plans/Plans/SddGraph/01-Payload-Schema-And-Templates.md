@@ -215,7 +215,7 @@ template-drift problem this task exists to prevent.
 - VCS: `git`
 - Revision / checkpoint: `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
 - Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
-- Final aligned review: Plans/SddGraph/reviews/02-sddgraph-code-review-fcb3575.md; frozen: c59170f34737eb905844d5b88a1e4cb3e0a21aec..fcb35759af8c456ac3e8df43375ba38f9d9d94e6
+- Final aligned review: Plans/SddGraph/reviews/03-sddgraph-code-review-fcb3575.md; frozen: c59170f34737eb905844d5b88a1e4cb3e0a21aec..fcb35759af8c456ac3e8df43375ba38f9d9d94e6
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
