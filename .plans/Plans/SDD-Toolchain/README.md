@@ -4,6 +4,10 @@ type: plan
 status: complete
 created: 2026-08-03
 updated: 2026-08-11
+waivers:
+  - code: SDD121
+    reason: "Completed lifecycle record cites the decisions that governed execution at the time; D-0021, D-0022, and D-0023 superseded them later, and history-bearing plan documents are not rewritten to track supersession."
+    accepted: "2026-08-31"
 tags: [golang, tooling, validation, authoring, hooks]
 related: [Specs/SDD-Toolchain]
 phases:

@@ -2,8 +2,9 @@
 title: "Cross-Platform Go SDD Validator"
 type: spec
 status: superseded
+superseded_by: Specs/SDD-Toolchain
 created: 2026-08-02
-updated: 2026-08-03
+updated: 2026-08-31
 tags: [validation, golang, cross-platform, testing]
 related: [Specs/SDD-Toolchain]
 ---

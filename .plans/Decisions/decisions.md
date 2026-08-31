@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-17
+updated: 2026-08-31
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -89,7 +89,7 @@ decisions:
     reversibility: two-way
   - id: D-0008
     kind: decision
-    status: accepted
+    status: superseded
     date: 2026-07-24
     decided_by: user
     statement: "Completion is evidence-gated at task, phase, and plan level per shared/completion-evidence.md: each plan task is one clean, independently bisectable native-SCM revision; retrospective evidence with exact commands and revision identity must be populated before any status flips to complete; phase completion requires a persisted frozen four-lane Aligned review; lifecycle bookkeeping lands in separate scoped commits."
@@ -98,6 +98,7 @@ decisions:
     scope: []
     tags: [completion-evidence, implement, code-review]
     reversibility: two-way
+    superseded_by: D-0022
   - id: D-0009
     kind: decision
     status: superseded
@@ -112,7 +113,7 @@ decisions:
     reversibility: two-way
   - id: D-0010
     kind: decision
-    status: accepted
+    status: superseded
     date: 2026-07-24
     decided_by: user
     statement: "sdd-planner does not integrate beads (sdd-beads) for issue tracking; plan/phase/task frontmatter remains the only work-tracking layer."
@@ -121,6 +122,7 @@ decisions:
     scope: []
     tags: [tracking, integrations]
     reversibility: two-way
+    superseded_by: D-0023
   - id: D-0011
     kind: decision
     status: superseded
@@ -251,7 +253,33 @@ decisions:
     scope: [go.mod, README.md, AGENTS.md, CLAUDE.md, commands/setup/SKILL.portable.md, skills/sdd-cli/SKILL.md, internal/provision/provision.go]
     tags: [golang, distribution, versioning, setup, modules]
     reversibility: two-way
+  - id: D-0022
+    kind: decision
+    status: accepted
+    supersedes: D-0008
+    date: 2026-08-31
+    decided_by: user-approved
+    statement: "For graph-executed plans per Designs/SddGraph, completion is observation-gated: node state is derived on read from structure plus recorded observations, and the only path to GREEN is a mechanical artifact (parsed test report, command exit/output, or frozen review artifact) synced through the sdd binary — never narrated evidence. A node's GREEN is assumed closure, sufficient for dependants to build on; completion-grade closure is the derived predicate 'GREEN and covered by a GREEN frozen full review gate whose aggregate diff digest still matches.' The frozen Aligned four-lane review obligation is preserved but scoped to feature review gates rather than phase cuts; phase completion is the projection 'every node in the phase is closed'; review findings naming scope nodes demote them to RED mechanically. Bisectability is per-VCS: git — one node = one clean revision anchored in its observation; p4 — one plan/phase = one changelist, with per-node history in observation records; plain trees anchor by digest only. v1 markdown plans not yet converted remain governed by shared/completion-evidence.md's evidence-table discipline until conversion."
+    rejected: [status flips on assertion, narrated completion evidence as the gate for graph plans, full four-lane review per phase cut at graph granularity, full review per node, stored status fields in the graph]
+    rationale: "Approved via Designs/SddGraph (DD-3, DD-5, DD-9). Observation-gated closure removes every write path by which an LLM concludes; two-axis closure (assumed vs. closed) keeps flow while review weight attaches to feature integrators proportional to integration risk. Supersedes D-0008's letter on status flips, per-task revision granularity, and phase-scoped review; preserves its intent that completion is a fact, not a claim."
+    scope: []
+    tags: [completion-evidence, execution, graph, review]
+    reversibility: two-way
+  - id: D-0023
+    kind: decision
+    status: accepted
+    supersedes: D-0010
+    date: 2026-08-31
+    decided_by: user-approved
+    statement: "Planning-root artifacts are the only work-tracking layer: plan/phase/task frontmatter for v1 markdown plans, and the committed plan graph (Plans/<Plan>/<Plan>-Graph.json per Designs/SddGraph) for graph-executed plans. No external issue tracker is integrated."
+    rejected: [external issue-tracker integration (sdd-beads), graph or work-tracking state stored outside the planning root]
+    rationale: "Narrows D-0010 to its intent: the beads rejection was about external trackers adding complexity, not about in-repo planning artifacts. The graph is a committed planning-root artifact versioned with the plan it schedules."
+    scope: []
+    tags: [tracking, integrations, graph]
+    reversibility: two-way
 ---
+
+
 
 
 

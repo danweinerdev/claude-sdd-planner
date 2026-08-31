@@ -32,6 +32,9 @@ tasks:
     justifies: "FR-36, FR-34, AC-28, AC-46. Completes the rollout so no artifact type is left with two writers, which would leave the invariants advisory for that type."
     depends_on: ["7.3"]
 waivers:
+  - code: SDD121
+    reason: "Completed lifecycle record cites the decisions that governed execution at the time; D-0021, D-0022, and D-0023 superseded them later, and history-bearing plan documents are not rewritten to track supersession."
+    accepted: "2026-08-31"
   - code: SDD173
     reason: "Seven phases closed on one full-range review and test pass spanning all implementation commits, because the phases were implemented out of plan order and no contiguous range isolates any single phase. SDD173's per-phase endpoint and lifecycle-only-changes branches both assume phases close one at a time. See F-01 in this phase's review."
     accepted: "2026-08-12"

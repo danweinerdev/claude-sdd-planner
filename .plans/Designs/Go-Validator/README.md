@@ -2,8 +2,9 @@
 title: "Go SDD Validator Architecture"
 type: design
 status: superseded
+superseded_by: Specs/SDD-Toolchain
 created: 2026-08-02
-updated: 2026-08-03
+updated: 2026-08-31
 tags: [validation, golang, architecture, cross-platform]
 related: [Specs/Go-Validator, Specs/SDD-Toolchain]
 ---

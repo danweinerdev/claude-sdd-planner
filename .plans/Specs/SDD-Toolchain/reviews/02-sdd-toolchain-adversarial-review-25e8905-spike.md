@@ -4,6 +4,10 @@ type: review
 status: resolved
 created: 2026-08-04
 updated: 2026-08-04
+waivers:
+  - code: SDD121
+    reason: "Frozen review records the decisions as they stood at review time; later supersessions (D-0021, D-0022) do not rewrite frozen review artifacts."
+    accepted: "2026-08-31"
 tags: [review, adversarial, spike, golang]
 related: [Specs/SDD-Toolchain, Plans/SDD-Toolchain]
 review_of: "Specs/SDD-Toolchain"
