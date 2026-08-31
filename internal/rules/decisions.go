@@ -58,9 +58,18 @@ func repoDecisions(r *Root) map[decisionKey]decisionRecord {
 func init() {
 	Register(&Rule{
 		Code: "SDD145", Severity: Error, PyFunc: "_decision_links",
-		What: "a decision's `scope` entry resolves to neither a known artifact nor an on-disk repository path",
+		What: "a live decision's `scope` entry resolves to neither a known artifact nor an on-disk repository path",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
 			for key, rec := range repoDecisions(r) {
+				// Superseded and rejected entries are immutable history: their
+				// scopes recorded the world as it stood, collision detection
+				// consults only accepted scopes, and the append-only ledger
+				// forbids repairing them in place (a scope correction is a
+				// superseding entry, per D-0017's own precedent). Only live
+				// entries must resolve.
+				if s := metaStr(rec.Entry, "status"); s == "superseded" || s == "rejected" {
+					continue
+				}
 				scope, ok := rec.Entry["scope"].([]any)
 				if !ok {
 					continue
@@ -103,6 +112,21 @@ func init() {
     scope: ["Research/ok.md"]
 `),
 			"Research/ok.md": strings.Replace(validResearch, "## Context\n\nText.", "## Context\n\nGoverned by D-0001.", 1),
+		}}, {Name: "superseded-scope-is-history", Files: map[string]string{
+			"Decisions/decisions.md": decisionLog(`
+  - id: D-0001
+    status: superseded
+    superseded_by: D-0002
+    question: Q
+    statement: S
+    scope: ["Removed/gone.md"]
+  - id: D-0002
+    status: accepted
+    supersedes: D-0001
+    question: Q
+    statement: S2
+    scope: []
+`),
 		}}},
 	})
 
