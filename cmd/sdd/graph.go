@@ -12,8 +12,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +29,45 @@ func graphCmd() *cobra.Command {
 		},
 	}
 	c.AddCommand(graphHazardsCmd())
+	c.AddCommand(graphInitCmd())
+	return c
+}
+
+// graphInitCmd creates a plan's empty committed graph plus the .gitignore
+// entries that keep lock sidecars and the .graph/ workspace out of version
+// control. Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
+func graphInitCmd() *cobra.Command {
+	var plan string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "init",
+		Short: "Create an empty plan graph (Plans/<Plan>/<Plan>-Graph.json)",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph init: --plan is required")
+			}
+			root, err := store.FindPlanningRoot(".")
+			if err != nil {
+				return fmt.Errorf("graph init: %w", err)
+			}
+			planDir := filepath.Join(root, "Plans", plan)
+			path, err := gstore.Init(planDir)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK   bool   `json:"ok"`
+					Path string `json:"path"`
+				}{true, relPath(path)})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "initialized %s\n", relPath(path))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 

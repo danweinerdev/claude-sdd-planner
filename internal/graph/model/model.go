@@ -218,11 +218,18 @@ type Proposal struct {
 // trailing newline. The graph is committed and diffed by humans, so byte
 // stability is part of the contract (DD-3).
 func (g *Graph) Encode() ([]byte, error) {
+	// A nil Nodes slice would marshal as `"nodes": null`, which the strict
+	// decoder rejects — an empty graph is `[]`, never null. Normalize on a
+	// shallow copy so encoding is never the thing that mutates a graph.
+	out := *g
+	if out.Nodes == nil {
+		out.Nodes = []Node{}
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(g); err != nil {
+	if err := enc.Encode(&out); err != nil {
 		return nil, fmt.Errorf("encode graph: %w", err)
 	}
 	return buf.Bytes(), nil
