@@ -19,7 +19,7 @@ waivers:
 phases:
   - id: 1
     title: "Payload Schema and Templates"
-    status: in-progress
+    status: complete
     doc: "01-Payload-Schema-And-Templates.md"
     depends_on: []
   - id: 2

@@ -3,7 +3,7 @@ title: "Payload Schema and Templates"
 type: phase
 plan: "SddGraph"
 phase: 1
-status: in-progress
+status: complete
 created: 2026-08-31
 updated: 2026-08-31
 deliverable: "Strictly-decoded graph/payload model, closed hazard vocabulary, and the graph-proposal template skeleton + JSON Schema generated from one source and CI-gated against drift"
@@ -199,16 +199,30 @@ validator run on the real exemplar — anything weaker recreates the
 template-drift problem this task exists to prevent.
 
 ## Acceptance Criteria
-- [ ] `internal/graph/model` round-trips the full-featured fixture and
+- [x] `internal/graph/model` round-trips the full-featured fixture and
       rejects every malformed case with a JSON-path error (DD-12).
-- [ ] Hazard vocabulary is closed, described, and CLI-inspectable
+- [x] Hazard vocabulary is closed, described, and CLI-inspectable
       (`sdd graph hazards`).
-- [ ] `sdd template graph-proposal` exemplar validates against
+- [x] `sdd template graph-proposal` exemplar validates against
       `--schema` output in CI; independent edits fail `make test`.
-- [ ] `go vet` and `staticcheck` clean over `internal/graph/...`;
+- [x] `go vet` and `staticcheck` clean over `internal/graph/...`;
       `make test` green.
 
 ## Phase Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
+- Final aligned review: Plans/SddGraph/reviews/02-sddgraph-code-review-fcb3575.md; frozen: c59170f34737eb905844d5b88a1e4cb3e0a21aec..fcb35759af8c456ac3e8df43375ba38f9d9d94e6
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `exit 0: full gate green at phase end — go suite (all packages incl. internal/graph/{model,hazards,proposal} and cmd/sdd meta-registries), regression corpus, template gate (10 markdown templates + byte-compared graph-proposal JSON pair), portable drift and leak gates` |
+
+### Completed task identities
+
+- `1.1`: `e37df494a163ea466fe71143727584d107684cc2`
+- `1.2`: `ed539842fd2c45838fa44d4b0de75fae9bc1e807`
+- `1.3`: `7483157e34d20584796bc2fa1ecc6f7eaf693aa4`
