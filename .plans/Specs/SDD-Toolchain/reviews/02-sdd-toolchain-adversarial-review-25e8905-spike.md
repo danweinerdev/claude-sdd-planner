@@ -8,6 +8,9 @@ waivers:
   - code: SDD121
     reason: "Frozen review records the decisions as they stood at review time; later supersessions (D-0021, D-0022) do not rewrite frozen review artifacts."
     accepted: "2026-08-31"
+  - code: SDD096
+    reason: "FU-01's task reference was recorded when 5.4 was unique in the root and binds to Plans/SDD-Toolchain task 5.4; a later plan (SddGraph) reusing the id does not re-bind a frozen review's follow-up."
+    accepted: "2026-08-31"
 tags: [review, adversarial, spike, golang]
 related: [Specs/SDD-Toolchain, Plans/SDD-Toolchain]
 review_of: "Specs/SDD-Toolchain"

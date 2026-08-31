@@ -1,0 +1,207 @@
+---
+title: "Skill Rewrites and Self-Hosting"
+type: phase
+plan: "SddGraph"
+phase: 5
+status: planned
+created: 2026-08-31
+updated: 2026-08-31
+deliverable: "The plan skill rewritten as a decomposition protocol with the structured interview, the implement skill rewritten as the walk loop, regenerated portable trees and synced docs with an advanced version floor, and the self-hosting pilot executed under graph execution"
+tasks:
+  - id: "5.1"
+    title: "Rewrite the plan skill as a decomposition protocol with structured interview"
+    status: planned
+    verification: "make test — template gate, portable drift gate, and leak gate green after regeneration; manual protocol walkthrough documented in this task's evidence: the rewritten commands/plan/SKILL.md drives interview (S/M/L/XL scope gate, bounded adaptive multiple-choice waves, early ready-to-plan exit, resumable ledger under a gitignored path) -> node proposal payload authored from sdd template graph-proposal -> sdd compile -> silhouette read-back with CHAIN treated as a re-proposal signal; the skill nowhere instructs writing plan/phase markdown by hand and nowhere invents hazards on the operator's behalf."
+    justifies: "DD-13 (node granularity is one red-green cycle; the skill's output is a proposal payload, not markdown), DD-16 (structured resumable interview). Prevents the token-waste loop this whole design exists to remove from planning sessions."
+  - id: "5.2"
+    title: "Rewrite the implement skill as the graph walk loop"
+    status: planned
+    verification: "make test green after regeneration; manual protocol walkthrough documented in evidence: the rewritten commands/implement/SKILL.md drives next --claim -> write the node's named tests -> observe red (sync the failing report; hazard-discharging tests must record red_seq before green counts) -> implement -> sync the passing report -> merge; stopping rules present verbatim (2 consecutive failures propose split, 3 stop and escalate); INTENT-STALE and finding-demotion responses routed as judgment steps; the skill nowhere writes completion evidence prose as a gate input and nowhere edits Graph.json or rendered views directly."
+    justifies: "DD-13, D-0022 (sync-only completion — the skill teaches showing reports, never asserting), DD-5 red-before-green walk protocol. Prevents narrated completion re-entering through skill prose after the binary closed the write path."
+    depends_on: ["5.1"]
+  - id: "5.3"
+    title: "Portable regeneration, documentation sync, version floor advance"
+    status: planned
+    verification: "make plugins && make plugins-check green (regenerated .codex-plugin/ and .opencode-plugin/ committed with the skill changes, no hand edits, portable variants reviewed for the changed skills); README.md, CLAUDE.md, AGENTS.md skill/agent tables and directory layouts updated consistently (grep spot-checks for the new graph verbs and rewritten skill descriptions); python3 bump-version.py set-floor advances minSddVersion to the release carrying the graph verbs, per the deliberate-floor discipline; sdd plugin status reports clean provenance."
+    justifies: "D-0021 (floor advanced deliberately, never by make bump-*), D-0017 (per-harness generated trees are the published artifact — regeneration is mandatory with skill edits), and the docs-stay-in-sync repo rule; prevents harness caches serving stale skills against a binary whose verbs they don't know."
+    depends_on: ["5.1", "5.2"]
+  - id: "5.4"
+    title: "Self-hosting pilot: convert this plan and walk a live slice"
+    status: planned
+    verification: "Documented pilot run in this task's evidence, executed with the released binary: sdd graph convert --plan SddGraph produces a staged proposal whose sentinels are resolved via the payload path; sdd compile succeeds with the coverage invariant satisfied; at least two nodes corresponding to real remaining work from this phase are executed end to end via next --claim -> red sync -> green sync -> merge with clean isolation and red_seq recorded; sdd graph status/path/shape output captured; every discrepancy between the design's claims and observed behavior is filed as a finding list in the evidence (empty list is a pass, silence is not)."
+    justifies: "The design's Testing Strategy names self-hosting as acceptance: the first real plan executed under SddGraph is a slice of its own implementation plan. DD-15 (convert exercised on a real v1 plan, not only fixtures). Prevents shipping a walk loop that has only ever walked fixtures."
+    depends_on: ["5.3"]
+---
+
+# Phase 5: Skill Rewrites and Self-Hosting
+
+## Overview
+
+Moves the new execution model from binary capability to lived workflow: the
+planning skill becomes a decomposition protocol emitting proposal payloads,
+the implementation skill becomes the claim/red/green/sync walk loop, the
+portable trees and docs regenerate in lockstep with an advanced version
+floor, and the plan proves itself by converting and walking a slice of its
+own remaining work. Tool-side enforcement has been live since phase 3; this
+phase lands the prose that narrates it (the design's rollout note).
+
+## 5.1: Rewrite the plan skill as a decomposition protocol with structured interview
+
+### Subtasks
+- [ ] Rewrite `commands/plan/SKILL.md`: interview protocol (S/M/L/XL scope
+      gate sets per-wave question budget; bounded multiple-choice waves;
+      adaptive continuation until no material assumptions remain; every
+      wave offers a ready-to-plan exit; answers persist to a resumable
+      ledger under a gitignored path).
+- [ ] Decomposition section: node granularity = one red→green cycle; 1–2
+      sentence falsifiable contracts; named failing tests per node; declared
+      artifact sets; hazard triage against `sdd graph hazards` (explicit
+      `--no-hazards`-equivalent claim, never silent); estimates; feature
+      review-gate placement at integrators with the terminal-gate backstop.
+- [ ] Output contract: author the payload from `sdd template
+      graph-proposal`, `graph propose`, `compile`, read back
+      `graph shape` — CHAIN triggers re-proposal; document the repair loop
+      as file edits against JSON-path findings.
+- [ ] Decide and apply the portable-variant question: does
+      `commands/plan/SKILL.portable.md` (if introduced) or harness markers
+      handle divergence; keep the decision recorded in the skill header
+      comment.
+- [ ] v1 coexistence paragraph: plans without graphs continue under the old
+      protocol until converted (D-0022's v1 clause) — the skill routes by
+      graph presence.
+
+### Notes
+Revision boundary: the canonical skill file rewritten and self-consistent;
+portable regeneration is 5.3 (do not hand-edit generated trees here). The
+skill's job shrinks to the three LLM-shaped tasks the design names:
+negotiate intent, decompose, and read back diagnostics — everything
+mechanical is a CLI call. Design references: DD-13, DD-16; § The execution
+loop. Keep the interview ledger path inside the plan's `.graph/` area so
+init's `.gitignore` already covers it.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+### Trap
+Do not carry the old skill's "3-7 phases, 2-6 tasks" shape language into
+node decomposition. Node count follows from red→green cycles, not from a
+document shape; importing the old quotas recreates order-of-thought CHAIN
+decompositions the silhouette check exists to reject.
+
+## 5.2: Rewrite the implement skill as the graph walk loop
+
+### Subtasks
+- [ ] Rewrite `commands/implement/SKILL.md` around the loop: `next --claim`
+      → write named tests → run and **sync the failing report** → implement
+      → sync the passing report → merge; repeat until the frontier is
+      empty; surface `graph status` between rounds.
+- [ ] Stopping rules verbatim: 2 consecutive failures → propose `split`;
+      3 → stop and escalate to the user.
+- [ ] Reaction protocol: INTENT-STALE (re-read the changed requirement diff
+      only; re-hash / rework / replan as judgment), finding-demotion (RED
+      nodes re-enter the frontier), lease expiry and `release` etiquette.
+- [ ] Evidence language: rendered views and observation records replace
+      narrated completion-evidence tables for graph plans; v1 plans keep the
+      old protocol (routing by graph presence, as in 5.1).
+- [ ] Update `agents/code-implementer.md` dispatch expectations if the
+      inline-task contract (implement_task dispatches carry the task
+      inline, per the repo's agent-prompt conventions) needs graph-node
+      payloads.
+
+### Notes
+Revision boundary: canonical implement skill rewritten; portable
+regeneration in 5.3. The prose must never instruct asserting completion —
+the binary refuses it anyway (DD-5), but skill text that implies otherwise
+trains the model to fight the tool. Design references: § The execution loop,
+§ Stopping rules, DD-5, DD-10, D-0022.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+## 5.3: Portable regeneration, documentation sync, version floor advance
+
+### Subtasks
+- [ ] `make plugins` after 5.1/5.2; review generated diffs for the two
+      rewritten skills; check whether any `.portable.md` variant shadows
+      them and update variants deliberately (repo editing rule 2).
+- [ ] `make plugins-check` green; `sdd plugin status` provenance clean.
+- [ ] Sync README.md, CLAUDE.md, AGENTS.md: skill tables, `sdd` verb
+      surface (graph family), lifecycle description mentioning graph
+      execution and v1 coexistence; setup-generated guidance templates
+      (`shared/templates/claude-md-*.md`, `agents-md-*.md`) updated to
+      match.
+- [ ] `python3 bump-version.py set-floor <release>` advancing minSddVersion
+      to the first release carrying the graph verbs (deliberate act with
+      rationale in the commit).
+- [ ] Full `make test` as the phase gate.
+
+### Notes
+Revision boundary: generated trees, docs, and floor move in one revision so
+no harness can install skills that name verbs the admitted binary lacks.
+Design references: § Migration/Rollout phase 5; D-0021 (floor discipline);
+repo editing rules 1, 2, 9. The version bump itself (make bump-*) is a
+release action taken with the user at the boundary — this task prepares
+everything the bump publishes.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+## 5.4: Self-hosting pilot: convert this plan and walk a live slice
+
+### Subtasks
+- [ ] `sdd graph convert --plan SddGraph`; resolve sentinels through the
+      payload path (hazard triage and gate specification are real judgments
+      — make them, don't default them).
+- [ ] `sdd compile` to a committed `SddGraph-Graph.json`; capture
+      `status`/`path`/`risk`/`shape` output.
+- [ ] Execute at least two genuinely remaining nodes (documentation
+      follow-ups, corpus additions, or fix-forward work discovered by the
+      pilot) end to end under `next --claim` → red sync → green sync →
+      merge.
+- [ ] Record every design-vs-behavior discrepancy as a finding list in this
+      task's evidence; file material ones as new tasks or design follow-ups
+      rather than fixing silently.
+- [ ] Leave the converted graph committed as the living integration fixture
+      (design § Testing Strategy).
+
+### Notes
+Revision boundary: the pilot run, its committed graph, and its finding list.
+This is the acceptance test the design sets for itself — the walk loop must
+walk real work, with the released binary, in this repository, before the
+plan closes. If the pilot finds nothing at all, say so explicitly in
+evidence; an empty finding list is a result, silence is not. Design
+references: § Testing Strategy (self-hosting), DD-15, D-0022.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+### Trap
+The pilot will tempt you to hand-pick two trivial already-green nodes so the
+walk "passes". The pilot's value is adversarial: pick nodes with real red
+phases and at least one hazard-discharging test, or the red-before-green and
+demotion machinery ships having never fired outside fixtures.
+
+## Acceptance Criteria
+- [ ] Both rewritten skills drive the graph workflow end to end with no
+      hand-written plan/phase markdown and no narrated completion path
+      (DD-13, DD-16, D-0022).
+- [ ] Generated trees regenerate cleanly; docs and templates agree with the
+      shipped verb surface; minSddVersion floor advanced deliberately
+      (D-0021).
+- [ ] The self-hosting pilot walked ≥2 real nodes with red_seq recorded and
+      clean-isolation merges; its finding list is recorded (empty allowed,
+      absent not).
+- [ ] `make test` green across the phase.
+
+## Phase Completion Evidence
+
+<!-- Keep the exact `Pending — not complete.` line until completion. -->
+Pending — not complete.

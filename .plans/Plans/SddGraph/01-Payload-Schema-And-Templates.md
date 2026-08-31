@@ -1,0 +1,170 @@
+---
+title: "Payload Schema and Templates"
+type: phase
+plan: "SddGraph"
+phase: 1
+status: planned
+created: 2026-08-31
+updated: 2026-08-31
+deliverable: "Strictly-decoded graph/payload model, closed hazard vocabulary, and the graph-proposal template skeleton + JSON Schema generated from one source and CI-gated against drift"
+tasks:
+  - id: "1.1"
+    title: "Graph and payload model with strict JSON decoding"
+    status: planned
+    verification: "go test ./internal/graph/model/... -count=1 — round-trip (to_dict(from_dict(x)) == x) on a full-featured fixture graph; unknown key rejected with did-you-mean naming the nearest field and a JSON path (nodes[2].gate.tets[0] -> did you mean 'tests'); version != 1 rejected naming the supported schema version (no migrate verb exists yet — v1 is the first schema; the error must not reference one); malformed verification.result rejected naming the two valid values. go vet ./internal/graph/... and staticcheck ./internal/graph/... clean."
+    justifies: "DD-12 (strict decoding, JSON-path errors), DD-3 (structure-and-observations-only persisted shape). Prevents a hallucinated payload key being silently dropped and surfacing later as an uncovered AC blamed on the wrong node."
+  - id: "1.2"
+    title: "Closed hazard vocabulary with required test shapes"
+    status: planned
+    verification: "go test ./internal/graph/hazards/... -count=1 — every vocabulary entry carries a nonempty required-test-shape description; require_known rejects an unknown hazard naming the vocabulary; the untriaged sentinel round-trips as the literal string and is distinct from an explicit empty list; a node with hazards untriaged is reported as untriaged by the model layer."
+    justifies: "DD-9 (gate vocabulary), DD-13 (hazard discharge requires a test of a specific shape). Prevents 'passing tests that guard nothing' — the defect class the vocabulary encodes."
+    depends_on: ["1.1"]
+  - id: "1.3"
+    title: "sdd template graph-proposal: skeleton and schema from one source"
+    status: planned
+    verification: "go test ./cmd/sdd/ -run TestGraphProposalTemplate -count=1 — `sdd template graph-proposal` emits a placeholder-complete exemplar that validates against the schema emitted by `sdd template graph-proposal --schema` (the round-trip gate); the exemplar demonstrates a tests gate, a command gate, a review gate, a filled hazards list, an untriaged sentinel, and a terminal full review gate depending on every sink; the drift test fails if exemplar and schema are edited independently. Manual: `sdd template graph-proposal --schema | python -m json.tool` exits 0."
+    justifies: "DD-12 (skeleton + schema from one source, CI-gated exactly like the existing markdown template gate; the exemplar is what makes LLM payloads fill-in rather than guess)."
+    depends_on: ["1.1", "1.2"]
+---
+
+# Phase 1: Payload Schema and Templates
+
+## Overview
+
+Lands the data layer everything else consumes: the Go model for
+`<Plan>-Graph.json` and the `graph propose` payload (strict decoding,
+versioned, JSON-path errors), the closed hazard vocabulary with its
+required-test-shape contract, and the `sdd template graph-proposal`
+skeleton/schema pair generated from one source. No disk I/O, no CLI verbs
+beyond `template` — pure shapes and their gates, so phases 2–4 build on a
+frozen wire contract.
+
+## 1.1: Graph and payload model with strict JSON decoding
+
+### Subtasks
+- [ ] Create `internal/graph/model` with `Graph`, `Node`, `Gate`, `Test`,
+      `Verification`, `Claim` types mirroring the design's data model
+      (`version`, `seq_counter`, `nodes[]`; node: `id`, `contract`,
+      `justifies`, `intent_hashes`, `deps`, `gate{type,tests|command|lanes}`,
+      `hazards`, `artifacts`, `estimate`, `phase`, `claim?`, `verification?`
+      with `result/seq/artifact_digests/report_digest/isolation/provenance`
+      and per-test `red_seq`).
+- [ ] Implement `FromDict`/`ToDict` (or `UnmarshalJSON`/`MarshalJSON`) with
+      strict decoding: unknown keys are errors carrying a JSON path and a
+      nearest-field did-you-mean (Levenshtein over the struct's known keys).
+- [ ] Enforce field invariants at decode: nonempty node id/contract,
+      `estimate >= 1` defaulting to 1, `verification.result` ∈ {pass, fail},
+      `isolation` ∈ {clean, shared-dirty, asserted}, gate `type` ∈ {tests,
+      command, review}, `version == 1` with a version-mismatch error naming
+      the supported version.
+- [ ] Separate payload shapes (proposal/fragment) from the master-graph
+      shape — proposals carry no `claim`/`verification`/`intent_hashes`
+      (tool-owned fields are rejected in payloads, same posture as FR-18).
+- [ ] Table-driven tests: round-trip fixture, every rejection case with its
+      exact JSON path, tool-owned-field rejection.
+
+### Notes
+Revision boundary: `internal/graph/model` compiles, is fully unit-tested, and
+is imported by nothing else yet. The wire contract (field names, sentinel
+spellings, valid enums) is frozen here — phases 2–4 must not need to change
+it. Design references: `Designs/SddGraph` § Data model, DD-12. Tool-owned
+fields in payloads are rejected, not ignored, mirroring the spec's FR-18
+posture for `apply`. Keep `hazards: null`-vs-`"untriaged"`-vs-`[]` handling
+in this task's tests — it is the subtlest decode case (1.2 defines the
+vocabulary; the sentinel plumbing lives here).
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+### Trap
+You will want to use plain `encoding/json` with struct tags and call it
+strict. Don't — stock `json.Unmarshal` silently drops unknown keys, which is
+precisely the failure DD-12 forbids. Decode via `json.Decoder` with
+`DisallowUnknownFields` *plus* a raw-map pass to produce JSON paths and
+did-you-mean, or token-walk; the error quality is the contract, not a
+nicety.
+
+## 1.2: Closed hazard vocabulary with required test shapes
+
+### Subtasks
+- [ ] Create `internal/graph/hazards`: the vocabulary as data — each entry
+      `{name, required test shape description}` seeded from the design's
+      table (order-sensitive, computes-number, derives-state, persists-state,
+      user-entrypoint, ships-prose, concurrent-access, external-format,
+      deterministic-replay, frame-coupled).
+- [ ] `RequireKnown(name, where)` returning a vocabulary-naming error for
+      unknown hazards; `Untriaged` sentinel constant.
+- [ ] `sdd graph hazards` read-only subcommand printing the vocabulary and
+      each hazard's required test shape (`--json` supported).
+- [ ] Tests: unknown rejection, sentinel distinctness from empty list,
+      vocabulary completeness (every entry has a nonempty shape description).
+
+### Notes
+Revision boundary: the vocabulary package plus one read-only CLI verb; no
+compile-time enforcement yet (that is 2.3's coverage checks). The vocabulary
+is closed and extended only by evidence — the package doc-comment must say
+so. Design references: `Designs/SddGraph` § Data model (hazard vocabulary),
+DD-9, DD-13. `sdd graph hazards` is read-only and gets allowlisted for
+read-only agents when 2.6 lands the guard entries; note that forward
+dependency in the code comment, not as a hidden coupling.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+## 1.3: sdd template graph-proposal: skeleton and schema from one source
+
+### Subtasks
+- [ ] Define the proposal JSON Schema (payload `version`, `nodes[]`,
+      fragment metadata) generated from — or CI-checked against — the same
+      source that renders the skeleton exemplar (follow the existing
+      `internal/schema` spec-schema-covers-template test pattern).
+- [ ] Extend `cmd/sdd/template.go` with the `graph-proposal` template:
+      default output is the placeholder-complete exemplar; `--schema` emits
+      the JSON Schema.
+- [ ] Exemplar content: one node per gate type, a filled hazard list and an
+      `"untriaged"` node, `justifies` citing placeholder `AC-NN`/`DD-N`,
+      `deps`, `artifacts`, `estimate`, and a terminal `full` review gate
+      depending on every sink node (the DD-9 coverage backstop).
+- [ ] Round-trip gate test: the emitted exemplar validates against the
+      emitted schema; wire into the existing `sdd template --check` path so
+      `make test` fails on drift.
+
+### Notes
+Revision boundary: `sdd template graph-proposal [--schema]` works end to end
+and is drift-gated; nothing consumes proposals yet. The exemplar is the
+authoring contract for every LLM that will ever propose a graph — favor
+demonstrative values over terse ones (DD-12: models replicate exemplars, they
+don't satisfy specifications). When 2.3 lands, extend the round-trip test to
+"exemplar compiles clean" — leave a TODO naming that test by name. Schema
+files live beside the existing ones in `internal/schema/` unless size argues
+for `internal/graph/schema/`; either way one source, two outputs.
+
+### Completion Evidence
+
+<!-- Keep the exact pending line until completion. -->
+Pending — not complete.
+
+### Trap
+Do not hand-write the skeleton and the schema as two artifacts that a test
+merely compares loosely (e.g., key-name presence). The gate must be the real
+validator run on the real exemplar — anything weaker recreates the
+template-drift problem this task exists to prevent.
+
+## Acceptance Criteria
+- [ ] `internal/graph/model` round-trips the full-featured fixture and
+      rejects every malformed case with a JSON-path error (DD-12).
+- [ ] Hazard vocabulary is closed, described, and CLI-inspectable
+      (`sdd graph hazards`).
+- [ ] `sdd template graph-proposal` exemplar validates against
+      `--schema` output in CI; independent edits fail `make test`.
+- [ ] `go vet` and `staticcheck` clean over `internal/graph/...`;
+      `make test` green.
+
+## Phase Completion Evidence
+
+<!-- Keep the exact `Pending — not complete.` line until completion. -->
+Pending — not complete.
