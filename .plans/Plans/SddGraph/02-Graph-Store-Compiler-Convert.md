@@ -3,14 +3,14 @@ title: "Graph Store, Compiler, Convert"
 type: phase
 plan: "SddGraph"
 phase: 2
-status: planned
+status: in-progress
 created: 2026-08-31
 updated: 2026-08-31
 deliverable: "Committed graph store with locked atomic writes, propose/assemble staging, the compile pipeline (batched errors, coverage, intent hashes, rendered views), v1 conversion with blocking sentinels, and guard coverage for every new surface"
 tasks:
   - id: "2.1"
     title: "Graph store: discovery, locked atomic writes, init"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/store/... -count=1 — upward discovery finds Plans/<Plan>/<Plan>-Graph.json from a nested cwd and errors helpfully when absent; save is temp+fsync+rename with pinned UTF-8/LF (byte-identical output on Windows and POSIX fixtures); concurrent read-modify-write under the reused internal/store lock loses no update (two-writer test); `sdd graph init` writes the graph skeleton plus .gitignore covering *.lock and .graph/. go test ./internal/graph/store/... -race -count=1 clean."
     justifies: "DD-3 (only structure and observations persist; atomic writes under the advisory lock, reusing internal/store rather than growing a second implementation). Prevents torn reads and lock-file commits — the two store corruptions the design names."
   - id: "2.2"
@@ -61,19 +61,19 @@ executes yet.
 ## 2.1: Graph store: discovery, locked atomic writes, init
 
 ### Subtasks
-- [ ] Create `internal/graph/store`: `Find(start)` walking upward for
+- [x] Create `internal/graph/store`: `Find(start)` walking upward for
       `Plans/<Plan>/<Plan>-Graph.json`; `Load` via the strict model decoder;
       `Save` via temp file + fsync + `os.Rename`-equivalent with pinned
       UTF-8/LF and stable key order.
-- [ ] Reuse `internal/store`'s lock (`lock.go`/`lock_unix.go`/
+- [x] Reuse `internal/store`'s lock (`lock.go`/`lock_unix.go`/
       `lock_windows.go`) for a `Locked(path, fn)` read-modify-write helper;
       document non-reentrancy.
-- [ ] `sdd graph init --plan <name>`: writes an empty v1 graph plus
+- [x] `sdd graph init --plan <name>`: writes an empty v1 graph plus
       `Plans/<Plan>/.gitignore` covering `*.lock` and `.graph/`.
-- [ ] Two-writer contention test (goroutines + separate processes deferred
+- [x] Two-writer contention test (goroutines + separate processes deferred
       to 3.6) and a torn-read test (reader during writer sees old or new,
       never partial).
-- [ ] `-race` on the package tests.
+- [x] `-race` on the package tests.
 
 ### Notes
 Revision boundary: the store package plus `sdd graph init`; no other verb
@@ -85,8 +85,24 @@ references: DD-3, § Components (`store` row).
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `085f4f123f1988300c643a322cc800c858e8450c`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `085f4f123f1988300c643a322cc800c858e8450c`
+- Focused review: `git show 085f4f123f1988300c643a322cc800c858e8450c`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `085f4f123f1988300c643a322cc800c858e8450c`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/... ./cmd/sdd/ -count=1` | `.` | PASS (`exit 0`) | `ok internal/graph/{model,hazards,proposal,store}, ok cmd/sdd 24.687s; upward discovery from nested cwd finds SamplePlan-Graph.json and a miss names the init verb; init writes empty v1 graph + .graph/ dir + merged .gitignore (*.sdd-lock, *.lock, .graph/) preserving existing lines, re-init refused; load->save byte-identical LF-only; 8 writers x 5 CAS increments lose no update; reader storm during 40 updates never sees a torn or invalid graph; fn and decode errors surface without overwriting a corrupt graph. NOTE: -race deferred to task 3.6 matrix — this Windows host has no cgo C toolchain (gcc absent), so the race detector cannot build here` |
+| `go vet ./internal/graph/... ./cmd/sdd/` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd graph init smoke in a temp planning root` | `built binary at 085f4f1` | PASS | `initialized Plans/Demo/Demo-Graph.json with version 1 / seq_counter 0 / nodes []; .gitignore carries the three lines; second init refused naming the live-graph rule` |
 
 ### Trap
 `os.Rename` over an existing file fails on Windows under some conditions and
