@@ -666,6 +666,41 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
 
+	// The artifact-level freeze gate: run the validator over the resolved
+	// candidate and refuse on any Error-severity finding on this review
+	// itself (SDD086/087 finding shape, schema errors, dangling references).
+	// Phase-gate reviews only, and deliberately stronger than the transition
+	// verbs' introduced-only diff: a phase-gate review freezes at resolve and
+	// is immutable afterwards (D-0020), so any invalid byte it carries at
+	// freeze time would be invalid forever — the gate must catch pre-existing
+	// findings too. An ordinary review stays an editable record, so its
+	// defects remain repairable and `sdd validate` reporting them is enough.
+	// Waivers are honored, the same criterion `sdd validate` applies.
+	var artifactDiags []rules.Diagnostic
+	if isPhaseGate {
+		artifactDiags, err = candidateArtifactErrors(path, updated)
+		if err != nil {
+			return fmt.Errorf("review resolve: %w", err)
+		}
+	}
+	if len(artifactDiags) > 0 {
+		for _, d := range artifactDiags {
+			res.Blocking = append(res.Blocking, fmt.Sprintf("%s: %s %s", d.Code, d.Message, d.Correction))
+		}
+		if o.JSON {
+			if err := writeJSON(res); err != nil {
+				return err
+			}
+			return &refusedError{n: len(artifactDiags)}
+		}
+		var b strings.Builder
+		b.WriteString("review resolve: refused — the resolved review would not validate, and a frozen review cannot be repaired:\n")
+		for _, d := range artifactDiags {
+			fmt.Fprintf(&b, "  %s %s:%d: %s\n      fix: %s\n", d.Code, d.Path, d.Line, d.Message, d.Correction)
+		}
+		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+	}
+
 	outcome := "resolved"
 	if isPhaseGate {
 		outcome = "resolved and frozen"

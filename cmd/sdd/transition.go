@@ -312,6 +312,53 @@ func diagKey(d rules.Diagnostic) string {
 	return d.Code + "\x00" + d.Path + "\x00" + fmt.Sprint(d.Line) + "\x00" + d.Message
 }
 
+// candidateArtifactErrors validates a candidate document in place and returns
+// the Error-severity diagnostics ON THAT ARTIFACT — not the introduced-only
+// diff gateDiagnostics computes. The freezing verbs need this stronger form:
+// a frozen artifact is immutable, so any invalid byte it carries at freeze
+// time becomes permanently invalid, whether or not the freezing transition
+// introduced it. Waivers are honored (RunWithWaivers), the same criterion
+// `sdd validate` applies by default.
+func candidateArtifactErrors(path, candidate string) ([]rules.Diagnostic, error) {
+	root, repoRoot, err := resolveRoots(".", "")
+	if err != nil {
+		return nil, err
+	}
+	rel := ""
+	if abs, absErr := filepath.Abs(path); absErr == nil {
+		if r, relErr := filepath.Rel(root, abs); relErr == nil {
+			rel = filepath.ToSlash(r)
+		}
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.WriteAtomic(path, candidate); err != nil {
+		return nil, err
+	}
+	defer store.WriteAtomic(path, string(original))
+	vcs.InvalidateWorkingState()
+	defer vcs.InvalidateWorkingState()
+
+	loaded, err := rules.LoadRootRepo(root, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	if planRel := rules.PlanRelOf(rel); planRel != "" {
+		loaded = rules.ScopeToPlan(loaded, planRel)
+	} else if rel != "" {
+		loaded = rules.ScopeToDoc(loaded, rel)
+	}
+	var out []rules.Diagnostic
+	for _, d := range rules.RunWithWaivers(loaded) {
+		if d.Severity == rules.Error && d.Path == rel {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 var _ = artifact.Parse
 
 // planLifecycle implements `sdd plan approve` and `sdd plan activate`.

@@ -137,6 +137,16 @@ func TestReviewScaffoldWritesIntoPlanReviewsDir(t *testing.T) {
 func scaffoldedReview(t *testing.T) (dir, review string) {
 	t.Helper()
 	dir = t.TempDir()
+	// The resolve gate validates the candidate against the planning root
+	// resolved from the working directory; without this the gate would read
+	// whatever repo the test process happens to run in. The config file makes
+	// the temp dir a real planning root, so scaffold writes planning-root-
+	// relative references instead of falling back to absolute paths.
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, "planning-config.json"),
+		[]byte(`{"planningRoot": "."}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	planDir := filepath.Join(dir, "Plans", "Sample Plan")
 	if err := os.MkdirAll(planDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -261,6 +271,55 @@ func TestReviewResolveLifecycle(t *testing.T) {
 	}
 	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
 		t.Fatalf("second resolve should be an already-resolved no-op: %v", err)
+	}
+}
+
+// A frozen review is immutable, so resolve must refuse to freeze a review the
+// validator rejects — a defect frozen in place would be permanent. This is
+// the gate that was missing when a phase review froze with findings declared
+// in frontmatter but no `### F-NN` body sections (SDD087).
+func TestReviewResolveRefusesInvalidCandidate(t *testing.T) {
+	_, review := scaffoldedReview(t)
+	for _, lane := range reviewLaneIDs() {
+		if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+			Lane:     lane,
+			Evidence: "Inspected the full diff at the frozen range; no drift against the phase scope",
+		}); err != nil {
+			t.Fatalf("evidence set %s: %v", lane, err)
+		}
+	}
+
+	// Declare a finding in frontmatter without its `### F-01` body section.
+	src := readFile(t, review)
+	src = strings.Replace(src, "findings: []",
+		"findings:\n  - id: F-01\n    severity: minor\n    title: \"Sample finding\"\n    status: fixed", 1)
+	if err := os.WriteFile(review, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdReviewResolve(review, reviewResolveOpts{})
+	if err == nil || !strings.Contains(err.Error(), "SDD087") {
+		t.Fatalf("resolve must refuse to freeze a review with an SDD087 finding; got %v", err)
+	}
+	if after := readFile(t, review); !strings.Contains(after, "\nfrozen: false\n") {
+		t.Fatalf("a refused resolve must not write; got:\n%s", after)
+	}
+
+	// Give the finding its body section and a matching disposition; the same
+	// resolve now passes.
+	src = readFile(t, review)
+	src = strings.Replace(src, "## Findings\n\nNone.",
+		"## Findings\n\n### F-01 — Sample finding\n\nDetails of the sample finding.", 1)
+	src = strings.Replace(src, "## Resolution Log\n\nNone.",
+		"## Resolution Log\n\n### F-01 — fixed\n\nCorrected within the reviewed range.", 1)
+	if err := os.WriteFile(review, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("resolve after adding the body section: %v", err)
+	}
+	if after := readFile(t, review); !strings.Contains(after, "\nfrozen: true\n") {
+		t.Fatalf("resolve must freeze the repaired review; got:\n%s", after)
 	}
 }
 
