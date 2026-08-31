@@ -1,7 +1,7 @@
 ---
 title: "SddGraph Implementation"
 type: plan
-status: approved
+status: active
 created: 2026-08-31
 updated: 2026-08-31
 tags: [graph, execution, tdd, sdd-cli]
@@ -19,7 +19,7 @@ waivers:
 phases:
   - id: 1
     title: "Payload Schema and Templates"
-    status: planned
+    status: in-progress
     doc: "01-Payload-Schema-And-Templates.md"
     depends_on: []
   - id: 2

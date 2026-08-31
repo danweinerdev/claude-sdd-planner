@@ -3,14 +3,14 @@ title: "Payload Schema and Templates"
 type: phase
 plan: "SddGraph"
 phase: 1
-status: planned
+status: in-progress
 created: 2026-08-31
 updated: 2026-08-31
 deliverable: "Strictly-decoded graph/payload model, closed hazard vocabulary, and the graph-proposal template skeleton + JSON Schema generated from one source and CI-gated against drift"
 tasks:
   - id: "1.1"
     title: "Graph and payload model with strict JSON decoding"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/model/... -count=1 — round-trip (to_dict(from_dict(x)) == x) on a full-featured fixture graph; unknown key rejected with did-you-mean naming the nearest field and a JSON path (nodes[2].gate.tets[0] -> did you mean 'tests'); version != 1 rejected naming the supported schema version (no migrate verb exists yet — v1 is the first schema; the error must not reference one); malformed verification.result rejected naming the two valid values. go vet ./internal/graph/... and staticcheck ./internal/graph/... clean."
     justifies: "DD-12 (strict decoding, JSON-path errors), DD-3 (structure-and-observations-only persisted shape). Prevents a hallucinated payload key being silently dropped and surfacing later as an uncovered AC blamed on the wrong node."
   - id: "1.2"
@@ -42,25 +42,25 @@ frozen wire contract.
 ## 1.1: Graph and payload model with strict JSON decoding
 
 ### Subtasks
-- [ ] Create `internal/graph/model` with `Graph`, `Node`, `Gate`, `Test`,
+- [x] Create `internal/graph/model` with `Graph`, `Node`, `Gate`, `Test`,
       `Verification`, `Claim` types mirroring the design's data model
       (`version`, `seq_counter`, `nodes[]`; node: `id`, `contract`,
       `justifies`, `intent_hashes`, `deps`, `gate{type,tests|command|lanes}`,
       `hazards`, `artifacts`, `estimate`, `phase`, `claim?`, `verification?`
       with `result/seq/artifact_digests/report_digest/isolation/provenance`
       and per-test `red_seq`).
-- [ ] Implement `FromDict`/`ToDict` (or `UnmarshalJSON`/`MarshalJSON`) with
+- [x] Implement `FromDict`/`ToDict` (or `UnmarshalJSON`/`MarshalJSON`) with
       strict decoding: unknown keys are errors carrying a JSON path and a
       nearest-field did-you-mean (Levenshtein over the struct's known keys).
-- [ ] Enforce field invariants at decode: nonempty node id/contract,
+- [x] Enforce field invariants at decode: nonempty node id/contract,
       `estimate >= 1` defaulting to 1, `verification.result` ∈ {pass, fail},
       `isolation` ∈ {clean, shared-dirty, asserted}, gate `type` ∈ {tests,
       command, review}, `version == 1` with a version-mismatch error naming
       the supported version.
-- [ ] Separate payload shapes (proposal/fragment) from the master-graph
+- [x] Separate payload shapes (proposal/fragment) from the master-graph
       shape — proposals carry no `claim`/`verification`/`intent_hashes`
       (tool-owned fields are rejected in payloads, same posture as FR-18).
-- [ ] Table-driven tests: round-trip fixture, every rejection case with its
+- [x] Table-driven tests: round-trip fixture, every rejection case with its
       exact JSON path, tool-owned-field rejection.
 
 ### Notes
@@ -75,8 +75,20 @@ vocabulary; the sentinel plumbing lives here).
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `e37df494a163ea466fe71143727584d107684cc2`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `e37df494a163ea466fe71143727584d107684cc2`
+- Focused review: `git show e37df494a163ea466fe71143727584d107684cc2`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `e37df494a163ea466fe71143727584d107684cc2`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/model/ -count=1` | `.` | PASS (`exit 0`) | `ok internal/graph/model 0.275s; round-trip byte-identical on the full-featured fixture; unknown-key did-you-mean with JSON path (nodes[0].gate: unknown key "tets" — did you mean "tests"?); version 2 rejected naming supported version 1 with no migrate reference; result/isolation/gate-type enums rejected naming valid values; estimate 0 and 1.5 rejected; hazards untriaged/[]/list decode distinctly; 4+ findings batched in one pass; all four tool-owned fields rejected in proposals and accepted in graphs` |
+| `go vet ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
 
 ### Trap
 You will want to use plain `encoding/json` with struct tags and call it
