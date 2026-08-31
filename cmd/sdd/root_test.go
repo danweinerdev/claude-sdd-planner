@@ -207,7 +207,7 @@ func handlerFlagSets() []struct {
 		{"sdd list", []string{"json", "root"}},
 		{"sdd apply", []string{"dry-run", "quiet", "diff", "create", "json", "retire", "expect", "type", "supersede"}},
 		{"sdd section set", []string{"heading", "dry-run", "diff", "json", "expect", "type"}},
-		{"sdd template", []string{"out", "check", "dir", "for-apply", "json"}},
+		{"sdd template", []string{"out", "check", "dir", "for-apply", "schema", "json"}},
 		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "no-stub-sections", "type", "all"}},
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json"}},

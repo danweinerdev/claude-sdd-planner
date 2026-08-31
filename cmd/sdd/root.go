@@ -276,6 +276,7 @@ sets them itself and refuses a payload carrying a conflicting value.`,
 	c.Flags().BoolVar(&o.Check, "check", false, "regenerate every committed template and diff")
 	c.Flags().StringVar(&o.Dir, "dir", "shared/templates", "template directory for --check")
 	c.Flags().BoolVar(&o.ForApply, "for-apply", false, "omit tool-owned fields, so the output is a valid apply payload")
+	c.Flags().BoolVar(&o.Schema, "schema", false, "emit the JSON Schema instead of the skeleton (graph-proposal only)")
 	c.Flags().BoolVar(&o.JSON, "json", false, "emit the result as JSON")
 	return c
 }

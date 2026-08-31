@@ -68,6 +68,29 @@ var (
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
 
+// KeySets exposes the allowed-key vocabulary of the PROPOSAL payload shapes,
+// keyed by object name. It exists for exactly one consumer: the
+// graph-proposal JSON Schema's drift-gate test, which cross-checks the
+// schema's `properties` against these lists so the two can never disagree
+// silently (DD-12: skeleton and schema from one source). Node keys are the
+// payload form — tool-owned fields excluded, since DecodeProposal rejects
+// them. Returned slices are copies.
+func KeySets() map[string][]string {
+	proposalNodeKeys := make([]string, 0, len(nodeKeys))
+	for _, k := range nodeKeys {
+		if _, toolOwned := toolOwnedNodeKeys[k]; !toolOwned {
+			proposalNodeKeys = append(proposalNodeKeys, k)
+		}
+	}
+	cp := func(s []string) []string { return append([]string(nil), s...) }
+	return map[string][]string{
+		"proposal": cp(proposalKeys),
+		"node":     proposalNodeKeys,
+		"gate":     cp(gateKeys),
+		"test":     cp(testKeys),
+	}
+}
+
 // DecodeGraph strictly decodes a committed master graph.
 func DecodeGraph(data []byte) (*Graph, error) {
 	raw, err := parse(data)

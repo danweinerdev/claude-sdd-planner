@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
@@ -42,8 +44,14 @@ type templateOpts struct {
 	Check    bool
 	Dir      string
 	ForApply bool
+	Schema   bool
 	JSON     bool
 }
+
+// graphProposalType is the one non-markdown template: a JSON payload skeleton
+// plus its JSON Schema, both generated from one source in
+// internal/graph/proposal (Designs/SddGraph DD-12).
+const graphProposalType = "graph-proposal"
 
 func cmdTemplate(artifactType string, o templateOpts) error {
 	if o.Check {
@@ -53,9 +61,29 @@ func cmdTemplate(artifactType string, o templateOpts) error {
 		return fmt.Errorf("template: expected exactly one artifact type\n\n%s", templateUsage)
 	}
 
-	body, err := renderTemplateFor(artifactType, o.ForApply)
-	if err != nil {
-		return fmt.Errorf("template: %w", err)
+	var body string
+	switch {
+	case artifactType == graphProposalType:
+		if o.ForApply {
+			return fmt.Errorf("template: --for-apply applies to markdown artifact types; a graph proposal is already the payload `sdd graph propose` accepts")
+		}
+		if o.Schema {
+			body = string(proposal.SchemaJSON())
+		} else {
+			raw, err := proposal.ExemplarJSON()
+			if err != nil {
+				return fmt.Errorf("template: %w", err)
+			}
+			body = string(raw)
+		}
+	case o.Schema:
+		return fmt.Errorf("template: --schema applies only to %s", graphProposalType)
+	default:
+		var err error
+		body, err = renderTemplateFor(artifactType, o.ForApply)
+		if err != nil {
+			return fmt.Errorf("template: %w", err)
+		}
 	}
 	if o.JSON {
 		res := templateResult{OK: true, Type: artifactType, ForApply: o.ForApply, Body: body}
@@ -255,6 +283,31 @@ func checkTemplates(dir string, jsonOut bool) error {
 		allowExtraHeadings = len(loaded.Headings) == 0 && loaded.AdditionalSections == "allowed"
 		if diff := structuralDiff(string(raw), generated); diff != "" {
 			drifted = append(drifted, path+": "+diff)
+		}
+	}
+
+	// The graph-proposal pair is generated wholesale — no authored prose to
+	// preserve — so unlike the markdown templates it is compared by content
+	// bytes (CRLF-normalized for autocrlf checkouts), not by structure.
+	for _, gen := range []struct {
+		name   string
+		render func() ([]byte, error)
+	}{
+		{graphProposalType + ".json", proposal.ExemplarJSON},
+		{graphProposalType + ".schema.json", func() ([]byte, error) { return proposal.SchemaJSON(), nil }},
+	} {
+		path := filepath.Join(dir, gen.name)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue // no committed copy of this generated file
+		}
+		checked++
+		want, err := gen.render()
+		if err != nil {
+			return fmt.Errorf("template --check: %s: %w", gen.name, err)
+		}
+		if !bytes.Equal(bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n")), want) {
+			drifted = append(drifted, path+": content differs from the generated form")
 		}
 	}
 

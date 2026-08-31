@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal/schema.json",
+  "title": "sdd graph proposal payload",
+  "description": "A batched node proposal for `sdd graph propose` (Designs/SddGraph DD-11, DD-12). The same node shape as the committed graph minus tool-owned fields: intent_hashes, claim, verification, and red_seqs are computed by the tool and refused in payloads. Authoring flow: `sdd template graph-proposal` emits a placeholder-complete exemplar; fill it, stage with `sdd graph propose`, and let `sdd compile` report every finding in one pass.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "nodes"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Payload schema version. This document describes version 1."
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/node" },
+      "description": "The proposed nodes. Order is presentational; execution order derives from deps."
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contract", "gate", "hazards"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable kebab-case identifier; retired ids are never reused."
+        },
+        "contract": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A falsifiable sentence or two stating what is true when this node is done. A contract that needs paragraphs is a split signal."
+        },
+        "justifies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "The AC-NN / FR-NN / DD-N ids this node exists for. Compile fails when any reachable acceptance criterion has no covering node."
+        },
+        "deps": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Node ids this node depends on. A node becomes workable only when every dep is GREEN."
+        },
+        "gate": { "$ref": "#/definitions/gate" },
+        "hazards": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            { "const": "untriaged" }
+          ],
+          "description": "Triaged failure classes from the closed vocabulary (`sdd graph hazards`). An empty list is a legitimate explicit claim; the string \"untriaged\" marks an unmade judgment and blocks compile."
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Repo-relative paths this node's implementation writes. Declared write-set: drives parallel-safety and digest anchoring."
+        },
+        "estimate": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Unitless positive relative cost weight (default 1). Consumed only by critical-path analytics and `next` ordering; not a time promise."
+        },
+        "phase": {
+          "type": "string",
+          "description": "Presentation grouping for rendered views. No scheduling or review obligation reads it."
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["tests", "command", "review"],
+          "description": "How the node's contract is verified. `tests` is the default and strongly preferred; `command` for exit-code truths (builds, linters); `review` for feature gates whose observation is a frozen Aligned review."
+        },
+        "tests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/test" },
+          "description": "The runner-reported tests a `tests` gate is satisfied by."
+        },
+        "command": {
+          "type": "string",
+          "description": "The check command whose exit code is a `command` gate's observation."
+        },
+        "lanes": {
+          "oneOf": [
+            { "const": "full" },
+            { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+          ],
+          "description": "A `review` gate's lane set: \"full\" (all four lanes; the only form that carries completion-grade closure) or a named subset for lighter checkpoints."
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "file"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The test id exactly as the runner reports it."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path of the file that will define the test."
+        },
+        "satisfies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Hazards this test discharges. The test's shape must match each hazard's required form, and the merge gate requires it to have been seen failing (red before green)."
+        }
+      }
+    }
+  }
+}
