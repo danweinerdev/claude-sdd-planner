@@ -254,7 +254,12 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		case docRel != "":
 			loaded = rules.ScopeToDoc(loaded, docRel)
 		}
-		return rules.Run(loaded), nil
+		// RunWithWaivers, not Run: the gate's criterion must be the same one
+		// `sdd validate` applies by default, where an accepted exception
+		// re-tags its finding Waived (reported, not invalidating). Plain Run
+		// leaves matched errors at Error severity, which would make the gate
+		// refuse transitions on findings the validator itself excuses.
+		return rules.RunWithWaivers(loaded), nil
 	}
 
 	beforeDiags, err := run()
@@ -287,6 +292,15 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 	}
 	var introduced []rules.Diagnostic
 	for _, d := range afterDiags {
+		// Only invalidating findings gate a transition — the same criterion
+		// `sdd validate` uses for Invalid. A Waived finding is a human-accepted
+		// exception recorded in the artifact's own frontmatter: it is still
+		// reported by validate, but it does not make the root invalid, so it
+		// must not make a transition refuse either (the gate's contract is
+		// "the artifact validates", not "the artifact has no findings").
+		if d.Severity != rules.Error {
+			continue
+		}
 		if !existing[diagKey(d)] {
 			introduced = append(introduced, d)
 		}

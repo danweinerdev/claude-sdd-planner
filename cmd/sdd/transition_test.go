@@ -168,6 +168,41 @@ func TestDocApproveRefusesBlockingOpenQuestion(t *testing.T) {
 	}
 }
 
+// A waived finding must not gate a transition: the gate's contract is "the
+// artifact validates", and a Waived finding does not invalidate. Same fixture
+// as the refusal test above, plus the accepted exception in frontmatter.
+func TestDocApproveHonorsWaivedFinding(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	specDir := filepath.Join(dir, "Specs", "Sample")
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "---\n" +
+		"title: \"Sample Spec\"\n" +
+		"type: spec\n" +
+		"status: review\n" +
+		"created: 2026-08-01\n" +
+		"updated: 2026-08-01\n" +
+		"tags: [spec]\n" +
+		"waivers:\n" +
+		"  - code: SDD153\n" +
+		"    reason: \"this question is tracked by an external party and the spec holds under every answer\"\n" +
+		"    accepted: \"2026-08-31\"\n" +
+		"---\n\n# Sample Spec\n\nSome content.\n" +
+		"\n## Open Questions\n\n- Should we do this at all?\n"
+	path := filepath.Join(specDir, "README.md")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := docLifecycle("spec", "approve", path, "", false, false); err != nil {
+		t.Fatalf("approve must not refuse on a waived finding; got %v", err)
+	}
+	if out := readFile(t, path); !strings.Contains(out, "\nstatus: approved\n") {
+		t.Fatalf("approve must write the new status; got:\n%s", out)
+	}
+}
+
 // A --by that does not resolve is almost always a typo; recording it would
 // produce a supersession chain pointing at nothing.
 func TestDocSupersedeRefusesDanglingSuccessor(t *testing.T) {
