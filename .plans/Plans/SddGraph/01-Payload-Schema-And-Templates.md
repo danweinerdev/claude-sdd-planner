@@ -21,7 +21,7 @@ tasks:
     depends_on: ["1.1"]
   - id: "1.3"
     title: "sdd template graph-proposal: skeleton and schema from one source"
-    status: planned
+    status: complete
     verification: "go test ./cmd/sdd/ -run TestGraphProposalTemplate -count=1 — `sdd template graph-proposal` emits a placeholder-complete exemplar that validates against the schema emitted by `sdd template graph-proposal --schema` (the round-trip gate); the exemplar demonstrates a tests gate, a command gate, a review gate, a filled hazards list, an untriaged sentinel, and a terminal full review gate depending on every sink; the drift test fails if exemplar and schema are edited independently. Manual: `sdd template graph-proposal --schema | python -m json.tool` exits 0."
     justifies: "DD-12 (skeleton + schema from one source, CI-gated exactly like the existing markdown template gate; the exemplar is what makes LLM payloads fill-in rather than guess)."
     depends_on: ["1.1", "1.2"]
@@ -146,18 +146,18 @@ dependency in the code comment, not as a hidden coupling.
 ## 1.3: sdd template graph-proposal: skeleton and schema from one source
 
 ### Subtasks
-- [ ] Define the proposal JSON Schema (payload `version`, `nodes[]`,
+- [x] Define the proposal JSON Schema (payload `version`, `nodes[]`,
       fragment metadata) generated from — or CI-checked against — the same
       source that renders the skeleton exemplar (follow the existing
       `internal/schema` spec-schema-covers-template test pattern).
-- [ ] Extend `cmd/sdd/template.go` with the `graph-proposal` template:
+- [x] Extend `cmd/sdd/template.go` with the `graph-proposal` template:
       default output is the placeholder-complete exemplar; `--schema` emits
       the JSON Schema.
-- [ ] Exemplar content: one node per gate type, a filled hazard list and an
+- [x] Exemplar content: one node per gate type, a filled hazard list and an
       `"untriaged"` node, `justifies` citing placeholder `AC-NN`/`DD-N`,
       `deps`, `artifacts`, `estimate`, and a terminal `full` review gate
       depending on every sink node (the DD-9 coverage backstop).
-- [ ] Round-trip gate test: the emitted exemplar validates against the
+- [x] Round-trip gate test: the emitted exemplar validates against the
       emitted schema; wire into the existing `sdd template --check` path so
       `make test` fails on drift.
 
@@ -173,8 +173,24 @@ for `internal/graph/schema/`; either way one source, two outputs.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `7483157e34d20584796bc2fa1ecc6f7eaf693aa4`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `7483157e34d20584796bc2fa1ecc6f7eaf693aa4`
+- Focused review: `git show 7483157e34d20584796bc2fa1ecc6f7eaf693aa4`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `7483157e34d20584796bc2fa1ecc6f7eaf693aa4`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok cmd/sdd 17.275s, ok internal/graph/{hazards,model,proposal}; exemplar decodes clean via DecodeProposal (round-trip gate); byte-deterministic LF-only render; demonstrates tests/command/review gates, untriaged/filled/explicit-empty hazards, AC-NN/FR-NN/DD-N placeholders, terminal full review gate covering every sink; schema properties == model.KeySets() with additionalProperties:false everywhere; gate.type enum == model constants; version const == SchemaVersion; required lists == decoder requirements` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd template graph-proposal / --schema / template --check smoke` | `built binary at 7483157` | PASS | `exemplar emits 4 nodes (define-schema, parse-config, build-gate, feature-review); --schema emits defs {gate,node,test}; committed shared/templates copies written; 'sdd template --check' reports 10 templates match plus byte-compared JSON pair; make plugins + plugins-check in sync` |
 
 ### Trap
 Do not hand-write the skeleton and the schema as two artifacts that a test
