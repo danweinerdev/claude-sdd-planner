@@ -63,6 +63,7 @@ compilation, digest tracking, and the refusal gates the workflow depends on.`,
 		provisionCmd(),
 		pluginCmd(),
 		hookCmd(),
+		graphCmd(),
 	)
 	// spec/design lifecycle verbs share one kind-parameterized handler.
 	root.AddCommand(docCmd("spec"), docCmd("design"))

@@ -56,6 +56,7 @@ func TestFlagsAreDocumented(t *testing.T) {
 func TestSubcommandsMatchDispatch(t *testing.T) {
 	want := map[string]bool{
 		"apply": true, "decide": true, "doctor": true, "evidence": true,
+		"graph": true,
 		"hook": true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
 		"review": true, "schema": true, "section": true, "show": true,
@@ -210,6 +211,7 @@ func handlerFlagSets() []struct {
 		{"sdd migrate", []string{"dry-run", "diff", "json", "allow-frozen", "no-stub-sections", "type", "all"}},
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json"}},
+		{"sdd graph hazards", []string{"json"}},
 		{"sdd evidence add", []string{
 			"task", "phase", "plan", "verified-by", "working-dir", "result",
 			"tool", "tool-context", "tool-result", "focused-review",
