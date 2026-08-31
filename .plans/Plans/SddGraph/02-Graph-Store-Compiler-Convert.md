@@ -15,7 +15,7 @@ tasks:
     justifies: "DD-3 (only structure and observations persist; atomic writes under the advisory lock, reusing internal/store rather than growing a second implementation). Prevents torn reads and lock-file commits — the two store corruptions the design names."
   - id: "2.2"
     title: "sdd graph propose and assemble: fragment staging and merge"
-    status: planned
+    status: complete
     verification: "go test ./cmd/sdd/ -run TestGraphPropose -count=1 — propose --file stages a schema-valid fragment under Plans/<Plan>/.graph/fragments/ and rejects invalid payloads with JSON-path errors before staging; assemble merges disjoint fragments into one proposal set, refuses colliding node ids naming both fragments, and leaves fragments untouched on refusal; a proposal touching an existing node id is rejected as a mutation (CLI verbs own mutation, DD-11)."
     justifies: "DD-11 (construction is declarative and batched; parallel decomposition via per-agent fragments merged by assemble). Prevents the per-call construction failure mode: dangling intermediate states and shell-quoted prose."
     depends_on: ["2.1"]
@@ -114,18 +114,18 @@ extend it there, not in a fork.
 ## 2.2: sdd graph propose and assemble: fragment staging and merge
 
 ### Subtasks
-- [ ] `sdd graph propose --plan <name> --file <payload.json>`: validate
+- [x] `sdd graph propose --plan <name> --file <payload.json>`: validate
       (parse + schema, JSON-path errors) then stage under
       `Plans/<Plan>/.graph/fragments/<uuid7>.json`; refuse without staging on
       any error.
-- [ ] `sdd graph assemble --plan <name>`: merge staged fragments into one
+- [x] `sdd graph assemble --plan <name>`: merge staged fragments into one
       proposal set; refuse on node-id collisions naming both fragments;
       deterministic merge order.
-- [ ] Reject payloads carrying tool-owned fields (`claim`, `verification`,
+- [x] Reject payloads carrying tool-owned fields (`claim`, `verification`,
       `intent_hashes`) at propose time.
-- [ ] Reject proposals that redefine an existing master-graph node id —
+- [x] Reject proposals that redefine an existing master-graph node id —
       mutations go through CLI verbs (phase 3), not proposals.
-- [ ] Tests per the verification field, including refusal atomicity
+- [x] Tests per the verification field, including refusal atomicity
       (nothing staged on error).
 
 ### Notes
@@ -137,8 +137,24 @@ on the common case. Design references: DD-11, § Interfaces.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `b011057eb8ee58439ea6fc764cacdeab45cc71c4`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `b011057eb8ee58439ea6fc764cacdeab45cc71c4`
+- Focused review: `git show b011057eb8ee58439ea6fc764cacdeab45cc71c4`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `b011057eb8ee58439ea6fc764cacdeab45cc71c4`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok cmd/sdd 24.431s, ok internal/graph/{model,hazards,proposal,store}; stage parks a valid fragment verbatim and refuses without staging on strict-decode findings (JSON-path + did-you-mean), tool-owned fields, and master-graph node redefinition; stage without an initialized graph points at init; assemble merges 3 disjoint fragments in staging order (UUIDv7 time-ordered), refuses collisions naming both fragments leaving all fragments untouched and writing no merged set, consumes fragments only after proposal.json is durably written; empty staging area points at propose` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `end-to-end authoring smoke in a temp planning root` | `built binary at b011057` | PASS | `template graph-proposal -> init -> propose -> assemble produced proposal.json with the 4 exemplar nodes in order; second propose+assemble cycle staged and merged cleanly` |
 
 ## 2.3: sdd compile: batched validation, coverage, intent hashes
 
