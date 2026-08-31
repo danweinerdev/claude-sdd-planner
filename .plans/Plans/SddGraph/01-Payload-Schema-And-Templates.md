@@ -6,6 +6,10 @@ phase: 1
 status: complete
 created: 2026-08-31
 updated: 2026-08-31
+waivers:
+  - code: SDD173
+    reason: "Successor-phase implementation commits (task 2.1 onward) and release bumps land after this phase's frozen review by design in a sequential multi-phase plan; each successor phase freezes its own full four-lane review over its own range, so later material changes are reviewed by their own phase gates rather than by re-running this one. SDD173's material-paths branch assumes the plan closes with the phase (same class as the Plans/SDD-Toolchain precedent waiver)."
+    accepted: "2026-08-31"
 deliverable: "Strictly-decoded graph/payload model, closed hazard vocabulary, and the graph-proposal template skeleton + JSON Schema generated from one source and CI-gated against drift"
 tasks:
   - id: "1.1"
