@@ -15,7 +15,7 @@ tasks:
     justifies: "DD-12 (strict decoding, JSON-path errors), DD-3 (structure-and-observations-only persisted shape). Prevents a hallucinated payload key being silently dropped and surfacing later as an uncovered AC blamed on the wrong node."
   - id: "1.2"
     title: "Closed hazard vocabulary with required test shapes"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/hazards/... -count=1 — every vocabulary entry carries a nonempty required-test-shape description; require_known rejects an unknown hazard naming the vocabulary; the untriaged sentinel round-trips as the literal string and is distinct from an explicit empty list; a node with hazards untriaged is reported as untriaged by the model layer."
     justifies: "DD-9 (gate vocabulary), DD-13 (hazard discharge requires a test of a specific shape). Prevents 'passing tests that guard nothing' — the defect class the vocabulary encodes."
     depends_on: ["1.1"]
@@ -101,16 +101,16 @@ nicety.
 ## 1.2: Closed hazard vocabulary with required test shapes
 
 ### Subtasks
-- [ ] Create `internal/graph/hazards`: the vocabulary as data — each entry
+- [x] Create `internal/graph/hazards`: the vocabulary as data — each entry
       `{name, required test shape description}` seeded from the design's
       table (order-sensitive, computes-number, derives-state, persists-state,
       user-entrypoint, ships-prose, concurrent-access, external-format,
       deterministic-replay, frame-coupled).
-- [ ] `RequireKnown(name, where)` returning a vocabulary-naming error for
+- [x] `RequireKnown(name, where)` returning a vocabulary-naming error for
       unknown hazards; `Untriaged` sentinel constant.
-- [ ] `sdd graph hazards` read-only subcommand printing the vocabulary and
+- [x] `sdd graph hazards` read-only subcommand printing the vocabulary and
       each hazard's required test shape (`--json` supported).
-- [ ] Tests: unknown rejection, sentinel distinctness from empty list,
+- [x] Tests: unknown rejection, sentinel distinctness from empty list,
       vocabulary completeness (every entry has a nonempty shape description).
 
 ### Notes
@@ -124,8 +124,24 @@ dependency in the code comment, not as a hidden coupling.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `ed539842fd2c45838fa44d4b0de75fae9bc1e807`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `ed539842fd2c45838fa44d4b0de75fae9bc1e807`
+- Focused review: `git show ed539842fd2c45838fa44d4b0de75fae9bc1e807`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `ed539842fd2c45838fa44d4b0de75fae9bc1e807`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/hazards/ ./cmd/sdd/ -count=1` | `.` | PASS (`exit 0`) | `ok internal/graph/hazards 0.069s, ok cmd/sdd 17.151s; vocabulary complete (10 entries, all with nonempty required shapes, canonical order enforced, All() returns a copy); RequireKnown rejects unknown hazards naming the caller location and the full vocabulary; RequireKnownAll batches deterministically; subcommand and handler-flag meta-registries updated deliberately` |
+| `go vet ./internal/graph/... ./cmd/sdd/` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings; pre-existing cmd/sdd U1000 findings (evidenceUsage, reviewUsage, transitionUsage unused consts) confirmed present at HEAD before this task via stash probe — untouched, out of task scope` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd graph hazards / --json smoke` | `built binary at ed53984` | PASS | `text table lists 10 hazards with required shapes plus the explicit-empty-list note; --json parses, 10 entries, first computes-number` |
 
 ## 1.3: sdd template graph-proposal: skeleton and schema from one source
 
