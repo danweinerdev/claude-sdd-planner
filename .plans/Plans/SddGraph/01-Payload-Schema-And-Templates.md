@@ -213,13 +213,13 @@ template-drift problem this task exists to prevent.
 - Verified: 2026-08-31
 - Repository: `.`
 - VCS: `git`
-- Revision / checkpoint: `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
-- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `fcb35759af8c456ac3e8df43375ba38f9d9d94e6`
-- Final aligned review: Plans/SddGraph/reviews/03-sddgraph-code-review-fcb3575.md; frozen: c59170f34737eb905844d5b88a1e4cb3e0a21aec..fcb35759af8c456ac3e8df43375ba38f9d9d94e6
+- Revision / checkpoint: `edee5d595b069bb5a76505c9fc611bfac2df1efd`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `edee5d595b069bb5a76505c9fc611bfac2df1efd`
+- Final aligned review: Plans/SddGraph/reviews/04-sddgraph-code-review-edee5d5.md; frozen: c59170f34737eb905844d5b88a1e4cb3e0a21aec..edee5d595b069bb5a76505c9fc611bfac2df1efd
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
-| `make test` | `.` | PASS (`exit 0`) | `exit 0: full gate green at phase end — go suite (all packages incl. internal/graph/{model,hazards,proposal} and cmd/sdd meta-registries), regression corpus, template gate (10 markdown templates + byte-compared graph-proposal JSON pair), portable drift and leak gates` |
+| `make test` | `.` | PASS (`exit 0`) | `exit 0 at edee5d5: full gate green — go suite (internal/graph/{model,hazards,proposal}, cmd/sdd incl. the resolve freeze gate and hermetic review fixtures), regression corpus, template gate (10 markdown templates + byte-compared graph-proposal JSON pair), portable drift and leak gates` |
 
 ### Completed task identities
 
