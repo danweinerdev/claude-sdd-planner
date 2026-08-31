@@ -12,9 +12,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
@@ -30,6 +32,99 @@ func graphCmd() *cobra.Command {
 	}
 	c.AddCommand(graphHazardsCmd())
 	c.AddCommand(graphInitCmd())
+	c.AddCommand(graphProposeCmd())
+	c.AddCommand(graphAssembleCmd())
+	return c
+}
+
+// planDirFor resolves Plans/<plan> under the planning root — the shared
+// preamble of every plan-scoped graph verb.
+func planDirFor(plan, verb string) (string, error) {
+	if plan == "" {
+		return "", fmt.Errorf("graph %s: --plan is required", verb)
+	}
+	root, err := store.FindPlanningRoot(".")
+	if err != nil {
+		return "", fmt.Errorf("graph %s: %w", verb, err)
+	}
+	return filepath.Join(root, "Plans", plan), nil
+}
+
+// graphProposeCmd stages one payload file as a fragment: validated
+// wholesale, refused without staging on any finding (DD-11 — construction
+// is declarative and batched; the repair loop is an edit to the payload
+// file). Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
+func graphProposeCmd() *cobra.Command {
+	var plan, file string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "propose",
+		Short: "Validate a proposal payload and stage it as a fragment",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			planDir, err := planDirFor(plan, "propose")
+			if err != nil {
+				return err
+			}
+			if file == "" {
+				return fmt.Errorf("graph propose: --file is required (author the payload from `sdd template graph-proposal`)")
+			}
+			payload, err := os.ReadFile(file)
+			if err != nil {
+				return fmt.Errorf("graph propose: %w", err)
+			}
+			staged, err := proposal.Stage(planDir, payload)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK       bool   `json:"ok"`
+					Fragment string `json:"fragment"`
+				}{true, relPath(staged)})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "staged %s\n", relPath(staged))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&file, "file", "", "payload file to validate and stage")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphAssembleCmd merges every staged fragment into one proposal set for
+// compile, refusing node-id collisions by naming both declaring fragments.
+// Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
+func graphAssembleCmd() *cobra.Command {
+	var plan string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "assemble",
+		Short: "Merge staged fragments into one proposal set",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			planDir, err := planDirFor(plan, "assemble")
+			if err != nil {
+				return err
+			}
+			assembled, merged, err := proposal.Assemble(planDir)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK       bool   `json:"ok"`
+					Proposal string `json:"proposal"`
+					Nodes    int    `json:"nodes"`
+				}{true, relPath(assembled), len(merged.Nodes)})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "assembled %s (%d nodes)\n", relPath(assembled), len(merged.Nodes))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 

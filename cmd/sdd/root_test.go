@@ -213,6 +213,8 @@ func handlerFlagSets() []struct {
 		{"sdd next", []string{"json"}},
 		{"sdd graph hazards", []string{"json"}},
 		{"sdd graph init", []string{"plan", "json"}},
+		{"sdd graph propose", []string{"plan", "file", "json"}},
+		{"sdd graph assemble", []string{"plan", "json"}},
 		{"sdd evidence add", []string{
 			"task", "phase", "plan", "verified-by", "working-dir", "result",
 			"tool", "tool-context", "tool-result", "focused-review",

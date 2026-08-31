@@ -124,12 +124,18 @@ func Exemplar() *model.Proposal {
 // ExemplarJSON renders the exemplar deterministically: two-space indent, LF,
 // trailing newline — the same conventions as the committed graph.
 func ExemplarJSON() ([]byte, error) {
+	return encodeJSON(Exemplar())
+}
+
+// encodeJSON renders any payload shape with the package's conventions:
+// two-space indent, LF, trailing newline, no HTML escaping.
+func encodeJSON(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(Exemplar()); err != nil {
-		return nil, fmt.Errorf("encode graph-proposal exemplar: %w", err)
+	if err := enc.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode payload: %w", err)
 	}
 	return buf.Bytes(), nil
 }
