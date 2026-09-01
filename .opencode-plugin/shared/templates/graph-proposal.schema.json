@@ -64,6 +64,10 @@
         "phase": {
           "type": "string",
           "description": "Presentation grouping for rendered views. No scheduling or review obligation reads it."
+        },
+        "history": {
+          "type": "string",
+          "description": "Authored annotation for the human reader (conversion records a v1 task's completion provenance here). Never machine-consumed: states derive from observations alone, and history grants no GREEN."
         }
       }
     },

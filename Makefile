@@ -58,7 +58,17 @@ PLATFORMS := \
 build:
 	@mkdir -p $(dir $(SDD))
 	@go build -o $(SDD) ./cmd/sdd
+	@rm -f $(SDD).exe
 	@echo "built $(SDD)"
+
+# The rm -f above is a Windows footgun guard, not dead code: `go build -o
+# .../sdd` produces a file literally named `sdd`, but when make's shell later
+# executes `$(SDD)`, Windows PATHEXT resolution prefers a SIBLING `sdd.exe`
+# if one exists — so a stale .exe left by an older toolchain silently
+# shadows every freshly built binary in every make target that runs $(SDD),
+# including the template drift gate. That exact failure shipped: a v2.3.5
+# sdd.exe from before the graph-proposal pair check sat in build/ for a week
+# while `make test` reported the stale schema copy as clean.
 
 # build-release compiles the host platform with the published flags. Useful for
 # reproducing a CI artifact locally without cross-compiling the whole set.
