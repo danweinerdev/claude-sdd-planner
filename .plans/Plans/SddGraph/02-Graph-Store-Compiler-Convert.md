@@ -39,7 +39,7 @@ tasks:
     depends_on: ["2.3"]
   - id: "2.6"
     title: "Guard coverage: pretooluse entries and FR-28 path guard for graph artifacts"
-    status: planned
+    status: complete
     verification: "go test ./internal/hook/... -count=1 — the guard parity test enumerates the new mutating verbs (graph propose|assemble|compile|convert|init and later-phase names reserved: sync|release|split|set-tests|gc, next --claim) as denied for read-only agents and the read surface (graph hazards|status|show|export, template graph-proposal, next without --claim) as allowed; Write/Edit on <Plan>-Graph.json and on rendered plan/phase view paths is denied for every agent per the FR-28 extension; FR-44 discipline holds — a mutating subcommand missing a guard entry fails the suite."
     justifies: "D-0014 (sdd subcommand allowlist for read-only agents), DD-2 guard-coverage section (FR-28 Write/Edit extension to Graph.json and rendered views). Prevents the sanctioned-bypass hole: an agent hand-editing the graph the tool is supposed to own."
     depends_on: ["2.1"]
@@ -340,13 +340,13 @@ is the requirement, not a UX bug to smooth over.
 ## 2.6: Guard coverage: pretooluse entries and FR-28 path guard for graph artifacts
 
 ### Subtasks
-- [ ] Add the phase-2 mutating verbs to the `sdd hook pretooluse`
+- [x] Add the phase-2 mutating verbs to the `sdd hook pretooluse`
       deny-list for read-only agents; allowlist the read surface. (Later
       phases land their own entries in the same revision as their verbs —
       the parity test built here is what enforces that.)
-- [ ] Extend the artifact-path Write/Edit guard to `<Plan>-Graph.json` and
+- [x] Extend the artifact-path Write/Edit guard to `<Plan>-Graph.json` and
       rendered view paths (schema-recognized), denied for every agent.
-- [ ] Extend the FR-44-style parity test: any `sdd graph` subcommand without
+- [x] Extend the FR-44-style parity test: any `sdd graph` subcommand without
       a guard classification fails the suite.
 
 ### Notes
@@ -358,8 +358,20 @@ D-0014, `Specs/SDD-Toolchain` FR-44.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `b2281b8a9e601475a0cb55f9c55b1e4258bba10a`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `b2281b8a9e601475a0cb55f9c55b1e4258bba10a`
+- Focused review: `git show b2281b8a9e601475a0cb55f9c55b1e4258bba10a`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `b2281b8a9e601475a0cb55f9c55b1e4258bba10a`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/hook/ ./cmd/sdd/ -count=1` | `.` | PASS (`exit 0`) | `ok internal/hook 10.524s, ok cmd/sdd 25.305s; every classified top-level verb allows/denies exactly as declared; graph read surface (hazards/status/show/export/path/risk/shape) allowed and every mutating graph verb incl. reserved later-phase names (sync/release/split/set-tests/gc) denied, with bare and unknown graph sub-verbs denying by default; bare 'sdd next' and 'next --json' allowed while '--claim' and '--claim=true' deny; Write/Edit on Plans/Sample/Sample-Graph.json denied for a read-only agent with Read never denied and unrelated JSON untouched; the new cmd-side parity test walks the real cobra tree and fails on any unclassified verb (FR-44)` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/... ./internal/hook/` | `.` | PASS (`exit 0`) | `no findings` |
 
 ## Acceptance Criteria
 - [ ] A payload authored from the 1.3 exemplar stages, assembles, compiles,
