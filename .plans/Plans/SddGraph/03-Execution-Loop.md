@@ -21,7 +21,7 @@ tasks:
     depends_on: ["3.1"]
   - id: "3.3"
     title: "Workspace providers: git, p4, plain"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/provider/... -count=1 — capacity answers: git N (worktree allocation/cleanup round-trip against a fixture repo), p4 1 (single shared client, plan/phase CL number recorded as provenance; opened-file list captured), plain 1 (digests only); provider handles are opaque to the graph (states/sync tests pass with a stub provider); allocation failure refuses the claim leaving the node unclaimed (named provider error); effective parallelism = min(artifact-disjoint frontier, capacity) with an artifact-overlap test; isolation classification: worktree => clean, serial-one-CL => clean by construction, concurrent shared-tree => shared-dirty."
     justifies: "DD-6 (digest anchor universal, VCS provenance supplementary), DD-7 (isolation as observation), DD-8 (parallelism is provider capacity, correctness holds at 1). Prevents a green report from a contaminated tree counting as clean evidence."
     depends_on: ["3.2"]
@@ -160,20 +160,20 @@ OQ-2 (resolved here: 30-minute default).
 ## 3.3: Workspace providers: git, p4, plain
 
 ### Subtasks
-- [ ] Define the provider interface in `internal/graph/provider`: capacity
+- [x] Define the provider interface in `internal/graph/provider`: capacity
       for an artifact set, allocate/release workspace, provenance for an
       observation, isolation classification.
-- [ ] Git provider over `internal/vcs/git.go`: worktree per claim under
+- [x] Git provider over `internal/vcs/git.go`: worktree per claim under
       `Plans/<Plan>/.graph/ws-<uuid7>/` (gitignored), branch from merged
       state, provenance = commit hash + worktree path, cleanup on
       merge/release.
-- [ ] P4 provider over `internal/vcs/p4.go`: capacity 1, single shared
+- [x] P4 provider over `internal/vcs/p4.go`: capacity 1, single shared
       client, plan/phase pending-CL number + opened-file list as provenance,
       serial execution => isolation clean by construction.
-- [ ] Plain provider: capacity 1, digest-only provenance.
-- [ ] Allocation-failure semantics: named provider error, claim refused,
+- [x] Plain provider: capacity 1, digest-only provenance.
+- [x] Allocation-failure semantics: named provider error, claim refused,
       node stays on the frontier (design § Error Handling).
-- [ ] Fixture tests per adapter (git fixture repo; p4 mocked at the
+- [x] Fixture tests per adapter (git fixture repo; p4 mocked at the
       command-runner seam consistent with existing `internal/vcs` tests).
 
 ### Notes
@@ -185,8 +185,24 @@ is load-bearing. Design references: DD-6, DD-7, DD-8; `shared/vcs-detection.md`.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `7629a68409e61cb2cb1e589d909c94773872b8cc`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `7629a68409e61cb2cb1e589d909c94773872b8cc`
+- Focused review: `git show 7629a68409e61cb2cb1e589d909c94773872b8cc`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `7629a68409e61cb2cb1e589d909c94773872b8cc`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 24.9s and all twelve internal/graph packages; git provider round-trips a real worktree (branched from repo HEAD, planning-root-relative slash handle under Plans/<Plan>/.graph/ws-*, provenance carrying kind git + revision + worktree, isolation clean regardless of other claims, leftover workspace refused rather than reused, release removes the dir); claims integration proves effective parallelism = min(disjoint frontier, capacity) — two artifact-disjoint nodes claim concurrently with distinct recorded worktrees; p4 provider mocked at the runner seam reports capacity 1, shared-tree allocation, pending CL 4321 + opened-file provenance, clean-by-construction at one claimant and shared-dirty at two; plain provider is capacity 1 with nil provenance (digest-only anchoring); allocation failure refuses the claim leaving the node unclaimed (claims suite)` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `CLI smoke in a temp git repo` | `built binary at 7629a68` | PASS | `next --claim allocated ws-impl as a real worktree at the repo HEAD and inlined the cited AC text; graph release removed the worktree and reported it` |
 
 ### Trap
 Do not make graph correctness depend on provider richness — no "if git then
