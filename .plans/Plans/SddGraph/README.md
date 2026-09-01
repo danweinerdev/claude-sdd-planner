@@ -29,7 +29,7 @@ phases:
     depends_on: [1]
   - id: 3
     title: "Execution Loop"
-    status: in-progress
+    status: complete
     doc: "03-Execution-Loop.md"
     depends_on: [2]
   - id: 4

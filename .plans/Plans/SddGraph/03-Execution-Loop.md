@@ -3,7 +3,7 @@ title: "Execution Loop"
 type: phase
 plan: "SddGraph"
 phase: 3
-status: in-progress
+status: complete
 created: 2026-08-31
 updated: 2026-09-01
 deliverable: "The walkable graph: derived states, claim/lease scheduling, per-VCS workspace providers, report-driven sync with digest anchoring, and the merge gate including red-before-green — sync-only completion live with its protections"
@@ -366,21 +366,42 @@ DD-10.
 | `WSL Fedora (Linux): go test -race ./internal/graph/... -count=1 and the stress pair -count=2 -race` | `native-fs copy of the working tree at e5b0f92; POSIX flock semantics, not drvfs emulation` | PASS | `-race clean across all fourteen internal/graph packages; both stress tests PASS twice under -race — the run matrix subtask's Windows and POSIX legs both executed locally, no CI conditional needed` |
 
 ## Acceptance Criteria
-- [ ] A fixture graph walks end to end — claim, red run, green run, sync,
+- [x] A fixture graph walks end to end — claim, red run, green run, sync,
       merge — with states correct at every step and no assert-pass path
       (DD-5, D-0022).
-- [ ] RED-outranks-BLOCKED, workable≠frontier, and all three staleness
+- [x] RED-outranks-BLOCKED, workable≠frontier, and all three staleness
       triggers verified by table tests (DD-3, DD-4).
-- [ ] Red-before-green refuses a never-failed hazard-discharging test at
+- [x] Red-before-green refuses a never-failed hazard-discharging test at
       merge (DD-5, DD-13 mechanics).
-- [ ] Providers: git worktrees at N and forced-1, p4 single-CL clean by
+- [x] Providers: git worktrees at N and forced-1, p4 single-CL clean by
       construction, plain digest-only — all merge-gate compatible (DD-6,
       DD-7, DD-8).
-- [ ] Zero double-claims and torn reads across the multi-process stress
+- [x] Zero double-claims and torn reads across the multi-process stress
       matrix; `-race` clean (DD-10).
-- [ ] Guard entries cover every phase-3 verb; `make test` green.
+- [x] Guard entries cover every phase-3 verb; `make test` green.
 
 ## Phase Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8`
+- Final aligned review: Plans/SddGraph/reviews/06-sddgraph-code-review-55f24cf.md; frozen: 55c51cbb76d40ff19f88b67f40f9dcd99a1c8867..55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green at phase head: template gate plus the entire go suite including the frozen regression corpus, portable drift/leak gates, and the new phase-3 packages (states, digest, claims, provider, sync, ops) with the multi-process stress pair; -race clean across all fourteen internal/graph packages on Linux (WSL Fedora, native fs); stress matrix green on Windows x3 and Linux x2; all six phase ACs verified and checked` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd review resolve` | `four-lane single-agent review 06 over 55c51cbb76d40ff19f88b67f40f9dcd99a1c8867..55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8` | PASS | `resolved and frozen, verdict Aligned; two minor findings deferred into accepted followups (FU-01 branch retention policy, tracked in 5.4; FU-02 dead cmd/sdd consts, tracked in 4.1)` |
+
+### Completed task identities
+
+- `3.1`: `e5e9ed859d14e91b99e2709c419215ecfd547136`
+- `3.2`: `f6fe384534017e87733746548e46513bef5d5580`
+- `3.3`: `7629a68409e61cb2cb1e589d909c94773872b8cc`
+- `3.4`: `0cec5cb851a480edb199ad06fb94b5e4f41623ae`
+- `3.5`: `027be4ae31c32f32ad57b007a2b2b28d0beefa53`
+- `3.6`: `e5b0f9267cd8a73fc173012068f41a2e06067b63`
