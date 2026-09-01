@@ -3,14 +3,14 @@ title: "Skill Rewrites and Self-Hosting"
 type: phase
 plan: "SddGraph"
 phase: 5
-status: planned
+status: in-progress
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 deliverable: "The plan skill rewritten as a decomposition protocol with the structured interview, the implement skill rewritten as the walk loop, regenerated portable trees and synced docs with an advanced version floor, and the self-hosting pilot executed under graph execution"
 tasks:
   - id: "5.1"
     title: "Rewrite the plan skill as a decomposition protocol with structured interview"
-    status: planned
+    status: complete
     verification: "make test — template gate, portable drift gate, and leak gate green after regeneration; manual protocol walkthrough documented in this task's evidence: the rewritten commands/plan/SKILL.md drives interview (S/M/L/XL scope gate, bounded adaptive multiple-choice waves, early ready-to-plan exit, resumable ledger under a gitignored path) -> node proposal payload authored from sdd template graph-proposal -> sdd compile -> silhouette read-back with CHAIN treated as a re-proposal signal; the skill nowhere instructs writing plan/phase markdown by hand and nowhere invents hazards on the operator's behalf."
     justifies: "DD-13 (node granularity is one red-green cycle; the skill's output is a proposal payload, not markdown), DD-16 (structured resumable interview). Prevents the token-waste loop this whole design exists to remove from planning sessions."
   - id: "5.2"
@@ -48,25 +48,25 @@ phase lands the prose that narrates it (the design's rollout note).
 ## 5.1: Rewrite the plan skill as a decomposition protocol with structured interview
 
 ### Subtasks
-- [ ] Rewrite `commands/plan/SKILL.md`: interview protocol (S/M/L/XL scope
+- [x] Rewrite `commands/plan/SKILL.md`: interview protocol (S/M/L/XL scope
       gate sets per-wave question budget; bounded multiple-choice waves;
       adaptive continuation until no material assumptions remain; every
       wave offers a ready-to-plan exit; answers persist to a resumable
       ledger under a gitignored path).
-- [ ] Decomposition section: node granularity = one red→green cycle; 1–2
+- [x] Decomposition section: node granularity = one red→green cycle; 1–2
       sentence falsifiable contracts; named failing tests per node; declared
       artifact sets; hazard triage against `sdd graph hazards` (explicit
       `--no-hazards`-equivalent claim, never silent); estimates; feature
       review-gate placement at integrators with the terminal-gate backstop.
-- [ ] Output contract: author the payload from `sdd template
+- [x] Output contract: author the payload from `sdd template
       graph-proposal`, `graph propose`, `compile`, read back
       `graph shape` — CHAIN triggers re-proposal; document the repair loop
       as file edits against JSON-path findings.
-- [ ] Decide and apply the portable-variant question: does
+- [x] Decide and apply the portable-variant question: does
       `commands/plan/SKILL.portable.md` (if introduced) or harness markers
       handle divergence; keep the decision recorded in the skill header
       comment.
-- [ ] v1 coexistence paragraph: plans without graphs continue under the old
+- [x] v1 coexistence paragraph: plans without graphs continue under the old
       protocol until converted (D-0022's v1 clause) — the skill routes by
       graph presence.
 
@@ -81,8 +81,22 @@ init's `.gitignore` already covers it.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `922b2a1dbcf57a22019f3d55e9e2fc069cb2482f`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `922b2a1dbcf57a22019f3d55e9e2fc069cb2482f`
+- Focused review: `git show 922b2a1dbcf57a22019f3d55e9e2fc069cb2482f`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `922b2a1dbcf57a22019f3d55e9e2fc069cb2482f`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `template gate (10 templates), portable drift gate, and leak gate all green after regeneration: make plugins regenerated both portable trees for the rewritten skill (53 generated, 5 variants, 0 overridden), zero FAIL lines across the full suite, and a leak scan of the generated sdd-plan skill found no harness-isms (agent prefix transformed, /plan trigger stripped)` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `manual protocol walkthrough (CLI, temp git repo, built binary at 922b2a1)` | `drove the rewritten skill's exact sequence: interview ledger under Plans/<P>/.graph/interview.json, sdd template graph-proposal --out, propose, compile, shape read-back` | PASS | `ledger confirmed gitignored by init's .gitignore (git check-ignore); a deliberately serial decomposition compiled then read back silhouette CHAIN with the 'prices zero parallelism' hint — treated as the re-proposal signal per skill step 6 — and the re-proposed independent decomposition read back FLAT with ceiling 1.50x; rendered views carry the GENERATED VIEW marker (never hand-written); the skill text nowhere instructs writing plan/phase markdown by hand and nowhere invents hazards (triage named as interview-grade judgment, empty list explicit-only)` |
 
 ### Trap
 Do not carry the old skill's "3-7 phases, 2-6 tasks" shape language into

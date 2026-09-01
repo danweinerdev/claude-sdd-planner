@@ -39,7 +39,7 @@ phases:
     depends_on: [3]
   - id: 5
     title: "Skill Rewrites and Self-Hosting"
-    status: planned
+    status: in-progress
     doc: "05-Skill-Rewrites-And-Self-Hosting.md"
     depends_on: [4]
 ---
