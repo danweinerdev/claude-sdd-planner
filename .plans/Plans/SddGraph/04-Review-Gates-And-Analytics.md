@@ -15,7 +15,7 @@ tasks:
     justifies: "DD-9 (feature-scoped tiered reviews, two-axis closure, mechanical reopen), D-0022 (completion-grade closure), D-0020 (freeze-at-resolve inherited unchanged). Prevents both failure modes the design names: uniform review weight at graph granularity, and a faulted node still reading GREEN between finding and fix."
   - id: "4.2"
     title: "Graph analytics: path, risk, shape, status, show, export"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/algorithms/... ./cmd/sdd/ -run TestGraphAnalytics -count=1 — path reports critical-path length, total estimate, and speedup ceiling on fixtures with known answers; risk reports cut vertices (articulation points) on a fixture with a known waist; shape classifies FLAT, CHAIN, FUNNEL, HOURGLASS, MIXED on one fixture each from the depth histogram; status summarizes state counts and per-node lines; show prints one node's full record; export emits mermaid, dot, plan (flat ordered reading view), and shape formats; every subcommand supports --json; algorithms package imports neither store nor states (pure structure); next's critical-path marking (3.2) now delegates to algorithms."
     justifies: "DD-14 (analytics as first-class review inputs: cut vertices aim review attention, silhouette diagnoses decomposition, ceiling prices parallelism). Prevents decomposition quality staying an aesthetic judgment."
     depends_on: ["4.1"]
@@ -107,18 +107,18 @@ a stale gate GREEN.
 ## 4.2: Graph analytics: path, risk, shape, status, show, export
 
 ### Subtasks
-- [ ] `internal/graph/algorithms`: longest path with estimate weights
+- [x] `internal/graph/algorithms`: longest path with estimate weights
       (critical path + total estimate + speedup ceiling), articulation
       points (cut vertices), depth histogram + silhouette classification
       (FLAT / CHAIN / FUNNEL / HOURGLASS / MIXED) — pure functions over
       structure, no store/state imports.
-- [ ] CLI verbs: `graph path`, `graph risk`, `graph shape`, `graph status`,
+- [x] CLI verbs: `graph path`, `graph risk`, `graph shape`, `graph status`,
       `graph show <id>`, `graph export --format mermaid|dot|plan|shape`,
       all with `--json`.
-- [ ] Wire `next`'s critical-path-first ordering (3.2's minimal helper) to
+- [x] Wire `next`'s critical-path-first ordering (3.2's minimal helper) to
       the real implementation.
-- [ ] Known-answer fixtures per algorithm and per silhouette class.
-- [ ] Guard entries: all analytics verbs read-only-allowlisted.
+- [x] Known-answer fixtures per algorithm and per silhouette class.
+- [x] Guard entries: all analytics verbs read-only-allowlisted.
 
 ### Notes
 Revision boundary: the complete read-only analytics surface. Keep
@@ -129,8 +129,22 @@ beyond graph + derived state. Design references: DD-14, § Interfaces.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2`
+- Focused review: `git show 95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/algorithms/... ./cmd/sdd/ -run TestGraphAnalytics -count=1` | `.` | PASS (`exit 0`) | `known answers hold on every fixture: critical path a->m->y length 6 of total 8 with ceiling 8/6 on the waist graph (chain ceiling exactly 1, solo and empty graphs degrade cleanly); cut vertices [m] on the waist, none on the diamond, interior [b] on the chain, per-component on disconnected graphs; depth histogram [2 1 2] classifies HOURGLASS with one known-answer fixture per silhouette class (FLAT/CHAIN/FUNNEL/HOURGLASS/MIXED, first match wins); cmd-level tests drive all six verbs through the real cobra tree with JSON and human output asserted, including the unknown-format refusal naming the vocabulary; full sweep go test ./... green; go vet clean; staticcheck clean across cmd/sdd and internal/graph (FU-02's three dead usage consts deleted); algorithms package imports neither store nor states nor model (pure structure, verified by import list); next's ordering already delegates to the shared CriticalWeight primitive and CriticalPath inlines the same recurrence` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `CLI smoke in a temp git repo` | `built binary at 95e85c1: compile a five-node funnel (a,b -> m -> y -> fgate), then every analytics verb` | PASS | `path 7 of 8 ceiling 1.14x a->m->y->fgate; risk names m and y with critical weights; shape FUNNEL with depth bars; status BLOCKED=3 READY=2 closed=0/5 with per-node lines; show m prints the full record; export plan renders the ordered reading view` |
 
 ## 4.3: Fuzz targets for payload decoder and report parsers
 
