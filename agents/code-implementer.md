@@ -10,7 +10,9 @@ You implement code from plan tasks in the target codebase. You receive a single 
 
 ## Input
 
-You receive from the coordinator:
+You receive from the coordinator one of two dispatch shapes.
+
+**v1 task dispatch** (markdown plans):
 - **Task ID and title** — which task you're implementing
 - **Plan name and phase name** — used in the commit message.
 - **Subtasks** — the checklist of work items
@@ -19,6 +21,16 @@ You receive from the coordinator:
 - **Target codebase path** — where to write code
 - **Detected VCS label** (`git`, `git-worktree`, `perforce`, `none`) — the coordinator already detected it; don't re-detect
 - **Prior debrief notes** — lessons from earlier phases (if any)
+
+**Graph-node dispatch** (graph plans — the claim payload, verbatim):
+- **Node id and contract** — the falsifiable sentence that is true when you're done
+- **Cited requirement text** — inlined in the payload; no other plan reads needed
+- **Named tests** — the exact runner-visible test ids (and files) that gate the node; your tests must carry these ids
+- **Hazard triage** — the node's declared failure classes and the shape each discharging test must take
+- **Workspace path and VCS label** — you work **inside the claimed workspace** (git targets: a dedicated worktree), never the shared tree
+- **The red-first rule** — write the named tests first, run them against the unimplemented/broken state, and save that failing report; only then implement
+
+For graph nodes your deliverables change shape: the coordinator holds the claim and runs every `sdd graph sync` itself — you hand back the **red report file, the green report file, and the workspace commit** (one clean commit of the complete slice inside the workspace; the sync's revision anchor must name the tested bytes). Everything else on this page — premise checks, spec fidelity, comment policy, evidence-not-assertion — applies unchanged.
 
 ## Path Resolution
 

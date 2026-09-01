@@ -64,8 +64,13 @@ func writeFile(t *testing.T, root, rel, content string) {
 // artifactText builds a review artifact with the frontmatter shape the
 // scaffold/resolve flow produces.
 func artifactText(status string, frozen bool, verdict string, lanes map[string]string, findingsBlock string) string {
+	return artifactTextFor("Plans/P/01-Ungrouped.md", status, frozen, verdict, lanes, findingsBlock)
+}
+
+func artifactTextFor(reviewOf, status string, frozen bool, verdict string, lanes map[string]string, findingsBlock string) string {
 	var b strings.Builder
 	b.WriteString("---\ntitle: \"Gate review\"\ntype: review\nstatus: " + status + "\n")
+	fmt.Fprintf(&b, "review_of: \"%s\"\n", reviewOf)
 	fmt.Fprintf(&b, "frozen: %v\nverdict: %s\nreview_mode: single-agent\nlane_results:\n", frozen, verdict)
 	// Deterministic lane order for readability; map order is irrelevant.
 	for _, lane := range model.ReviewLanes {
@@ -441,4 +446,44 @@ func TestClosedPredicate(t *testing.T) {
 	if closed["a"] {
 		t.Fatal("a stale gate must withdraw closure")
 	}
+}
+
+func TestRecordBindsArtifactToGate(t *testing.T) {
+	a := work("a", nil)
+	g1 := fullGate("g1", []string{"a"})
+	b := work("b", nil)
+	g2 := fullGate("g2", []string{"b"})
+	root, planDir := fixture(t, 0, a, g1, b, g2)
+
+	// review_of must exist: an artifact naming no reviewed document
+	// cannot be bound to any gate.
+	writeFile(t, root, "reviews/none.md", artifactTextFor("", "resolved", true, "Aligned", allPass(), ""))
+	_, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "none.md")})
+	if err == nil || !strings.Contains(err.Error(), "carries no review_of") {
+		t.Fatalf("missing review_of must refuse: %v", err)
+	}
+
+	// review_of must lie under THIS plan.
+	writeFile(t, root, "reviews/other.md", artifactTextFor("Plans/OtherPlan/01-Phase.md", "resolved", true, "Aligned", allPass(), ""))
+	_, err = Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "other.md")})
+	if err == nil || !strings.Contains(err.Error(), "not under Plans/P/") {
+		t.Fatalf("another plan's review must refuse: %v", err)
+	}
+
+	// Cross-gate reuse: one artifact greens one gate. Record on g1, then
+	// pointing g2 at the SAME artifact refuses naming g1.
+	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+	artifact := filepath.Join(root, "reviews", "r.md")
+	if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: artifact}); err != nil {
+		t.Fatalf("first record: %v", err)
+	}
+	_, err = Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g2",
+		Artifact: artifact})
+	if err == nil || !strings.Contains(err.Error(), `already recorded on gate "g1"`) {
+		t.Fatalf("cross-gate reuse must refuse naming the prior gate: %v", err)
+	}
+	_ = planDir
 }

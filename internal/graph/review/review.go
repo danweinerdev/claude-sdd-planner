@@ -126,6 +126,7 @@ type facts struct {
 	Status      string `yaml:"status"`
 	Frozen      bool   `yaml:"frozen"`
 	Verdict     string `yaml:"verdict"`
+	ReviewOf    string `yaml:"review_of"`
 	LaneResults []struct {
 		Lane   string `yaml:"lane"`
 		Result string `yaml:"result"`
@@ -250,6 +251,29 @@ func Record(o Options) (*Result, error) {
 		return nil, fmt.Errorf("graph review: %s is not a frozen Aligned review — %s; run `sdd review resolve` on it first (D-0020 freezes all three signals atomically)", o.Artifact, strings.Join(missing, "; "))
 	}
 
+	// Gate-to-artifact binding (review-07 F-01): a frozen Aligned artifact
+	// is evidence for the plan it reviewed, not a bearer token. review_of
+	// must name a document under THIS plan, and an artifact already
+	// recorded on another gate refuses — pointing gate B at gate A's
+	// artifact would green B with A's evidence.
+	planPrefix := "Plans/" + o.Plan + "/"
+	if f.ReviewOf == "" {
+		return nil, fmt.Errorf("graph review: %s carries no review_of; a gate observation binds to the artifact's reviewed document, and an artifact that names none cannot be bound", o.Artifact)
+	}
+	if !strings.HasPrefix(filepath.ToSlash(f.ReviewOf), planPrefix) {
+		return nil, fmt.Errorf("graph review: %s reviews %q, which is not under %s — a review of another plan is not evidence for this gate", o.Artifact, f.ReviewOf, planPrefix)
+	}
+	reportDigest := digest.Bytes(raw)
+	for i := range g.Nodes {
+		other := &g.Nodes[i]
+		if other.ID == o.Node || other.Gate.Type != model.GateReview {
+			continue
+		}
+		if v := other.Verification; v != nil && v.ReportDigest == reportDigest {
+			return nil, fmt.Errorf("graph review: %s is already recorded on gate %q; one review artifact greens one gate — scaffold and resolve a review of THIS gate's scope", o.Artifact, other.ID)
+		}
+	}
+
 	// Lane conformance: a full gate needs all four lanes, a subset gate
 	// needs exactly the lanes it names; each must carry a passing result.
 	laneResult := map[string]string{}
@@ -334,7 +358,6 @@ func Record(o Options) (*Result, error) {
 		return nil, fmt.Errorf("graph review: reading provenance: %w", err)
 	}
 
-	reportDigest := digest.Bytes(raw)
 	res := &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Demoted: demoted}
 	handle := ""
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
