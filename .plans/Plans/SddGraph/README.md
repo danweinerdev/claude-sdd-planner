@@ -192,6 +192,8 @@ duplicated.
 - `3`: `55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8`; review: `Plans/SddGraph/reviews/06-sddgraph-code-review-55f24cf.md`
 - `4`: `8ba800581a7ab1a127de5294f051d32e9b46eef3`; review: `Plans/SddGraph/reviews/07-sddgraph-code-review-8ba8005.md`
 - `5`: `2ba187c1d778593babcf509de6fb1f2fc9467086`; review: `Plans/SddGraph/reviews/08-sddgraph-code-review-2ba187c.md`
+<!-- graph-view:begin — generated section, do not edit -->
+
 ## Graph View
 
 <!-- GENERATED VIEW — source of truth: SddGraph-Graph.json. Regenerate with `sdd compile --plan SddGraph`. Edits here are overwritten. -->
