@@ -6,6 +6,10 @@ phase: 2
 status: complete
 created: 2026-08-31
 updated: 2026-08-31
+waivers:
+  - code: SDD173
+    reason: "Successor-phase implementation commits and release bumps land after this phase's frozen review by design in a sequential multi-phase plan; each successor phase freezes its own full four-lane review over its own range, so later material changes are reviewed by their own phase gates rather than by re-running this one (same precedent as phase 1 and the Plans/SDD-Toolchain waivers)."
+    accepted: "2026-08-31"
 deliverable: "Committed graph store with locked atomic writes, propose/assemble staging, the compile pipeline (batched errors, coverage, intent hashes, rendered views), v1 conversion with blocking sentinels, and guard coverage for every new surface"
 tasks:
   - id: "2.1"
