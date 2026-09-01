@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -34,6 +36,70 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphInitCmd())
 	c.AddCommand(graphProposeCmd())
 	c.AddCommand(graphAssembleCmd())
+	return c
+}
+
+// compileCmd is the top-level `sdd compile`: validate the staged proposal
+// wholesale (parse -> schema -> semantic, every finding in one report),
+// embed intent fingerprints, and append the nodes to the committed graph.
+// Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
+func compileCmd() *cobra.Command {
+	var plan string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "compile",
+		Short: "Compile the staged proposal into the plan graph",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("compile: --plan is required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("compile: %w", err)
+			}
+			res, findings, err := gcompile.Run(root, repoRoot, plan)
+			if err != nil {
+				return err
+			}
+			if len(findings) > 0 {
+				if asJSON {
+					out := struct {
+						OK       bool              `json:"ok"`
+						Findings []gcompile.Finding `json:"findings"`
+					}{false, findings}
+					if err := writeJSON(out); err != nil {
+						return err
+					}
+					return &refusedError{n: len(findings)}
+				}
+				var b strings.Builder
+				fmt.Fprintf(&b, "compile: refused — %d finding(s), all reported:\n", len(findings))
+				for _, f := range findings {
+					fmt.Fprintf(&b, "  %s\n", f.String())
+				}
+				return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK       bool                         `json:"ok"`
+					Graph    string                       `json:"graph"`
+					Added    []string                     `json:"added"`
+					Hashes   map[string]map[string]string `json:"intent_hashes,omitempty"`
+					Consumed string                       `json:"consumed"`
+				}{true, relPath(res.GraphPath), res.Added, res.Hashes, relPath(res.Consumed)})
+			}
+			hashed := 0
+			for _, m := range res.Hashes {
+				hashed += len(m)
+			}
+			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d intent fingerprint(s) embedded); consumed %s\n",
+				len(res.Added), relPath(res.GraphPath), hashed, relPath(res.Consumed))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 

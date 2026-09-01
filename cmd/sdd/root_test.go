@@ -55,7 +55,7 @@ func TestFlagsAreDocumented(t *testing.T) {
 // it must be a deliberate edit here rather than a silent side effect.
 func TestSubcommandsMatchDispatch(t *testing.T) {
 	want := map[string]bool{
-		"apply": true, "decide": true, "doctor": true, "evidence": true,
+		"apply": true, "compile": true, "decide": true, "doctor": true, "evidence": true,
 		"graph": true,
 		"hook": true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
@@ -215,6 +215,7 @@ func handlerFlagSets() []struct {
 		{"sdd graph init", []string{"plan", "json"}},
 		{"sdd graph propose", []string{"plan", "file", "json"}},
 		{"sdd graph assemble", []string{"plan", "json"}},
+		{"sdd compile", []string{"plan", "json"}},
 		{"sdd evidence add", []string{
 			"task", "phase", "plan", "verified-by", "working-dir", "result",
 			"tool", "tool-context", "tool-result", "focused-review",
