@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "define-schema",
+      "contract": "the schema describes every supported key and rejects an unknown one",
+      "justifies": [
+        "FR-01"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "test_schema_covers_every_key",
+            "file": "tests/test_schema.ext"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "src/schema.ext"
+      ],
+      "estimate": 1,
+      "phase": "01-example"
+    },
+    {
+      "id": "parse-config",
+      "contract": "loading a config accepts every documented key and refuses an unknown key by name",
+      "justifies": [
+        "AC-01",
+        "DD-1"
+      ],
+      "deps": [
+        "define-schema"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "test_loads_valid_config",
+            "file": "tests/test_config.ext"
+          },
+          {
+            "id": "test_reparses_hostile_values",
+            "file": "tests/test_config.ext",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "src/config.ext"
+      ],
+      "estimate": 2,
+      "phase": "01-example"
+    },
+    {
+      "id": "build-gate",
+      "contract": "the tree builds clean; REPLACE the untriaged sentinel below with a triaged hazard list or an explicit empty list before compiling",
+      "justifies": [
+        "FR-01"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make build"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "01-example"
+    },
+    {
+      "id": "feature-review",
+      "contract": "the example feature survives a full validation cycle",
+      "justifies": [
+        "AC-01"
+      ],
+      "deps": [
+        "parse-config",
+        "build-gate"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "01-example"
+    }
+  ]
+}

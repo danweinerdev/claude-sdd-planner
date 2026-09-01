@@ -1,14 +1,17 @@
 package compile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 const fixtureSpec = `---
@@ -55,7 +58,7 @@ related: []
 const fixturePlan = `---
 title: "Sample Plan"
 type: plan
-status: active
+status: draft
 created: 2026-08-01
 updated: 2026-08-01
 tags: []
@@ -64,6 +67,30 @@ phases: []
 ---
 
 # Sample Plan
+
+## Overview
+
+A fixture plan.
+
+## Non-Goals
+
+None.
+
+## Architecture
+
+Simple.
+
+## Key Decisions
+
+None.
+
+## Dependencies
+
+None.
+
+## Plan Completion Evidence
+
+Pending — not complete.
 `
 
 const fixtureDecisions = `---
@@ -175,6 +202,178 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	}
 	if _, err := os.Stat(res.Consumed); !os.IsNotExist(err) {
 		t.Fatalf("the compiled proposal must be consumed: %s", res.Consumed)
+	}
+
+	// Views rendered alongside the graph: one phase doc (the nodes carry no
+	// label, so they group as Ungrouped) plus the README projection.
+	if len(res.Views) != 2 {
+		t.Fatalf("expected 2 rendered views (phase doc + README), got %v", res.Views)
+	}
+	doc, err := os.ReadFile(filepath.Join(root, "Plans", "SamplePlan", "01-Ungrouped.md"))
+	if err != nil {
+		t.Fatalf("phase view missing: %v", err)
+	}
+	for _, want := range []string{
+		"GENERATED VIEW", "type: phase", "plan: \"SamplePlan\"", "tasks: []",
+		"### impl-fr", "- Gate: review — full", "Pending — not complete.",
+	} {
+		if !strings.Contains(string(doc), want) {
+			t.Fatalf("phase view missing %q:\n%s", want, doc)
+		}
+	}
+	readme, err := os.ReadFile(filepath.Join(root, "Plans", "SamplePlan", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"## Graph View", `doc: "01-Ungrouped.md"`, "## Non-Goals",
+	} {
+		if !strings.Contains(string(readme), want) {
+			t.Fatalf("README projection missing %q:\n%s", want, readme)
+		}
+	}
+
+	// Idempotence: re-rendering the unchanged graph writes nothing.
+	g2, err := gstore.Load(res.GraphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := renderViews(root, "SamplePlan", g2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("re-render of an unchanged graph must be a no-op, rewrote %v", again)
+	}
+}
+
+// TestRenderRefusalLeavesGraphAndPayloadUntouched: a target file without the
+// generated marker (a hand-authored or frozen v1 document) refuses the whole
+// compile BEFORE the graph write.
+func TestRenderRefusalLeavesGraphAndPayloadUntouched(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	if err := os.WriteFile(filepath.Join(planDir, "01-Ungrouped.md"),
+		[]byte("---\ntitle: \"Hand-authored\"\ntype: phase\n---\n\n# Not a view\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stage(t, root, happyProposal)
+	graphBefore, _ := os.ReadFile(gstore.PathFor(planDir))
+
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err == nil || !strings.Contains(err.Error(), "not a generated view") {
+		t.Fatalf("compile must refuse to overwrite a non-generated document: err=%v findings=%v", err, findings)
+	}
+	graphAfter, _ := os.ReadFile(gstore.PathFor(planDir))
+	if string(graphBefore) != string(graphAfter) {
+		t.Fatal("a view refusal must leave the graph untouched (preflight runs before the write)")
+	}
+	entries, _ := os.ReadDir(proposal.FragmentsDir(planDir))
+	staged := 0
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".json" {
+			staged++
+		}
+	}
+	if staged != 1 {
+		t.Fatal("a view refusal must leave the payload staged")
+	}
+}
+
+var goldenDateRe = regexp.MustCompile(`(?m)^(created|updated): \d{4}-\d{2}-\d{2}$`)
+
+func normalizeDates(b []byte) []byte {
+	return goldenDateRe.ReplaceAll(b, []byte("$1: DATE"))
+}
+
+// TestGoldenTriple freezes the payload -> graph -> rendered-views pipeline:
+// the filled template exemplar compiles into byte-stable goldens (dates
+// normalized). Regenerate deliberately with UPDATE_GOLDENS=1. This is the
+// frozen-golden pattern the plan names; the goldens live in this package's
+// testdata rather than tools/regression because they freeze a pipeline, not
+// a validator rule example — recorded as a deviation in the task notes.
+func TestGoldenTriple(t *testing.T) {
+	spec := strings.Replace(fixtureSpec, "- [ ] **AC-02**: An unknown key names itself in the refusal.\n", "", 1)
+	root := fixtureRoot(t, spec)
+
+	raw, err := proposal.ExemplarJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	filled := string(raw)
+	filled = strings.ReplaceAll(filled, "AC-NN", "AC-01")
+	filled = strings.ReplaceAll(filled, "FR-NN", "FR-01")
+	filled = strings.ReplaceAll(filled, "DD-N", "DD-1")
+	filled = strings.ReplaceAll(filled, `"untriaged"`, "[]")
+	stage(t, root, filled)
+
+	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
+		t.Fatalf("compile: %v %v", err, findings)
+	}
+
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	outputs := map[string]string{
+		"payload.json":  filled,
+		"graph.json":    readAsString(t, gstore.PathFor(planDir)),
+		"01-example.md": readAsString(t, filepath.Join(planDir, "01-example.md")),
+		"README.md":     readAsString(t, filepath.Join(planDir, "README.md")),
+	}
+	goldenDir := filepath.Join("testdata", "golden")
+	if os.Getenv("UPDATE_GOLDENS") == "1" {
+		if err := os.MkdirAll(goldenDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for name, content := range outputs {
+			if err := os.WriteFile(filepath.Join(goldenDir, name),
+				normalizeDates([]byte(content)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Log("goldens updated")
+		return
+	}
+	for name, content := range outputs {
+		want, err := os.ReadFile(filepath.Join(goldenDir, name))
+		if err != nil {
+			t.Fatalf("golden %s missing (regenerate with UPDATE_GOLDENS=1): %v", name, err)
+		}
+		got := normalizeDates([]byte(content))
+		if string(got) != strings.ReplaceAll(string(want), "\r\n", "\n") {
+			t.Errorf("golden %s drifted:\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
+		}
+	}
+}
+
+func readAsString(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestRenderedViewsValidateStructurally: the rendered plan scope carries
+// zero Error-severity findings under the real validator.
+func TestRenderedViewsValidateStructurally(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	stage(t, root, happyProposal)
+	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
+		t.Fatalf("compile: %v %v", err, findings)
+	}
+	loaded, err := rules.LoadRootRepo(root, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded = rules.ScopeToPlan(loaded, rules.PlanRelOf("Plans/SamplePlan/README.md"))
+	var errs []string
+	for _, d := range rules.RunWithWaivers(loaded) {
+		if d.Severity == rules.Error && strings.HasPrefix(d.Path, "Plans/SamplePlan") {
+			errs = append(errs, fmt.Sprintf("%s %s:%d: %s", d.Code, d.Path, d.Line, d.Message))
+		}
+	}
+	if len(errs) > 0 {
+		t.Fatalf("rendered views must validate structurally clean:\n%s", strings.Join(errs, "\n"))
 	}
 }
 

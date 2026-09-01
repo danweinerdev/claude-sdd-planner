@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "seq_counter": 0,
+  "nodes": [
+    {
+      "id": "define-schema",
+      "contract": "the schema describes every supported key and rejects an unknown one",
+      "justifies": [
+        "FR-01"
+      ],
+      "intent_hashes": {
+        "FR-01": "sha256:cd0d3e2ad952fd96a71f498ac1510a122ee114f849443dd9cf48f6ed9f988081"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "test_schema_covers_every_key",
+            "file": "tests/test_schema.ext"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "src/schema.ext"
+      ],
+      "estimate": 1,
+      "phase": "01-example"
+    },
+    {
+      "id": "parse-config",
+      "contract": "loading a config accepts every documented key and refuses an unknown key by name",
+      "justifies": [
+        "AC-01",
+        "DD-1"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:359cb3cdb32fce1a085ada6401e2a790a5b66d4dc2ef813ab7bfde07141bf776",
+        "DD-1": "sha256:d232c7f5cda9340869abffd3e78a2d9ef2ec3261df2b31251ce7937e06503c6f"
+      },
+      "deps": [
+        "define-schema"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "test_loads_valid_config",
+            "file": "tests/test_config.ext"
+          },
+          {
+            "id": "test_reparses_hostile_values",
+            "file": "tests/test_config.ext",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "src/config.ext"
+      ],
+      "estimate": 2,
+      "phase": "01-example"
+    },
+    {
+      "id": "build-gate",
+      "contract": "the tree builds clean; REPLACE the untriaged sentinel below with a triaged hazard list or an explicit empty list before compiling",
+      "justifies": [
+        "FR-01"
+      ],
+      "intent_hashes": {
+        "FR-01": "sha256:cd0d3e2ad952fd96a71f498ac1510a122ee114f849443dd9cf48f6ed9f988081"
+      },
+      "gate": {
+        "type": "command",
+        "command": "make build"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "01-example"
+    },
+    {
+      "id": "feature-review",
+      "contract": "the example feature survives a full validation cycle",
+      "justifies": [
+        "AC-01"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:359cb3cdb32fce1a085ada6401e2a790a5b66d4dc2ef813ab7bfde07141bf776"
+      },
+      "deps": [
+        "parse-config",
+        "build-gate"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "01-example"
+    }
+  ]
+}

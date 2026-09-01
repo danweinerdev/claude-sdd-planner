@@ -50,6 +50,8 @@ type Result struct {
 	Hashes map[string]map[string]string
 	// Consumed is the proposal (or single fragment) file that was consumed.
 	Consumed string
+	// Views is every rendered view file this compile wrote or refreshed.
+	Views []string
 }
 
 // Run compiles the staged proposal for one plan. `root` is the planning
@@ -103,7 +105,16 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 		}
 		added = append(added, n.ID)
 	}
-	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
+	// Preflight the render targets BEFORE the graph write: a view refusal
+	// (an existing hand-authored or frozen document in a target's place)
+	// must leave the graph untouched and the payload staged.
+	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter}
+	preview.Nodes = append(append(preview.Nodes, g.Nodes...), p.Nodes...)
+	if err := preflightViews(root, plan, preview); err != nil {
+		return nil, nil, err
+	}
+
+	final, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 		for _, n := range fresh.Nodes {
 			for _, incoming := range p.Nodes {
 				if n.ID == incoming.ID {
@@ -113,14 +124,21 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 		}
 		fresh.Nodes = append(fresh.Nodes, p.Nodes...)
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, nil, err
+	}
+	// Views render from the graph as written (DD-2: projections of the
+	// source of truth, never of an in-memory draft).
+	views, err := renderViews(root, plan, final)
+	if err != nil {
+		return nil, nil, fmt.Errorf("compile: graph written but view rendering failed (re-run `sdd compile` after fixing): %w", err)
 	}
 	// Consumed only after the graph write is durable.
 	if err := os.Remove(payloadPath); err != nil {
 		return nil, nil, fmt.Errorf("compile: graph written but %s could not be consumed: %w", payloadPath, err)
 	}
-	return &Result{GraphPath: graphPath, Added: added, Hashes: hashes, Consumed: payloadPath}, nil, nil
+	return &Result{GraphPath: graphPath, Added: added, Hashes: hashes, Consumed: payloadPath, Views: views}, nil, nil
 }
 
 // selectProposal picks the compile input: the assembled proposal when it

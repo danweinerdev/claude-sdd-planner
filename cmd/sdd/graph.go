@@ -81,20 +81,25 @@ func compileCmd() *cobra.Command {
 				return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 			}
 			if asJSON {
+				views := make([]string, len(res.Views))
+				for i, v := range res.Views {
+					views[i] = relPath(v)
+				}
 				return writeJSON(struct {
 					OK       bool                         `json:"ok"`
 					Graph    string                       `json:"graph"`
 					Added    []string                     `json:"added"`
 					Hashes   map[string]map[string]string `json:"intent_hashes,omitempty"`
+					Views    []string                     `json:"views,omitempty"`
 					Consumed string                       `json:"consumed"`
-				}{true, relPath(res.GraphPath), res.Added, res.Hashes, relPath(res.Consumed)})
+				}{true, relPath(res.GraphPath), res.Added, res.Hashes, views, relPath(res.Consumed)})
 			}
 			hashed := 0
 			for _, m := range res.Hashes {
 				hashed += len(m)
 			}
-			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d intent fingerprint(s) embedded); consumed %s\n",
-				len(res.Added), relPath(res.GraphPath), hashed, relPath(res.Consumed))
+			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d intent fingerprint(s) embedded, %d view(s) rendered); consumed %s\n",
+				len(res.Added), relPath(res.GraphPath), hashed, len(res.Views), relPath(res.Consumed))
 			return nil
 		},
 	}
