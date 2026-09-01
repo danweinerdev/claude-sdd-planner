@@ -808,3 +808,51 @@ related: [Specs/Foreign]
 		t.Fatal("the transitively-cited FR must be fingerprinted")
 	}
 }
+
+// TestGraphViewSectionInsertsBeforeEvidence: the README's Plan Completion
+// Evidence section is replaced wholesale by evidence writers, and its extent
+// runs to the next depth<=2 heading — the graph-view BEGIN marker is a
+// comment, not a heading, so a section appended after the evidence section
+// gets its begin marker swallowed by the next evidence write (the exact
+// defect repaired in cd95ec8). The renderer therefore inserts the section
+// BEFORE the evidence heading; only a README without one appends at EOF.
+func TestGraphViewSectionInsertsBeforeEvidence(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	readme := "---\ntitle: \"P\"\ntype: plan\nstatus: active\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags: []\nrelated: []\nphases: []\n---\n\n# P\n\n## Overview\n\nProse.\n\n## Plan Completion Evidence\n\nPending — not complete.\n"
+	if err := os.WriteFile(filepath.Join(planDir, "README.md"), []byte(readme), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{
+		{ID: "a", Contract: "works", Gate: model.Gate{Type: model.GateTests},
+			Hazards: model.Hazards{}, Estimate: 1},
+	}}
+	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out, err := os.ReadFile(filepath.Join(planDir, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	begin := strings.Index(s, "<!-- graph-view:begin")
+	evidence := strings.Index(s, "## Plan Completion Evidence")
+	if begin < 0 || evidence < 0 {
+		t.Fatalf("both the section and the evidence heading must exist:\n%s", s)
+	}
+	if begin > evidence {
+		t.Fatalf("the graph-view section must be inserted BEFORE the evidence section, not after it:\n%s", s)
+	}
+	// The upsert path replaces in place: a second render must not duplicate
+	// or relocate the section.
+	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+		t.Fatalf("re-render: %v", err)
+	}
+	out2, _ := os.ReadFile(filepath.Join(planDir, "README.md"))
+	if c := strings.Count(string(out2), "<!-- graph-view:begin"); c != 1 {
+		t.Fatalf("exactly one graph-view section after re-render, got %d", c)
+	}
+}

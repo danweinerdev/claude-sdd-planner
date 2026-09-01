@@ -35,10 +35,6 @@ None.
 
 None.
 
-## Plan Completion Evidence
-
-Pending — not complete.
-
 <!-- graph-view:begin — generated section, do not edit -->
 
 ## Graph View
@@ -53,3 +49,7 @@ Pending — not complete.
 truth; these documents are projections.
 
 <!-- graph-view:end -->
+
+## Plan Completion Evidence
+
+Pending — not complete.

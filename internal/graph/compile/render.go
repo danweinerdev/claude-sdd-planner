@@ -300,6 +300,9 @@ func shortRev(rev string) string {
 var (
 	createdLineRe = regexp.MustCompile(`(?m)^created: (\S+)`)
 	updatedLineRe = regexp.MustCompile(`(?m)^updated: (\S+)`)
+	// planEvidenceHeadingRe locates the evidence section the graph-view
+	// insertion must stay ahead of.
+	planEvidenceHeadingRe = regexp.MustCompile(`(?m)^## Plan Completion Evidence\s*$`)
 )
 
 // planWrite decides one view target's fate without writing: whether a write
@@ -435,6 +438,15 @@ func updateReadme(planDir, plan string, groups []phaseGroup, closed map[string]b
 			return false, fmt.Errorf("compile: %s has a malformed graph-view section (begin without end)", path)
 		}
 		out = out[:begin] + section + out[end+len(graphViewEnd):]
+	} else if i := planEvidenceHeadingRe.FindStringIndex(out); i != nil {
+		// Insert BEFORE the Plan Completion Evidence section, never after:
+		// evidence writers replace that section's whole extent (up to the
+		// next depth<=2 heading), and the begin marker is a comment, not a
+		// heading — a section appended after the evidence heading gets its
+		// begin marker swallowed by the next evidence write, orphaning the
+		// projection from the lifecycle strip that keeps frozen review
+		// pins honest.
+		out = out[:i[0]] + section + "\n\n" + out[i[0]:]
 	} else {
 		if !strings.HasSuffix(out, "\n") {
 			out += "\n"
