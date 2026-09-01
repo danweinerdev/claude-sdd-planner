@@ -33,7 +33,7 @@ tasks:
     depends_on: ["2.3"]
   - id: "2.5"
     title: "sdd graph convert: v1 plans to graphs with blocking sentinels"
-    status: planned
+    status: complete
     verification: "go test ./cmd/sdd/ -run TestGraphConvert -count=1 — converting a v1 fixture plan maps tasks to nodes, depends_on to deps, justifies citations, and declared artifacts; every gap is an explicit sentinel: hazards untriaged, gate unspecified where verification names no runnable check, needs-contract where the task title/notes reduce to no falsifiable sentence; the converted graph does NOT compile until sentinels are resolved (compile lists each one); completed v1 tasks convert with their evidence preserved as historical annotations, never as verification observations."
     justifies: "DD-15 (conversion is a standing tool capability; the tool never asserts on the operator's behalf — sentinel-then-block). Prevents laundering unmade judgments into the graph during migration."
     depends_on: ["2.3"]
@@ -277,20 +277,20 @@ stub; TODO(4.1) in render.go upgrades it to the closed predicate.
 ## 2.5: sdd graph convert: v1 plans to graphs with blocking sentinels
 
 ### Subtasks
-- [ ] `sdd graph convert --plan <name>`: read the v1 README + phase docs via
+- [x] `sdd graph convert --plan <name>`: read the v1 README + phase docs via
       existing artifact parsing; map task → node (id, contract from title +
       condensed notes, deps from depends_on + phase order, justifies,
       artifacts where declared).
-- [ ] Gap sentinels: `hazards: "untriaged"` everywhere; `gate:
+- [x] Gap sentinels: `hazards: "untriaged"` everywhere; `gate:
       {type: "unspecified"}` where verification names no runnable check;
       `needs-contract` marker where no falsifiable sentence derives.
-- [ ] Compile-side enforcement: `unspecified` gates and `needs-contract`
+- [x] Compile-side enforcement: `unspecified` gates and `needs-contract`
       markers block compile with per-node findings (extend 2.3's semantic
       set).
-- [ ] Completed v1 tasks: convert with evidence preserved as historical
+- [x] Completed v1 tasks: convert with evidence preserved as historical
       annotation fields (never as `verification` observations — no
       retroactive GREEN).
-- [ ] Fixture test converting a miniature v1 plan end to end, asserting the
+- [x] Fixture test converting a miniature v1 plan end to end, asserting the
       sentinel set and the compile refusal list.
 
 ### Notes
@@ -302,10 +302,34 @@ the laundering the sentinel exists to prevent. Historical evidence
 annotations are display-only; states derive from observations, and converted
 plans start with none.
 
+
+Recorded deviation (implementation): gates land `unspecified` universally
+rather than attempting command extraction from verification prose — any
+extraction is inference, which this task's own Trap forbids; the operator
+specifies every gate at sentinel-resolution time. Completed-task provenance
+lives in the new author-owned `history` node field (schema and drift gates
+updated), never in observations.
+
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `10db7546b3c14ed42be02f10eb0293c71e63a661`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `10db7546b3c14ed42be02f10eb0293c71e63a661`
+- Focused review: `git show 10db7546b3c14ed42be02f10eb0293c71e63a661`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `10db7546b3c14ed42be02f10eb0293c71e63a661`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 24.128s and all eight internal/graph packages; a two-phase v1 fixture converts to three nodes with every mechanical mapping asserted (task ids -> task-N-M, task depends_on plus phase-order densification into sorted deps, justifies id extraction in order of appearance, phase labels from doc stems) and every judgment sentinel asserted (NEEDS-CONTRACT contracts, unspecified gates, untriaged hazards); the completed task carries verified-date + revision provenance as history with verification nil (no retroactive observations); compile refuses the converted graph listing gate/contract/hazard sentinels per node plus the coverage invariant; an empty plan refuses helpfully; the frontmatter string-value-model bug in phase-id parsing was caught by the fixture (deps wired backwards) and fixed with a documented string branch` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd graph convert end-to-end smoke in a temp planning root` | `built binary at 10db754` | PASS | `converted 1 task with v1 provenance carried; compile refused with 4 findings naming each sentinel and the missing full gate; CLI output names the deliberate v1-doc retirement step` |
 
 ### Trap
 The tempting shortcut is defaulting `gate: {type: "command", command: "make
