@@ -3,7 +3,7 @@ title: "Review Gates and Analytics"
 type: phase
 plan: "SddGraph"
 phase: 4
-status: in-progress
+status: complete
 created: 2026-08-31
 updated: 2026-09-01
 deliverable: "Feature-scoped review gates with derived scope, the closed predicate, finding-driven demotion, and the graph analytics surface (path, risk, shape, export) plus fuzz hardening of external-input parsers"
@@ -194,18 +194,36 @@ replay as ordinary tests (`-run TestFuzzCorpus`).
 | `go test -fuzz exploration, 60s per target (local, Windows host, go1.26)` | `FuzzDecode over DecodeProposal+DecodeGraph; FuzzJUnit and FuzzGoTestJSON over the sync parsers; commands documented in the test files and the task notes` | PASS | `zero crashers across all three targets: FuzzDecode 19.4M execs (366 interesting), FuzzJUnit 26.2M (456), FuzzGoTestJSON 25.5M (451); no panics, no hangs — no crash fixes needed, so no crasher corpus entries exist` |
 
 ## Acceptance Criteria
-- [ ] A two-gate nested fixture reviews incrementally (no re-reviewed diff),
+- [x] A two-gate nested fixture reviews incrementally (no re-reviewed diff),
       greens only from frozen Aligned artifacts, and demotes named nodes to
       RED on findings (DD-9, D-0020).
-- [ ] *Closed* derives correctly and drives both view projection and
+- [x] *Closed* derives correctly and drives both view projection and
       frozen-view refusal (D-0022).
-- [ ] `path`/`risk`/`shape` return known answers on fixtures; every
+- [x] `path`/`risk`/`shape` return known answers on fixtures; every
       silhouette class classified; exports render (DD-14).
-- [ ] Corpus-replay fuzz tests green; no parser panics on hostile input.
-- [ ] Guard entries cover the phase's verbs; `make test` green; `go vet`/
+- [x] Corpus-replay fuzz tests green; no parser panics on hostile input.
+- [x] Guard entries cover the phase's verbs; `make test` green; `go vet`/
       `staticcheck` clean.
 
 ## Phase Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `8ba800581a7ab1a127de5294f051d32e9b46eef3`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `8ba800581a7ab1a127de5294f051d32e9b46eef3`
+- Final aligned review: Plans/SddGraph/reviews/07-sddgraph-code-review-8ba8005.md; frozen: 0976ef5bcfad89e798b6d6e712f826b23cef19eb..8ba800581a7ab1a127de5294f051d32e9b46eef3
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green at phase head: template gate (now genuinely checking all 10 templates including the graph-proposal pair, after the stale-sdd.exe bypass fix) plus the entire go suite — review package (scope/record/closed/demotion), states review-gate digest extension, compile lane vocabulary, frozen-view lifecycle, analytics known answers at both algorithm and CLI level, fuzz corpus replay — with go vet and staticcheck clean across cmd/sdd and internal/graph; all five phase ACs verified and checked` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd review resolve` | `four-lane single-agent review 07 over 0976ef5bcfad89e798b6d6e712f826b23cef19eb..8ba800581a7ab1a127de5294f051d32e9b46eef3` | PASS | `resolved and frozen, verdict Aligned; one minor finding deferred into an accepted followup (FU-01 gate-to-artifact binding, tracked in 5.2)` |
+
+### Completed task identities
+
+- `4.1`: `6e5ae294e0a63a34d764fb3527dcf80f262a25db`
+- `4.2`: `95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2`
+- `4.3`: `6f30d0c193264a1c53f3529b5786d6d085c72bce`
