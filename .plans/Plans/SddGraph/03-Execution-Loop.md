@@ -3,14 +3,14 @@ title: "Execution Loop"
 type: phase
 plan: "SddGraph"
 phase: 3
-status: planned
+status: in-progress
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 deliverable: "The walkable graph: derived states, claim/lease scheduling, per-VCS workspace providers, report-driven sync with digest anchoring, and the merge gate including red-before-green — sync-only completion live with its protections"
 tasks:
   - id: "3.1"
     title: "Derived node states with three-way staleness"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/states/... -count=1 — table tests covering: deps-not-all-GREEN => BLOCKED, deps-all-GREEN never-verified => READY, last-fail => RED even with a non-GREEN dep (RED outranks BLOCKED), pass with no newer ancestor seq => GREEN; seq staleness (ancestor re-verified => descendant STALE), digest staleness (on-disk artifact digest differs from observation => STALE), intent staleness (cited requirement text no longer matches embedded hash => INTENT-STALE reported distinctly); workable = {READY, RED, STALE} but frontier excludes workable nodes with non-GREEN deps; states recomputed on read — no state field exists to store. Single topological pass over a 1000-node fixture completes under one second."
     justifies: "DD-3 (derived state cannot drift), DD-4 (INTENT-STALE), D-0022 (GREEN as assumed closure). Prevents the stored-status lie: a state edited outside the tool."
   - id: "3.2"
@@ -61,18 +61,18 @@ completion — it only shows reports.
 ## 3.1: Derived node states with three-way staleness
 
 ### Subtasks
-- [ ] Create `internal/graph/states`: one topological pass computing
+- [x] Create `internal/graph/states`: one topological pass computing
       `effective[n]` (highest verification seq among n and ancestors) and
       each node's state; export the workable/frontier distinction.
-- [ ] Implement precedence exactly: RED (recorded failure) checked before
+- [x] Implement precedence exactly: RED (recorded failure) checked before
       the deps-all-GREEN test; frontier re-gates on deps independently.
-- [ ] Digest staleness: recompute declared-artifact digests on read (cheap
+- [x] Digest staleness: recompute declared-artifact digests on read (cheap
       content hash; cache by mtime within one invocation) and compare to the
       observation.
-- [ ] Intent staleness: recheck embedded intent hashes via 2.3's shared
+- [x] Intent staleness: recheck embedded intent hashes via 2.3's shared
       normalizer against the related spec/design text; report INTENT-STALE
       as its own diagnostic with the requirement-diff payload.
-- [ ] Table tests per the verification field plus the 1000-node performance
+- [x] Table tests per the verification field plus the 1000-node performance
       fixture.
 
 ### Notes
@@ -85,8 +85,20 @@ Design references: § Node states, DD-3, DD-4, D-0022.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `e5e9ed859d14e91b99e2709c419215ecfd547136`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `e5e9ed859d14e91b99e2709c419215ecfd547136`
+- Focused review: `git show e5e9ed859d14e91b99e2709c419215ecfd547136`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `e5e9ed859d14e91b99e2709c419215ecfd547136`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across all ten internal/graph packages; state table covers deps-not-all-GREEN => BLOCKED, never-verified-with-GREEN-deps => READY, RED outranks BLOCKED (failed node with non-GREEN dep reports RED), pass with no newer ancestor => GREEN, direct and transitive seq staleness via effective[n], digest staleness naming exactly the drifted artifacts (including one declared after the observation) with the axis disabled when no digest source is supplied, INTENT-STALE naming exactly the drifted or unresolvable citation and attributed distinctly from the other axes; workable = {READY,RED,STALE} with the frontier excluding workable nodes with non-GREEN deps; cycle members derive BLOCKED and flagged, never workable; Derive is pure (a caller's mutation cannot leak into a later pass); a 1000-node derive completes under one second; digest helpers agree between File and Bytes, memoize within one run, and report missing artifacts as the distinct empty value` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
 
 ### Trap
 You will want to store computed states back into the graph JSON "as a
