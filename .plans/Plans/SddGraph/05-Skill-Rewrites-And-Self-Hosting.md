@@ -92,7 +92,7 @@ init's `.gitignore` already covers it.
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
-| `make test` | `.` | PASS (`exit 0`) | `template gate (10 templates), portable drift gate, and leak gate all green after regeneration: make plugins regenerated both portable trees for the rewritten skill (53 generated, 5 variants, 0 overridden), zero FAIL lines across the full suite, and a leak scan of the generated sdd-plan skill found no harness-isms (agent prefix transformed, /plan trigger stripped)` |
+| `make test` | `.` | PASS (`exit 0`) | `template gate (10 templates), portable drift gate, and leak gate all green after regeneration: make plugins regenerated both portable trees for the rewritten skill (53 generated, 5 variants, 0 overridden), no failing tests anywhere in the full suite, and a leak scan of the generated sdd-plan skill found no harness-isms (agent prefix transformed, /plan trigger stripped)` |
 
 | Tool / inspection | Context | Result | Observable evidence |
 |---|---|---|---|
