@@ -39,7 +39,7 @@ tasks:
     depends_on: ["3.4"]
   - id: "3.6"
     title: "Multi-process concurrency stress and race verification"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/... -run TestConcurrentWalk -count=1 — N separate OS processes (test-spawned sdd binaries) claiming from one shared frontier produce zero double-claims and a parseable graph after every interleaving (atomic-rename torn-read-free property), asserted on Windows and POSIX runners; go test ./internal/graph/... -race -count=1 clean across store, claims, states, sync; a lease-expiry takeover mid-walk preserves the previous workspace file and the takeover itself is lock-serialized."
     justifies: "Prevents the two concrete corruption failures the design's Testing Strategy names: double-claim under parallel dispatch and torn reads of the committed graph. DD-10, DD-3."
     depends_on: ["3.5"]
@@ -324,14 +324,14 @@ D-0022; § Error Handling (lease expiry, merge-gate refusals).
 ## 3.6: Multi-process concurrency stress and race verification
 
 ### Subtasks
-- [ ] Test harness spawning N `sdd` processes (the built binary) against one
+- [x] Test harness spawning N `sdd` processes (the built binary) against one
       fixture graph: concurrent `next --claim` + `sync` + `gc` interleavings.
-- [ ] Assertions: zero double-claims across all runs; every intermediate
+- [x] Assertions: zero double-claims across all runs; every intermediate
       graph file parses (torn-read-free); final state consistent with the
       observation log.
-- [ ] Run matrix: Windows and POSIX (CI-conditional where needed).
-- [ ] `-race` across `internal/graph/...`.
-- [ ] Lease-takeover interleaving: expire mid-walk, second process claims,
+- [x] Run matrix: Windows and POSIX (CI-conditional where needed).
+- [x] `-race` across `internal/graph/...`.
+- [x] Lease-takeover interleaving: expire mid-walk, second process claims,
       first process's late sync refused (stale claim), workspace preserved.
 
 ### Notes
@@ -345,8 +345,25 @@ DD-10.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `e5b0f9267cd8a73fc173012068f41a2e06067b63`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `e5b0f9267cd8a73fc173012068f41a2e06067b63`
+- Focused review: `git show e5b0f9267cd8a73fc173012068f41a2e06067b63`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `e5b0f9267cd8a73fc173012068f41a2e06067b63`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ -run 'TestGraphConcurrentClaimStress|TestGraphLeaseTakeoverAcrossProcesses' -count=3` | `.` | PASS (`exit 0`) | `stress green Windows x3: four workers racing next --claim as separate processes on ten disjoint nodes with a reader and concurrent gc — zero double-claims, capacity (8) filled exactly, every reader parse clean (torn-read-free), final graph claims identical to reported wins, every claim's workspace present (gc reaped no live allocation); takeover walks the crash story through the binary: lapsed lease, takeover refused naming the post-mortem workspace, gc expires+reaps, successor claims with a fresh branch, dead claimant's late sync refused by claim discipline; designing the harness forced out and fixed four real bugs (gc-vs-claim TOCTOU closed by confirm-then-allocate with exact-lease rollback, gc missing the expiry pass, gc reap silently no-op on plain trees, deterministic branch collision on post-gc reclaim)` |
+| `go test ./... -count=1` | `.` | PASS (full sweep, no failures) | `SWEEP-CLEAN` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings (three U1000s in cmd/sdd are pre-existing, untouched files)` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `WSL Fedora (Linux): go test -race ./internal/graph/... -count=1 and the stress pair -count=2 -race` | `native-fs copy of the working tree at e5b0f92; POSIX flock semantics, not drvfs emulation` | PASS | `-race clean across all fourteen internal/graph packages; both stress tests PASS twice under -race — the run matrix subtask's Windows and POSIX legs both executed locally, no CI conditional needed` |
 
 ## Acceptance Criteria
 - [ ] A fixture graph walks end to end — claim, red run, green run, sync,
