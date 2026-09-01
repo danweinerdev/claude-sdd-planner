@@ -27,7 +27,7 @@ tasks:
     depends_on: ["5.1", "5.2"]
   - id: "5.4"
     title: "Self-hosting pilot: convert this plan and walk a live slice"
-    status: in-progress
+    status: complete
     verification: "Documented pilot run in this task's evidence, executed with the released binary: sdd graph convert --plan SddGraph produces a staged proposal whose sentinels are resolved via the payload path; sdd compile succeeds with the coverage invariant satisfied; at least two nodes corresponding to real remaining work from this phase are executed end to end via next --claim -> red sync -> green sync -> merge with clean isolation and red_seq recorded; sdd graph status/path/shape output captured; every discrepancy between the design's claims and observed behavior is filed as a finding list in the evidence (empty list is a pass, silence is not)."
     justifies: "The design's Testing Strategy names self-hosting as acceptance: the first real plan executed under SddGraph is a slice of its own implementation plan. DD-15 (convert exercised on a real v1 plan, not only fixtures). Prevents shipping a walk loop that has only ever walked fixtures."
     depends_on: ["5.3"]
@@ -209,19 +209,19 @@ everything the bump publishes.
 ## 5.4: Self-hosting pilot: convert this plan and walk a live slice
 
 ### Subtasks
-- [ ] `sdd graph convert --plan SddGraph`; resolve sentinels through the
+- [x] `sdd graph convert --plan SddGraph`; resolve sentinels through the
       payload path (hazard triage and gate specification are real judgments
       — make them, don't default them).
-- [ ] `sdd compile` to a committed `SddGraph-Graph.json`; capture
+- [x] `sdd compile` to a committed `SddGraph-Graph.json`; capture
       `status`/`path`/`risk`/`shape` output.
-- [ ] Execute at least two genuinely remaining nodes (documentation
+- [x] Execute at least two genuinely remaining nodes (documentation
       follow-ups, corpus additions, or fix-forward work discovered by the
       pilot) end to end under `next --claim` → red sync → green sync →
       merge.
-- [ ] Record every design-vs-behavior discrepancy as a finding list in this
+- [x] Record every design-vs-behavior discrepancy as a finding list in this
       task's evidence; file material ones as new tasks or design follow-ups
       rather than fixing silently.
-- [ ] Leave the converted graph committed as the living integration fixture
+- [x] Leave the converted graph committed as the living integration fixture
       (design § Testing Strategy).
 
 ### Notes
@@ -234,8 +234,25 @@ references: § Testing Strategy (self-hosting), DD-15, D-0022.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3`
+- Focused review: `git show 2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `sdd compile --plan SddGraph` | `.` | PASS (`exit 0`) | `the converted plan compiled: 31 nodes into SddGraph-Graph.json with 46 intent fingerprints embedded and the coverage invariant satisfied — after resolving every sentinel through the payload path as real judgments (22 falsifiable contracts, gates naming genuine runner-visible test ids, explicit empty-list hazard triage for completed v1 work with the rationale that its failure classes were discharged by the v1 evidence trail, phase labels deliberately relabeled v2-N-* so rendered views land beside the frozen v1 docs instead of over them) plus five phase gates, the terminal gate, a node for task 5.5, and the two pilot work nodes` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `pilot walk (sdd 2.7.0 plus the in-tree fixes the pilot itself filed as 5.5/5.6)` | `the full loop against the real planning root: re-verification pass, gate recordings from frozen history, two claim-red-green-merge-integrate walks, live gc` | PASS | `re-verification greened all 23 converted nodes from real reports (one go test -json stream for 19 tests gates, one make test log for 4 command gates — history granted nothing, observations did); gates v2-1 through v2-4 recorded from the four real frozen Aligned reviews with scope derivation printed; both pilot nodes walked with genuine red phases — the gc-branch-pruning walk armed red_seq at seq 28 and merged clean at seq 29 anchored to its workspace commit, the junit-vendor walk armed at seq 30 and merged at seq 31 — each integrated to mainline and deriving GREEN; live sdd graph gc then pruned exactly the two merged pilot branches (the first pilot node's own feature reaping its own walk); final derived status GREEN=29 closed=22 of 31 with the phase-5 and terminal gates honestly open awaiting their reviews` |
+| focused review of the first pilot slice | `git show 0c2f8d445806fe469d111fd0400853569ebae7e7` | PASS | `gc branch pruning reviewed for correctness, scope, tests, and boundary: prune set derived from git ancestry and checkout state, never graph bookkeeping; unmerged and checked-out branches proven surviving` |
+| analytics capture | `sdd graph status/path/risk/shape --plan SddGraph` | PASS | `pre-walk: 27 BLOCKED / 4 READY, critical path 26 of 37 units ceiling 1.42x, one cut vertex (the phase-5 gate), silhouette MIXED with a long near-chain tail from convert's dense phase-order deps; post-walk: GREEN=29 closed=22/31` |
+| pilot finding list — design vs observed behavior (the subtask's required record; not empty) | nine entries | RECORDED | `F-01 compile's coverage demand flooded by 47 foreign acceptance criteria reachable only transitively, filed and fixed as task 5.5; F-02 the README graph-view upsert read as changed plan intent by all four frozen phase reviews' pins, filed and fixed as task 5.6; F-03 rendered projection docs tripped the phases-array listing rule, filed and fixed as task 5.6; F-04 rendered views target the v1 phase-doc filenames (convert warns) and retiring frozen v1 history was unacceptable, resolved by operator relabeling in the payload; F-05 unchained phase gates derive overlapping scopes because scope subtraction sees only gates inside the dependency closure — authoring guidance is to chain phase gates for disjoint increments, mechanics behaved as designed; F-06 the sync verb's human output omits the merge outcome its JSON carries, minor UX follow-up; F-07 heaviest-first claim selection leaves a freshly converted plan's frontier dominated by already-complete v1 work until re-verified — the re-verification pass is the honest remedy and belongs in converted-plan guidance; F-08 next takes a filesystem path while graph verbs take plan names, an invocation-surface inconsistency; F-09 rendered views refresh only at compile, so a walk leaves them stale until the next compile` |
 
 ### Trap
 The pilot will tempt you to hand-pick two trivial already-green nodes so the

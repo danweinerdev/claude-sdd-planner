@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "seq_counter": 0,
+  "seq_counter": 31,
   "nodes": [
     {
       "id": "task-1-1",
@@ -33,7 +33,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-1-payload-schema",
-      "history": "complete as v1 task 1.1 — verified 2026-08-31; revision e37df494a163ea466fe71143727584d107684cc2"
+      "history": "complete as v1 task 1.1 — verified 2026-08-31; revision e37df494a163ea466fe71143727584d107684cc2",
+      "verification": {
+        "result": "pass",
+        "seq": 1,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-1-2",
@@ -65,7 +75,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-1-payload-schema",
-      "history": "complete as v1 task 1.2 — verified 2026-08-31; revision ed539842fd2c45838fa44d4b0de75fae9bc1e807"
+      "history": "complete as v1 task 1.2 — verified 2026-08-31; revision ed539842fd2c45838fa44d4b0de75fae9bc1e807",
+      "verification": {
+        "result": "pass",
+        "seq": 2,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-1-3",
@@ -96,7 +116,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-1-payload-schema",
-      "history": "complete as v1 task 1.3 — verified 2026-08-31; revision 7483157e34d20584796bc2fa1ecc6f7eaf693aa4"
+      "history": "complete as v1 task 1.3 — verified 2026-08-31; revision 7483157e34d20584796bc2fa1ecc6f7eaf693aa4",
+      "verification": {
+        "result": "pass",
+        "seq": 3,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-1",
@@ -128,7 +158,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.1 — verified 2026-08-31; revision 085f4f123f1988300c643a322cc800c858e8450c"
+      "history": "complete as v1 task 2.1 — verified 2026-08-31; revision 085f4f123f1988300c643a322cc800c858e8450c",
+      "verification": {
+        "result": "pass",
+        "seq": 4,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-2",
@@ -161,7 +201,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.2 — verified 2026-08-31; revision b011057eb8ee58439ea6fc764cacdeab45cc71c4"
+      "history": "complete as v1 task 2.2 — verified 2026-08-31; revision b011057eb8ee58439ea6fc764cacdeab45cc71c4",
+      "verification": {
+        "result": "pass",
+        "seq": 5,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-3",
@@ -198,7 +248,17 @@
       "hazards": [],
       "estimate": 2,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.3 — verified 2026-08-31; revision fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2"
+      "history": "complete as v1 task 2.3 — verified 2026-08-31; revision fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2",
+      "verification": {
+        "result": "pass",
+        "seq": 6,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-4",
@@ -235,7 +295,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.4 — verified 2026-08-31; revision 4f9e981133e7d6dd73d18db7ca492ff00fe603b6"
+      "history": "complete as v1 task 2.4 — verified 2026-08-31; revision 4f9e981133e7d6dd73d18db7ca492ff00fe603b6",
+      "verification": {
+        "result": "pass",
+        "seq": 7,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-5",
@@ -268,7 +338,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.5 — verified 2026-08-31; revision 10db7546b3c14ed42be02f10eb0293c71e63a661"
+      "history": "complete as v1 task 2.5 — verified 2026-08-31; revision 10db7546b3c14ed42be02f10eb0293c71e63a661",
+      "verification": {
+        "result": "pass",
+        "seq": 8,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-2-6",
@@ -304,7 +384,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-2-store-compiler-convert",
-      "history": "complete as v1 task 2.6 — verified 2026-08-31; revision b2281b8a9e601475a0cb55f9c55b1e4258bba10a"
+      "history": "complete as v1 task 2.6 — verified 2026-08-31; revision b2281b8a9e601475a0cb55f9c55b1e4258bba10a",
+      "verification": {
+        "result": "pass",
+        "seq": 9,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-1",
@@ -342,7 +432,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.1 — verified 2026-09-01; revision e5e9ed859d14e91b99e2709c419215ecfd547136"
+      "history": "complete as v1 task 3.1 — verified 2026-09-01; revision e5e9ed859d14e91b99e2709c419215ecfd547136",
+      "verification": {
+        "result": "pass",
+        "seq": 10,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-2",
@@ -379,7 +479,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.2 — verified 2026-09-01; revision f6fe384534017e87733746548e46513bef5d5580"
+      "history": "complete as v1 task 3.2 — verified 2026-09-01; revision f6fe384534017e87733746548e46513bef5d5580",
+      "verification": {
+        "result": "pass",
+        "seq": 11,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-3",
@@ -419,7 +529,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.3 — verified 2026-09-01; revision 7629a68409e61cb2cb1e589d909c94773872b8cc"
+      "history": "complete as v1 task 3.3 — verified 2026-09-01; revision 7629a68409e61cb2cb1e589d909c94773872b8cc",
+      "verification": {
+        "result": "pass",
+        "seq": 12,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-4",
@@ -458,7 +578,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.4 — verified 2026-09-01; revision 0cec5cb851a480edb199ad06fb94b5e4f41623ae"
+      "history": "complete as v1 task 3.4 — verified 2026-09-01; revision 0cec5cb851a480edb199ad06fb94b5e4f41623ae",
+      "verification": {
+        "result": "pass",
+        "seq": 13,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-5",
@@ -503,7 +633,17 @@
       "hazards": [],
       "estimate": 2,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.5 — verified 2026-09-01; revision 027be4ae31c32f32ad57b007a2b2b28d0beefa53"
+      "history": "complete as v1 task 3.5 — verified 2026-09-01; revision 027be4ae31c32f32ad57b007a2b2b28d0beefa53",
+      "verification": {
+        "result": "pass",
+        "seq": 14,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-3-6",
@@ -541,7 +681,17 @@
       "hazards": [],
       "estimate": 2,
       "phase": "v2-3-execution-loop",
-      "history": "complete as v1 task 3.6 — verified 2026-09-01; revision e5b0f9267cd8a73fc173012068f41a2e06067b63"
+      "history": "complete as v1 task 3.6 — verified 2026-09-01; revision e5b0f9267cd8a73fc173012068f41a2e06067b63",
+      "verification": {
+        "result": "pass",
+        "seq": 15,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-4-1",
@@ -582,7 +732,17 @@
       "hazards": [],
       "estimate": 2,
       "phase": "v2-4-review-gates-analytics",
-      "history": "complete as v1 task 4.1 — verified 2026-09-01; revision 6e5ae294e0a63a34d764fb3527dcf80f262a25db"
+      "history": "complete as v1 task 4.1 — verified 2026-09-01; revision 6e5ae294e0a63a34d764fb3527dcf80f262a25db",
+      "verification": {
+        "result": "pass",
+        "seq": 16,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-4-2",
@@ -618,7 +778,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-4-review-gates-analytics",
-      "history": "complete as v1 task 4.2 — verified 2026-09-01; revision 95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2"
+      "history": "complete as v1 task 4.2 — verified 2026-09-01; revision 95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2",
+      "verification": {
+        "result": "pass",
+        "seq": 17,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-4-3",
@@ -654,7 +824,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-4-review-gates-analytics",
-      "history": "complete as v1 task 4.3 — verified 2026-09-01; revision 6f30d0c193264a1c53f3529b5786d6d085c72bce"
+      "history": "complete as v1 task 4.3 — verified 2026-09-01; revision 6f30d0c193264a1c53f3529b5786d6d085c72bce",
+      "verification": {
+        "result": "pass",
+        "seq": 18,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-5-1",
@@ -679,7 +859,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-5-skills-self-hosting",
-      "history": "complete as v1 task 5.1 — verified 2026-09-01; revision 922b2a1dbcf57a22019f3d55e9e2fc069cb2482f"
+      "history": "complete as v1 task 5.1 — verified 2026-09-01; revision 922b2a1dbcf57a22019f3d55e9e2fc069cb2482f",
+      "verification": {
+        "result": "pass",
+        "seq": 20,
+        "report_digest": "sha256:f69a3900a382fbdb2a0dbd708f5820f4e8c9ba10585f6b79e178b2dcf8ef763a",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-5-2",
@@ -706,7 +896,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-5-skills-self-hosting",
-      "history": "complete as v1 task 5.2 — verified 2026-09-01; revision aa914086a9d132a6db6be8315ccd5c20e6005f6b"
+      "history": "complete as v1 task 5.2 — verified 2026-09-01; revision aa914086a9d132a6db6be8315ccd5c20e6005f6b",
+      "verification": {
+        "result": "pass",
+        "seq": 21,
+        "report_digest": "sha256:f69a3900a382fbdb2a0dbd708f5820f4e8c9ba10585f6b79e178b2dcf8ef763a",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-5-3",
@@ -729,7 +929,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-5-skills-self-hosting",
-      "history": "complete as v1 task 5.3 — verified 2026-09-01; revision a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63"
+      "history": "complete as v1 task 5.3 — verified 2026-09-01; revision a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63",
+      "verification": {
+        "result": "pass",
+        "seq": 22,
+        "report_digest": "sha256:f69a3900a382fbdb2a0dbd708f5820f4e8c9ba10585f6b79e178b2dcf8ef763a",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-5-4",
@@ -752,7 +962,17 @@
       },
       "hazards": [],
       "estimate": 2,
-      "phase": "v2-5-skills-self-hosting"
+      "phase": "v2-5-skills-self-hosting",
+      "verification": {
+        "result": "pass",
+        "seq": 23,
+        "report_digest": "sha256:f69a3900a382fbdb2a0dbd708f5820f4e8c9ba10585f6b79e178b2dcf8ef763a",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "task-5-5",
@@ -775,7 +995,17 @@
       "hazards": [],
       "estimate": 1,
       "phase": "v2-5-skills-self-hosting",
-      "history": "complete as v1 task 5.5 -- verified 2026-09-01; revision 074d598ff1cb37917e1d9ac051fc3f4d33850d7f"
+      "history": "complete as v1 task 5.5 -- verified 2026-09-01; revision 074d598ff1cb37917e1d9ac051fc3f4d33850d7f",
+      "verification": {
+        "result": "pass",
+        "seq": 19,
+        "report_digest": "sha256:6b3bc91e8d373f03e61bf89fa272e5247d352dfbb9e48720a069dfba1acbcd32",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "pilot-gc-branch-pruning",
@@ -807,7 +1037,26 @@
         "internal/graph/provider/provider.go"
       ],
       "estimate": 2,
-      "phase": "v2-5-skills-self-hosting"
+      "phase": "v2-5-skills-self-hosting",
+      "verification": {
+        "result": "pass",
+        "seq": 29,
+        "artifact_digests": {
+          "internal/graph/ops/ops.go": "sha256:838ffdb619ce9e5bfdb527ed824ca1284697fc66bb1da0e6c4d3e06fe4b20507",
+          "internal/graph/ops/ops_test.go": "sha256:5035cc67d8d2916c7b2dfb4b1674a4af83b6dab37db565edf9efd01127759c34",
+          "internal/graph/provider/provider.go": "sha256:4a9880fb257cf7ce9a2ce117faa092214eef3ce619f33d6ae1a9ff88c10dddcd"
+        },
+        "report_digest": "sha256:1a4e5e70703131936b65a271cac2b20258705cf892aae7b78788b4828a1b3a92",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "0c2f8d445806fe469d111fd0400853569ebae7e7",
+          "worktree": ".plans/Plans/SddGraph/.graph/ws-pilot-gc-branch-pruning"
+        }
+      },
+      "red_seqs": {
+        "TestGCPrunesMergedClaimBranches": 28
+      }
     },
     {
       "id": "pilot-junit-vendor-corpus",
@@ -838,7 +1087,25 @@
         "internal/graph/sync/report_vendor_test.go"
       ],
       "estimate": 1,
-      "phase": "v2-5-skills-self-hosting"
+      "phase": "v2-5-skills-self-hosting",
+      "verification": {
+        "result": "pass",
+        "seq": 31,
+        "artifact_digests": {
+          "internal/graph/sync/report_vendor_test.go": "sha256:72e006ddbc26347b59db3fb664422d6f6e2eb2699fa08413bea09b3f5a47547c",
+          "internal/graph/sync/testdata/reports/junit-vendor.xml": "sha256:bb51343ecfffbc3978c454c000a624cda48a9a57a86c390253e72d8f7e056603"
+        },
+        "report_digest": "sha256:82f0dc9b95614af2a94d59f503aa2df968d5153afb24c884a97498cdbceab593",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3",
+          "worktree": ".plans/Plans/SddGraph/.graph/ws-pilot-junit-vendor-corpus"
+        }
+      },
+      "red_seqs": {
+        "TestJUnitVendorShapes": 30
+      }
     },
     {
       "id": "gate-v2-1-payload-schema",
@@ -860,7 +1127,17 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "v2-1-payload-schema"
+      "phase": "v2-1-payload-schema",
+      "verification": {
+        "result": "pass",
+        "seq": 24,
+        "report_digest": "sha256:017e12ce8a4dcf56548a11af96d8f5ddd0d18e36a67205b3e2b1766d7a4f35f5",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "gate-v2-2-store-compiler-convert",
@@ -885,7 +1162,17 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "v2-2-store-compiler-convert"
+      "phase": "v2-2-store-compiler-convert",
+      "verification": {
+        "result": "pass",
+        "seq": 25,
+        "report_digest": "sha256:e0346da6eb0337e3b0a61808d98ba680f711c25542a3bf1f98ee9f4fbbb753a4",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "gate-v2-3-execution-loop",
@@ -910,7 +1197,17 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "v2-3-execution-loop"
+      "phase": "v2-3-execution-loop",
+      "verification": {
+        "result": "pass",
+        "seq": 26,
+        "report_digest": "sha256:17faa75e07831667770da1ba756b89bb18a94667577f5619562b9dac8753c2a0",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "gate-v2-4-review-gates-analytics",
@@ -932,7 +1229,17 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "v2-4-review-gates-analytics"
+      "phase": "v2-4-review-gates-analytics",
+      "verification": {
+        "result": "pass",
+        "seq": 27,
+        "report_digest": "sha256:c266016d5cf1c0b6f799b600d61c31ccd7504856a4d425ad1db56ca9c4d93c97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "dff1e350b6d71b3ade0a97ab4c8d64e71f6d8c2f"
+        }
+      }
     },
     {
       "id": "gate-v2-5-skills-self-hosting",
