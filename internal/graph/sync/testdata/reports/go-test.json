@@ -1,0 +1,8 @@
+{"Time":"2026-09-01T10:11:39.4546808-07:00","Action":"start","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"}
+{"Time":"2026-09-01T10:11:39.51732-07:00","Action":"run","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Test":"TestStateTable"}
+{"Time":"2026-09-01T10:11:39.51732-07:00","Action":"output","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Test":"TestStateTable","Output":"=== RUN   TestStateTable\n"}
+{"Time":"2026-09-01T10:11:39.51732-07:00","Action":"output","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Test":"TestStateTable","Output":"--- PASS: TestStateTable (0.00s)\n"}
+{"Time":"2026-09-01T10:11:39.51732-07:00","Action":"pass","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Test":"TestStateTable","Elapsed":0}
+{"Time":"2026-09-01T10:11:39.51732-07:00","Action":"output","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Output":"PASS\n"}
+{"Time":"2026-09-01T10:11:39.5207365-07:00","Action":"output","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Output":"ok  \tgithub.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states\t0.066s\n"}
+{"Time":"2026-09-01T10:11:39.5207365-07:00","Action":"pass","Package":"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states","Elapsed":0.066}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="0" failures="1" skipped="1" tests="4" time="0.132" timestamp="2026-08-30T12:01:33.194532" hostname="ci-runner-04">
+    <testcase classname="tests.test_loader" name="test_valid_config_loads" time="0.021" />
+    <testcase classname="tests.test_loader" name="test_unknown_key_named" time="0.014">
+      <failure message="AssertionError: refusal did not name the key">tests/test_loader.py:41: AssertionError</failure>
+    </testcase>
+    <testcase classname="tests.test_loader" name="test_windows_paths[C:\temp]" time="0.009" />
+    <testcase classname="tests.test_loader" name="test_requires_network" time="0.000">
+      <skipped message="no network in CI" />
+    </testcase>
+  </testsuite>
+</testsuites>
