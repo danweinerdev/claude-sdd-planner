@@ -1,5 +1,989 @@
 {
   "version": 1,
   "seq_counter": 0,
-  "nodes": []
+  "nodes": [
+    {
+      "id": "task-1-1",
+      "contract": "The graph and payload model decodes strictly -- unknown keys, malformed values, and tool-owned payload fields are refused with JSON paths and did-you-mean suggestions, batched -- and encodes deterministically.",
+      "justifies": [
+        "DD-12",
+        "DD-3"
+      ],
+      "intent_hashes": {
+        "DD-12": "sha256:c0122e6ad367085a8c01ad22b69dc01022e831ae8bfe70ab7bccc128af173686",
+        "DD-3": "sha256:da2657521bbcc465fb749a760d5085ba0ce97bd45f009c5e0e5bd1690001f194"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestDecodedShapes",
+            "file": "internal/graph/model/decode_test.go"
+          },
+          {
+            "id": "TestUnknownKeyDidYouMean",
+            "file": "internal/graph/model/decode_test.go"
+          },
+          {
+            "id": "TestRoundTrip",
+            "file": "internal/graph/model/decode_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-1-payload-schema",
+      "history": "complete as v1 task 1.1 — verified 2026-08-31; revision e37df494a163ea466fe71143727584d107684cc2"
+    },
+    {
+      "id": "task-1-2",
+      "contract": "The hazard vocabulary is closed and canonical; unknown hazards are refused naming the whole vocabulary; each entry states the test shape that discharges it.",
+      "justifies": [
+        "DD-9",
+        "DD-13"
+      ],
+      "intent_hashes": {
+        "DD-13": "sha256:b1b571645a33c9c1562db184740d11188d809eac4f1dfe088630f8f5581f3bbe",
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-1-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestVocabularyIsCompleteAndCanonical",
+            "file": "internal/graph/hazards/hazards_test.go"
+          },
+          {
+            "id": "TestRequireKnownNamesTheVocabulary",
+            "file": "internal/graph/hazards/hazards_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-1-payload-schema",
+      "history": "complete as v1 task 1.2 — verified 2026-08-31; revision ed539842fd2c45838fa44d4b0de75fae9bc1e807"
+    },
+    {
+      "id": "task-1-3",
+      "contract": "`sdd template graph-proposal` emits a placeholder-complete exemplar and its JSON Schema from one source, byte-stable, cross-checked against the model's key sets.",
+      "justifies": [
+        "DD-12"
+      ],
+      "intent_hashes": {
+        "DD-12": "sha256:c0122e6ad367085a8c01ad22b69dc01022e831ae8bfe70ab7bccc128af173686"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestExemplarDecodesCleanly",
+            "file": "internal/graph/proposal/proposal_test.go"
+          },
+          {
+            "id": "TestSchemaKeysMatchModel",
+            "file": "internal/graph/proposal/proposal_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-1-payload-schema",
+      "history": "complete as v1 task 1.3 — verified 2026-08-31; revision 7483157e34d20584796bc2fa1ecc6f7eaf693aa4"
+    },
+    {
+      "id": "task-2-1",
+      "contract": "The committed graph store initializes, loads, saves, and updates under compare-and-swap with advisory locking; concurrent updates lose no increment and readers never observe a torn graph.",
+      "justifies": [
+        "DD-3"
+      ],
+      "intent_hashes": {
+        "DD-3": "sha256:da2657521bbcc465fb749a760d5085ba0ce97bd45f009c5e0e5bd1690001f194"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestUpdateLosesNoIncrement",
+            "file": "internal/graph/store/store_test.go"
+          },
+          {
+            "id": "TestReadersNeverSeeATornGraph",
+            "file": "internal/graph/store/store_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.1 — verified 2026-08-31; revision 085f4f123f1988300c643a322cc800c858e8450c"
+    },
+    {
+      "id": "task-2-2",
+      "contract": "Payload fragments stage atomically in UUIDv7 order and assemble into one proposal; any refusal stages nothing and names both sides of a collision.",
+      "justifies": [
+        "DD-11"
+      ],
+      "intent_hashes": {
+        "DD-11": "sha256:f4c3310e82a2ebea62b4ee4654f3c1623b44c75c0b94a8d4bcd3f94e5015e19a"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3",
+        "task-2-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestStageParksAValidFragment",
+            "file": "internal/graph/proposal/staging_test.go"
+          },
+          {
+            "id": "TestAssembleMergesDisjointFragmentsInStagingOrder",
+            "file": "internal/graph/proposal/staging_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.2 — verified 2026-08-31; revision b011057eb8ee58439ea6fc764cacdeab45cc71c4"
+    },
+    {
+      "id": "task-2-3",
+      "contract": "`sdd compile` validates a staged proposal wholesale -- every semantic finding batched in one deterministic report -- embeds intent fingerprints, and appends to the committed graph only when clean.",
+      "justifies": [
+        "DD-4",
+        "DD-9",
+        "DD-11"
+      ],
+      "intent_hashes": {
+        "DD-11": "sha256:f4c3310e82a2ebea62b4ee4654f3c1623b44c75c0b94a8d4bcd3f94e5015e19a",
+        "DD-4": "sha256:0efc402d6e5ef2ce7d21ebbb15f4228cf2ffab33104cd9071d1f6d020b9e014a",
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3",
+        "task-2-2"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestCompileBatchesEveryFinding",
+            "file": "internal/graph/compile/compile_test.go"
+          },
+          {
+            "id": "TestCompileHappyPathEmbedsFingerprintsAndConsumes",
+            "file": "internal/graph/compile/compile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.3 — verified 2026-08-31; revision fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2"
+    },
+    {
+      "id": "task-2-4",
+      "contract": "Compile renders phase views and the README projection as marker-guarded generated files; an existing non-generated target refuses the whole compile before the graph write.",
+      "justifies": [
+        "DD-1",
+        "FR-36",
+        "DD-2"
+      ],
+      "intent_hashes": {
+        "DD-1": "sha256:aa70f81febd4426a6353634a349c2bb19369e50e950e2cfd7ba6df280e4226da",
+        "DD-2": "sha256:22449b47484b58c8a2ed62b3353aafe908df25ac291789738ed4c11c87ea9228",
+        "FR-36": "sha256:95f98158d09e34217e27fc416d0121e87eab0ba7649b6835ea39447db6e68762"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3",
+        "task-2-3"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestRenderRefusalLeavesGraphAndPayloadUntouched",
+            "file": "internal/graph/compile/compile_test.go"
+          },
+          {
+            "id": "TestGoldenTriple",
+            "file": "internal/graph/compile/compile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.4 — verified 2026-08-31; revision 4f9e981133e7d6dd73d18db7ca492ff00fe603b6"
+    },
+    {
+      "id": "task-2-5",
+      "contract": "`sdd graph convert` maps a v1 plan mechanically -- tasks to nodes, phase order to deps, completion provenance to history -- and marks every unmade judgment with a blocking sentinel.",
+      "justifies": [
+        "DD-15"
+      ],
+      "intent_hashes": {
+        "DD-15": "sha256:c2c5975ab7557c4ac7acd46f0625d7530df8a0005ceb0a865c134888fc87576f"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3",
+        "task-2-3"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestConvertMapsMechanicsAndMarksJudgments",
+            "file": "internal/graph/convert/convert_test.go"
+          },
+          {
+            "id": "TestConvertedGraphRefusesToCompile",
+            "file": "internal/graph/convert/convert_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.5 — verified 2026-08-31; revision 10db7546b3c14ed42be02f10eb0293c71e63a661"
+    },
+    {
+      "id": "task-2-6",
+      "contract": "Guard classification covers every `sdd` and `sdd graph` verb from single-source maps, and parity with the real command tree is enforced by tests.",
+      "justifies": [
+        "D-0014",
+        "DD-2",
+        "FR-28"
+      ],
+      "intent_hashes": {
+        "DD-2": "sha256:22449b47484b58c8a2ed62b3353aafe908df25ac291789738ed4c11c87ea9228",
+        "FR-28": "sha256:9821d08e4fd4cce6058d48844b38e897aeace91dd5be6f20b4a5cff897b623bd"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3",
+        "task-2-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGuardParityWithPython",
+            "file": "internal/hook/guard_parity_test.go"
+          },
+          {
+            "id": "TestHandlerFlagTableIsComplete",
+            "file": "cmd/sdd/root_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert",
+      "history": "complete as v1 task 2.6 — verified 2026-08-31; revision b2281b8a9e601475a0cb55f9c55b1e4258bba10a"
+    },
+    {
+      "id": "task-3-1",
+      "contract": "Node states derive on read -- RED outranks BLOCKED, workable is not frontier, staleness propagates by seq, digest, and intent -- and nothing derivable is ever stored.",
+      "justifies": [
+        "DD-3",
+        "DD-4",
+        "D-0022"
+      ],
+      "intent_hashes": {
+        "DD-3": "sha256:da2657521bbcc465fb749a760d5085ba0ce97bd45f009c5e0e5bd1690001f194",
+        "DD-4": "sha256:0efc402d6e5ef2ce7d21ebbb15f4228cf2ffab33104cd9071d1f6d020b9e014a"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestStateTable",
+            "file": "internal/graph/states/states_test.go"
+          },
+          {
+            "id": "TestNothingDerivableIsStored",
+            "file": "internal/graph/states/states_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.1 — verified 2026-09-01; revision e5e9ed859d14e91b99e2709c419215ecfd547136"
+    },
+    {
+      "id": "task-3-2",
+      "contract": "`sdd next --claim` claims the heaviest claimable frontier node under compare-and-swap with a leased identity; double-claims are structurally impossible.",
+      "justifies": [
+        "DD-10",
+        "D-0022"
+      ],
+      "intent_hashes": {
+        "DD-10": "sha256:8f61652732f60751862101444908b42527a3d7a6c152d9bcd1c466ee2785b683"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6",
+        "task-3-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestClaimPicksTheHeaviestFrontierNode",
+            "file": "internal/graph/claims/claims_test.go"
+          },
+          {
+            "id": "TestClaimScreensClaimsArtifactsAndCapacity",
+            "file": "internal/graph/claims/claims_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.2 — verified 2026-09-01; revision f6fe384534017e87733746548e46513bef5d5580"
+    },
+    {
+      "id": "task-3-3",
+      "contract": "Workspace providers supply isolation and provenance per VCS: git worktrees N-way on per-claim branches, p4 one shared client, plain trees digest-only -- every guarantee holds at capacity 1.",
+      "justifies": [
+        "DD-6",
+        "DD-7",
+        "DD-8"
+      ],
+      "intent_hashes": {
+        "DD-6": "sha256:667c94b3dc11f33723e325ab502153d1399c20a397f3e3e877489254934768cf",
+        "DD-7": "sha256:0742f2f0ec5a664ad26748e4a9ac02fd01197ff45c467b71b6a07e62892d71aa",
+        "DD-8": "sha256:8a413a433e2874accd8e92015aba69976df8c98c7a42a09f0eb16048646a2914"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6",
+        "task-3-2"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGitProviderWorktreeRoundTrip",
+            "file": "internal/graph/provider/provider_test.go"
+          },
+          {
+            "id": "TestGitProviderForcedCapacityOne",
+            "file": "internal/graph/provider/provider_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.3 — verified 2026-09-01; revision 7629a68409e61cb2cb1e589d909c94773872b8cc"
+    },
+    {
+      "id": "task-3-4",
+      "contract": "`sdd graph sync` records observations only from parsed reports or real exit codes -- honest buckets for unresolved and ambiguous tests, red_seq stamped on first failure, no assert path.",
+      "justifies": [
+        "DD-5",
+        "DD-6",
+        "D-0022"
+      ],
+      "intent_hashes": {
+        "DD-5": "sha256:0de32445d58606bdfe3eb565409dceb6df094e15e5e2c311044e4d9aa027dc6d",
+        "DD-6": "sha256:667c94b3dc11f33723e325ab502153d1399c20a397f3e3e877489254934768cf"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6",
+        "task-3-3"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestSyncRecordsObservationWithAnchors",
+            "file": "internal/graph/sync/sync_test.go"
+          },
+          {
+            "id": "TestSyncRefusesWithoutGuessing",
+            "file": "internal/graph/sync/sync_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.4 — verified 2026-09-01; revision 0cec5cb851a480edb199ad06fb94b5e4f41623ae"
+    },
+    {
+      "id": "task-3-5",
+      "contract": "A clean pass by the claim holder merges atomically; red-before-green refuses a never-failed hazard-discharging test; split, set-tests, and gc mutate single nodes under the store lock.",
+      "justifies": [
+        "DD-5",
+        "DD-7",
+        "DD-10",
+        "D-0022"
+      ],
+      "intent_hashes": {
+        "DD-10": "sha256:8f61652732f60751862101444908b42527a3d7a6c152d9bcd1c466ee2785b683",
+        "DD-5": "sha256:0de32445d58606bdfe3eb565409dceb6df094e15e5e2c311044e4d9aa027dc6d",
+        "DD-7": "sha256:0742f2f0ec5a664ad26748e4a9ac02fd01197ff45c467b71b6a07e62892d71aa"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6",
+        "task-3-4"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestRedBeforeGreenGatesHazardTests",
+            "file": "internal/graph/sync/sync_test.go"
+          },
+          {
+            "id": "TestSplitRetiresRewiresAndInherits",
+            "file": "internal/graph/ops/ops_test.go"
+          },
+          {
+            "id": "TestGCReapsOrphansAndStalePayloadsOnly",
+            "file": "internal/graph/ops/ops_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.5 — verified 2026-09-01; revision 027be4ae31c32f32ad57b007a2b2b28d0beefa53"
+    },
+    {
+      "id": "task-3-6",
+      "contract": "Multi-process walks are safe: racing claimants never double-claim, readers never see torn graphs, and gc never reaps an allocation in flight -- proven cross-process on both flock semantics.",
+      "justifies": [
+        "DD-10",
+        "DD-3"
+      ],
+      "intent_hashes": {
+        "DD-10": "sha256:8f61652732f60751862101444908b42527a3d7a6c152d9bcd1c466ee2785b683",
+        "DD-3": "sha256:da2657521bbcc465fb749a760d5085ba0ce97bd45f009c5e0e5bd1690001f194"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6",
+        "task-3-5"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGraphConcurrentClaimStress",
+            "file": "cmd/sdd/graph_stress_test.go"
+          },
+          {
+            "id": "TestGraphLeaseTakeoverAcrossProcesses",
+            "file": "cmd/sdd/graph_stress_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "v2-3-execution-loop",
+      "history": "complete as v1 task 3.6 — verified 2026-09-01; revision e5b0f9267cd8a73fc173012068f41a2e06067b63"
+    },
+    {
+      "id": "task-4-1",
+      "contract": "Review gates derive disjoint incremental scopes, green only from resolved frozen Aligned artifacts, demote finding-named nodes to RED in the same write, and the derived closed predicate drives view projection and frozen-view refusal.",
+      "justifies": [
+        "DD-9",
+        "D-0022",
+        "D-0020"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-3-1",
+        "task-3-2",
+        "task-3-3",
+        "task-3-4",
+        "task-3-5",
+        "task-3-6"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestScopeNestedGatesDisjointCover",
+            "file": "internal/graph/review/review_test.go"
+          },
+          {
+            "id": "TestRecordDemotesNamedNodes",
+            "file": "internal/graph/review/review_test.go"
+          },
+          {
+            "id": "TestFrozenViewLifecycle",
+            "file": "internal/graph/compile/compile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "v2-4-review-gates-analytics",
+      "history": "complete as v1 task 4.1 — verified 2026-09-01; revision 6e5ae294e0a63a34d764fb3527dcf80f262a25db"
+    },
+    {
+      "id": "task-4-2",
+      "contract": "Graph analytics report the critical path with speedup ceiling, cut vertices, and silhouette class with known answers on fixtures; every analytics verb is read-only.",
+      "justifies": [
+        "DD-14"
+      ],
+      "intent_hashes": {
+        "DD-14": "sha256:09fc55b380bd5fe7a757f364cd4b9078074e812d680c5d20c3aad177af4f633d"
+      },
+      "deps": [
+        "task-3-1",
+        "task-3-2",
+        "task-3-3",
+        "task-3-4",
+        "task-3-5",
+        "task-3-6",
+        "task-4-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGraphAnalyticsCriticalPath",
+            "file": "internal/graph/algorithms/algorithms_test.go"
+          },
+          {
+            "id": "TestGraphAnalyticsPathRiskShape",
+            "file": "cmd/sdd/graph_analytics_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-4-review-gates-analytics",
+      "history": "complete as v1 task 4.2 — verified 2026-09-01; revision 95e85c1c19bf2863756998d3e7a8eac1e6fdc4f2"
+    },
+    {
+      "id": "task-4-3",
+      "contract": "The payload decoder and both report parsers refuse arbitrary hostile input with structured errors and never panic; curated corpora and real-emitter seeds replay as ordinary tests.",
+      "justifies": [
+        "DD-5"
+      ],
+      "intent_hashes": {
+        "DD-5": "sha256:0de32445d58606bdfe3eb565409dceb6df094e15e5e2c311044e4d9aa027dc6d"
+      },
+      "deps": [
+        "task-3-1",
+        "task-3-2",
+        "task-3-3",
+        "task-3-4",
+        "task-3-5",
+        "task-3-6",
+        "task-4-1"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestFuzzCorpusDecode",
+            "file": "internal/graph/model/fuzz_test.go"
+          },
+          {
+            "id": "TestFuzzCorpusReports",
+            "file": "internal/graph/sync/fuzz_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-4-review-gates-analytics",
+      "history": "complete as v1 task 4.3 — verified 2026-09-01; revision 6f30d0c193264a1c53f3529b5786d6d085c72bce"
+    },
+    {
+      "id": "task-5-1",
+      "contract": "The plan skill drives interview, payload, compile, and silhouette read-back and never writes plan or phase markdown by hand; both portable trees regenerate clean.",
+      "justifies": [
+        "DD-13",
+        "DD-16"
+      ],
+      "intent_hashes": {
+        "DD-13": "sha256:b1b571645a33c9c1562db184740d11188d809eac4f1dfe088630f8f5581f3bbe",
+        "DD-16": "sha256:e0e3368f8543b7e6e8e38d58d8ae415046e72692fb54f521ee43a22876d593fe"
+      },
+      "deps": [
+        "task-4-1",
+        "task-4-2",
+        "task-4-3"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting",
+      "history": "complete as v1 task 5.1 — verified 2026-09-01; revision 922b2a1dbcf57a22019f3d55e9e2fc069cb2482f"
+    },
+    {
+      "id": "task-5-2",
+      "contract": "The implement skill drives the walk loop -- claim, red, green, sync, merge, integrate -- with stopping rules verbatim and no narrated completion path; gate observations bind to their own artifacts.",
+      "justifies": [
+        "DD-13",
+        "D-0022",
+        "DD-5"
+      ],
+      "intent_hashes": {
+        "DD-13": "sha256:b1b571645a33c9c1562db184740d11188d809eac4f1dfe088630f8f5581f3bbe",
+        "DD-5": "sha256:0de32445d58606bdfe3eb565409dceb6df094e15e5e2c311044e4d9aa027dc6d"
+      },
+      "deps": [
+        "task-4-1",
+        "task-4-2",
+        "task-4-3",
+        "task-5-1"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting",
+      "history": "complete as v1 task 5.2 — verified 2026-09-01; revision aa914086a9d132a6db6be8315ccd5c20e6005f6b"
+    },
+    {
+      "id": "task-5-3",
+      "contract": "Portable trees, docs, and the minSddVersion floor move in lockstep: no harness can install skills naming verbs the admitted binary lacks.",
+      "justifies": [
+        "D-0021",
+        "D-0017"
+      ],
+      "deps": [
+        "task-4-1",
+        "task-4-2",
+        "task-4-3",
+        "task-5-1",
+        "task-5-2"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting",
+      "history": "complete as v1 task 5.3 — verified 2026-09-01; revision a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63"
+    },
+    {
+      "id": "task-5-4",
+      "contract": "The self-hosting pilot converts this plan, compiles it with the coverage invariant satisfied, and walks at least two real nodes end to end with red_seq recorded and clean-isolation merges; every design-vs-behavior discrepancy is recorded.",
+      "justifies": [
+        "DD-15"
+      ],
+      "intent_hashes": {
+        "DD-15": "sha256:c2c5975ab7557c4ac7acd46f0625d7530df8a0005ceb0a865c134888fc87576f"
+      },
+      "deps": [
+        "task-4-1",
+        "task-4-2",
+        "task-4-3",
+        "task-5-3"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test"
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "v2-5-skills-self-hosting"
+    },
+    {
+      "id": "task-5-5",
+      "contract": "Compile's AC-coverage demand is scoped to the plan's own directly-related specs; transitively reachable ids stay citable and fingerprinted.",
+      "justifies": [
+        "DD-4"
+      ],
+      "intent_hashes": {
+        "DD-4": "sha256:0efc402d6e5ef2ce7d21ebbb15f4228cf2ffab33104cd9071d1f6d020b9e014a"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestACCoverageScopedToDirectSpecs",
+            "file": "internal/graph/compile/compile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting",
+      "history": "complete as v1 task 5.5 -- verified 2026-09-01; revision 074d598ff1cb37917e1d9ac051fc3f4d33850d7f"
+    },
+    {
+      "id": "pilot-gc-branch-pruning",
+      "contract": "`sdd graph gc` prunes workspace branches (graph/<node>-*) whose tips are reachable from the mainline HEAD and which no active claim references; unmerged work and claimed branches always survive.",
+      "justifies": [
+        "DD-10"
+      ],
+      "intent_hashes": {
+        "DD-10": "sha256:8f61652732f60751862101444908b42527a3d7a6c152d9bcd1c466ee2785b683"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGCPrunesMergedClaimBranches",
+            "file": "internal/graph/ops/ops_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/graph/ops/ops.go",
+        "internal/graph/ops/ops_test.go",
+        "internal/graph/provider/provider.go"
+      ],
+      "estimate": 2,
+      "phase": "v2-5-skills-self-hosting"
+    },
+    {
+      "id": "pilot-junit-vendor-corpus",
+      "contract": "The JUnit parser handles vendor-emitter report shapes -- nested suites carrying properties, system-out, CDATA, quotes and newlines inside case names -- proven by a committed corpus seed and exact count assertions.",
+      "justifies": [
+        "DD-5"
+      ],
+      "intent_hashes": {
+        "DD-5": "sha256:0de32445d58606bdfe3eb565409dceb6df094e15e5e2c311044e4d9aa027dc6d"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestJUnitVendorShapes",
+            "file": "internal/graph/sync/report_vendor_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/graph/sync/testdata/reports/junit-vendor.xml",
+        "internal/graph/sync/report_vendor_test.go"
+      ],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting"
+    },
+    {
+      "id": "gate-v2-1-payload-schema",
+      "contract": "Every node under v2-1-payload-schema survives a full four-lane review of its aggregate diff.",
+      "justifies": [
+        "DD-9"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-1-1",
+        "task-1-2",
+        "task-1-3"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-1-payload-schema"
+    },
+    {
+      "id": "gate-v2-2-store-compiler-convert",
+      "contract": "Every node under v2-2-store-compiler-convert survives a full four-lane review of its aggregate diff.",
+      "justifies": [
+        "DD-9"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-2-1",
+        "task-2-2",
+        "task-2-3",
+        "task-2-4",
+        "task-2-5",
+        "task-2-6"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-2-store-compiler-convert"
+    },
+    {
+      "id": "gate-v2-3-execution-loop",
+      "contract": "Every node under v2-3-execution-loop survives a full four-lane review of its aggregate diff.",
+      "justifies": [
+        "DD-9"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-3-1",
+        "task-3-2",
+        "task-3-3",
+        "task-3-4",
+        "task-3-5",
+        "task-3-6"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-3-execution-loop"
+    },
+    {
+      "id": "gate-v2-4-review-gates-analytics",
+      "contract": "Every node under v2-4-review-gates-analytics survives a full four-lane review of its aggregate diff.",
+      "justifies": [
+        "DD-9"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "task-4-1",
+        "task-4-2",
+        "task-4-3"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-4-review-gates-analytics"
+    },
+    {
+      "id": "gate-v2-5-skills-self-hosting",
+      "contract": "Every node under v2-5-skills-self-hosting survives a full four-lane review of its aggregate diff.",
+      "justifies": [
+        "DD-9"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "pilot-gc-branch-pruning",
+        "pilot-junit-vendor-corpus",
+        "task-5-1",
+        "task-5-2",
+        "task-5-3",
+        "task-5-4",
+        "task-5-5"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting"
+    },
+    {
+      "id": "gate-plan-final",
+      "contract": "The whole plan graph survives a terminal full review: every node closed or explicitly carried forward.",
+      "justifies": [
+        "DD-9",
+        "D-0022"
+      ],
+      "intent_hashes": {
+        "DD-9": "sha256:7e565e5b08c8e8cd013ec93b4bb4d6db1591cb08f6c600a47d837393b743445e"
+      },
+      "deps": [
+        "gate-v2-1-payload-schema",
+        "gate-v2-2-store-compiler-convert",
+        "gate-v2-3-execution-loop",
+        "gate-v2-4-review-gates-analytics",
+        "gate-v2-5-skills-self-hosting"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "v2-5-skills-self-hosting"
+    }
+  ]
 }

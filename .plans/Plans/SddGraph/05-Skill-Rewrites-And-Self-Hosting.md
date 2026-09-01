@@ -37,6 +37,12 @@ tasks:
     verification: "go test ./internal/graph/compile/ -run TestACCoverage -count=1 — ACs of specs DIRECTLY related in the plan README still demand covering nodes (existing fixture behavior unchanged); ACs of specs reachable only transitively (via a design's related graph) demand no coverage, while their FR/NFR/AC/DD ids remain citable and fingerprinted; the pilot's reconnaissance compile of the converted SddGraph plan drops its 47 foreign-AC findings."
     justifies: "DD-4 (coverage is an exit code over the plan's OWN requirement surface); pilot finding F-01 from task 5.4 (filed per its subtask: material discrepancies become new tasks, never silent fixes). Prevents every graph plan in a multi-plan root being refused for acceptance criteria owned by other plans' completed specs."
     depends_on: []
+  - id: "5.6"
+    title: "v1 validation coexists with graph projections"
+    status: complete
+    verification: "go test ./internal/rules/ -run 'TestLifecycleNormalization|TestPhaseOwnership' -count=1 plus make gen-fixtures and the frozen corpus committed — SDD163 exempts phase docs carrying the GENERATED VIEW marker (projections are owned by the graph, not the README phases[] array); SDD174's lifecycle normalization strips the marker-delimited graph-view section from plan READMEs so compile's projection upsert does not invalidate frozen phase reviews; the pilot's nine coexistence errors clear with zero waivers."
+    justifies: "D-0022 (v1 plans keep the markdown protocol until converted — coexistence is a standing state, not a transition instant); pilot findings F-02/F-03 from task 5.4 (filed per its subtask). Prevents graph adoption on any plan with a completed v1 phase from invalidating that phase's frozen review pin."
+    depends_on: ["5.5"]
 ---
 
 # Phase 5: Skill Rewrites and Self-Hosting
@@ -281,6 +287,52 @@ scoping change, and the tests — nothing else. Design references: DD-4;
 | Tool / inspection | Context | Result | Observable evidence |
 |---|---|---|---|
 | `pilot reconnaissance compile (built binary at 074d598)` | `sdd compile --plan SddGraph against the real planning root with the converted 22-node proposal staged` | PASS | `findings drop from 136 to 89 with zero foreign-AC refusals remaining; every surviving finding is a real operator judgment — the 22 converted nodes' contract/gate/hazard sentinels plus the full-gate coverage backstop, and task-4-3's empty justifies (its v1 prose carried no extractable ids) — which is exactly the set task 5.4's sentinel resolution owns` |
+
+## 5.6: v1 validation coexists with graph projections
+
+### Subtasks
+- [x] Red tests: a plan README differing from its historical copy only by the
+      marker-delimited graph-view section must lifecycle-normalize
+      identically (SDD174 path); a phase doc carrying the GENERATED VIEW
+      marker and listed by no README must emit no SDD163. Observe both
+      failing against current behavior first.
+- [x] Move the three view-marker strings to exported `rules` constants
+      (byte-identical to what render.go already emits — existing rendered
+      views must keep being recognized); render.go consumes them.
+- [x] SDD163: skip generated views; add the Good example; `make gen-fixtures`
+      and commit the corpus.
+- [x] SDD174: strip the graph-view section (symmetric on both sides of the
+      comparison) in plan-README lifecycle normalization.
+- [x] Re-validate the planning root: the pilot's nine errors clear.
+
+### Notes
+Filed from the self-hosting pilot (5.4 findings F-02/F-03): compiling the
+converted plan upserted the README's generated Graph View section — which
+SDD174's frozen-review pin read as changed plan intent for all four
+completed phases — and rendered five projection docs SDD163 demanded be
+listed in the README phases[] array v1 owns. Both rules predate projections;
+both fixes scope v1 rules to v1 artifacts rather than waiving. Revision
+boundary: rules constants + two rule changes + tests + regenerated corpus.
+Design references: D-0022 v1 clause; DD-2 (views are projections).
+
+### Completion Evidence
+
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `178e13523f23423bfed3c1449deb4c37377239cb`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `178e13523f23423bfed3c1449deb4c37377239cb`
+- Focused review: `git show 178e13523f23423bfed3c1449deb4c37377239cb`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `178e13523f23423bfed3c1449deb4c37377239cb`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/rules/ -run 'TestLifecycleNormalization|TestPhaseOwnership' -count=1` | `.` | PASS (`exit 0`) | `green after both reds were observed first: the normalization test initially diverged (the generated Graph View section read as changed intent) and the ownership test initially emitted the listing demand for a marker-carrying view; under the fix a README differing only by the generated section normalizes identically, a real prose change still survives normalization, the generated view is exempt while a rogue non-generated unlisted doc still fires; full sweep green including the regression corpus (untouched by design — it materializes Bad examples only; the new Good example rides the registry meta-test); go vet clean; package staticcheck clean apart from the six pre-existing internal/rules findings noted in 5.5` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `validation of the real pilot artifacts (built binary at 178e135)` | `sdd validate --scope Plans/SddGraph against the real planning root carrying the compiled 31-node graph, five rendered views, and the upserted README section` | PASS | `the pilot's nine coexistence errors clear with zero waivers — the root reports Valid; the root-cause ordering bug (the evidence-section normalizer swallowing the begin marker, an HTML comment rather than a heading) was found by diffing the real pinned README against the real current one and is pinned by the reorder comment` |
 
 ## Acceptance Criteria
 - [ ] Both rewritten skills drive the graph workflow end to end with no

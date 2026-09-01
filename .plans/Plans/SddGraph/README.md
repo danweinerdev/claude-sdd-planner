@@ -3,7 +3,7 @@ title: "SddGraph Implementation"
 type: plan
 status: active
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 tags: [graph, execution, tdd, sdd-cli]
 related: [Designs/SddGraph]
 waivers:
@@ -175,3 +175,22 @@ duplicated.
 uses the exact labels `Verified`, `Repository`, `VCS`, `Revision / checkpoint`,
 and `Identity recheck`, each exactly once visibly as `- <label>: <value>`. -->
 Pending — not complete.
+
+<!-- graph-view:begin — generated section, do not edit -->
+
+## Graph View
+
+<!-- GENERATED VIEW — source of truth: SddGraph-Graph.json. Regenerate with `sdd compile --plan SddGraph`. Edits here are overwritten. -->
+
+| Phase | Nodes | Doc |
+|---|---|---|
+| 1: v2-1-payload-schema | 4 | `01-v2-1-payload-schema.md` |
+| 2: v2-2-store-compiler-convert | 7 | `02-v2-2-store-compiler-convert.md` |
+| 3: v2-3-execution-loop | 7 | `03-v2-3-execution-loop.md` |
+| 4: v2-4-review-gates-analytics | 4 | `04-v2-4-review-gates-analytics.md` |
+| 5: v2-5-skills-self-hosting | 9 | `05-v2-5-skills-self-hosting.md` |
+
+31 node(s) total. The committed graph (`SddGraph-Graph.json`) is the source of
+truth; these documents are projections.
+
+<!-- graph-view:end -->
