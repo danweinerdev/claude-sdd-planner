@@ -6,6 +6,10 @@ phase: 4
 status: complete
 created: 2026-08-31
 updated: 2026-09-01
+waivers:
+  - code: SDD173
+    reason: "Successor-phase implementation commits and release bumps land after this phase's frozen review by design in a sequential multi-phase plan; each successor phase freezes its own full four-lane review over its own range, so later material changes are reviewed by their own phase gates rather than by re-running this one (same precedent as phases 1-3 and the Plans/SDD-Toolchain waivers)."
+    accepted: "2026-09-01"
 deliverable: "Feature-scoped review gates with derived scope, the closed predicate, finding-driven demotion, and the graph analytics surface (path, risk, shape, export) plus fuzz hardening of external-input parsers"
 tasks:
   - id: "4.1"
