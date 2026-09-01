@@ -249,6 +249,17 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 		return nil, fmt.Errorf("compile: %s does not exist; the plan's README carries the `related` graph citations resolve through", planRel)
 	}
 	out := &sourceSet{items: map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
+	// Coverage is an exit code over the plan's OWN requirement surface
+	// (DD-4): only specs the plan's README directly relates put their ACs
+	// on the coverage demand. Transitively reachable specs (a design's
+	// background citations — often another plan's requirement surface)
+	// stay citable below but demand nothing here.
+	directSpec := map[string]bool{}
+	for _, src := range rules.DirectRelatedSources(loaded, planArt) {
+		if src.Kind() == "spec" {
+			directSpec[src.Rel] = true
+		}
+	}
 	for _, src := range rules.RelatedIdentifierSources(loaded, planArt) {
 		kind := src.Kind()
 		if kind != "spec" && kind != "design" {
@@ -266,7 +277,7 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 						out.items[id] = item
 					}
 				}
-				if family == "AC" {
+				if family == "AC" && directSpec[src.Rel] {
 					out.acIDs = append(out.acIDs, id)
 				}
 			}

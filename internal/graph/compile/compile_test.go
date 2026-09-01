@@ -705,3 +705,106 @@ func TestFrozenViewLifecycle(t *testing.T) {
 		t.Fatalf("after the explicit delete, the render proceeds: %v", err)
 	}
 }
+
+// TestACCoverageScopedToDirectSpecs (Plans/SddGraph 5.5, filed from the
+// self-hosting pilot's finding F-01): coverage is an exit code over the
+// plan's OWN requirement surface (DD-4). A spec reachable only transitively
+// — through a design's background citation — does not put its acceptance
+// criteria on this plan's coverage demand; its ids remain citable and
+// fingerprinted. Without the scoping, every graph plan in a multi-plan root
+// is refused for ACs owned by other plans' completed specs.
+func TestACCoverageScopedToDirectSpecs(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	// The design now cites a foreign spec (another plan's requirement
+	// surface) with a live, unchecked AC and a citable FR.
+	foreign := `---
+title: "Foreign Spec"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# Foreign Spec
+
+## Functional Requirements
+
+- **FR-90**: Something another plan implements.
+
+## Acceptance Criteria
+
+- [ ] **AC-90**: The other plan's criterion.
+`
+	if err := os.WriteFile(filepath.Join(root, "Specs", "Foreign", "README.md"), nil, 0o644); err == nil {
+		_ = os.Remove(filepath.Join(root, "Specs", "Foreign", "README.md"))
+	}
+	if err := os.MkdirAll(filepath.Join(root, "Specs", "Foreign"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Specs", "Foreign", "README.md"), []byte(foreign), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	design := `---
+title: "Sample Design"
+type: design
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [design]
+related: [Specs/Foreign]
+---
+
+# Sample Design
+
+## Design Decisions
+
+- **DD-1**: Strict decoding.
+  Context: silent drops. Decision: refuse unknown keys. Rationale: drift.
+`
+	if err := os.WriteFile(filepath.Join(root, "Designs", "Sample", "README.md"), []byte(design), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Payload covers the plan's OWN ACs; one node cites the foreign FR to
+	// prove transitive ids stay citable.
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "own-1", "contract": "own AC-01 satisfied", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t1", "file": "f.ext"}]}, "hazards": []},
+    {"id": "own-2", "contract": "own AC-02 satisfied", "justifies": ["AC-02", "FR-90"], "deps": ["own-1"],
+     "gate": {"type": "tests", "tests": [{"id": "t2", "file": "f.ext"}]}, "hazards": []},
+    {"id": "gate-final", "contract": "plan survives full review", "justifies": ["AC-01", "AC-02"], "deps": ["own-2"],
+     "gate": {"type": "review", "lanes": "full"}, "hazards": []}
+  ]
+}
+`)
+	res, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	joined := ""
+	for _, f := range findings {
+		joined += f.String() + "\n"
+	}
+	if strings.Contains(joined, "AC-90") {
+		t.Fatalf("a transitively-reachable spec's AC must not demand coverage here:\n%s", joined)
+	}
+	if strings.Contains(joined, `cites "FR-90"`) {
+		t.Fatalf("transitive ids must stay citable:\n%s", joined)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected a clean compile, got:\n%s", joined)
+	}
+	// The foreign FR's fingerprint embedded — citability is not just
+	// non-refusal, the intent hash rides along.
+	g, err := gstore.Load(res.GraphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("own-2").IntentHashes["FR-90"] == "" {
+		t.Fatal("the transitively-cited FR must be fingerprinted")
+	}
+}

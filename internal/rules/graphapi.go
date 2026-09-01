@@ -19,6 +19,30 @@ func RelatedIdentifierSources(r *Root, a *Artifact) []*Artifact {
 	return relatedSources(r, a)
 }
 
+// DirectRelatedSources resolves ONLY an artifact's own `related` list — no
+// transitive hops. The graph compiler scopes its AC-coverage demand to the
+// specs a plan directly claims (DD-4: coverage over the plan's OWN
+// requirement surface), while citations keep resolving through the full
+// transitive walk. Order follows the frontmatter list; unresolvable refs are
+// skipped, matching the transitive walk's posture.
+func DirectRelatedSources(r *Root, a *Artifact) []*Artifact {
+	var out []*Artifact
+	related, ok := a.Meta["related"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, ref := range related {
+		s, ok := ref.(string)
+		if !ok {
+			continue
+		}
+		if target := resolveRef(r, s); target != nil {
+			out = append(out, target)
+		}
+	}
+	return out
+}
+
 // DefinedIdentifiers returns the ids of one family (FR, NFR, AC, DD) that an
 // artifact's body defines, using the validator's own definition patterns —
 // which are retirement-safe by shape (a struck-through `~~**AC-37**~~` does
