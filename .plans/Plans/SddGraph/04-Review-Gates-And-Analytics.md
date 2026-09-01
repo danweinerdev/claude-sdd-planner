@@ -21,7 +21,7 @@ tasks:
     depends_on: ["4.1"]
   - id: "4.3"
     title: "Fuzz targets for payload decoder and report parsers"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/... -run TestFuzzCorpus -count=1 plus go test ./internal/graph/model/ -fuzz FuzzDecode -fuzztime 60s and go test ./internal/graph/sync/ -fuzz FuzzJUnit -fuzztime 60s -run xxx locally documented in the task notes: no panics, no hangs, structured errors only, on arbitrary payload JSON, JUnit XML, and go-test-json streams; discovered crashers added to testdata corpora and fixed within this task."
     justifies: "Design § Structural Verification names these parsers as hostile-external-input consumers by design. Prevents a malformed CI report or hand-mangled payload crashing the tool that owns the committed graph."
     depends_on: ["4.1"]
@@ -149,14 +149,14 @@ beyond graph + derived state. Design references: DD-14, § Interfaces.
 ## 4.3: Fuzz targets for payload decoder and report parsers
 
 ### Subtasks
-- [ ] `FuzzDecode` over the strict model decoder (arbitrary JSON bytes).
-- [ ] `FuzzJUnit` and `FuzzGoTestJSON` over the sync parsers (arbitrary
+- [x] `FuzzDecode` over the strict model decoder (arbitrary JSON bytes).
+- [x] `FuzzJUnit` and `FuzzGoTestJSON` over the sync parsers (arbitrary
       XML/JSON-stream bytes).
-- [ ] Seed corpora from real reports (this repo's own `go test -json`
+- [x] Seed corpora from real reports (this repo's own `go test -json`
       output; a JUnit sample from a common emitter).
-- [ ] CI-friendly regression mode: corpus replay as ordinary tests; the
+- [x] CI-friendly regression mode: corpus replay as ordinary tests; the
       `-fuzz` exploration commands documented here for local runs.
-- [ ] Fix every discovered crasher in this task; add each to the corpus.
+- [x] Fix every discovered crasher in this task; add each to the corpus.
 
 ### Notes
 Revision boundary: fuzz harnesses + corpus + any crash fixes; no functional
@@ -164,10 +164,34 @@ change otherwise. Structured errors are the contract — a parser may reject,
 never panic, on any input, because sync consumes files produced by arbitrary
 CI systems. Design references: § Structural Verification.
 
+Local exploration record (2026-09-01, Windows host, go1.26): `go test
+./internal/graph/model/ -fuzz FuzzDecode -fuzztime 60s -run xxx` — 19.4M
+execs, 366 interesting inputs, zero crashers; `go test
+./internal/graph/sync/ -fuzz FuzzJUnit -fuzztime 60s -run xxx` — 26.2M
+execs, 456 interesting, zero crashers; `go test ./internal/graph/sync/
+-fuzz FuzzGoTestJSON -fuzztime 60s -run xxx` — 25.5M execs, 451
+interesting, zero crashers. No crash fixes were needed, so no crasher
+corpus entries exist; the curated hostile corpora and real-emitter seeds
+replay as ordinary tests (`-run TestFuzzCorpus`).
+
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `6f30d0c193264a1c53f3529b5786d6d085c72bce`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `6f30d0c193264a1c53f3529b5786d6d085c72bce`
+- Focused review: `git show 6f30d0c193264a1c53f3529b5786d6d085c72bce`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `6f30d0c193264a1c53f3529b5786d6d085c72bce`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/... -run TestFuzzCorpus -count=1` | `.` | PASS (`exit 0`) | `corpus replay green as ordinary tests: the curated hostile corpora (deep nesting, container confusion, overflow numbers, invalid UTF-8, XML entities, surrogate bytes, interleaved stream garbage) exercise both strict decoders and both report parsers with structured errors only, and the real-emitter seeds are asserted to PARSE (pytest JUnit to 4 cases, this repo's go-test-json to 1 test id); routing refuses unknown report formats by name; full sweep go test ./... green, go vet and staticcheck clean` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `go test -fuzz exploration, 60s per target (local, Windows host, go1.26)` | `FuzzDecode over DecodeProposal+DecodeGraph; FuzzJUnit and FuzzGoTestJSON over the sync parsers; commands documented in the test files and the task notes` | PASS | `zero crashers across all three targets: FuzzDecode 19.4M execs (366 interesting), FuzzJUnit 26.2M (456), FuzzGoTestJSON 25.5M (451); no panics, no hangs — no crash fixes needed, so no crasher corpus entries exist` |
 
 ## Acceptance Criteria
 - [ ] A two-gate nested fixture reviews incrementally (no re-reviewed diff),
