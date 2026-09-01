@@ -6,6 +6,10 @@ phase: 3
 status: complete
 created: 2026-08-31
 updated: 2026-09-01
+waivers:
+  - code: SDD173
+    reason: "Successor-phase implementation commits and release bumps land after this phase's frozen review by design in a sequential multi-phase plan; each successor phase freezes its own full four-lane review over its own range, so later material changes are reviewed by their own phase gates rather than by re-running this one (same precedent as phases 1-2 and the Plans/SDD-Toolchain waivers)."
+    accepted: "2026-09-01"
 deliverable: "The walkable graph: derived states, claim/lease scheduling, per-VCS workspace providers, report-driven sync with digest anchoring, and the merge gate including red-before-green — sync-only completion live with its protections"
 tasks:
   - id: "3.1"
