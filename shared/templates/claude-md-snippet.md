@@ -9,8 +9,8 @@ Planning artifacts live at the planning root defined by `planning-config.json` (
 | `/sdd-planner:brainstorm` | Explore possibilities → `Brainstorm/<topic>.md` |
 | `/sdd-planner:specify` | Write requirements → `Specs/<feature>/README.md` |
 | `/sdd-planner:design` | Technical architecture → `Designs/<component>/README.md` |
-| `/sdd-planner:plan` | Create or expand an implementation plan → `Plans/<Name>/` (deepens on re-run) |
-| `/sdd-planner:implement` | Execute a plan phase — implement tasks, track progress |
+| `/sdd-planner:plan` | Decompose work into an executable plan graph → `Plans/<Name>/` + `<Name>-Graph.json` (v1 plans keep the old protocol until converted) |
+| `/sdd-planner:implement` | Walk the plan graph — claim → red → green → sync → merge, observation-gated |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |

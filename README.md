@@ -83,8 +83,8 @@ Claude Code names shown; in Codex/OpenCode the same skills are `sdd-research`, `
 | `/sdd-planner:brainstorm` | Explore options (Idea 0 is always "do nothing") | `Brainstorm/<topic>.md` |
 | `/sdd-planner:specify` | Write requirements | `Specs/<feature>/README.md` |
 | `/sdd-planner:design` | Technical architecture | `Designs/<component>/README.md` |
-| `/sdd-planner:plan` | Create or expand an implementation plan (re-run to deepen) | `Plans/<Name>/` |
-| `/sdd-planner:implement` | Execute a plan phase, evidence-gated | Code + statuses + completion evidence |
+| `/sdd-planner:plan` | Decompose work into an executable plan graph: structured interview → node payload → compile → silhouette read-back (re-run to extend; v1 plans keep the old protocol until converted) | `Plans/<Name>/` + `<Name>-Graph.json` |
+| `/sdd-planner:implement` | Walk the plan graph: claim → red → green → sync → merge, observation-gated (v1 plans keep the wave protocol) | Code + observations + rendered views |
 | `/sdd-planner:code-review` | Four-lane intent-isolated review | Unified report |
 | `/sdd-planner:debrief` | After-action notes | `Plans/<Name>/notes/<phase>.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis | Inline findings |

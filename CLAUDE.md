@@ -106,7 +106,7 @@ Plan (README.md)       <- like a Jira Project
 | debrief | `draft`, `complete` |
 
 ### Completion Evidence
-`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically.
+`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter), with lifecycle bookkeeping in a separate scoped commit. Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
 
 ### Plan Lifecycle
 Plans live flat under `Plans/<PlanName>/`; lifecycle is the README frontmatter `status`, never a directory move. `/plan` creates `draft` and sets `approved` after review; `/implement` sets `active`, then `complete` when the final phase finishes (evidence-gated); `/debrief` backfills a missed transition subject to the same gate. AI commands filter by `status` to scope what they read.
@@ -122,8 +122,8 @@ Plans: `Plans/<PlanName>/README.md` with zero-padded phase docs (`01-Phase-Name.
 | `/sdd-planner:brainstorm` | Explore possibilities → `Brainstorm/<topic>.md` |
 | `/sdd-planner:specify` | Write requirements → `Specs/<feature>/README.md` |
 | `/sdd-planner:design` | Technical architecture → `Designs/<component>/README.md` |
-| `/sdd-planner:plan` | Create or expand an implementation plan → `Plans/<Name>/` (deepens on re-run) |
-| `/sdd-planner:implement` | Execute a plan phase — implement tasks, track progress |
+| `/sdd-planner:plan` | Decompose work into an executable plan graph → `Plans/<Name>/` + `<Name>-Graph.json` (interview → payload → compile → silhouette; extends on re-run; v1 plans keep the old protocol until converted) |
+| `/sdd-planner:implement` | Walk the plan graph — claim → red → green → sync → merge, observation-gated (v1 plans keep the wave protocol) |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
 | `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
@@ -184,7 +184,7 @@ Every skill and both hooks drive one cross-platform Go binary. The plugin does n
 go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 ```
 
-`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide`, `review scaffold|evidence set|resolve`, `template`, `hook`, `provision`, `plugin sync|check|status`, `doctor`.
+`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide`, `review scaffold|evidence set|resolve`, `template` (incl. `graph-proposal`), `hook`, `provision`, `plugin sync|check|status`, `doctor` — plus the graph family: `compile`, `next --claim`, and `graph init|propose|assemble|convert|hazards|sync|review|release|split|set-tests|gc|status|show|path|risk|shape|export`.
 
 ## Configuration
 

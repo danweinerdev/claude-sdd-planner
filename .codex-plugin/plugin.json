@@ -1,7 +1,7 @@
 {
   "name": "sdd-planner",
   "version": "2.7.0",
-  "minSddVersion": "1.16.0",
+  "minSddVersion": "2.7.0",
   "description": "Spec-driven development planning skills for research, requirements, designs, implementation plans, execution, review, debriefs, and validation.",
   "author": {
     "name": "Daniel Weiner"

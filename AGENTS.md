@@ -55,7 +55,7 @@ The `shared/` documents are normative — read them before changing behavior the
 | Review lanes, four-lane isolation, project socket | `shared/review-lanes.md`, `shared/review-artifacts.md` |
 | Portable runtime resolution + delegation contract | `shared/agent-runtime.md` |
 
-Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions with lifecycle bookkeeping in separate scoped commits; `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths.
+Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions with lifecycle bookkeeping in separate scoped commits; `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
 
 ## Versioning
 
@@ -71,4 +71,4 @@ Harnesses cache plugins by version — a content change without a bump is invisi
 
 ## The `sdd` binary contract
 
-Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries (D-0015). Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run.
+Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries (D-0015). Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run. Graph execution is part of the binary contract: `compile`, `next --claim`, and the `graph` family (`init|propose|assemble|convert|hazards|sync|review|release|split|set-tests|gc|status|show|path|risk|shape|export`) own every mutation of a committed plan graph — skills author payloads and read diagnostics, never edit `<Name>-Graph.json` or rendered views by hand.

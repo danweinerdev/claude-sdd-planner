@@ -48,6 +48,8 @@ Use these skills as needed: `sdd-setup`, `sdd-research`, `sdd-brainstorm`, `sdd-
 
 The normal progression is: `sdd-setup` -> `sdd-research` -> `sdd-brainstorm` -> `sdd-specify` -> `sdd-design` -> `sdd-plan` -> `sdd-implement` -> `sdd-code-review` -> `sdd-debrief`. Use `sdd-validate` at lifecycle boundaries. It is valid to enter at any point when the corresponding artifacts already exist.
 
+Plans come in two execution models, routed by graph presence. A plan with a committed `<Name>-Graph.json` executes as a graph walk (`sdd-plan` authors node payloads compiled into it; `sdd-implement` walks claim → red → green → sync → merge, with completion derived from observations, never narrated). A plan without a graph is a v1 markdown plan and keeps the wave protocol and evidence rules until converted with `sdd graph convert` — conversion emits blocking sentinels that are real judgments, never defaults.
+
 For a contiguous specification, design, or planning session, write every
 artifact and ledger update as it becomes known and record once per affected SCM
 root at session close — never per artifact, skill, approval, review, or
