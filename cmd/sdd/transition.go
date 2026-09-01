@@ -28,18 +28,6 @@ import (
 // is always a real finding with an artifact path and line, exactly as FR-21
 // requires.
 
-const transitionUsage = `sdd plan approve <plan-path>
-sdd plan activate <plan-path>
-sdd task complete <phase-path> --id ID
-sdd phase complete <phase-path>
-sdd plan complete <plan-path>
-sdd spec submit|approve|implement|supersede <spec-path> [--by PATH]
-sdd design submit|approve|implement|supersede <design-path> [--by PATH]
-
-Each verb refuses unless the gate its schema declares is met, evaluated by the
-same rules sdd validate runs. Pass --dry-run to see the verdict without
-writing.`
-
 // completeOpts is what a `<kind> complete` transition needs. `approve` and
 // `activate` are separate verbs rather than flags because each gates on
 // something different, and because a plan that jumps straight to `complete`

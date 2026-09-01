@@ -23,15 +23,6 @@ import (
 // evidence is well-formed by construction rather than by an author's care, and
 // the identity fields are read from the repository rather than typed.
 
-const evidenceUsage = `sdd evidence add <artifact-path> --task ID | --phase | --plan
-                       --verified-by "<command>" --result "<observation>"
-                       [--working-dir PATH] [--tool "<inspection>"]
-                       [--focused-review "<command>"] [--date YYYY-MM-DD]
-
-Records a completion-evidence section with the exact labels
-shared/completion-evidence.md requires. Repository, VCS, and revision identity
-are read from the target repository rather than supplied.`
-
 type evidenceOpts struct {
 	Task        string
 	Phase       bool

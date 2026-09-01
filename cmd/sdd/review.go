@@ -39,26 +39,6 @@ import (
 // the earlier shape (`frozen: true` at birth) made the artifact immutable
 // while still `open`, so no supported command could ever resolve it.
 
-const reviewUsage = `sdd review scaffold <phase-path> --frozen <base>..<endpoint>
-                     [--out PATH] [--mode independent|mixed|single-agent]
-sdd review evidence set <review-path> --lane <id> [--evidence TEXT]
-sdd review resolve <review-path> [--accept-followups] [--dry-run]
-
-scaffold writes the four-lane phase-completion review artifact the gate
-requires, with each lane's evidence left as a placeholder the validator
-refuses until it is replaced by what the lane actually observed.
-
-evidence set records one lane's concrete observation (from --evidence or
-stdin) on an open review.
-
-resolve is the closing transition. On a phase-gate review (review_scope:
-phase) it refuses unless every lane carries real evidence, the verdict is
-Aligned, and every finding has a terminal disposition, then sets frozen: true
-and status: resolved atomically; after resolve the review is immutable
-(SPK050). On an ordinary review it runs the reduced gate — every finding has
-a terminal disposition and no follow-up floats untracked — and sets
-status: resolved without freezing.`
-
 // stableLanes are the data-layer lane identifiers the validator checks, in the
 // order shared/review-artifacts.md lists them. Frontmatter always uses these
 // names, whatever agent ran the lane.

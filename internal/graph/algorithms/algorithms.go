@@ -223,3 +223,261 @@ func DependencyClosure(g Graph, start string) map[string]bool {
 	}
 	return out
 }
+
+// PathReport is the critical-path analysis `graph path` prints (DD-14:
+// the ceiling prices parallelism — no capacity can beat the heaviest
+// dependency chain).
+type PathReport struct {
+	// Path is the heaviest estimate-sum chain, source to sink.
+	Path []string `json:"path"`
+	// Length is the estimate sum along Path: the wall-clock floor.
+	Length int `json:"length"`
+	// Total is the estimate sum over every node: the serial cost.
+	Total int `json:"total"`
+	// Ceiling is Total/Length: the best speedup unlimited capacity buys.
+	Ceiling float64 `json:"ceiling"`
+}
+
+// CriticalPath computes the heaviest estimate-sum dependency chain. Missing
+// estimates default to 1 (the model's floor); cycle members are omitted,
+// matching TopoSort. An empty (or all-cycle) graph returns a zero report.
+func CriticalPath(g Graph, estimate map[string]int) PathReport {
+	est := func(id string) int {
+		if e := estimate[id]; e > 0 {
+			return e
+		}
+		return 1
+	}
+	weight := map[string]int{}
+	order := TopoSort(g)
+	// Same recurrence as CriticalWeight, inlined so the two stay
+	// definitionally identical while this one also reconstructs the path.
+	dependants := map[string][]string{}
+	for _, id := range sortedIDs(g) {
+		for _, dep := range g[id] {
+			if _, ok := g[dep]; ok {
+				dependants[dep] = append(dependants[dep], id)
+			}
+		}
+	}
+	for i := len(order) - 1; i >= 0; i-- {
+		id := order[i]
+		best := 0
+		for _, dependant := range dependants[id] {
+			if w := weight[dependant]; w > best {
+				best = w
+			}
+		}
+		weight[id] = est(id) + best
+	}
+
+	rep := PathReport{}
+	for _, id := range order {
+		rep.Total += est(id)
+	}
+	// The heaviest full chain starts at a source: extending any path
+	// backward only adds positive estimates.
+	start := ""
+	for _, id := range order {
+		if len(g[id]) > 0 {
+			continue // not a source (has deps inside the graph)
+		}
+		if start == "" || weight[id] > weight[start] {
+			start = id
+		}
+	}
+	if start == "" {
+		return rep
+	}
+	rep.Length = weight[start]
+	for cur := start; cur != ""; {
+		rep.Path = append(rep.Path, cur)
+		next := ""
+		want := weight[cur] - est(cur)
+		if want <= 0 {
+			break
+		}
+		deps := append([]string(nil), dependants[cur]...)
+		sortStrings(deps)
+		for _, d := range deps {
+			if weight[d] == want {
+				next = d
+				break
+			}
+		}
+		cur = next
+	}
+	if rep.Length > 0 {
+		rep.Ceiling = float64(rep.Total) / float64(rep.Length)
+	}
+	return rep
+}
+
+// CutVertices returns the articulation points of the dependency graph viewed
+// undirected: nodes whose removal disconnects work that is currently
+// connected — the waists where a single node's failure stalls both sides
+// (DD-14: cut vertices aim review attention). Sorted; deterministic.
+func CutVertices(g Graph) []string {
+	undirected := map[string][]string{}
+	addEdge := func(a, b string) {
+		undirected[a] = append(undirected[a], b)
+		undirected[b] = append(undirected[b], a)
+	}
+	for _, id := range sortedIDs(g) {
+		if _, ok := undirected[id]; !ok {
+			undirected[id] = nil
+		}
+		for _, dep := range g[id] {
+			if _, ok := g[dep]; ok {
+				addEdge(id, dep)
+			}
+		}
+	}
+	ids := make([]string, 0, len(undirected))
+	for id := range undirected {
+		ids = append(ids, id)
+	}
+	sortStrings(ids)
+	for _, id := range ids {
+		sortStrings(undirected[id])
+	}
+
+	// Iterative Hopcroft-Tarjan articulation points.
+	disc := map[string]int{}
+	low := map[string]int{}
+	parent := map[string]string{}
+	cut := map[string]bool{}
+	timer := 0
+	for _, root := range ids {
+		if _, seen := disc[root]; seen {
+			continue
+		}
+		type frame struct {
+			id   string
+			next int
+		}
+		stack := []frame{{root, 0}}
+		timer++
+		disc[root], low[root] = timer, timer
+		rootChildren := 0
+		for len(stack) > 0 {
+			f := &stack[len(stack)-1]
+			if f.next < len(undirected[f.id]) {
+				n := undirected[f.id][f.next]
+				f.next++
+				if _, seen := disc[n]; !seen {
+					parent[n] = f.id
+					if f.id == root {
+						rootChildren++
+					}
+					timer++
+					disc[n], low[n] = timer, timer
+					stack = append(stack, frame{n, 0})
+				} else if n != parent[f.id] && disc[n] < low[f.id] {
+					low[f.id] = disc[n]
+				}
+			} else {
+				stack = stack[:len(stack)-1]
+				if p := parent[f.id]; p != "" {
+					if low[f.id] < low[p] {
+						low[p] = low[f.id]
+					}
+					if p != root && low[f.id] >= disc[p] {
+						cut[p] = true
+					}
+				}
+			}
+		}
+		if rootChildren > 1 {
+			cut[root] = true
+		}
+	}
+	var out []string
+	for id := range cut {
+		out = append(out, id)
+	}
+	sortStrings(out)
+	return out
+}
+
+// DepthHistogram returns the node count per dependency depth: depth 0 is a
+// source (no in-graph deps), and every other node sits one past its deepest
+// dep. Cycle members are omitted, matching TopoSort.
+func DepthHistogram(g Graph) []int {
+	depth := map[string]int{}
+	var hist []int
+	for _, id := range TopoSort(g) {
+		d := 0
+		for _, dep := range g[id] {
+			if dd, ok := depth[dep]; ok && dd+1 > d {
+				d = dd + 1
+			}
+		}
+		depth[id] = d
+		for len(hist) <= d {
+			hist = append(hist, 0)
+		}
+		hist[d]++
+	}
+	return hist
+}
+
+// Silhouette classes (DD-14: the histogram's shape diagnoses decomposition
+// quality — a CHAIN prices zero parallelism, an HOURGLASS names a waist).
+const (
+	ShapeFlat      = "FLAT"
+	ShapeChain     = "CHAIN"
+	ShapeFunnel    = "FUNNEL"
+	ShapeHourglass = "HOURGLASS"
+	ShapeMixed     = "MIXED"
+)
+
+// Silhouette classifies a depth histogram. Rules, first match wins:
+// CHAIN — more than one level, every level exactly one node (a serial plan).
+// FLAT — at most two levels (everything runs nearly at once).
+// HOURGLASS — an interior level strictly narrower than both ends (a waist).
+// FUNNEL — widths never increase with depth (wide start converging).
+// MIXED — everything else.
+func Silhouette(hist []int) string {
+	if len(hist) == 0 {
+		return ShapeFlat
+	}
+	allOnes := true
+	for _, w := range hist {
+		if w != 1 {
+			allOnes = false
+			break
+		}
+	}
+	switch {
+	case allOnes && len(hist) > 1:
+		return ShapeChain
+	case len(hist) <= 2:
+		return ShapeFlat
+	}
+	first, last := hist[0], hist[len(hist)-1]
+	interiorMin := hist[1]
+	for _, w := range hist[1 : len(hist)-1] {
+		if w < interiorMin {
+			interiorMin = w
+		}
+	}
+	if interiorMin < first && interiorMin < last {
+		return ShapeHourglass
+	}
+	narrowing := true
+	for i := 1; i < len(hist); i++ {
+		if hist[i] > hist[i-1] {
+			narrowing = false
+			break
+		}
+	}
+	if narrowing {
+		return ShapeFunnel
+	}
+	return ShapeMixed
+}
+
+// sortStrings is sort.Strings, aliased locally so every walk in this package
+// funnels through one deterministic-order primitive.
+func sortStrings(s []string) { sort.Strings(s) }

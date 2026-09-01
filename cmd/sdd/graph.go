@@ -56,6 +56,12 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphGCCmd())
+	c.AddCommand(graphPathCmd())
+	c.AddCommand(graphRiskCmd())
+	c.AddCommand(graphShapeCmd())
+	c.AddCommand(graphStatusCmd())
+	c.AddCommand(graphShowCmd())
+	c.AddCommand(graphExportCmd())
 	return c
 }
 
@@ -888,3 +894,4 @@ func graphHazardsCmd() *cobra.Command {
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the vocabulary as JSON")
 	return c
 }
+
