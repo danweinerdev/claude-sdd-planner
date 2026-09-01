@@ -58,6 +58,10 @@ type NodeState struct {
 	// distinct because its remedy (re-hash / rework / replan) is a judgment
 	// call.
 	IntentStale []string
+	// IsolationStale: the pass was observed with non-clean isolation
+	// (shared-dirty, or an asserted record). Provisionally accepted, never
+	// GREEN: the mandatory clean re-verify is what lifts it (DD-7).
+	IsolationStale bool
 
 	// Workable: READY, RED, or STALE.
 	Workable bool
@@ -164,7 +168,10 @@ func Derive(in Inputs) map[string]NodeState {
 				}
 				sort.Strings(ns.IntentStale)
 			}
-			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 {
+			if v.Isolation != model.IsolationClean {
+				ns.IsolationStale = true
+			}
+			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || ns.IsolationStale {
 				ns.State = Stale
 			} else {
 				ns.State = Green

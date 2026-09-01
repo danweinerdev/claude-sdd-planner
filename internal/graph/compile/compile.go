@@ -154,6 +154,17 @@ func CurrentIntent(root, repoRoot, plan string) (map[string]intent.Item, error) 
 	return sources.items, nil
 }
 
+// Validate runs the full semantic pass over a graph as it stands (an empty
+// proposal against it) — the transition gate `graph split` and friends use
+// to prove a mutation introduces no findings that compile would refuse.
+func Validate(root, repoRoot, plan string, g *model.Graph) ([]Finding, error) {
+	sources, err := identifierSources(root, repoRoot, plan)
+	if err != nil {
+		return nil, err
+	}
+	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, sources), nil
+}
+
 // selectProposal picks the compile input: the assembled proposal when it
 // exists, else exactly one staged fragment (single-fragment flows skip
 // assemble), else a helpful refusal.
@@ -251,7 +262,12 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 	}
 	// Duplicate ids: within the proposal, and against the master graph
 	// (phase-1 review followup FU-01 — the model layer deliberately does not
-	// check this; compile does).
+	// check this; compile does). Retired ids are never reused (the same
+	// stable-identifier discipline the markdown artifacts carry).
+	retired := map[string]bool{}
+	for _, id := range g.Retired {
+		retired[id] = true
+	}
 	seen := map[string]bool{}
 	for i := range p.Nodes {
 		n := &p.Nodes[i]
@@ -260,6 +276,10 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 			continue
 		}
 		seen[n.ID] = true
+		if retired[n.ID] {
+			add(n.ID, "was retired (split or cut); retired ids are never reused — pick a fresh id")
+			continue
+		}
 		if _, exists := merged[n.ID]; exists {
 			add(n.ID, "already exists in the graph; proposals introduce nodes, mutations go through `sdd graph` verbs")
 			continue

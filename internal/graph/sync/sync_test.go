@@ -10,6 +10,8 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
@@ -249,15 +251,97 @@ func TestSyncClaimDiscipline(t *testing.T) {
 		t.Fatal("a claimed node requires --by")
 	}
 
+	// A RED run by the holder renews the lease (the walk continues); a
+	// clean PASS by the holder MERGES instead — claim cleared atomically.
 	t0 := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	failing := `<testsuite><testcase name="test_a"><failure/></testcase></testsuite>`
 	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder",
+		ReportName: "r.xml", ReportBytes: []byte(failing), By: "holder",
 		Now: func() time.Time { return t0 }, TTL: 20 * time.Minute})
-	if err != nil || !res.Recorded {
-		t.Fatalf("holder sync: %+v %v", res, err)
+	if err != nil || !res.Recorded || res.Merged {
+		t.Fatalf("holder red run records without merging: %+v %v", res, err)
 	}
 	if res.LeaseRenewed != t0.Add(20*time.Minute).UTC().Format(time.RFC3339) {
-		t.Fatalf("syncing is the liveness proof; the lease must renew: %q", res.LeaseRenewed)
+		t.Fatalf("a non-completing sync is the liveness proof; the lease must renew: %q", res.LeaseRenewed)
+	}
+
+	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder"})
+	if err != nil || !res.Recorded || !res.Merged {
+		t.Fatalf("a clean pass by the holder merges: %+v %v", res, err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("a").Claim != nil {
+		t.Fatal("merge clears the claim atomically with the observation")
+	}
+}
+
+func TestRedBeforeGreenGatesHazardTests(t *testing.T) {
+	n := testsNode("a", "test_h")
+	n.Gate.Tests[0].Satisfies = []string{"external-format"}
+	n.Hazards = model.Hazards{"external-format"}
+	planDir, repoRoot := fixture(t, n)
+
+	passing := `<testsuite><testcase name="test_h"/></testsuite>`
+	_, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(passing)})
+	if err == nil || !strings.Contains(err.Error(), "red-before-green") {
+		t.Fatalf("a hazard-discharging test must be seen failing before its pass counts: %v", err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("a").Verification != nil {
+		t.Fatal("the refused pass must not record")
+	}
+
+	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
+	if res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(failing)}); err != nil || !res.Recorded {
+		t.Fatalf("the red run records freely: %+v %v", res, err)
+	}
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(passing)})
+	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
+		t.Fatalf("after the recorded red, the pass counts: %+v %v", res, err)
+	}
+}
+
+// dirtyProvider forces shared-dirty isolation to prove provisional
+// acceptance: recorded, never merged.
+type dirtyProvider struct{}
+
+func (dirtyProvider) Kind() string                    { return "plain" }
+func (dirtyProvider) Capacity() int                   { return 2 }
+func (dirtyProvider) Allocate(string) (provider.Workspace, error) {
+	return provider.Workspace{}, nil
+}
+func (dirtyProvider) Release(string) error                  { return nil }
+func (dirtyProvider) Isolation(string, int) string          { return model.IsolationSharedDirty }
+func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
+
+func TestSharedDirtyPassRecordsProvisionally(t *testing.T) {
+	n := testsNode("a", "test_a")
+	n.Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z"}
+	planDir, repoRoot := fixture(t, n)
+	report := `<testsuite><testcase name="test_a"/></testsuite>`
+
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder",
+		Provider: dirtyProvider{}})
+	if err != nil || !res.Recorded {
+		t.Fatalf("shared-dirty pass records provisionally: %+v %v", res, err)
+	}
+	if res.Merged {
+		t.Fatal("shared-dirty never merges; the mandatory clean re-verify does")
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	node := g.NodeByID("a")
+	if node.Claim == nil {
+		t.Fatal("the claim survives a provisional pass")
+	}
+	// And states hold it STALE, not GREEN (the DD-7 wiring).
+	derived := states.Derive(states.Inputs{Graph: g})
+	if derived["a"].State != states.Stale || !derived["a"].IsolationStale {
+		t.Fatalf("a shared-dirty pass derives STALE with the isolation cause: %+v", derived["a"])
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Options configures one sync.
@@ -55,6 +56,13 @@ type Result struct {
 	LeaseRenewed string             `json:"lease_renewed,omitempty"`
 	Refusal      string             `json:"refusal,omitempty"`
 	LogPath      string             `json:"log,omitempty"`
+	// Merged: the observation was a clean pass and the claim completed in
+	// the same cycle — claim cleared, workspace released (DD-10's atomic
+	// sequence). A pass that records without merging (shared-dirty
+	// isolation, or an unclaimed re-verify) reports Merged=false.
+	Merged bool `json:"merged,omitempty"`
+	// WorkspaceReleased names the workspace handle torn down on merge.
+	WorkspaceReleased string `json:"workspace_released,omitempty"`
 }
 
 func (o *Options) fill() {
@@ -208,9 +216,41 @@ func Run(o Options) (*Result, error) {
 		}
 	}
 
+	// Merge-gate preconditions bind the RECORDING of a pass (DD-5): a pass
+	// that fails them is refused whole with the failing condition named, so
+	// no dependant ever unblocks on unproven work. Red runs record freely —
+	// they are how the proof is produced.
+	if result == model.ResultPass {
+		if isolation == model.IsolationAsserted {
+			return nil, fmt.Errorf("graph sync: %q: an asserted observation is refused by default; produce a real report", o.Node)
+		}
+		var unproven []string
+		for _, t := range node.Gate.Tests {
+			if len(t.Satisfies) == 0 {
+				continue
+			}
+			if _, seen := node.RedSeqs[t.ID]; !seen {
+				unproven = append(unproven, t.ID)
+			}
+		}
+		if len(unproven) > 0 {
+			return nil, fmt.Errorf("graph sync: red-before-green: hazard-discharging test(s) %v have never been observed failing; run them against the broken or unimplemented state and sync that failing report first — a test that passes against both correct and broken code guards nothing", unproven)
+		}
+		if handle != "" {
+			if clean, dirty, cleanErr := vcs.Detect(digestRoot).Clean(); cleanErr == nil && !clean {
+				example := ""
+				if len(dirty) > 0 {
+					example = " (e.g. " + dirty[0] + ")"
+				}
+				return nil, fmt.Errorf("graph sync: workspace %s has %d uncommitted path(s)%s; commit the complete slice, then re-sync the passing report — the revision anchor must name the tested bytes", handle, len(dirty), example)
+			}
+		}
+	}
+
 	leaseRenewed := ""
 	var recorded *model.Verification
 	redAdded := map[string]int{}
+	merged := false
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 		n := fresh.NodeByID(o.Node)
 		if n == nil {
@@ -241,8 +281,19 @@ func Run(o Options) (*Result, error) {
 				redAdded[id] = seq
 			}
 		}
-		// Implicit lease renewal: syncing IS the liveness proof (DD-10).
-		if n.Claim != nil && n.Claim.By == o.By {
+		merged = false
+		switch {
+		case result == model.ResultPass && isolation == model.IsolationClean &&
+			n.Claim != nil && n.Claim.By == o.By:
+			// The atomic completion (DD-10): a clean pass by the holder
+			// merges — observation recorded, claim cleared, workspace
+			// released after the write lands. A pass with shared-dirty
+			// isolation records provisionally instead (STALE, never GREEN)
+			// and keeps the claim for the mandatory clean re-verify.
+			n.Claim = nil
+			merged = true
+		case n.Claim != nil && n.Claim.By == o.By:
+			// Implicit lease renewal: syncing IS the liveness proof (DD-10).
 			n.Claim.LeaseExpires = o.Now().Add(o.TTL).UTC().Format(time.RFC3339)
 			leaseRenewed = n.Claim.LeaseExpires
 		}
@@ -255,6 +306,13 @@ func Run(o Options) (*Result, error) {
 	res.Observation = recorded
 	res.RedSeqsAdded = redAdded
 	res.LeaseRenewed = leaseRenewed
+	res.Merged = merged
+	if merged && handle != "" {
+		if err := prov.Release(handle); err != nil {
+			return res, fmt.Errorf("graph sync: merged, but workspace %s could not be released (reap it with `sdd graph gc`): %w", handle, err)
+		}
+		res.WorkspaceReleased = handle
+	}
 	return res, nil
 }
 

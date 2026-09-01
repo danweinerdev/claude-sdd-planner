@@ -120,10 +120,21 @@ func (g *gitProvider) Allocate(nodeID string) (Workspace, error) {
 		// or a crashed allocate) is never silently reused or destroyed.
 		return Workspace{}, fmt.Errorf("workspace %s already exists; inspect and remove it (or `git worktree remove` it) before reclaiming this node", wsDir)
 	}
-	if _, err := g.run(g.repoRoot, "git", "worktree", "add", "--detach", wsDir, "HEAD"); err != nil {
+	// A BRANCH per claim, not a detached HEAD: the node's commits must stay
+	// reachable after the worktree is released at merge — a detached
+	// worktree's commits would dangle and eventually be garbage-collected,
+	// which is silent data loss of exactly the work the claim produced.
+	if _, err := g.run(g.repoRoot, "git", "worktree", "add", "-b", g.branchFor(nodeID), wsDir, "HEAD"); err != nil {
 		return Workspace{}, err
 	}
 	return Workspace{Handle: g.handleFor(wsDir), Dir: wsDir}, nil
+}
+
+// branchFor names a claim's branch. Deterministic per node so the branch is
+// findable after the worktree is gone; a leftover branch from an earlier
+// claim fails the worktree add loudly, same posture as a leftover dir.
+func (g *gitProvider) branchFor(nodeID string) string {
+	return "graph/" + sanitize(nodeID)
 }
 
 func (g *gitProvider) handleFor(wsDir string) string {

@@ -58,7 +58,7 @@ var toolOwnedNodeKeys = map[string]string{
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "nodes"}
+	graphKeys        = []string{"version", "seq_counter", "nodes", "retired"}
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
@@ -172,6 +172,9 @@ func (d *decoder) graph(raw any) *Graph {
 			}
 			g.SeqCounter = n
 		}
+	}
+	if v, present := obj["retired"]; present && !d.proposal {
+		g.Retired = d.stringList("retired", v)
 	}
 	nodesRaw, present := obj["nodes"]
 	if !present {

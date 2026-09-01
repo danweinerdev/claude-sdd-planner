@@ -26,6 +26,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -50,6 +51,150 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
+	c.AddCommand(graphSplitCmd())
+	c.AddCommand(graphSetTestsCmd())
+	c.AddCommand(graphGCCmd())
+	return c
+}
+
+// graphSplitCmd retires a too-big node into children (the stopping rule's
+// remedy: two consecutive failures propose a split). Gated like a compile:
+// the mutation must introduce no finding the compiler would refuse.
+func graphSplitCmd() *cobra.Command {
+	var plan, node, file string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "split",
+		Short: "Retire a node into children from a proposal payload",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" || file == "" {
+				return fmt.Errorf("graph split: --plan, --node, and --file are all required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph split: %w", err)
+			}
+			payload, err := os.ReadFile(file)
+			if err != nil {
+				return fmt.Errorf("graph split: %w", err)
+			}
+			res, err := ops.Split(root, repoRoot, plan, node, payload)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK bool `json:"ok"`
+					*ops.SplitResult
+				}{true, res})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "retired %s into %s (retired ids are never reused)\n",
+				res.Retired, strings.Join(res.Children, ", "))
+			if len(res.Rewired) > 0 {
+				fmt.Fprintf(c.OutOrStdout(), "re-pointed dependants: %s\n", strings.Join(res.Rewired, ", "))
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id to retire")
+	c.Flags().StringVar(&file, "file", "", "proposal payload declaring the children")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphSetTestsCmd edits one node's declared test list under the lock.
+func graphSetTestsCmd() *cobra.Command {
+	var plan, node, by, file string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "set-tests",
+		Short: "Replace a node's declared tests (holder-only while claimed)",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" || file == "" {
+				return fmt.Errorf("graph set-tests: --plan, --node, and --file are all required")
+			}
+			planDir, err := planDirFor(plan, "set-tests")
+			if err != nil {
+				return err
+			}
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				return fmt.Errorf("graph set-tests: %w", err)
+			}
+			var tests []model.Test
+			if err := json.Unmarshal(raw, &tests); err != nil {
+				return fmt.Errorf("graph set-tests: %s is not a JSON array of {id, file, satisfies?}: %v", file, err)
+			}
+			if err := ops.SetTests(planDir, node, by, tests); err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK    bool   `json:"ok"`
+					Node  string `json:"node"`
+					Tests int    `json:"tests"`
+				}{true, node, len(tests)})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "set %d test(s) on %s (red proofs for removed tests pruned)\n", len(tests), node)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id to edit")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
+	c.Flags().StringVar(&file, "file", "", "JSON array of tests: [{\"id\": ..., \"file\": ..., \"satisfies\": [...]}]")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphGCCmd reaps abandoned workspace state: orphan ws-* directories and
+// staged payloads whose nodes all landed (the crash window between compile's
+// graph write and payload consumption).
+func graphGCCmd() *cobra.Command {
+	var plan string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "gc",
+		Short: "Reap orphan workspaces and stale staged payloads",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph gc: --plan is required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph gc: %w", err)
+			}
+			res, err := ops.GC(root, repoRoot, plan)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK bool `json:"ok"`
+					*ops.GCResult
+				}{true, res})
+			}
+			if len(res.Workspaces) == 0 && len(res.StalePayloads) == 0 {
+				fmt.Fprintln(c.OutOrStdout(), "nothing to reap")
+			}
+			for _, w := range res.Workspaces {
+				fmt.Fprintf(c.OutOrStdout(), "reaped workspace %s\n", w)
+			}
+			for _, p := range res.StalePayloads {
+				fmt.Fprintf(c.OutOrStdout(), "reaped stale payload %s\n", p)
+			}
+			for _, k := range res.Kept {
+				fmt.Fprintf(c.OutOrStdout(), "kept %s (active claim)\n", k)
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 

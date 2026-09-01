@@ -83,6 +83,13 @@ type Graph struct {
 	Version    int    `json:"version"`
 	SeqCounter int    `json:"seq_counter"`
 	Nodes      []Node `json:"nodes"`
+	// Retired is the append-only register of node ids that once existed and
+	// were retired (split, cut). A retired id is never reused — the same
+	// stable-identifier discipline the markdown artifacts carry — so
+	// existing references (history annotations, review followups, human
+	// memory) cannot silently re-bind. Tool-owned: proposals carrying it
+	// are refused by the strict decoder's unknown-key rule.
+	Retired []string `json:"retired,omitempty"`
 }
 
 // Node is one unit of work: a falsifiable contract, its dependencies, the

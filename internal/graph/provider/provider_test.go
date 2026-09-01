@@ -87,11 +87,24 @@ func TestGitProviderWorktreeRoundTrip(t *testing.T) {
 		t.Fatalf("leftover workspace must refuse: %v", err)
 	}
 
+	// The claim gets a BRANCH, not a detached HEAD: commits made in the
+	// worktree must stay reachable after release, or merged work would
+	// dangle and eventually be garbage-collected.
+	if err := os.WriteFile(filepath.Join(ws.Dir, "work.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, ws.Dir, "add", ".")
+	gitOK(t, ws.Dir, "commit", "-q", "-m", "node work")
+	workCommit := gitOK(t, ws.Dir, "rev-parse", "HEAD")
+
 	if err := p.Release(ws.Handle); err != nil {
 		t.Fatalf("release: %v", err)
 	}
 	if _, err := os.Stat(ws.Dir); !os.IsNotExist(err) {
 		t.Fatal("release must remove the worktree")
+	}
+	if got := gitOK(t, repoRoot, "rev-parse", "graph/node-a"); got != workCommit {
+		t.Fatalf("the claim branch must keep the work reachable after release: %s != %s", got, workCommit)
 	}
 }
 
