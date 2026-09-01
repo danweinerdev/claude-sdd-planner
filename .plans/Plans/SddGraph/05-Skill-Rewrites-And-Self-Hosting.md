@@ -21,7 +21,7 @@ tasks:
     depends_on: ["5.1"]
   - id: "5.3"
     title: "Portable regeneration, documentation sync, version floor advance"
-    status: planned
+    status: complete
     verification: "make plugins && make plugins-check green (regenerated .codex-plugin/ and .opencode-plugin/ committed with the skill changes, no hand edits, portable variants reviewed for the changed skills); README.md, CLAUDE.md, AGENTS.md skill/agent tables and directory layouts updated consistently (grep spot-checks for the new graph verbs and rewritten skill descriptions); python3 bump-version.py set-floor advances minSddVersion to the release carrying the graph verbs, per the deliberate-floor discipline; sdd plugin status reports clean provenance."
     justifies: "D-0021 (floor advanced deliberately, never by make bump-*), D-0017 (per-harness generated trees are the published artifact — regeneration is mandatory with skill edits), and the docs-stay-in-sync repo rule; prevents harness caches serving stale skills against a binary whose verbs they don't know."
     depends_on: ["5.1", "5.2"]
@@ -153,19 +153,19 @@ trains the model to fight the tool. Design references: § The execution loop,
 ## 5.3: Portable regeneration, documentation sync, version floor advance
 
 ### Subtasks
-- [ ] `make plugins` after 5.1/5.2; review generated diffs for the two
+- [x] `make plugins` after 5.1/5.2; review generated diffs for the two
       rewritten skills; check whether any `.portable.md` variant shadows
       them and update variants deliberately (repo editing rule 2).
-- [ ] `make plugins-check` green; `sdd plugin status` provenance clean.
-- [ ] Sync README.md, CLAUDE.md, AGENTS.md: skill tables, `sdd` verb
+- [x] `make plugins-check` green; `sdd plugin status` provenance clean.
+- [x] Sync README.md, CLAUDE.md, AGENTS.md: skill tables, `sdd` verb
       surface (graph family), lifecycle description mentioning graph
       execution and v1 coexistence; setup-generated guidance templates
       (`shared/templates/claude-md-*.md`, `agents-md-*.md`) updated to
       match.
-- [ ] `python3 bump-version.py set-floor <release>` advancing minSddVersion
+- [x] `python3 bump-version.py set-floor <release>` advancing minSddVersion
       to the first release carrying the graph verbs (deliberate act with
       rationale in the commit).
-- [ ] Full `make test` as the phase gate.
+- [x] Full `make test` as the phase gate.
 
 ### Notes
 Revision boundary: generated trees, docs, and floor move in one revision so
@@ -177,8 +177,22 @@ everything the bump publishes.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63`
+- Focused review: `git show a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green as the phase-gate subtask requires: template gate 10 templates, portable drift gate, leak gate, and the entire go suite with zero failing lines; make plugins-check confirms both generated trees in sync with the canonical tree after regeneration; sdd plugin status reports clean provenance (53 generated, 5 variants, 0 overridden); minSddVersion advanced deliberately to 2.7.0 via python3 bump-version.py set-floor (never make bump-*), the first release carrying every graph verb the rewritten skills name` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `generated-diff review + doc grep spot-checks` | `the two rewritten skills' portable outputs and the six synced docs at a49e6e5` | PASS | `sdd-plan portable output is the pure generated transform (5.1's recorded no-variant decision); sdd-implement portable output comes from the deliberately rewritten variant carrying the walk loop with the v1 protocol retained for its portable-specific adapters; grep spot-checks confirm the graph verb family named in AGENTS.md and CLAUDE.md binary-contract sections, mirrored invariants paragraphs in both (graph plans tighten mechanically; v1 until converted), rewritten skill rows in README/CLAUDE/claude-md templates, and the graph-vs-v1 routing paragraph in agents-md-full` |
 
 ## 5.4: Self-hosting pilot: convert this plan and walk a live slice
 
