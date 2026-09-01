@@ -27,7 +27,7 @@ tasks:
     depends_on: ["2.2"]
   - id: "2.4"
     title: "Rendered plan and phase views from the graph"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/compile/... -run TestRender -count=1 — compile renders Plans/<Plan>/README.md and numbered phase docs from a fixture graph; rendered views parse as valid SDD artifacts (sdd validate --scope over a rendered fixture plan reports zero structural findings); every node's projected state renders from derived state, never from a stored field; re-rendering an unchanged graph is byte-identical (idempotent); a hand-edit to a rendered view is overwritten by the next compile and a header comment in every view names the graph as source."
     justifies: "DD-1 (plan/phase markdown becomes rendered views, superseding the FR-36 plan/phase leg), DD-2 (graph is the source of truth; views carry no information not derivable from graph + specs). Prevents dual-writable-source drift."
     depends_on: ["2.3"]
@@ -215,22 +215,22 @@ about which spec is reachable and the two tools will fight.
 ## 2.4: Rendered plan and phase views from the graph
 
 ### Subtasks
-- [ ] Renderer in `internal/graph/compile`: graph → `Plans/<Plan>/README.md`
+- [x] Renderer in `internal/graph/compile`: graph → `Plans/<Plan>/README.md`
       + numbered phase docs (grouping by node `phase` label), carrying a
       generated-file header naming the graph as source and the regenerating
       command.
-- [ ] Project node contracts, deps, gates, hazards, justifies, and derived
+- [x] Project node contracts, deps, gates, hazards, justifies, and derived
       state into human-readable task-like sections; completion-grade fields
       render from observations only.
-- [ ] Idempotence: unchanged graph → byte-identical views.
-- [ ] Golden triples: payload → graph → rendered-views fixtures under the
+- [x] Idempotence: unchanged graph → byte-identical views.
+- [x] Golden triples: payload → graph → rendered-views fixtures under the
       existing `tools/regression` pattern (byte-compared views,
       canonicalized graph comparison), regenerated via `make gen-fixtures`
       and committed — the corpus the design's Testing Strategy names.
-- [ ] Rendered views pass `sdd validate` structurally (fixture-level check);
+- [x] Rendered views pass `sdd validate` structurally (fixture-level check);
       where the v1 schema demands sections that are graph-derived, render
       them — never invent content the graph does not hold.
-- [ ] Frozen-view refusal stub: refuse regeneration when a frozen `Aligned`
+- [x] Frozen-view refusal stub: refuse regeneration when a frozen `Aligned`
       review artifact covering the view's nodes exists (full *closed*
       predicate arrives in 4.1; the stub keys on review-artifact presence and
       carries a TODO naming 4.1).
@@ -243,10 +243,36 @@ spec/design naming. The projection is DD-2's contract: if a reader needs
 information the view lacks, the fix is graph schema or renderer, never a
 hand edit. Design references: DD-1, DD-2 (frozen-view invariant).
 
+
+Recorded deviations (implementation): golden triples live in
+`internal/graph/compile/testdata/golden/` rather than `tools/regression`
+(they freeze a pipeline, not a validator rule example; regenerated via
+`UPDATE_GOLDENS=1 go test`, byte-compared in CI). README rendering is two
+surgical edits (phases[] replacement when empty, delimited Graph View
+section) preserving identity prose; merging non-empty v1 phases[] is
+conversion's job (2.5). The marker-refusal guard doubles as the frozen-view
+stub; TODO(4.1) in render.go upgrades it to the closed predicate.
+
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `4f9e981133e7d6dd73d18db7ca492ff00fe603b6`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `4f9e981133e7d6dd73d18db7ca492ff00fe603b6`
+- Focused review: `git show 4f9e981133e7d6dd73d18db7ca492ff00fe603b6`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `4f9e981133e7d6dd73d18db7ca492ff00fe603b6`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 23.943s and all seven internal/graph packages; happy path renders one phase doc plus the README projection (marker, type: phase frontmatter, node sections, pending evidence line) and re-rendering the unchanged graph writes nothing (byte-stable idempotence); a pre-existing non-generated target refuses the whole compile BEFORE the graph write, leaving graph and staged payload untouched; golden payload->graph->views triples byte-compare after date normalization (UPDATE_GOLDENS=1 regenerates; testdata location deviation from the tools/regression wording recorded in Notes); the real validator over the rendered plan scope reports zero Error findings; the nested-quote YAML defect in deliverable was caught by that check and fixed` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd compile view smoke in a temp planning root` | `built binary at 4f9e981` | PASS | `filled exemplar compiled: 4 nodes, 5 fingerprints, 2 views rendered; phase view carries marker/frontmatter/node sections; README gains rendered phases[] and the delimited Graph View table; second compile reports nothing staged` |
 
 ## 2.5: sdd graph convert: v1 plans to graphs with blocking sentinels
 
