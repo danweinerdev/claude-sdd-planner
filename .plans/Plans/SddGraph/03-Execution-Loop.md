@@ -33,7 +33,7 @@ tasks:
     depends_on: ["3.3"]
   - id: "3.5"
     title: "Merge gate and node lifecycle verbs: release, split, set-tests, gc"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/claims/... ./cmd/sdd/ -run 'TestMergeGate|TestGraphLifecycle' -count=1 — merge (the sync-completion path) refuses on: non-clean isolation (asserted refused by default, shared-dirty accepted only provisionally landing STALE-not-GREEN), unresolved declared tests, digest mismatch between report time and merge time, missing/dirty git revision anchor when provider is git, hazard-discharging test with no recorded red_seq earlier than its green seq (red-before-green); refusal names the failing condition and leaves the claim intact; successful merge is one atomic sequence under the lock: verify -> merge observation -> delete workspace file -> clear claim; split retires a node into children preserving id-retirement; set-tests edits a node's declared tests under the lock; gc reaps expired-claim workspace files listing what it removed."
     justifies: "DD-5 (red-before-green ships with sync-only completion, per the design's rollout ordering), DD-7, DD-10, D-0022. Prevents a tautological test greening a hazard-carrying node and a crashed agent stranding a claim."
     depends_on: ["3.4"]
@@ -273,23 +273,23 @@ that is the correct behavior, not a missing feature.
 ## 3.5: Merge gate and node lifecycle verbs: release, split, set-tests, gc
 
 ### Subtasks
-- [ ] Merge gate in `internal/graph/claims`: verify observation
+- [x] Merge gate in `internal/graph/claims`: verify observation
       (clean-isolation default, declared tests resolved, digest match at
       merge time, git revision anchor clean when applicable,
       red-before-green for hazard-discharging tests) → merge → delete
       workspace file → clear claim, all under one lock hold.
-- [ ] `shared-dirty` provisional acceptance: observation merges but the node
+- [x] `shared-dirty` provisional acceptance: observation merges but the node
       derives STALE-not-GREEN until a clean re-verify (states already
       support it; wire the flag).
-- [ ] `sdd graph split <node>`: retire into children (id retirement per the
+- [x] `sdd graph split <node>`: retire into children (id retirement per the
       stable-identifier discipline), preserving deps and hazards triage
       state.
-- [ ] `sdd graph set-tests <node>`: locked single-node test-list edit.
-- [ ] `sdd graph gc`: reap workspace files of expired claims, listing
+- [x] `sdd graph set-tests <node>`: locked single-node test-list edit.
+- [x] `sdd graph gc`: reap workspace files of expired claims, listing
       removals; never touches unexpired claims.
-- [ ] Refusal messages name the exact failing condition (design § Error
+- [x] Refusal messages name the exact failing condition (design § Error
       Handling: merge-gate refusals).
-- [ ] Guard entries for `sync|release|split|set-tests|gc` land in this
+- [x] Guard entries for `sync|release|split|set-tests|gc` land in this
       task's revision (D-0014/FR-44 discipline: entries with verbs).
 
 ### Notes
@@ -302,8 +302,24 @@ D-0022; § Error Handling (lease expiry, merge-gate refusals).
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `027be4ae31c32f32ad57b007a2b2b28d0beefa53`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `027be4ae31c32f32ad57b007a2b2b28d0beefa53`
+- Focused review: `git show 027be4ae31c32f32ad57b007a2b2b28d0beefa53`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `027be4ae31c32f32ad57b007a2b2b28d0beefa53`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 24.3s and all fourteen internal/graph packages; merge preconditions gate the recording of a pass: red-before-green refuses a never-failed hazard-discharging test naming it, a dirty git worktree refuses naming the revision-anchor rule, asserted isolation refuses by default; a clean pass by the holder merges atomically (claim cleared in the same CAS, workspace released after, Merged reported) while a red run renews the lease instead; shared-dirty passes record provisionally and derive STALE with the IsolationStale cause; the git provider allocates a branch per claim and the work stays reachable after release (survival tested); split retires into children under a compile-equivalent introduced-findings gate with dep/hazard/phase inheritance, dependant re-pointing, and an append-only retired register compile enforces; set-tests is holder-only and prunes red proofs for replaced tests; gc reaps exactly the orphan workspaces and stale payloads (review-05 FU-01) while keeping active claims and novel payloads` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `CLI merge-path smoke in a temp git repo` | `built binary at 027be4a` | PASS | `premature green refused by red-before-green; dirty-worktree green refused; committed green merged — claim None, worktree gone, branch graph/impl at the provenance revision` |
 
 ## 3.6: Multi-process concurrency stress and race verification
 
