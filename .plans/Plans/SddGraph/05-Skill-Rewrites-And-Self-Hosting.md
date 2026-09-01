@@ -276,7 +276,7 @@ scoping change, and the tests — nothing else. Design references: DD-4;
 
 | Command | Working directory | Result | Observable evidence |
 |---|---|---|---|
-| `go test ./internal/graph/compile/ -run TestACCoverage -count=1` | `.` | PASS (`exit 0`) | `green after red was observed first: the new test initially refused with exactly the foreign-AC finding (AC-90 coverage demanded for a spec reachable only plan->design->spec), then passed under the scoping; the test also proves transitive ids stay citable AND fingerprinted (own-2 cites FR-90 from the foreign spec and its intent hash embeds); full sweep of internal/graph, internal/rules, and cmd/sdd suites green; go vet clean; staticcheck clean on the touched packages (six U1000s in untouched internal/rules files are pre-existing debt, noted for the phase review)` |
+| `go test ./internal/graph/compile/ -run TestACCoverage -count=1` | `.` | PASS (`exit 0`) | `green after red was observed first: the new test initially refused with exactly the foreign-AC finding (coverage demanded for the fixture criterion of a spec reachable only plan->design->spec), then passed under the scoping; the test also proves transitive ids stay citable AND fingerprinted (the node citing the foreign spec's fixture requirement resolves and its intent hash embeds); full sweep of internal/graph, internal/rules, and cmd/sdd suites green; go vet clean; staticcheck clean on the touched packages (six U1000s in untouched internal/rules files are pre-existing debt, noted for the phase review)` |
 
 | Tool / inspection | Context | Result | Observable evidence |
 |---|---|---|---|
