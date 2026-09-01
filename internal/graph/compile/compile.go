@@ -141,6 +141,19 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	return &Result{GraphPath: graphPath, Added: added, Hashes: hashes, Consumed: payloadPath, Views: views}, nil, nil
 }
 
+// CurrentIntent returns every requirement fingerprint reachable from the
+// plan's related graph right now: cited id -> its Item (normalized text +
+// hash). The walk loop consumes it twice — states recheck embedded hashes
+// against it (INTENT-STALE), and `next --claim` inlines the cited text into
+// the context payload so an agent never re-reads specs wholesale.
+func CurrentIntent(root, repoRoot, plan string) (map[string]intent.Item, error) {
+	sources, err := identifierSources(root, repoRoot, plan)
+	if err != nil {
+		return nil, err
+	}
+	return sources.items, nil
+}
+
 // selectProposal picks the compile input: the assembled proposal when it
 // exists, else exactly one staged fragment (single-fragment flows skip
 // assemble), else a helpful refusal.

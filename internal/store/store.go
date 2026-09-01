@@ -141,6 +141,37 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 // Config is the subset of planning-config.json this tool needs.
 type Config struct {
 	PlanningRoot string `json:"planningRoot"`
+	// GraphLeaseTtlMinutes bounds a claimed graph node's lease
+	// (Designs/SddGraph DD-10). Zero means the 30-minute default; any value
+	// satisfies correctness — leases are liveness bookkeeping, double-claim
+	// prevention lives in the store's compare-and-swap.
+	GraphLeaseTtlMinutes int `json:"graphLeaseTtlMinutes,omitempty"`
+}
+
+// LoadConfig walks upward from start for planning-config.json (the same
+// discovery FindPlanningRoot performs) and returns the parsed config. A
+// missing config is an error naming the search start, same as
+// FindPlanningRoot.
+func LoadConfig(start string) (Config, error) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return Config{}, err
+	}
+	for {
+		cfgPath := filepath.Join(dir, "planning-config.json")
+		if b, err := os.ReadFile(cfgPath); err == nil {
+			var c Config
+			if err := json.Unmarshal(b, &c); err != nil {
+				return Config{}, fmt.Errorf("%s: %s", cfgPath, DescribeJSONError(b, err))
+			}
+			return c, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return Config{}, fmt.Errorf("no planning-config.json found at or above %s", start)
+		}
+		dir = parent
+	}
 }
 
 // DescribeJSONError renders a JSON decode error with the line and column of

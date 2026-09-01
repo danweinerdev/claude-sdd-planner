@@ -336,7 +336,8 @@ findings; exit 2 means validation could not run.`,
 }
 
 func nextCmd() *cobra.Command {
-	var jsonOut bool
+	var jsonOut, claim bool
+	var by string
 	c := &cobra.Command{
 		Use:   "next [plan-path]",
 		Short: "Report current state and the literal next command to run",
@@ -346,10 +347,22 @@ func nextCmd() *cobra.Command {
 			if len(args) == 1 {
 				planPath = args[0]
 			}
+			// Graph-executed plans route to the frontier scheduler; v1
+			// markdown plans keep the report untouched (D-0022's v1 clause).
+			if planPath != "" {
+				if handled, err := graphNext(planPath, claim, by, jsonOut); handled {
+					return err
+				}
+			}
+			if claim {
+				return fmt.Errorf("next: --claim requires a plan with a committed graph (run `sdd graph init` / `sdd compile` first)")
+			}
 			return cmdNext(planPath, jsonOut)
 		},
 	}
 	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	c.Flags().BoolVar(&claim, "claim", false, "claim the frontier head under a lease and print its context payload")
+	c.Flags().StringVar(&by, "by", "", "claimant identity for --claim (default: a generated agent id)")
 	return c
 }
 

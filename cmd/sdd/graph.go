@@ -10,16 +10,24 @@ package main
 // allowlists the read surface deliberately.
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	gconvert "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/convert"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
@@ -38,6 +46,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphProposeCmd())
 	c.AddCommand(graphAssembleCmd())
 	c.AddCommand(graphConvertCmd())
+	c.AddCommand(graphReleaseCmd())
 	return c
 }
 
@@ -152,6 +161,244 @@ func compileCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphNext serves the frontier for a graph-executed plan: the read form
+// lists claimable work critical-path-first, --claim records a lease and
+// prints the full context payload (contract, inlined cited requirement
+// text, tests, hazards, workspace) so the agent needs no other reads to
+// start (Designs/SddGraph § The execution loop). Returns handled=false when
+// the plan has no committed graph, so v1 plans fall through untouched.
+func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, error) {
+	readme, err := resolvePlanReadme(planPath)
+	if err != nil {
+		return false, nil // let the v1 path report the resolution problem
+	}
+	planDir := filepath.Dir(readme)
+	if _, err := os.Stat(gstore.PathFor(planDir)); err != nil {
+		return false, nil
+	}
+	plan := filepath.Base(planDir)
+	root, repoRoot, err := resolveRoots(".", "")
+	if err != nil {
+		return true, fmt.Errorf("next: %w", err)
+	}
+	items, err := gcompile.CurrentIntent(root, repoRoot, plan)
+	if err != nil {
+		return true, fmt.Errorf("next: %w", err)
+	}
+	hashes := make(map[string]string, len(items))
+	for id, item := range items {
+		hashes[id] = item.Hash
+	}
+	digester := digest.New(repoRoot)
+	statesInputs := func(g *model.Graph) states.Inputs {
+		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact, CurrentIntentHashes: hashes}
+	}
+
+	if !claim {
+		g, err := gstore.Load(gstore.PathFor(planDir))
+		if err != nil {
+			return true, fmt.Errorf("next: %w", err)
+		}
+		derived := states.Derive(statesInputs(g))
+		adjacency := algorithms.Graph{}
+		estimate := map[string]int{}
+		claimed := 0
+		counts := map[states.State]int{}
+		for i := range g.Nodes {
+			n := &g.Nodes[i]
+			adjacency[n.ID] = n.Deps
+			estimate[n.ID] = n.Estimate
+			counts[derived[n.ID].State]++
+			if n.Claim != nil {
+				claimed++
+			}
+		}
+		weight := algorithms.CriticalWeight(adjacency, estimate)
+		frontier := states.Frontier(derived)
+		sort.SliceStable(frontier, func(i, j int) bool {
+			if weight[frontier[i]] != weight[frontier[j]] {
+				return weight[frontier[i]] > weight[frontier[j]]
+			}
+			return frontier[i] < frontier[j]
+		})
+		if jsonOut {
+			type row struct {
+				ID     string `json:"id"`
+				State  string `json:"state"`
+				Weight int    `json:"critical_weight"`
+			}
+			out := struct {
+				OK       bool                    `json:"ok"`
+				Plan     string                  `json:"plan"`
+				States   map[states.State]int    `json:"states"`
+				Claimed  int                     `json:"claimed"`
+				Frontier []row                   `json:"frontier"`
+			}{true, plan, counts, claimed, nil}
+			for _, id := range frontier {
+				out.Frontier = append(out.Frontier, row{id, string(derived[id].State), weight[id]})
+			}
+			return true, writeJSON(out)
+		}
+		fmt.Printf("%s: %d node(s)", plan, len(g.Nodes))
+		for _, s := range []states.State{states.Green, states.Ready, states.Red, states.Stale, states.Blocked} {
+			if counts[s] > 0 {
+				fmt.Printf("  %s=%d", s, counts[s])
+			}
+		}
+		fmt.Printf("  claimed=%d\n", claimed)
+		if len(frontier) == 0 {
+			fmt.Println("frontier: empty")
+			return true, nil
+		}
+		for i, id := range frontier {
+			mark := ""
+			if i == 0 {
+				mark = "  [critical path]"
+			}
+			if c := g.NodeByID(id).Claim; c != nil {
+				mark += "  [claimed by " + c.By + "]"
+			}
+			fmt.Printf("%2d. %s (%s, weight %d)%s\n", i+1, id, derived[id].State, weight[id], mark)
+		}
+		fmt.Println("claim the head with `sdd next " + planPath + " --claim`")
+		return true, nil
+	}
+
+	if by == "" {
+		by = "agent-" + randHex(4)
+	}
+	cfg, _ := store.LoadConfig(".")
+	ttl := time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
+	claimed, err := claims.Claim(planDir, claims.Options{By: by, TTL: ttl, StatesInputs: statesInputs})
+	if err != nil {
+		return true, err
+	}
+	node := claimed.Node
+	type citedText struct {
+		ID   string `json:"id"`
+		Text string `json:"text,omitempty"`
+	}
+	var cited []citedText
+	for _, id := range node.Justifies {
+		cited = append(cited, citedText{ID: id, Text: items[id].Normalized})
+	}
+	if jsonOut {
+		return true, writeJSON(struct {
+			OK           bool        `json:"ok"`
+			Node         model.Node  `json:"node"`
+			Cited        []citedText `json:"cited"`
+			LeaseExpires string      `json:"lease_expires"`
+			By           string      `json:"by"`
+			Workspace    string      `json:"workspace,omitempty"`
+			Reclaimed    []string    `json:"reclaimed_expired,omitempty"`
+		}{true, node, cited, claimed.LeaseExpires, by, claimed.Workspace, claimed.ReclaimedExpired})
+	}
+	fmt.Printf("claimed %s (by %s, lease expires %s)\n\n", node.ID, by, claimed.LeaseExpires)
+	fmt.Printf("contract: %s\n", node.Contract)
+	for _, c := range cited {
+		if c.Text != "" {
+			fmt.Printf("justifies %s: %s\n", c.ID, c.Text)
+		} else {
+			fmt.Printf("justifies %s\n", c.ID)
+		}
+	}
+	fmt.Printf("gate: %s\nhazards: %s\n", describeGateBrief(node.Gate), describeHazardsBrief(node.Hazards))
+	if len(node.Artifacts) > 0 {
+		fmt.Printf("artifacts: %s\n", strings.Join(node.Artifacts, ", "))
+	}
+	if node.History != "" {
+		fmt.Printf("history: %s\n", node.History)
+	}
+	if claimed.Workspace != "" {
+		fmt.Printf("workspace: %s\n", claimed.Workspace)
+	}
+	if len(claimed.ReclaimedExpired) > 0 {
+		fmt.Printf("reclaimed expired claim(s): %s\n", strings.Join(claimed.ReclaimedExpired, ", "))
+	}
+	return true, nil
+}
+
+func describeGateBrief(g model.Gate) string {
+	switch g.Type {
+	case model.GateTests:
+		var ids []string
+		for _, t := range g.Tests {
+			ids = append(ids, t.ID)
+		}
+		return "tests (" + strings.Join(ids, ", ") + ")"
+	case model.GateCommand:
+		return "command `" + g.Command + "`"
+	case model.GateReview:
+		if g.Lanes == nil {
+			return "review (full)"
+		}
+		return "review (" + strings.Join(g.Lanes, ", ") + ")"
+	default:
+		return g.Type
+	}
+}
+
+func describeHazardsBrief(h model.Hazards) string {
+	switch {
+	case h == nil:
+		return "UNTRIAGED"
+	case len(h) == 0:
+		return "none (explicit)"
+	default:
+		return strings.Join(h, ", ")
+	}
+}
+
+func randHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+// graphReleaseCmd is the graceful abandonment path: holder-only unless
+// --force names the takeover deliberately (DD-10).
+func graphReleaseCmd() *cobra.Command {
+	var plan, by string
+	var force, asJSON bool
+	c := &cobra.Command{
+		Use:   "release <node-id>",
+		Short: "Release a claimed node back to the frontier",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			planDir, err := planDirFor(plan, "release")
+			if err != nil {
+				return err
+			}
+			if by == "" && !force {
+				return fmt.Errorf("graph release: --by is required (a lease is released by its holder; use --force for a deliberate takeover)")
+			}
+			workspace, err := claims.Release(planDir, args[0], by, force)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK        bool   `json:"ok"`
+					Node      string `json:"node"`
+					Workspace string `json:"workspace,omitempty"`
+				}{true, args[0], workspace})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "released %s back to the frontier\n", args[0])
+			if workspace != "" {
+				fmt.Fprintf(c.OutOrStdout(), "workspace preserved for post-mortem: %s\n", workspace)
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&by, "by", "", "claimant identity that holds the lease")
+	c.Flags().BoolVar(&force, "force", false, "take over a claim held by someone else, deliberately")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }

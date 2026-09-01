@@ -169,6 +169,40 @@ func selfLoop(g Graph, id string) bool {
 	return false
 }
 
+// CriticalWeight returns, for every node, the heaviest estimate-sum path
+// from that node DOWNSTREAM through its dependants to a sink, including the
+// node's own estimate — "how much of the wall-clock floor still hangs off
+// this node". `next` serves the frontier heaviest-first so a capacity-1
+// provider works the node that keeps the floor from rising (DD-14's
+// critical-path preference, in the minimal form scheduling needs; the full
+// analytics surface lands with `graph path`). Cycle members are omitted,
+// matching TopoSort.
+func CriticalWeight(g Graph, estimate map[string]int) map[string]int {
+	dependants := map[string][]string{}
+	for _, id := range sortedIDs(g) {
+		for _, dep := range g[id] {
+			if _, ok := g[dep]; ok {
+				dependants[dep] = append(dependants[dep], id)
+			}
+		}
+	}
+	order := TopoSort(g)
+	weight := make(map[string]int, len(order))
+	// Walk the order backwards: every dependant is later in a topological
+	// order, so its weight is final by the time its dep is visited.
+	for i := len(order) - 1; i >= 0; i-- {
+		id := order[i]
+		best := 0
+		for _, dependant := range dependants[id] {
+			if w := weight[dependant]; w > best {
+				best = w
+			}
+		}
+		weight[id] = estimate[id] + best
+	}
+	return weight
+}
+
 // DependencyClosure returns every id reachable from start through deps
 // (start excluded), restricted to ids present in the graph. Deterministic
 // BFS. Phase 4's review-gate scope derivation and compile's coverage
