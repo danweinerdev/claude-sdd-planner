@@ -72,6 +72,19 @@ func CheckWrite(agent, tool, path, projectDir string) Decision {
 	if len(parts) == 0 || pluginSourceDirs[parts[0]] {
 		return Decision{}
 	}
+	// The committed plan graph is tool-owned state (Designs/SddGraph DD-2):
+	// only the sdd graph verbs write it, under the store lock. A hand edit
+	// would reintroduce exactly the dual-writable-source drift the graph
+	// exists to prevent, so it is denied like any schema-recognized
+	// artifact even though it is JSON rather than markdown.
+	if parts[0] == "Plans" && strings.HasSuffix(rel, "-Graph.json") {
+		return Decision{
+			Deny: true,
+			Reason: "Blocked " + tool + " on `" + rel + "`: the committed plan graph is written " +
+				"only by the sdd graph verbs (compile, sync, claim) under the store lock. " +
+				"Report what you found instead of changing it.",
+		}
+	}
 	if !artifactDirs[parts[0]] || !strings.HasSuffix(rel, ".md") {
 		return Decision{} // not a schema-recognized artifact path
 	}

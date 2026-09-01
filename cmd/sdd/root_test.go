@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/hook"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -79,6 +80,36 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 	for n := range got {
 		if !want[n] {
 			t.Errorf("subcommand %q is new; add it to this list deliberately", n)
+		}
+	}
+}
+
+// TestGuardClassifiesEverySubcommand enforces FR-44 against the real command
+// tree: every top-level verb and every `sdd graph` sub-verb must be
+// deliberately classified in the hook's exported read-only maps. A verb
+// added to the binary without a guard posture fails here — classification
+// is never an accident of the allowlist's default-deny.
+func TestGuardClassifiesEverySubcommand(t *testing.T) {
+	root := newRootCmd()
+	for _, c := range root.Commands() {
+		n := c.Name()
+		if n == "help" || n == "completion" {
+			continue
+		}
+		if _, classified := hook.SddVerbReadOnly[n]; !classified {
+			t.Errorf("subcommand %q has no guard classification; add it to hook.SddVerbReadOnly deliberately (FR-44)", n)
+		}
+		if n != "graph" {
+			continue
+		}
+		for _, sub := range c.Commands() {
+			sn := sub.Name()
+			if sn == "help" || sn == "completion" {
+				continue
+			}
+			if _, classified := hook.SddGraphVerbReadOnly[sn]; !classified {
+				t.Errorf("graph sub-verb %q has no guard classification; add it to hook.SddGraphVerbReadOnly deliberately (FR-44)", sn)
+			}
 		}
 	}
 }

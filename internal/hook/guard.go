@@ -92,14 +92,47 @@ var denyWithArgs = []struct{ head, args *regexp.Regexp }{
 // without an entry here would hand the read-only agents a sanctioned way to
 // rewrite planning artifacts. TestSddAllowlistCoversEverySubcommand fails when
 // the command tree grows past this list.
-var sddReadOnly = map[string]bool{
+// SddVerbReadOnly classifies EVERY top-level sdd verb (FR-44): present with
+// true = read-only, allowlisted; present with false = mutating, denied for
+// the read-only agents; ABSENT = unclassified, which the cmd/sdd parity test
+// fails — adding a verb to the binary without deciding its guard posture
+// here fails the suite, so classification is always a deliberate act.
+//
+// Exported (with SddGraphVerbReadOnly) as the single source both the guard
+// and that parity test read; a private copy in either place would drift.
+var SddVerbReadOnly = map[string]bool{
 	"validate": true, "show": true, "list": true, "next": true,
 	"version": true, "doctor": true, "schema": true,
+	"hook": true, // reads a payload and decides; writes nothing
+	"apply": false, "section": false, "migrate": false,
+	"evidence": false, "task": false, "phase": false, "plan": false,
+	"spec": false, "design": false,
+	"review": false, "template": false, // scaffold/resolve and --out write files
+	"provision": false, "plugin": false,
+	"decide":  false, // sub-verbs classified separately below
+	"graph":   false, // sub-verbs classified separately below
+	"compile": false, // appends to the committed plan graph
 }
 
 // sddDecideReadOnly are the `sdd decide` subcommands that only read.
 var sddDecideReadOnly = map[string]bool{
 	"list": true, "search": true, "validate": true,
+}
+
+// SddGraphVerbReadOnly classifies every `sdd graph` subcommand, current and
+// planned (Plans/SddGraph): the read surface is allowlisted, every mutating
+// verb — including the later-phase names reserved here so each lands
+// pre-denied — writes the committed graph or its workspace under the store
+// lock and is denied for read-only agents. Absent = unclassified = parity
+// failure, same discipline as the top-level map.
+var SddGraphVerbReadOnly = map[string]bool{
+	// read surface
+	"hazards": true, "status": true, "show": true, "export": true,
+	"path": true, "risk": true, "shape": true,
+	// mutating, phase 2
+	"init": false, "propose": false, "assemble": false, "convert": false,
+	// mutating, later phases (reserved: denied before they exist)
+	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
 }
 
 var (
@@ -320,7 +353,28 @@ func checkSdd(tokens []string, segment string) Decision {
 		}
 		return Decision{}
 	}
-	if !sddReadOnly[sub] {
+	if sub == "graph" {
+		if len(args) < 2 || !SddGraphVerbReadOnly[args[1]] {
+			verb := "<verb>"
+			if len(args) >= 2 {
+				verb = args[1]
+			}
+			return deny("Blocked `" + segment + "`: `sdd graph " + verb + "` mutates the plan graph or its workspace.")
+		}
+		return Decision{}
+	}
+	if sub == "next" {
+		// The flag matters here: bare `next` reads the frontier, `--claim`
+		// records a claim in the committed graph (DD-10). Flags are stripped
+		// from args above, so check the raw tokens.
+		for _, t := range tokens[1:] {
+			if t == "--claim" || strings.HasPrefix(t, "--claim=") {
+				return deny("Blocked `" + segment + "`: `sdd next --claim` records a claim in the plan graph.")
+			}
+		}
+		return Decision{}
+	}
+	if !SddVerbReadOnly[sub] {
 		return deny("Blocked `" + segment + "`: `sdd " + sub + "` mutates planning artifacts.")
 	}
 	return Decision{}

@@ -135,22 +135,12 @@ func TestGuardAppliesToPluginNamespacedAgents(t *testing.T) {
 // Write/Edit denial closes. This test enumerates the command tree and requires
 // every verb to be classified deliberately.
 func TestSddAllowlistCoversEverySubcommand(t *testing.T) {
-	// Every top-level subcommand `sdd` accepts, and whether a read-only agent
-	// may run it. Adding a verb to cmd/sdd without adding it here fails.
-	classified := map[string]bool{
-		"validate": true, "show": true, "list": true, "next": true,
-		"version": true, "doctor": true, "schema": true,
-		"apply": false, "section": false, "migrate": false,
-		"decide":   false, // sub-verbs classified separately
-		"hook":     true,  // reads a payload and decides; writes nothing
-		"evidence": false, "task": false, "phase": false, "plan": false,
-		"spec": false, "design": false, // lifecycle transition verbs mutate
-		"review": false, "template": false, // scaffold/resolve and --out write files
-		"provision": false, "plugin": false,
-	}
-	for verb, readOnly := range classified {
-		if verb == "decide" || verb == "hook" {
-			continue
+	// checkSdd's behavior must agree with the exported classification the
+	// cmd/sdd parity test enforces against the real command tree: every
+	// classified top-level verb allows or denies exactly as declared.
+	for verb, readOnly := range SddVerbReadOnly {
+		if verb == "decide" || verb == "graph" || verb == "hook" {
+			continue // sub-verb or self-referential cases, covered below
 		}
 		got := checkSdd([]string{"sdd", verb}, "sdd "+verb)
 		if readOnly && got.Deny {
@@ -172,6 +162,39 @@ func TestSddAllowlistCoversEverySubcommand(t *testing.T) {
 			t.Errorf("`sdd decide %s` mutates but the guard permitted it", verb)
 		}
 	}
+
+	// The graph verb tree: read surface allowed, everything else — including
+	// verbs that do not exist yet (reserved names land pre-denied) — denied.
+	for verb, readOnly := range SddGraphVerbReadOnly {
+		got := checkSdd([]string{"sdd", "graph", verb}, "sdd graph "+verb)
+		if readOnly && got.Deny {
+			t.Errorf("`sdd graph %s` is read-only but the guard denied it", verb)
+		}
+		if !readOnly && !got.Deny {
+			t.Errorf("`sdd graph %s` mutates but the guard permitted it", verb)
+		}
+	}
+	if got := checkSdd([]string{"sdd", "graph"}, "sdd graph"); !got.Deny {
+		t.Error("bare `sdd graph` must deny: an unclassified sub-verb is a mutation until proven otherwise")
+	}
+	if got := checkSdd([]string{"sdd", "graph", "made-up"}, "sdd graph made-up"); !got.Deny {
+		t.Error("an unknown graph sub-verb must deny by default")
+	}
+
+	// `next` is flag-sensitive (DD-10): the bare read is allowed, the claim
+	// is a graph mutation.
+	if got := checkSdd([]string{"sdd", "next"}, "sdd next"); got.Deny {
+		t.Errorf("bare `sdd next` is read-only but the guard denied it: %s", got.Reason)
+	}
+	if got := checkSdd([]string{"sdd", "next", "--json"}, "sdd next --json"); got.Deny {
+		t.Errorf("`sdd next --json` is read-only but the guard denied it: %s", got.Reason)
+	}
+	if got := checkSdd([]string{"sdd", "next", "--claim"}, "sdd next --claim"); !got.Deny {
+		t.Error("`sdd next --claim` records a claim and must deny")
+	}
+	if got := checkSdd([]string{"sdd", "next", "--claim=true"}, "sdd next --claim=true"); !got.Deny {
+		t.Error("`sdd next --claim=true` must deny like the bare flag")
+	}
 }
 
 // TestWriteGuardScope covers FR-28's exclusions, each of which exists for a
@@ -191,6 +214,8 @@ func TestWriteGuardScope(t *testing.T) {
 	notes := write("Plans/Sample/notes/01-One.md", "Just prose.\n")
 	readme := write("README.md", "# Root\n")
 	plugin := write("commands/plan/SKILL.md", "# Skill\n")
+	graph := write("Plans/Sample/Sample-Graph.json", `{"version": 1, "seq_counter": 0, "nodes": []}`)
+	otherJSON := write("Plans/Sample/scratch.json", `{}`)
 
 	cases := []struct {
 		name string
@@ -205,6 +230,12 @@ func TestWriteGuardScope(t *testing.T) {
 		{"planning-root README allowed", "Write", readme, false},
 		{"plugin source allowed", "Write", plugin, false},
 		{"outside the root allowed", "Write", filepath.Join(t.TempDir(), "x.md"), false},
+		// FR-28 extension (Designs/SddGraph DD-2): the committed plan graph
+		// is tool-owned; hand edits are denied even though it is JSON.
+		{"plan graph write denied", "Write", graph, true},
+		{"plan graph edit denied", "Edit", graph, true},
+		{"plan graph read never denied", "Read", graph, false},
+		{"unrelated json allowed", "Write", otherJSON, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
