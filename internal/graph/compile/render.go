@@ -38,6 +38,7 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
@@ -48,14 +49,18 @@ const frozenViewMarker = "<!-- FROZEN VIEW — every node in this phase is close
 
 // viewMarker identifies a generated view. Its presence is the renderer's
 // permission to overwrite; its absence on an existing target is a refusal.
+// The prefix is owned by internal/rules (the validator keys SDD163's
+// projection exemption on it), so emission and recognition cannot drift.
 func viewMarker(plan string) string {
-	return fmt.Sprintf("<!-- GENERATED VIEW — source of truth: %s-Graph.json. Regenerate with `sdd compile --plan %s`. Edits here are overwritten. -->", plan, plan)
+	return fmt.Sprintf("%s%s-Graph.json. Regenerate with `sdd compile --plan %s`. Edits here are overwritten. -->", rules.GeneratedViewMarkerPrefix, plan, plan)
 }
 
-// graphViewBegin/End delimit the README's upserted section.
+// graphViewBegin/End delimit the README's upserted section. Owned by
+// internal/rules: lifecycle normalization strips exactly these delimiters,
+// so a frozen phase review's README pin survives the upsert.
 const (
-	graphViewBegin = "<!-- graph-view:begin — generated section, do not edit -->"
-	graphViewEnd   = "<!-- graph-view:end -->"
+	graphViewBegin = rules.GraphViewBegin
+	graphViewEnd   = rules.GraphViewEnd
 )
 
 // phaseGroup is one rendered phase: its ordinal, label, and nodes in

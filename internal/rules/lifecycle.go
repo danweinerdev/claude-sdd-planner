@@ -425,6 +425,15 @@ func lifecycleNormalizedArtifact(source, kind string) (string, error) {
 
 	switch kind {
 	case "plan":
+		// The generated Graph View section is a projection of the committed
+		// graph, not plan intent: compile upserts it after phase reviews
+		// freeze, and without the strip every frozen review's README pin
+		// would read the projection as changed intent (Plans/SddGraph 5.6,
+		// filed from the self-hosting pilot). Stripped BEFORE evidence
+		// normalization: the begin marker is an HTML comment, not a
+		// heading, so a section normalizer running first would swallow it
+		// and strand the section body.
+		body = stripGraphViewSection(body)
 		body = normalizeEvidenceSection(body, 2, "Plan Completion Evidence")
 	case "phase":
 		body = normalizeAllTaskEvidence(body, lifecycleSequenceIDs(root, "tasks"))
