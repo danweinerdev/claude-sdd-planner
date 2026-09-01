@@ -27,6 +27,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
@@ -273,7 +274,10 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	}
 	cfg, _ := store.LoadConfig(".")
 	ttl := time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
-	claimed, err := claims.Claim(planDir, claims.Options{By: by, TTL: ttl, StatesInputs: statesInputs})
+	prov := provider.Detect(repoRoot, planDir)
+	claimed, err := claims.Claim(planDir, claims.Options{
+		By: by, TTL: ttl, StatesInputs: statesInputs, Provider: provider.ForClaims(prov),
+	})
 	if err != nil {
 		return true, err
 	}
@@ -382,16 +386,32 @@ func graphReleaseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Graceful abandonment tears the workspace down (unlike lease
+			// EXPIRY, which preserves it for post-mortem).
+			cleaned := false
+			if workspace != "" {
+				_, repoRoot, rootsErr := resolveRoots(".", "")
+				if rootsErr == nil {
+					if relErr := provider.Detect(repoRoot, planDir).Release(workspace); relErr == nil {
+						cleaned = true
+					} else {
+						fmt.Fprintf(c.ErrOrStderr(), "warning: workspace %s could not be removed: %v\n", workspace, relErr)
+					}
+				}
+			}
 			if asJSON {
 				return writeJSON(struct {
 					OK        bool   `json:"ok"`
 					Node      string `json:"node"`
 					Workspace string `json:"workspace,omitempty"`
-				}{true, args[0], workspace})
+					Cleaned   bool   `json:"workspace_cleaned,omitempty"`
+				}{true, args[0], workspace, cleaned})
 			}
 			fmt.Fprintf(c.OutOrStdout(), "released %s back to the frontier\n", args[0])
-			if workspace != "" {
-				fmt.Fprintf(c.OutOrStdout(), "workspace preserved for post-mortem: %s\n", workspace)
+			if workspace != "" && cleaned {
+				fmt.Fprintf(c.OutOrStdout(), "workspace removed: %s\n", workspace)
+			} else if workspace != "" {
+				fmt.Fprintf(c.OutOrStdout(), "workspace left in place: %s\n", workspace)
 			}
 			return nil
 		},
