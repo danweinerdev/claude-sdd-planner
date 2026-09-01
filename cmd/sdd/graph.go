@@ -186,7 +186,7 @@ func graphGCCmd() *cobra.Command {
 					*ops.GCResult
 				}{true, res})
 			}
-			if len(res.Workspaces) == 0 && len(res.StalePayloads) == 0 {
+			if len(res.Workspaces) == 0 && len(res.StalePayloads) == 0 && len(res.PrunedBranches) == 0 {
 				fmt.Fprintln(c.OutOrStdout(), "nothing to reap")
 			}
 			for _, w := range res.Workspaces {
@@ -194,6 +194,9 @@ func graphGCCmd() *cobra.Command {
 			}
 			for _, p := range res.StalePayloads {
 				fmt.Fprintf(c.OutOrStdout(), "reaped stale payload %s\n", p)
+			}
+			for _, b := range res.PrunedBranches {
+				fmt.Fprintf(c.OutOrStdout(), "pruned merged branch %s\n", b)
 			}
 			for _, k := range res.Kept {
 				fmt.Fprintf(c.OutOrStdout(), "kept %s (active claim)\n", k)

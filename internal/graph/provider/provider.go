@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
@@ -56,6 +57,14 @@ type Provider interface {
 	// EXPIRY deliberately never calls this — an expired claimant's
 	// workspace is post-mortem evidence).
 	Release(handle string) error
+	// PruneMergedBranches deletes claim branches (graph/*) whose work is
+	// fully integrated: tip reachable from the mainline HEAD and checked
+	// out in no worktree. The retention policy (review-06 FU-01, decided
+	// by the self-hosting pilot): merged branches are gc-reaped litter;
+	// unmerged branches are the ONLY reference to their work and always
+	// survive, as do active claims' checkouts. Nil for VCS without
+	// branches.
+	PruneMergedBranches() ([]string, error)
 	// Isolation classifies an observation produced in the given workspace
 	// with activeClaims outstanding (DD-7: clean = merged state plus this
 	// node's edits only).
@@ -186,6 +195,36 @@ func (g *gitProvider) Release(handle string) error {
 	return err
 }
 
+// PruneMergedBranches derives the prune set from git itself — branch list,
+// checkout state, ancestry — never from graph bookkeeping: a branch whose
+// tip the mainline already contains and which no worktree holds is litter
+// by definition, whatever the graph believes. `git branch -d` is the safety
+// net (it independently refuses unmerged and checked-out branches).
+func (g *gitProvider) PruneMergedBranches() ([]string, error) {
+	out, err := g.run(g.repoRoot, "git", "branch", "--list", "graph/*",
+		"--format=%(refname:short)|%(worktreepath)")
+	if err != nil {
+		return nil, err
+	}
+	var pruned []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "|", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] != "" {
+			continue // checked out somewhere (or empty listing): never prunable
+		}
+		name := parts[0]
+		if _, err := g.run(g.repoRoot, "git", "merge-base", "--is-ancestor", name, "HEAD"); err != nil {
+			continue // unmerged: the only reference to that work
+		}
+		if _, err := g.run(g.repoRoot, "git", "branch", "-d", name); err != nil {
+			return pruned, fmt.Errorf("pruning merged branch %s: %w", name, err)
+		}
+		pruned = append(pruned, name)
+	}
+	sort.Strings(pruned)
+	return pruned, nil
+}
+
 func (g *gitProvider) Isolation(handle string, activeClaims int) string {
 	if handle != "" {
 		return model.IsolationClean // a worktree is isolation by construction
@@ -229,6 +268,9 @@ func (p *p4Provider) Allocate(string) (Workspace, error) {
 }
 
 func (p *p4Provider) HandleFor(string) string { return "" }
+
+// PruneMergedBranches is nil for Perforce: one shared client, no branches.
+func (p *p4Provider) PruneMergedBranches() ([]string, error) { return nil, nil }
 
 func (p *p4Provider) Release(string) error { return nil }
 
@@ -276,6 +318,9 @@ func (p *plainProvider) Capacity() int                      { return 1 }
 func (p *plainProvider) Allocate(string) (Workspace, error) { return Workspace{Dir: p.repoRoot}, nil }
 func (p *plainProvider) HandleFor(string) string            { return "" }
 func (p *plainProvider) Release(string) error               { return nil }
+
+// PruneMergedBranches is nil for plain trees: no VCS, no branches.
+func (p *plainProvider) PruneMergedBranches() ([]string, error) { return nil, nil }
 func (p *plainProvider) Isolation(_ string, activeClaims int) string {
 	if activeClaims <= 1 {
 		return model.IsolationClean

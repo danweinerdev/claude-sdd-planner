@@ -255,7 +255,12 @@ type GCResult struct {
 	ExpiredClaims []string `json:"expired_claims,omitempty"`
 	Workspaces    []string `json:"workspaces,omitempty"`
 	StalePayloads []string `json:"stale_payloads,omitempty"`
-	Kept          []string `json:"kept,omitempty"`
+	// PrunedBranches lists fully-integrated claim branches deleted by the
+	// provider (git: graph/* tips reachable from mainline HEAD, checked
+	// out nowhere). Unmerged branches always survive — they are the only
+	// reference to their work.
+	PrunedBranches []string `json:"pruned_branches,omitempty"`
+	Kept           []string `json:"kept,omitempty"`
 }
 
 // GC reaps abandoned workspace state: ws-* directories no active claim
@@ -361,6 +366,15 @@ func GC(root, repoRoot, plan string) (*GCResult, error) {
 		}
 		res.StalePayloads = append(res.StalePayloads, filepath.Base(path))
 	}
+	// Branch pruning runs LAST: a workspace released above may have been
+	// the only checkout holding its branch, and this pass is what finally
+	// reaps it once the work is mainline-reachable.
+	pruned, err := prov.PruneMergedBranches()
+	if err != nil {
+		return nil, fmt.Errorf("graph gc: %w", err)
+	}
+	res.PrunedBranches = pruned
+
 	sort.Strings(res.Workspaces)
 	sort.Strings(res.StalePayloads)
 	sort.Strings(res.Kept)

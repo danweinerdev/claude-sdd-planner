@@ -2,6 +2,7 @@ package ops
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -285,5 +286,110 @@ func TestGCReapsOrphansAndStalePayloadsOnly(t *testing.T) {
 	}
 	if g.NodeByID("big").Claim == nil {
 		t.Fatal("the unexpired claim must survive gc")
+	}
+}
+
+// gitOps runs one git command in dir for the branch-pruning fixture.
+func gitOps(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// branchExists reports whether a branch ref resolves.
+func branchExists(t *testing.T, dir, name string) bool {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+name)
+	cmd.Dir = dir
+	return cmd.Run() == nil
+}
+
+// TestGCPrunesMergedClaimBranches (pilot-gc-branch-pruning, hazard
+// derives-state): gc prunes exactly the graph/* branches whose tips are
+// reachable from the mainline HEAD and which no worktree has checked out —
+// the prune set is tied to an INDEPENDENT definition (git ancestry plus
+// checkout state, computed by the test itself), never to a restatement of
+// the implementation. Unmerged work, active claims' branches, and
+// non-graph branches always survive.
+func TestGCPrunesMergedClaimBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	root, _ := fixtureRoot(t)
+	gitOps(t, root, "init", "-q")
+	gitOps(t, root, "config", "user.email", "t@example.com")
+	gitOps(t, root, "config", "user.name", "t")
+	gitOps(t, root, "add", "-A")
+	gitOps(t, root, "commit", "-q", "-m", "base")
+	mainline := gitOps(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+
+	// A merged claim branch: tip reachable from mainline HEAD.
+	gitOps(t, root, "branch", "graph/done-ab12", "HEAD")
+	// An unmerged claim branch: carries a commit mainline does not have.
+	gitOps(t, root, "checkout", "-q", "-b", "graph/wip-cd34")
+	if err := os.WriteFile(filepath.Join(root, "wip.txt"), []byte("wip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOps(t, root, "add", "wip.txt")
+	gitOps(t, root, "commit", "-q", "-m", "wip work")
+	gitOps(t, root, "checkout", "-q", mainline)
+	// A merged branch checked out in a worktree held by an ACTIVE claim:
+	// the claim record is what keeps gc's workspace pass from reaping the
+	// worktree first (an unreferenced ws-* dir is an orphan by definition),
+	// and the live checkout is what keeps the branch pass off the branch.
+	gitOps(t, root, "worktree", "add", "-q", "-b", "graph/active-ef56",
+		filepath.Join(root, "Plans", "SamplePlan", ".graph", "ws-active-claim"), "HEAD")
+	if _, err := gstore.Update(gstore.PathFor(filepath.Join(root, "Plans", "SamplePlan")), func(g *model.Graph) error {
+		g.NodeByID("big").Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z",
+			Workspace: "Plans/SamplePlan/.graph/ws-active-claim"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A merged NON-graph branch: out of gc's jurisdiction.
+	gitOps(t, root, "branch", "feature-x", "HEAD")
+
+	// The independent definition: graph/* branches, tip an ancestor of
+	// mainline HEAD, checked out nowhere.
+	expectPruned := map[string]bool{}
+	for _, line := range strings.Split(gitOps(t, root, "branch", "--list", "graph/*",
+		"--format=%(refname:short)|%(worktreepath)"), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "|", 2)
+		if len(parts) != 2 || parts[1] != "" {
+			continue // checked out somewhere: never prunable
+		}
+		name := parts[0]
+		cmd := exec.Command("git", "merge-base", "--is-ancestor", name, "HEAD")
+		cmd.Dir = root
+		if cmd.Run() == nil {
+			expectPruned[name] = true
+		}
+	}
+	if !expectPruned["graph/done-ab12"] || len(expectPruned) != 1 {
+		t.Fatalf("fixture self-check: independent prune set = %v, want exactly graph/done-ab12", expectPruned)
+	}
+
+	res, err := GC(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	_ = res
+
+	if branchExists(t, root, "graph/done-ab12") {
+		t.Error("the merged, unclaimed claim branch must be pruned")
+	}
+	if !branchExists(t, root, "graph/wip-cd34") {
+		t.Error("an unmerged claim branch must survive (it is the only reference to that work)")
+	}
+	if !branchExists(t, root, "graph/active-ef56") {
+		t.Error("a branch checked out in a worktree must survive")
+	}
+	if !branchExists(t, root, "feature-x") {
+		t.Error("non-graph branches are outside gc's jurisdiction")
 	}
 }

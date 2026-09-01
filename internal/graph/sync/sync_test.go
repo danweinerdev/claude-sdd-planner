@@ -316,6 +316,7 @@ func (dirtyProvider) Allocate(string) (provider.Workspace, error) {
 }
 func (dirtyProvider) HandleFor(string) string               { return "" }
 func (dirtyProvider) Release(string) error                  { return nil }
+func (dirtyProvider) PruneMergedBranches() ([]string, error) { return nil, nil }
 func (dirtyProvider) Isolation(string, int) string          { return model.IsolationSharedDirty }
 func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
 
