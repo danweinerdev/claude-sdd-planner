@@ -15,7 +15,7 @@ tasks:
     justifies: "DD-3 (derived state cannot drift), DD-4 (INTENT-STALE), D-0022 (GREEN as assumed closure). Prevents the stored-status lie: a state edited outside the tool."
   - id: "3.2"
     title: "sdd next --claim: frontier, leases, claim records"
-    status: planned
+    status: complete
     verification: "go test ./cmd/sdd/ -run TestGraphNext -count=1 — next (read-only) lists the frontier critical-path-first and is allowed for read-only agents; next --claim atomically selects, records {by, lease_expires, workspace}, and returns the node with inlined cited AC/DD text, tests, hazards, and workspace handle; a second concurrent --claim never receives the same node (lock-serialized); claim on an empty frontier explains why (BLOCKED counts, RED counts); lease TTL defaults to 30 minutes via planning-config graphLeaseTtlMinutes; any store-touching verb by the claim holder renews the lease; expiry returns the node to the frontier and preserves the workspace file; sdd graph release clears a claim explicitly."
     justifies: "DD-10 (claims and leases in the master graph under the store lock; double-claim prevention independent of claim.by), D-0022. Prevents two agents working one node — the race dispatch discipline cannot structurally close."
     depends_on: ["3.1"]
@@ -110,22 +110,22 @@ persisted state.
 ## 3.2: sdd next --claim: frontier, leases, claim records
 
 ### Subtasks
-- [ ] Extend `cmd/sdd/next.go`: graph-aware mode when a graph exists for the
+- [x] Extend `cmd/sdd/next.go`: graph-aware mode when a graph exists for the
       plan (v1 markdown behavior untouched otherwise).
-- [ ] Read path: frontier listing, critical-path-first ordering (estimate
+- [x] Read path: frontier listing, critical-path-first ordering (estimate
       sums via a minimal longest-path helper; full analytics land in 4.2),
       `--json`.
-- [ ] `--claim`: under the store lock select frontier head (respecting
+- [x] `--claim`: under the store lock select frontier head (respecting
       artifact-disjointness against outstanding claims and provider
       capacity), write the claim record, allocate the provider workspace
       (3.3 interface; stub provider until it lands), return the full context
       payload with inlined cited requirement text.
-- [ ] Lease mechanics: `graphLeaseTtlMinutes` (default 30) from
+- [x] Lease mechanics: `graphLeaseTtlMinutes` (default 30) from
       planning-config; implicit renewal on any claim-holder store-touching
       verb; expiry-at-read returns the node to the frontier preserving the
       workspace file.
-- [ ] `sdd graph release <node>` for graceful abandonment.
-- [ ] Guard entries land in this task's revision (D-0014 discipline —
+- [x] `sdd graph release <node>` for graceful abandonment.
+- [x] Guard entries land in this task's revision (D-0014 discipline —
       `next --claim` mutating, bare `next` read-only).
 
 ### Notes
@@ -138,8 +138,24 @@ OQ-2 (resolved here: 30-minute default).
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `f6fe384534017e87733746548e46513bef5d5580`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `f6fe384534017e87733746548e46513bef5d5580`
+- Focused review: `git show f6fe384534017e87733746548e46513bef5d5580`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `f6fe384534017e87733746548e46513bef5d5580`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 25.1s and all eleven internal/graph packages; claim picks the heaviest frontier node (critical-path-first) and commits the record to the store; artifact-overlap and provider-capacity screens verified (capacity refusal names itself); expiry-at-read returns a lapsed node to the frontier, reports the reclaim, and preserves the workspace; renew and release are holder-only with --force takeover; allocation failure refuses the claim with no record written; empty-frontier refusals carry state counts and active-claim totals; lease TTL flows from planning-config graphLeaseTtlMinutes` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd next read/claim/release smoke in a temp planning root` | `built binary at f6fe384` | PASS | `read lists the frontier critical-path-first with weights and claim annotations; claim printed the context payload with inlined FR-01 requirement text, gate tests, hazards, artifacts, and a 45-minute lease honoring the config key; read-after-claim showed claimed=1; holder release returned the node` |
 
 ## 3.3: Workspace providers: git, p4, plain
 
