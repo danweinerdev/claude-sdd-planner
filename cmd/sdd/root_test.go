@@ -244,6 +244,7 @@ func handlerFlagSets() []struct {
 		{"sdd next", []string{"json", "claim", "by"}},
 		{"sdd graph release", []string{"plan", "by", "force", "json"}},
 		{"sdd graph sync", []string{"plan", "node", "by", "report", "command-exit", "command-log", "json"}},
+		{"sdd graph review", []string{"plan", "node", "artifact", "by", "json"}},
 		{"sdd graph split", []string{"plan", "node", "file", "json"}},
 		{"sdd graph set-tests", []string{"plan", "node", "by", "file", "json"}},
 		{"sdd graph gc", []string{"plan", "json"}},

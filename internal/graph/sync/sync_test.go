@@ -384,8 +384,8 @@ func TestSyncGateRouting(t *testing.T) {
 
 	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "gate",
 		ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil ||
-		!strings.Contains(err.Error(), "review flow") {
-		t.Fatalf("review gates route to phase 4: %v", err)
+		!strings.Contains(err.Error(), "sdd graph review") {
+		t.Fatalf("review gates route to `sdd graph review`: %v", err)
 	}
 	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "conv",
 		ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil {

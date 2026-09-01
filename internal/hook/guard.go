@@ -133,6 +133,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"init": false, "propose": false, "assemble": false, "convert": false,
 	// mutating, later phases (reserved: denied before they exist)
 	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
+	// mutating, phase 4: records gate observations and finding demotions
+	"review": false,
 }
 
 var (

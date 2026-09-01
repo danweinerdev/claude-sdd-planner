@@ -24,13 +24,37 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
+
+// deriveClosure builds the derive pass the render path projects: full
+// three-axis states (digest from the shared tree, current intent
+// fingerprints from the same sources compile embeds from) plus the D-0022
+// closed predicate. One closure, applied to both the preflight preview and
+// the written graph, so the dry-run and the render can never disagree.
+func deriveClosure(repoRoot string, sources *sourceSet) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
+	currentHashes := map[string]string{}
+	for id, item := range sources.items {
+		currentHashes[id] = item.Hash
+	}
+	digester := digest.New(repoRoot)
+	return func(g *model.Graph) (map[string]states.NodeState, map[string]bool) {
+		st := states.Derive(states.Inputs{
+			Graph:               g,
+			ArtifactDigest:      digester.Artifact,
+			CurrentIntentHashes: currentHashes,
+		})
+		return st, review.Closed(g, st)
+	}
+}
 
 // Finding is one semantic refusal: where (a node id, or `graph` for
 // whole-graph findings) and what.
@@ -106,11 +130,15 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 		added = append(added, n.ID)
 	}
 	// Preflight the render targets BEFORE the graph write: a view refusal
-	// (an existing hand-authored or frozen document in a target's place)
-	// must leave the graph untouched and the payload staged.
-	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter}
+	// (an existing hand-authored document in a target's place, or a frozen
+	// view the new nodes would change) must leave the graph untouched and
+	// the payload staged. The dry-run needs the same derived truth the real
+	// render will project, so the derive pass runs on the preview graph.
+	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, Retired: g.Retired}
 	preview.Nodes = append(append(preview.Nodes, g.Nodes...), p.Nodes...)
-	if err := preflightViews(root, plan, preview); err != nil {
+	deriveFor := deriveClosure(repoRoot, sources)
+	pst, pclosed := deriveFor(preview)
+	if err := preflightViews(root, plan, preview, pst, pclosed); err != nil {
 		return nil, nil, err
 	}
 
@@ -130,7 +158,8 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	}
 	// Views render from the graph as written (DD-2: projections of the
 	// source of truth, never of an in-memory draft).
-	views, err := renderViews(root, plan, final)
+	fst, fclosed := deriveFor(final)
+	views, err := renderViews(root, plan, final, fst, fclosed)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compile: graph written but view rendering failed (re-run `sdd compile` after fixing): %w", err)
 	}
@@ -335,6 +364,17 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 				if hazards.Known(h) && !satisfied[h] {
 					shape, _ := hazards.Lookup(h)
 					add(id, "hazard %q is discharged by no test; one of the node's tests must declare `satisfies: [%q]` and take the required shape: %s", h, h, shape.RequiresTestThat)
+				}
+			}
+		}
+
+		// Review-gate lanes come from the closed four-lane vocabulary
+		// (DD-9): a typo'd lane would silently review nothing, the same
+		// failure class an unknown hazard is refused for.
+		if n.Gate.Type == model.GateReview {
+			for _, lane := range n.Gate.Lanes {
+				if !model.KnownReviewLane(lane) {
+					add(id, "names unknown review lane %q; the lanes are: %s (or \"full\" for all four — the only selection that carries completion-grade closure)", lane, strings.Join(model.ReviewLanes, ", "))
 				}
 			}
 		}

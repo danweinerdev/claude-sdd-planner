@@ -182,6 +182,25 @@ func (g Gate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+// ReviewLanes is the closed four-lane vocabulary (DD-9): the same lanes the
+// review artifacts' lane_results carry. A subset gate names some of these;
+// "full" means all four and is the only selection that carries
+// completion-grade closure. Compile refuses unknown lane names the same way
+// hazards are refused — a typo'd lane would silently review nothing.
+var ReviewLanes = []string{
+	"review_blind_spots", "review_plan_drift", "review_quality", "review_spec_compliance",
+}
+
+// KnownReviewLane reports whether name is one of the four canonical lanes.
+func KnownReviewLane(name string) bool {
+	for _, l := range ReviewLanes {
+		if l == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Lanes is a review gate's lane selection. nil = full.
 type Lanes []string
 

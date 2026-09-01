@@ -31,6 +31,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	gsync "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/sync"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
@@ -51,6 +52,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
+	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphGCCmd())
@@ -287,6 +289,68 @@ func graphSyncCmd() *cobra.Command {
 	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphReviewCmd records a review gate's observation from a persisted
+// frozen Aligned review artifact (DD-9, D-0020): the gate greens only from
+// all three freeze signals read together, and findings that name scope
+// nodes demote them in the same compare-and-swap cycle. Mutating:
+// guard-covered per D-0014.
+func graphReviewCmd() *cobra.Command {
+	var plan, node, artifact, by string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "review",
+		Short: "Record a review gate's observation from a frozen Aligned review artifact",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, cmdArgs []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph review: --plan is required")
+			}
+			if node == "" {
+				return fmt.Errorf("graph review: --node is required")
+			}
+			if artifact == "" {
+				return fmt.Errorf("graph review: --artifact is required (the frozen review artifact produced by `sdd review scaffold` → `sdd review resolve`)")
+			}
+			root, err := store.FindPlanningRoot(".")
+			if err != nil {
+				return fmt.Errorf("graph review: %w", err)
+			}
+			_, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph review: %w", err)
+			}
+			res, err := greview.Record(greview.Options{
+				Root: root, RepoRoot: repoRoot, Plan: plan, Node: node,
+				Artifact: artifact, By: by,
+			})
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(res)
+			}
+			fmt.Fprintf(c.OutOrStdout(), "recorded review gate %s: pass at seq %d\n", res.Node, res.Observation.Seq)
+			fmt.Fprintf(c.OutOrStdout(), "scope (%d node(s)): %s\n", len(res.Scope), strings.Join(res.Scope, ", "))
+			if len(res.Demoted) > 0 {
+				fmt.Fprintf(c.OutOrStdout(), "demoted by findings (RED, workable again): %s\n", strings.Join(res.Demoted, ", "))
+			}
+			if res.Merged {
+				fmt.Fprintln(c.OutOrStdout(), "claim completed")
+			}
+			if res.WorkspaceReleased != "" {
+				fmt.Fprintf(c.OutOrStdout(), "workspace released: %s\n", res.WorkspaceReleased)
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "the review-gate node id")
+	c.Flags().StringVar(&artifact, "artifact", "", "path to the frozen Aligned review artifact")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the gate node is claimed)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }

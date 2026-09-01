@@ -7,10 +7,16 @@ package compile
 // overwrite any existing file that lacks the marker — that one rule is both
 // the transition guard (a v1 hand-authored phase doc is never clobbered by
 // accident; conversion takes it over explicitly, task 2.5) and the
-// frozen-view refusal stub (a completed v1 phase's doc, anchored by a frozen
-// review, is exactly such a file). TODO(4.1): once the closed predicate
-// derives, refuse regenerating a GENERATED view whose nodes are closed, per
-// DD-2's frozen-view invariant.
+// frozen-view refusal for hand-authored documents (a completed v1 phase's
+// doc, anchored by a frozen review, is exactly such a file). Generated views
+// have their own frozen-view rule (DD-2, task 4.1): a view rendered while
+// every node in it was CLOSED (GREEN + covered by a passing frozen full
+// review gate, the D-0022 completion-grade predicate) carries the
+// frozen-view marker, and a later render that would CHANGE such a file is
+// refused — byte-identical re-renders stay no-ops, so compile remains
+// runnable on a completed plan. A legitimately reopened phase (a finding
+// demoted a node after its gate recorded) requires removing the frozen view
+// explicitly; the refusal names that escape.
 //
 // The plan README is treated differently from phase docs: its prose sections
 // (Overview, Non-Goals, ...) and frontmatter are plan identity the graph
@@ -31,8 +37,14 @@ import (
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
+
+// frozenViewMarker marks a generated view rendered while every node in it
+// was closed. Its presence turns content-changing regeneration into a
+// refusal (DD-2's frozen-view invariant).
+const frozenViewMarker = "<!-- FROZEN VIEW — every node in this phase is closed: GREEN and covered by a passing frozen full review gate. This projection is history; a render that would change it is refused. -->"
 
 // viewMarker identifies a generated view. Its presence is the renderer's
 // permission to overwrite; its absence on an existing target is a refusal.
@@ -108,11 +120,14 @@ func viewSlug(label string) string {
 	return s
 }
 
-// phaseStatus projects a group's frontmatter status from raw observations
-// only: `in-progress` once any node carries a claim or observation, else
-// `planned`. Never `complete` — completion-grade closure derives from review
-// gates (4.1) and is not this renderer's claim to make.
-func phaseStatus(nodes []*model.Node) string {
+// phaseStatus projects a group's frontmatter status: `complete` only when
+// every node is CLOSED (the derived D-0022 predicate — never a stored flag,
+// never hand-checked), `in-progress` once any node carries a claim or
+// observation, else `planned`.
+func phaseStatus(nodes []*model.Node, closed map[string]bool) string {
+	if allClosed(nodes, closed) {
+		return "complete"
+	}
 	for _, n := range nodes {
 		if n.Claim != nil || n.Verification != nil {
 			return "in-progress"
@@ -121,14 +136,33 @@ func phaseStatus(nodes []*model.Node) string {
 	return "planned"
 }
 
+// allClosed reports whether every node in the group derives closed.
+func allClosed(nodes []*model.Node, closed map[string]bool) bool {
+	if len(nodes) == 0 {
+		return false
+	}
+	for _, n := range nodes {
+		if !closed[n.ID] {
+			return false
+		}
+	}
+	return true
+}
+
 // renderPhaseDoc produces one phase view. created/updated are supplied by
-// the writer so unchanged content stays byte-identical across days.
-func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated string) string {
+// the writer so unchanged content stays byte-identical across days. st and
+// closed carry the derived truth the view projects (DD-2: a projection may
+// show derived state precisely because it is never parsed back).
+func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated string, st map[string]states.NodeState, closed map[string]bool) string {
+	frozen := allClosed(ph.Nodes, closed)
 	var b strings.Builder
-	fmt.Fprintf(&b, "---\ntitle: \"%s\"\ntype: phase\nplan: \"%s\"\nphase: %d\nstatus: %s\n", ph.Title, plan, ph.Ordinal, phaseStatus(ph.Nodes))
+	fmt.Fprintf(&b, "---\ntitle: \"%s\"\ntype: phase\nplan: \"%s\"\nphase: %d\nstatus: %s\n", ph.Title, plan, ph.Ordinal, phaseStatus(ph.Nodes, closed))
 	fmt.Fprintf(&b, "created: %s\nupdated: %s\n", created, updated)
 	fmt.Fprintf(&b, "deliverable: \"Graph view: %d node(s) under phase label %s\"\ntasks: []\n---\n\n", len(ph.Nodes), ph.Title)
 	fmt.Fprintf(&b, "# Phase %d: %s\n\n%s\n\n", ph.Ordinal, ph.Title, viewMarker(plan))
+	if frozen {
+		fmt.Fprintf(&b, "%s\n\n", frozenViewMarker)
+	}
 
 	b.WriteString("## Overview\n\n")
 	fmt.Fprintf(&b, "Rendered view of %d node(s) from the plan graph (schema v%d, seq %d).\n", len(ph.Nodes), g.Version, g.SeqCounter)
@@ -150,15 +184,36 @@ func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated
 			fmt.Fprintf(&b, "- History: %s\n", n.History)
 		}
 		fmt.Fprintf(&b, "- Observation: %s\n", describeObservation(n.Verification))
+		fmt.Fprintf(&b, "- Closure: %s\n", describeClosure(n.ID, st, closed))
 		if n.Claim != nil {
 			fmt.Fprintf(&b, "- Claim: %s (lease expires %s)\n", n.Claim.By, n.Claim.LeaseExpires)
 		}
 	}
 
 	b.WriteString("\n## Acceptance Criteria\n\n")
-	b.WriteString("- [ ] Every node in this phase is truly closed: a passing observation, and\n      coverage by a passing frozen full review gate (derived from the graph;\n      never checked off by hand).\n\n")
+	box := "[ ]"
+	if frozen {
+		box = "[x]"
+	}
+	fmt.Fprintf(&b, "- %s Every node in this phase is truly closed: a passing observation, and\n      coverage by a passing frozen full review gate (derived from the graph;\n      never checked off by hand).\n\n", box)
 	b.WriteString("## Phase Completion Evidence\n\nPending — not complete.\n")
 	return b.String()
+}
+
+// describeClosure projects the two-axis closure distinction (D-0022):
+// closed vs assumed-closed for GREEN nodes, the derived state otherwise.
+// A nil st/closed (a caller without derive inputs) reads as the zero state.
+func describeClosure(id string, st map[string]states.NodeState, closed map[string]bool) string {
+	switch {
+	case closed[id]:
+		return "**closed** — GREEN and covered by a passing frozen full review gate"
+	case st[id].State == states.Green:
+		return "assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)"
+	case st[id].State == "":
+		return "underived (no state inputs at render time)"
+	default:
+		return fmt.Sprintf("open — state %s", st[id].State)
+	}
 }
 
 func joinOr(values []string, empty string) string {
@@ -242,21 +297,24 @@ var (
 	updatedLineRe = regexp.MustCompile(`(?m)^updated: (\S+)`)
 )
 
-// writeView writes one rendered view with date stability: an existing
-// generated view keeps its created date, and keeps its bytes entirely when
-// nothing but the updated stamp would change. An existing NON-generated file
-// is refused — see the package comment.
-func writeView(path, content, plan string) (wrote bool, err error) {
+// planWrite decides one view target's fate without writing: whether a write
+// is needed, and the exact bytes to write. It carries BOTH refusal rules —
+// an existing non-generated file (hand-authored or frozen v1 history), and
+// an existing FROZEN VIEW whose content would change (DD-2: a projection of
+// closed work is history; byte-identical re-renders stay no-ops). Shared by
+// preflight (dry-run, before the graph write) and writeView, so a refusal
+// can never fire after the graph moved.
+func planWrite(path, content, plan string) (write bool, filled string, err error) {
 	today := time.Now().Format("2006-01-02")
 	existing, readErr := os.ReadFile(path)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
-			return false, readErr
+			return false, "", readErr
 		}
-		return true, istore.WriteAtomic(path, fillDates(content, today, today))
+		return true, fillDates(content, today, today), nil
 	}
 	if !strings.Contains(string(existing), viewMarker(plan)) {
-		return false, fmt.Errorf("compile: %s exists and is not a generated view; refusing to overwrite it (a hand-authored or frozen document is taken over by `sdd graph convert`, never clobbered by a render)", path)
+		return false, "", fmt.Errorf("compile: %s exists and is not a generated view; refusing to overwrite it (a hand-authored or frozen document is taken over by `sdd graph convert`, never clobbered by a render)", path)
 	}
 	created := today
 	if m := createdLineRe.FindStringSubmatch(string(existing)); m != nil {
@@ -267,11 +325,26 @@ func writeView(path, content, plan string) (wrote bool, err error) {
 		prevUpdated = m[1]
 	}
 	// Byte-stability check: same content under the existing stamps means no
-	// write at all.
+	// write at all — and therefore no frozen-view refusal either, so
+	// compile stays runnable on a completed plan.
 	if fillDates(content, created, prevUpdated) == string(existing) {
-		return false, nil
+		return false, "", nil
 	}
-	return true, istore.WriteAtomic(path, fillDates(content, created, today))
+	if strings.Contains(string(existing), frozenViewMarker) {
+		return false, "", fmt.Errorf("compile: %s is a frozen view — every node in it was closed when it was rendered, and the graph now disagrees with that frozen history; if the phase was legitimately reopened (a review finding demoted a node), delete the frozen view file explicitly and recompile", path)
+	}
+	return true, fillDates(content, created, today), nil
+}
+
+// writeView writes one rendered view with date stability: an existing
+// generated view keeps its created date, and keeps its bytes entirely when
+// nothing but the updated stamp would change.
+func writeView(path, content, plan string) (wrote bool, err error) {
+	write, filled, err := planWrite(path, content, plan)
+	if err != nil || !write {
+		return false, err
+	}
+	return true, istore.WriteAtomic(path, filled)
 }
 
 // fillDates substitutes the renderer's date placeholders.
@@ -280,19 +353,16 @@ func fillDates(content, created, updated string) string {
 	return strings.Replace(content, "updated: {DATE}", "updated: "+updated, 1)
 }
 
-// preflightViews checks every render target before anything is written: a
-// target that exists without the generated marker is a refusal, so a compile
-// that would clobber a hand-authored or frozen document refuses BEFORE the
-// graph write, leaving nothing half-done.
-func preflightViews(root, plan string, g *model.Graph) error {
+// preflightViews dry-runs every render target before anything is written:
+// both refusal rules (non-generated file in a target's place, frozen view
+// whose content would change) fire here, BEFORE the graph write, leaving
+// nothing half-done.
+func preflightViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
 	planDir := filepath.Join(root, "Plans", plan)
 	for _, ph := range groupPhases(g, plan) {
 		path := filepath.Join(planDir, ph.Doc)
-		if existing, err := os.ReadFile(path); err == nil {
-			if !strings.Contains(string(existing), viewMarker(plan)) {
-				return fmt.Errorf("compile: %s exists and is not a generated view; refusing to overwrite it (a hand-authored or frozen document is taken over by `sdd graph convert`, never clobbered by a render)", path)
-			}
-		} else if !os.IsNotExist(err) {
+		content := renderPhaseDoc(plan, g, ph, "{DATE}", "{DATE}", st, closed)
+		if _, _, err := planWrite(path, content, plan); err != nil {
 			return err
 		}
 	}
@@ -300,10 +370,10 @@ func preflightViews(root, plan string, g *model.Graph) error {
 }
 
 // renderViews writes the phase views and updates the README projection.
-func renderViews(root, plan string, g *model.Graph) ([]string, error) {
+func renderViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
 	planDir := filepath.Join(root, "Plans", plan)
 	groups := groupPhases(g, plan)
-	if err := preflightViews(root, plan, g); err != nil {
+	if err := preflightViews(root, plan, g, st, closed); err != nil {
 		return nil, err
 	}
 
@@ -312,7 +382,7 @@ func renderViews(root, plan string, g *model.Graph) ([]string, error) {
 		path := filepath.Join(planDir, ph.Doc)
 		// Dates stay templated here; writeView fills them with stability
 		// rules (existing created preserved, updated stamped on change).
-		content := renderPhaseDoc(plan, g, ph, "{DATE}", "{DATE}")
+		content := renderPhaseDoc(plan, g, ph, "{DATE}", "{DATE}", st, closed)
 		wrote, err := writeView(path, content, plan)
 		if err != nil {
 			return nil, err
@@ -322,7 +392,7 @@ func renderViews(root, plan string, g *model.Graph) ([]string, error) {
 		}
 	}
 
-	changed, err := updateReadme(planDir, plan, groups)
+	changed, err := updateReadme(planDir, plan, groups, closed)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +405,7 @@ func renderViews(root, plan string, g *model.Graph) ([]string, error) {
 // updateReadme performs the two surgical README edits: rendered phases[]
 // (only when the existing value is the empty list — mixed v1 plans are
 // conversion's job) and the marker-delimited Graph View section.
-func updateReadme(planDir, plan string, groups []phaseGroup) (bool, error) {
+func updateReadme(planDir, plan string, groups []phaseGroup, closed map[string]bool) (bool, error) {
 	path := filepath.Join(planDir, "README.md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -348,7 +418,7 @@ func updateReadme(planDir, plan string, groups []phaseGroup) (bool, error) {
 		var b strings.Builder
 		b.WriteString("\nphases:\n")
 		for _, ph := range groups {
-			fmt.Fprintf(&b, "  - id: %d\n    title: \"%s\"\n    status: %s\n    doc: \"%s\"\n", ph.Ordinal, ph.Title, phaseStatus(ph.Nodes), ph.Doc)
+			fmt.Fprintf(&b, "  - id: %d\n    title: \"%s\"\n    status: %s\n    doc: \"%s\"\n", ph.Ordinal, ph.Title, phaseStatus(ph.Nodes, closed), ph.Doc)
 		}
 		out = strings.Replace(out, "\nphases: []\n", b.String(), 1)
 	}

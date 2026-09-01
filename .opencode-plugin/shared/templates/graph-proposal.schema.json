@@ -94,7 +94,7 @@
             { "const": "full" },
             { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
           ],
-          "description": "A `review` gate's lane set: \"full\" (all four lanes; the only form that carries completion-grade closure) or a named subset for lighter checkpoints."
+          "description": "A `review` gate's lane set: \"full\" (all four lanes; the only form that carries completion-grade closure) or a named subset for lighter checkpoints. The closed vocabulary: review_blind_spots, review_plan_drift, review_quality, review_spec_compliance — compile refuses unknown lane names."
         }
       }
     },

@@ -10,6 +10,7 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
@@ -233,12 +234,18 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 		}
 	}
 
-	// Idempotence: re-rendering the unchanged graph writes nothing.
+	// Idempotence: re-rendering the unchanged graph — with the same derive
+	// inputs the compile projected — writes nothing.
 	g2, err := gstore.Load(res.GraphPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := renderViews(root, "SamplePlan", g2)
+	sources, err := identifierSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, closed := deriveClosure(root, sources)(g2)
+	again, err := renderViews(root, "SamplePlan", g2, st, closed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,5 +588,120 @@ func TestCompileInputSelection(t *testing.T) {
 	_, findings, err := Run(root, root, "SamplePlan")
 	if err != nil || len(findings) != 0 {
 		t.Fatalf("assembled compile: %v %v", err, findings)
+	}
+}
+
+func TestLaneAwareness(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	// One work node, one subset-lane checkpoint over it, one typo'd lane —
+	// and NO full gate anywhere: the subset gate must not confer coverage.
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "w", "contract": "work lands", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t_w", "file": "f.ext"}]}, "hazards": []},
+    {"id": "checkpoint", "contract": "light check holds", "justifies": ["AC-01"], "deps": ["w"],
+     "gate": {"type": "review", "lanes": ["review_quality", "review_speling"]}, "hazards": []}
+  ]
+}
+`)
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile must refuse with findings, not fail: %v", err)
+	}
+	joined := ""
+	for _, f := range findings {
+		joined += f.String() + "\n"
+	}
+	for _, want := range []string{
+		`checkpoint: names unknown review lane "review_speling"`,
+		`w: covered by no full review gate`,
+		`checkpoint: covered by no full review gate`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing finding %q in:\n%s", want, joined)
+		}
+	}
+	// The lane vocabulary is named in the refusal so the fix is copyable.
+	if !strings.Contains(joined, "review_blind_spots, review_plan_drift, review_quality, review_spec_compliance") {
+		t.Errorf("the refusal must name the four lanes:\n%s", joined)
+	}
+}
+
+// TestFrozenViewLifecycle: a view rendered while every node in it derives
+// closed carries the frozen marker and status complete; byte-identical
+// re-renders stay no-ops; a render that would CHANGE the frozen view is
+// refused; deleting the file explicitly is the sanctioned escape.
+func TestFrozenViewLifecycle(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	readme := "---\ntitle: \"P\"\ntype: plan\nstatus: draft\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags: []\nrelated: []\nphases: []\n---\n\n# P\n"
+	if err := os.WriteFile(filepath.Join(planDir, "README.md"), []byte(readme), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pass := func(seq int) *model.Verification {
+		return &model.Verification{Result: model.ResultPass, Seq: seq, Isolation: model.IsolationClean}
+	}
+	g := &model.Graph{Version: 1, SeqCounter: 2, Nodes: []model.Node{
+		{ID: "a", Contract: "works", Gate: model.Gate{Type: model.GateTests},
+			Hazards: model.Hazards{}, Estimate: 1, Verification: pass(1)},
+		{ID: "g1", Contract: "reviewed", Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview},
+			Hazards: model.Hazards{}, Estimate: 1, Verification: pass(2)},
+	}}
+	st := map[string]states.NodeState{
+		"a":  {ID: "a", State: states.Green},
+		"g1": {ID: "g1", State: states.Green},
+	}
+	closed := map[string]bool{"a": true, "g1": true}
+
+	written, err := renderViews(root, "P", g, st, closed)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if len(written) != 2 {
+		t.Fatalf("expected phase doc + README, wrote %v", written)
+	}
+	doc, err := os.ReadFile(filepath.Join(planDir, "01-Ungrouped.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		frozenViewMarker, "status: complete",
+		"- [x] Every node in this phase is truly closed",
+		"**closed** — GREEN and covered by a passing frozen full review gate",
+	} {
+		if !strings.Contains(string(doc), want) {
+			t.Fatalf("frozen view missing %q:\n%s", want, doc)
+		}
+	}
+
+	// Byte-identical re-render: no-op, no refusal — compile stays runnable
+	// on a completed plan.
+	again, err := renderViews(root, "P", g, st, closed)
+	if err != nil {
+		t.Fatalf("identical re-render must not refuse: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("identical re-render must write nothing: %v", again)
+	}
+
+	// The graph moves under the frozen view (a contract edit, a demotion,
+	// anything content-changing): the render is refused, naming the escape.
+	g.Nodes[0].Contract = "works differently now"
+	_, err = renderViews(root, "P", g, st, closed)
+	if err == nil || !strings.Contains(err.Error(), "frozen view") {
+		t.Fatalf("a content-changing render of a frozen view must refuse: %v", err)
+	}
+
+	// The sanctioned escape: delete the frozen view explicitly, recompile.
+	if err := os.Remove(filepath.Join(planDir, "01-Ungrouped.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderViews(root, "P", g, st, closed); err != nil {
+		t.Fatalf("after the explicit delete, the render proceeds: %v", err)
 	}
 }

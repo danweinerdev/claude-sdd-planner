@@ -158,6 +158,20 @@ func Derive(in Inputs) map[string]NodeState {
 						ns.DigestStale = append(ns.DigestStale, artifact)
 					}
 				}
+				if n.Gate.Type == model.GateReview {
+					// A review gate's observation records the aggregate
+					// diff it reviewed: every scope artifact's digest at
+					// review time. Drift in ANY of them is ordinary digest
+					// staleness — the reviewed diff is no longer the diff
+					// on disk (DD-9's gate-STALE rule). Gate nodes declare
+					// no artifacts of their own, so this iterates the
+					// recorded keys instead.
+					for artifact, recorded := range v.ArtifactDigests {
+						if in.ArtifactDigest(artifact) != recorded {
+							ns.DigestStale = append(ns.DigestStale, artifact)
+						}
+					}
+				}
 				sort.Strings(ns.DigestStale)
 			}
 			if in.CurrentIntentHashes != nil {

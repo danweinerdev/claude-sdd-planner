@@ -105,6 +105,38 @@ func TestDigestStaleness(t *testing.T) {
 	}
 }
 
+func TestReviewGateDigestStalenessOverRecordedKeys(t *testing.T) {
+	// A review gate declares no artifacts of its own; its observation
+	// records the aggregate scope diff (every scope artifact's digest at
+	// review time). Drift in ANY recorded key is ordinary digest staleness.
+	gate := node("g1", nil, pass(1))
+	gate.Gate = model.Gate{Type: model.GateReview}
+	gate.Verification.ArtifactDigests = map[string]string{
+		"src/a.ext": "sha256:aaaa",
+		"src/b.ext": "sha256:bbbb",
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{gate}}
+
+	fresh := map[string]string{"src/a.ext": "sha256:aaaa", "src/b.ext": "sha256:bbbb"}
+	s := Derive(Inputs{Graph: g, ArtifactDigest: func(rel string) string { return fresh[rel] }})
+	if s["g1"].State != Green {
+		t.Fatalf("matching aggregate diff must stay GREEN: %+v", s["g1"])
+	}
+
+	drifted := map[string]string{"src/a.ext": "sha256:aaaa", "src/b.ext": "sha256:DIFF"}
+	s = Derive(Inputs{Graph: g, ArtifactDigest: func(rel string) string { return drifted[rel] }})
+	if s["g1"].State != Stale || len(s["g1"].DigestStale) != 1 || s["g1"].DigestStale[0] != "src/b.ext" {
+		t.Fatalf("a drifted scope artifact must stale the gate: %+v", s["g1"])
+	}
+
+	// A reviewed artifact deleted from disk is drift too.
+	gone := map[string]string{"src/a.ext": "sha256:aaaa"}
+	s = Derive(Inputs{Graph: g, ArtifactDigest: func(rel string) string { return gone[rel] }})
+	if s["g1"].State != Stale {
+		t.Fatalf("a deleted reviewed artifact must stale the gate: %+v", s["g1"])
+	}
+}
+
 func TestIntentStaleness(t *testing.T) {
 	n := node("a", nil, pass(1))
 	n.IntentHashes = map[string]string{"AC-01": "sha256:old", "FR-01": "sha256:same"}

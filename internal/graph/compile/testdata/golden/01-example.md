@@ -32,6 +32,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: src/schema.ext
 - Estimate: 1
 - Observation: none yet
+- Closure: open — state READY
 
 ### parse-config
 
@@ -43,6 +44,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: src/config.ext
 - Estimate: 2
 - Observation: none yet
+- Closure: open — state BLOCKED
 
 ### build-gate
 
@@ -53,6 +55,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: none (explicit claim)
 - Estimate: 1
 - Observation: none yet
+- Closure: open — state READY
 
 ### feature-review
 
@@ -63,6 +66,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: none (explicit claim)
 - Estimate: 1
 - Observation: none yet
+- Closure: open — state BLOCKED
 
 ## Acceptance Criteria
 

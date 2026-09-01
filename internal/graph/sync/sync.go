@@ -108,7 +108,7 @@ func Run(o Options) (*Result, error) {
 
 	switch node.Gate.Type {
 	case model.GateReview:
-		return nil, fmt.Errorf("graph sync: %q is a review gate; its observation is the frozen Aligned review artifact recorded by the phase-4 review flow, not a test report", o.Node)
+		return nil, fmt.Errorf("graph sync: %q is a review gate; record its frozen Aligned review artifact with `sdd graph review --plan <plan> --node %s --artifact <review path>`, not a test report", o.Node, o.Node)
 	case model.GateUnspecified:
 		return nil, fmt.Errorf("graph sync: %q carries the unspecified-gate conversion sentinel; specify its gate (it should not have compiled)", o.Node)
 	case model.GateCommand:
