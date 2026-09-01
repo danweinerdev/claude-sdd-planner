@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "seq_counter": 31,
+  "seq_counter": 32,
   "nodes": [
     {
       "id": "task-1-1",
@@ -1265,7 +1265,24 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "v2-5-skills-self-hosting"
+      "phase": "v2-5-skills-self-hosting",
+      "verification": {
+        "result": "pass",
+        "seq": 32,
+        "artifact_digests": {
+          "internal/graph/ops/ops.go": "sha256:838ffdb619ce9e5bfdb527ed824ca1284697fc66bb1da0e6c4d3e06fe4b20507",
+          "internal/graph/ops/ops_test.go": "sha256:5035cc67d8d2916c7b2dfb4b1674a4af83b6dab37db565edf9efd01127759c34",
+          "internal/graph/provider/provider.go": "sha256:4a9880fb257cf7ce9a2ce117faa092214eef3ce619f33d6ae1a9ff88c10dddcd",
+          "internal/graph/sync/report_vendor_test.go": "sha256:72e006ddbc26347b59db3fb664422d6f6e2eb2699fa08413bea09b3f5a47547c",
+          "internal/graph/sync/testdata/reports/junit-vendor.xml": "sha256:bb51343ecfffbc3978c454c000a624cda48a9a57a86c390253e72d8f7e056603"
+        },
+        "report_digest": "sha256:77e10bc4d29fe05d2e4a6878f290b994a626a41244f73549090afa01cb2a7b88",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "2ba187c1d778593babcf509de6fb1f2fc9467086"
+        }
+      }
     },
     {
       "id": "gate-plan-final",

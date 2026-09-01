@@ -3,7 +3,7 @@ title: "Skill Rewrites and Self-Hosting"
 type: phase
 plan: "SddGraph"
 phase: 5
-status: in-progress
+status: complete
 created: 2026-08-31
 updated: 2026-09-01
 deliverable: "The plan skill rewritten as a decomposition protocol with the structured interview, the implement skill rewritten as the walk loop, regenerated portable trees and synced docs with an advanced version floor, and the self-hosting pilot executed under graph execution"
@@ -352,18 +352,39 @@ Design references: D-0022 v1 clause; DD-2 (views are projections).
 | `validation of the real pilot artifacts (built binary at 178e135)` | `sdd validate --scope Plans/SddGraph against the real planning root carrying the compiled 31-node graph, five rendered views, and the upserted README section` | PASS | `the pilot's nine coexistence errors clear with zero waivers — the root reports Valid; the root-cause ordering bug (the evidence-section normalizer swallowing the begin marker, an HTML comment rather than a heading) was found by diffing the real pinned README against the real current one and is pinned by the reorder comment` |
 
 ## Acceptance Criteria
-- [ ] Both rewritten skills drive the graph workflow end to end with no
+- [x] Both rewritten skills drive the graph workflow end to end with no
       hand-written plan/phase markdown and no narrated completion path
       (DD-13, DD-16, D-0022).
-- [ ] Generated trees regenerate cleanly; docs and templates agree with the
+- [x] Generated trees regenerate cleanly; docs and templates agree with the
       shipped verb surface; minSddVersion floor advanced deliberately
       (D-0021).
-- [ ] The self-hosting pilot walked ≥2 real nodes with red_seq recorded and
+- [x] The self-hosting pilot walked ≥2 real nodes with red_seq recorded and
       clean-isolation merges; its finding list is recorded (empty allowed,
       absent not).
-- [ ] `make test` green across the phase.
+- [x] `make test` green across the phase.
 
 ## Phase Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `2ba187c1d778593babcf509de6fb1f2fc9467086`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `2ba187c1d778593babcf509de6fb1f2fc9467086`
+- Final aligned review: Plans/SddGraph/reviews/08-sddgraph-code-review-2ba187c.md; frozen: b9de2fb1eeb0e6fe16f98f100163df458c1af8df..2ba187c1d778593babcf509de6fb1f2fc9467086
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green at phase head with zero failing lines: template gate (10 templates including the graph-proposal pair), portable drift and leak gates, the frozen regression corpus, and the entire go suite including the phase's new tests (walk-loop skill regeneration, gate-artifact binding, AC-coverage scoping, coexistence normalization and ownership exemption, gc branch pruning, vendor corpus shapes); all four phase ACs verified and checked; the self-hosting pilot walked two real nodes with red_seq recorded and clean-isolation merges and its nine-entry finding list is recorded in 5.4's evidence` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd review resolve + sdd graph review` | `four-lane single-agent review 08 over b9de2fb1eeb0e6fe16f98f100163df458c1af8df..2ba187c1d778593babcf509de6fb1f2fc9467086, then recorded onto the graph's phase-5 gate` | PASS | `resolved and frozen, verdict Aligned, zero findings (the phase's material findings were filed as tasks 5.5/5.6 by the pilot and fixed in-range with red observed first); gate-v2-5-skills-self-hosting then greened from the frozen artifact at seq 32 with its 25-node scope printed — the converted graph now reads GREEN=30 closed=30/31 with only the terminal gate honestly open awaiting a plan-level review artifact` |
+
+### Completed task identities
+
+- `5.1`: `922b2a1dbcf57a22019f3d55e9e2fc069cb2482f`
+- `5.2`: `aa914086a9d132a6db6be8315ccd5c20e6005f6b`
+- `5.3`: `a49e6e5fab59a53c533b2c0af4ec17f18c4c5b63`
+- `5.4`: `2cb4e4c09dedfec9b3be0d29d83d1f2ad73ed5c3`
+- `5.5`: `074d598ff1cb37917e1d9ac051fc3f4d33850d7f`
+- `5.6`: `178e13523f23423bfed3c1449deb4c37377239cb`
