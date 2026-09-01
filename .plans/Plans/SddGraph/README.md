@@ -34,7 +34,7 @@ phases:
     depends_on: [2]
   - id: 4
     title: "Review Gates and Analytics"
-    status: planned
+    status: in-progress
     doc: "04-Review-Gates-And-Analytics.md"
     depends_on: [3]
   - id: 5

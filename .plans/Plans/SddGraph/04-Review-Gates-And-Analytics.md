@@ -3,14 +3,14 @@ title: "Review Gates and Analytics"
 type: phase
 plan: "SddGraph"
 phase: 4
-status: planned
+status: in-progress
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 deliverable: "Feature-scoped review gates with derived scope, the closed predicate, finding-driven demotion, and the graph analytics surface (path, risk, shape, export) plus fuzz hardening of external-input parsers"
 tasks:
   - id: "4.1"
     title: "Review gates: derived scope, closed predicate, finding demotion"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/... -run TestReviewGate -count=1 — scope(A) derives as A's dependency closure minus nodes inside an earlier frozen full gate's scope (nested-gates fixture proves no diff is reviewed twice); a review gate greens only from a persisted review artifact that is resolved, frozen: true, and verdict Aligned (D-0020 wiring through the existing sdd review scaffold/resolve flow), bound to the digest of the scope's aggregate diff with VCS-native provenance; a drifted scope diff derives the gate STALE; recording a resolved review whose findings name scope nodes writes failing observations against each named node (they derive RED, re-enter workable) and dependants of the demoted nodes go STALE by seq after rework re-verifies; lanes: full vs named subset, only full carries closure; the closed predicate derives as GREEN and inside a GREEN frozen full gate's scope with matching diff digest; rendered views project assumed-closed vs closed distinctly and 2.4's frozen-view refusal now keys on the closed predicate."
     justifies: "DD-9 (feature-scoped tiered reviews, two-axis closure, mechanical reopen), D-0022 (completion-grade closure), D-0020 (freeze-at-resolve inherited unchanged). Prevents both failure modes the design names: uniform review weight at graph granularity, and a faulted node still reading GREEN between finding and fix."
   - id: "4.2"
@@ -43,29 +43,29 @@ input.
 ## 4.1: Review gates: derived scope, closed predicate, finding demotion
 
 ### Subtasks
-- [ ] Scope derivation in `internal/graph/states` (or a sibling
+- [x] Scope derivation in `internal/graph/states` (or a sibling
       `internal/graph/review`): dependency closure minus earlier frozen full
       gates' scopes; property test on nested-gate fixtures (disjoint
       incremental scopes, union covers the closure).
-- [ ] Gate observation source: wire to the persisted review artifact
+- [x] Gate observation source: wire to the persisted review artifact
       produced by the existing `sdd review scaffold` → `resolve` flow —
       gate reads `resolved` + `frozen: true` + verdict `Aligned`; no new
       review mechanism.
-- [ ] Aggregate-diff digest: union of scope nodes' artifact changes, hashed
+- [x] Aggregate-diff digest: union of scope nodes' artifact changes, hashed
       with the DD-6 anchor rules; VCS-native reference (git range / p4 CL +
       opened files) recorded as provenance; drift ⇒ gate STALE via ordinary
       digest staleness.
-- [ ] Finding demotion: a resolution whose findings map names scope nodes
+- [x] Finding demotion: a resolution whose findings map names scope nodes
       records failing observations against them through the sync path
       (RED, workable again); demotion happens as part of recording the
       review, not as agent courtesy.
-- [ ] Lanes: `full` (all four) vs named subset; only `full` participates in
+- [x] Lanes: `full` (all four) vs named subset; only `full` participates in
       the closed predicate; compile's coverage invariant (2.3) already
       requires full-gate coverage — extend its tests to lane awareness.
-- [ ] Closed predicate + projections: rendered views distinguish
+- [x] Closed predicate + projections: rendered views distinguish
       assumed-closed from closed; 2.4's frozen-view refusal stub upgraded to
       key on closed (TODO from 2.4 resolved).
-- [ ] Guard entries for any new verb surface (e.g., the review-recording
+- [x] Guard entries for any new verb surface (e.g., the review-recording
       hook) in the same revision.
 
 ### Notes
@@ -80,8 +80,22 @@ distinction). The p4 review surface is the CL diff — provenance capture from
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `6e5ae294e0a63a34d764fb3527dcf80f262a25db`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `6e5ae294e0a63a34d764fb3527dcf80f262a25db`
+- Focused review: `git show 6e5ae294e0a63a34d764fb3527dcf80f262a25db`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `6e5ae294e0a63a34d764fb3527dcf80f262a25db`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./... -count=1` | `.` | PASS (`exit 0`) | `full sweep green including the new internal/graph/review package (scope disjointness/union property on nested-gate fixtures incl. three-level transitivity; three-signal refusal batched and naming each failing signal; lane conformance full vs named subset; aggregate scope-artifact digests on the gate observation with drift deriving STALE; demotion seq-stamped below the gate obs, RED+workable, gate seq-stale on rework, out-of-scope names refused citing the finding id; closed predicate incl. gate self-closure and stale-gate closure withdrawal; claim discipline with merge-on-record), states review-gate digest extension table test, compile lane-vocabulary refusal + subset-no-coverage test, frozen-view lifecycle test (freeze, no-op, refusal, explicit-delete escape), goldens regenerated with closure projections; go vet and staticcheck clean` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `CLI smoke in a temp git repo` | `built binary at 6e5ae29: compile impl+fgate, green impl, then the review verb` | PASS | `unfrozen artifact refused naming the frozen signal; frozen Aligned recorded — gate pass seq 2, scope [impl], states GREEN:2; finding naming impl demoted it (fail seq 3 < gate seq 4) with aggregate digests recorded` |
 
 ### Trap
 You will want the gate to green from the review's `status: resolved` alone.
