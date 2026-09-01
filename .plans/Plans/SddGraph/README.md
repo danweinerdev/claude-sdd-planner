@@ -1,7 +1,7 @@
 ---
 title: "SddGraph Implementation"
 type: plan
-status: active
+status: complete
 created: 2026-08-31
 updated: 2026-09-01
 tags: [graph, execution, tdd, sdd-cli]
@@ -171,13 +171,27 @@ duplicated.
 
 ## Plan Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. Evidence
-uses the exact labels `Verified`, `Repository`, `VCS`, `Revision / checkpoint`,
-and `Identity recheck`, each exactly once visibly as `- <label>: <value>`. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `7c55ea5966011f33cbd889e785f2385620f17ab3`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `7c55ea5966011f33cbd889e785f2385620f17ab3`
 
-<!-- graph-view:begin — generated section, do not edit -->
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green at the plan-close head (v2.8.0): template gate with the graph-proposal pair, portable drift and leak gates, the frozen regression corpus, and the entire go suite covering all five phases' deliverables — model and strict decoding, hazards vocabulary, proposal staging and compile with rendered views, convert, guards, derived states, claims and providers, sync with the merge gate, split/set-tests/gc with branch pruning, review gates with the closed predicate, analytics, fuzz corpora, the rewritten skills' regenerated trees, AC-coverage scoping, and v1-graph validation coexistence; every phase closed on a persisted frozen Aligned four-lane review and evidence-gated task identities` |
 
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `self-hosting acceptance (design § Testing Strategy)` | `the plan converted itself and walked its own remaining work with the binary it built` | PASS | `SddGraph-Graph.json is committed as the living integration fixture: 31 nodes, GREEN=30 closed=30/31, five phase gates greened from the five real frozen review artifacts, two pilot nodes walked claim-red-green-merge-integrate with red_seq armed before every green, and only the terminal gate honestly open awaiting a plan-level review artifact; the pilot's nine-entry finding list is recorded in task 5.4's evidence with every material entry filed and fixed as tasks 5.5/5.6` |
+
+### Completed phase identities
+
+- `1`: `edee5d595b069bb5a76505c9fc611bfac2df1efd`; review: `Plans/SddGraph/reviews/04-sddgraph-code-review-edee5d5.md`
+- `2`: `39a31750362225d3ce885477f68621a70f470eac`; review: `Plans/SddGraph/reviews/05-sddgraph-code-review-39a3175.md`
+- `3`: `55f24cf20c1bb2bb1911a0cf1cc38a84e31359e8`; review: `Plans/SddGraph/reviews/06-sddgraph-code-review-55f24cf.md`
+- `4`: `8ba800581a7ab1a127de5294f051d32e9b46eef3`; review: `Plans/SddGraph/reviews/07-sddgraph-code-review-8ba8005.md`
+- `5`: `2ba187c1d778593babcf509de6fb1f2fc9467086`; review: `Plans/SddGraph/reviews/08-sddgraph-code-review-2ba187c.md`
 ## Graph View
 
 <!-- GENERATED VIEW — source of truth: SddGraph-Graph.json. Regenerate with `sdd compile --plan SddGraph`. Edits here are overwritten. -->
