@@ -27,10 +27,16 @@ tasks:
     depends_on: ["5.1", "5.2"]
   - id: "5.4"
     title: "Self-hosting pilot: convert this plan and walk a live slice"
-    status: planned
+    status: in-progress
     verification: "Documented pilot run in this task's evidence, executed with the released binary: sdd graph convert --plan SddGraph produces a staged proposal whose sentinels are resolved via the payload path; sdd compile succeeds with the coverage invariant satisfied; at least two nodes corresponding to real remaining work from this phase are executed end to end via next --claim -> red sync -> green sync -> merge with clean isolation and red_seq recorded; sdd graph status/path/shape output captured; every discrepancy between the design's claims and observed behavior is filed as a finding list in the evidence (empty list is a pass, silence is not)."
     justifies: "The design's Testing Strategy names self-hosting as acceptance: the first real plan executed under SddGraph is a slice of its own implementation plan. DD-15 (convert exercised on a real v1 plan, not only fixtures). Prevents shipping a walk loop that has only ever walked fixtures."
     depends_on: ["5.3"]
+  - id: "5.5"
+    title: "Scope compile's AC-coverage demand to the plan's own specs"
+    status: complete
+    verification: "go test ./internal/graph/compile/ -run TestACCoverage -count=1 — ACs of specs DIRECTLY related in the plan README still demand covering nodes (existing fixture behavior unchanged); ACs of specs reachable only transitively (via a design's related graph) demand no coverage, while their FR/NFR/AC/DD ids remain citable and fingerprinted; the pilot's reconnaissance compile of the converted SddGraph plan drops its 47 foreign-AC findings."
+    justifies: "DD-4 (coverage is an exit code over the plan's OWN requirement surface); pilot finding F-01 from task 5.4 (filed per its subtask: material discrepancies become new tasks, never silent fixes). Prevents every graph plan in a multi-plan root being refused for acceptance criteria owned by other plans' completed specs."
+    depends_on: []
 ---
 
 # Phase 5: Skill Rewrites and Self-Hosting
@@ -230,6 +236,51 @@ The pilot will tempt you to hand-pick two trivial already-green nodes so the
 walk "passes". The pilot's value is adversarial: pick nodes with real red
 phases and at least one hazard-discharging test, or the red-before-green and
 demotion machinery ships having never fired outside fixtures.
+
+## 5.5: Scope compile's AC-coverage demand to the plan's own specs
+
+### Subtasks
+- [x] Red test: a spec reachable only transitively (plan -> design -> spec)
+      carries an unchecked AC; compile must not demand its coverage; the AC's
+      id must still resolve as a citation. Observe the test failing against
+      current behavior first.
+- [x] `rules` API: expose the DIRECT related sources of an artifact (the
+      plan README's own `related` list, resolved) alongside the existing
+      transitive walk.
+- [x] `compile.identifierSources`: collect `acIDs` only from directly
+      related specs; `items` (citable ids + fingerprints) stay transitive.
+- [x] Re-run the pilot's reconnaissance compile: the 47 foreign-AC findings
+      disappear; the 22 nodes' sentinel findings remain (they are the
+      operator's real judgments, not this task's scope).
+
+### Notes
+Filed from the self-hosting pilot (5.4 finding F-01): Plans/SddGraph reaches
+Specs/SDD-Toolchain only through Designs/SddGraph's background citation, and
+compile demanded coverage of all 47 of that complete plan's unchecked ACs.
+The v1 validator has the same reach and absorbs it with SDD160 waivers;
+compile has no waiver mechanism by design, so the scoping must be right
+rather than waivable. Revision boundary: the rules API export, the compile
+scoping change, and the tests — nothing else. Design references: DD-4;
+§ Coverage invariant.
+
+### Completion Evidence
+
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `074d598ff1cb37917e1d9ac051fc3f4d33850d7f`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `074d598ff1cb37917e1d9ac051fc3f4d33850d7f`
+- Focused review: `git show 074d598ff1cb37917e1d9ac051fc3f4d33850d7f`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `074d598ff1cb37917e1d9ac051fc3f4d33850d7f`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./internal/graph/compile/ -run TestACCoverage -count=1` | `.` | PASS (`exit 0`) | `green after red was observed first: the new test initially refused with exactly the foreign-AC finding (AC-90 coverage demanded for a spec reachable only plan->design->spec), then passed under the scoping; the test also proves transitive ids stay citable AND fingerprinted (own-2 cites FR-90 from the foreign spec and its intent hash embeds); full sweep of internal/graph, internal/rules, and cmd/sdd suites green; go vet clean; staticcheck clean on the touched packages (six U1000s in untouched internal/rules files are pre-existing debt, noted for the phase review)` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `pilot reconnaissance compile (built binary at 074d598)` | `sdd compile --plan SddGraph against the real planning root with the converted 22-node proposal staged` | PASS | `findings drop from 136 to 89 with zero foreign-AC refusals remaining; every surviving finding is a real operator judgment — the 22 converted nodes' contract/gate/hazard sentinels plus the full-gate coverage backstop, and task-4-3's empty justifies (its v1 prose carried no extractable ids) — which is exactly the set task 5.4's sentinel resolution owns` |
 
 ## Acceptance Criteria
 - [ ] Both rewritten skills drive the graph workflow end to end with no

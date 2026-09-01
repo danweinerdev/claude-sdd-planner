@@ -1,0 +1,3 @@
+*.sdd-lock
+*.lock
+.graph/
