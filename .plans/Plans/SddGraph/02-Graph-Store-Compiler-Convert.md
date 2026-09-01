@@ -21,7 +21,7 @@ tasks:
     depends_on: ["2.1"]
   - id: "2.3"
     title: "sdd compile: batched validation, coverage, intent hashes"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/compile/... -count=1 — one compile pass over a deliberately broken proposal reports ALL of: JSON syntax with position, schema violation with JSON path and did-you-mean, uncovered AC (AC-3 uncovered), dangling dep, dependency cycle a->b->a, untriaged hazards, hazard with no satisfying test shape, node covered by no full review gate, artifacts of two claimed nodes overlapping; exit 1 with every finding, exit 2 on malformed invocation. Intent-hash test: embed over the shared normalizer, then a whitespace-only spec rewrap does NOT change the hash and a wording change DOES. Round-trip gate from 1.3 extended: the template exemplar compiles clean."
     justifies: "DD-4 (coverage becomes an exit code; intent hashes make spec edits ripple), DD-9 (coverage invariant, no silent gate insertion), DD-11 (all errors in one pass). Prevents a faithfully-executed wrong decomposition going GREEN — the design's named weakness of graph-only models."
     depends_on: ["2.2"]
@@ -159,22 +159,22 @@ on the common case. Design references: DD-11, § Interfaces.
 ## 2.3: sdd compile: batched validation, coverage, intent hashes
 
 ### Subtasks
-- [ ] Create `internal/graph/compile`: pipeline parse → schema → semantic,
+- [x] Create `internal/graph/compile`: pipeline parse → schema → semantic,
       accumulating findings; never stop at the first error within a stage
       class.
-- [ ] Semantic checks: `justifies` coverage (every AC in reachable specs has
+- [x] Semantic checks: `justifies` coverage (every AC in reachable specs has
       a covering node; every citation resolves), dangling deps, cycles
       (reuse/port topo sort into `internal/graph/algorithms`), untriaged
       hazards, hazard-without-satisfying-test-shape, DD-9 coverage invariant
       (every node inside the dependency closure of ≥1 `full` review gate —
       compile never inserts one), claimed-artifact overlap.
-- [ ] Shared intent-hash normalizer: identifier-token span to next same-depth
+- [x] Shared intent-hash normalizer: identifier-token span to next same-depth
       item, whitespace collapsed, wrap joined, markers/emphasis stripped;
       SHA-256; one function used by embed and (phase 3) recheck.
-- [ ] Write the compiled graph to the store under the lock; report every
+- [x] Write the compiled graph to the store under the lock; report every
       allocated/embedded hash in the result.
-- [ ] Extend 1.3's round-trip gate: template exemplar compiles clean.
-- [ ] Exit codes per the sdd contract (0/1/2).
+- [x] Extend 1.3's round-trip gate: template exemplar compiles clean.
+- [x] Exit codes per the sdd contract (0/1/2).
 
 ### Notes
 Revision boundary: `sdd compile --plan <name>` produces a valid committed
@@ -187,8 +187,24 @@ compile's write side here is graph-only.
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2`
+- Focused review: `git show fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... ./internal/rules/ -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 23.673s, internal/graph/{algorithms,compile,hazards,intent,model,proposal,store}, internal/rules 114.579s; one deliberately broken proposal reports ALL findings in one pass (dup id, dangling dep, cycle cyc-a->cyc-b->cyc-a, untriaged hazards, unknown hazard, satisfies-undeclared, hazard-undischarged naming the required shape, unsourced node, dangling AC-99/D-0099 citations, superseded D-0002 citation, uncovered AC-02, covered-by-no-full-gate, claimed-artifact overlap) with the graph untouched and the payload still staged; happy path embeds sha256 fingerprints for FR/AC/DD and not for ledger ids, then consumes the payload after the durable write; a rewrap-only spec edit embeds the identical FR-01 hash across two compiles while reword/literal changes fire (intent table tests); the filled template exemplar compiles with zero findings; input selection points at propose when empty and assemble when multiple fragments are staged` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings after merging the S1021 declaration in algorithms.go` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `sdd compile end-to-end smoke in a temp planning root` | `built binary at fe2b76e` | PASS | `template exemplar filled (ids substituted, untriaged resolved) -> propose -> compile: 4 nodes appended, 5 fingerprints embedded, fragment consumed; parse-config carries AC-01 and DD-1 sha256 hashes` |
 
 ### Trap
 Do not implement coverage by grepping the spec markdown ad hoc — resolve
