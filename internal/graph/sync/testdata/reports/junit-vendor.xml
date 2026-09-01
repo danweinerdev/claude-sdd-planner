@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="vendor-emitter" tests="6" failures="2" errors="1" skipped="1" time="1.042">
+  <testsuite name="com.vendor.SurefireStyleSuite" tests="3" failures="0" errors="0" skipped="1" time="0.611" timestamp="2026-09-01T09:15:22" hostname="build-agent-07">
+    <properties>
+      <property name="java.version" value="21.0.2"/>
+      <property name="surefire.version" value="3.2.5"/>
+      <property name="os.name" value="Linux"/>
+    </properties>
+    <testcase classname="com.vendor.SurefireStyleSuite" name="plain_pass" time="0.201"/>
+    <testcase classname="com.vendor.SurefireStyleSuite" name="handles &quot;quoted&quot; input" time="0.190"/>
+    <testcase classname="com.vendor.SurefireStyleSuite" name="skipped_with_properties" time="0.000">
+      <skipped message="requires vendor license"/>
+    </testcase>
+  </testsuite>
+  <testsuite name="com.vendor.OuterSuite" tests="3" failures="2" errors="1" time="0.431">
+    <testsuite name="com.vendor.OuterSuite.Nested" tests="3" failures="2" errors="1" time="0.431">
+      <testcase classname="com.vendor.Nested" name="first line&#10;second line" time="0.120">
+        <failure message="assertion failed across lines" type="AssertionError">expected the second line
+to match the first</failure>
+      </testcase>
+      <testcase classname="com.vendor.Nested" name="cdata_failure_message" time="0.101">
+        <error message="unexpected exception" type="java.lang.IllegalStateException"><![CDATA[java.lang.IllegalStateException: reserved <chars> & "quotes" survive CDATA
+	at com.vendor.Nested.run(Nested.java:42)]]></error>
+      </testcase>
+      <testcase classname="com.vendor.Nested" name="system_out_pass" time="0.210">
+        <system-out><![CDATA[INFO  starting fixture
+DEBUG noise the parser must ignore]]></system-out>
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>
