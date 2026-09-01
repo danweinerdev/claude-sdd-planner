@@ -154,6 +154,64 @@ func TestGitProviderBacksClaimsEndToEnd(t *testing.T) {
 	}
 }
 
+// forcedOne caps any provider at capacity 1: DD-8's "every guarantee holds
+// at capacity 1" must hold for git specifically, not just for providers
+// that are capacity-1 by construction.
+type forcedOne struct{ Provider }
+
+func (forcedOne) Capacity() int { return 1 }
+
+func TestGitProviderForcedCapacityOne(t *testing.T) {
+	repoRoot, planDir := gitFixture(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			model.Node{ID: "a", Contract: "c", Gate: model.Gate{Type: model.GateTests},
+				Hazards: model.Hazards{}, Estimate: 1, Artifacts: []string{"src/a.ext"}},
+			model.Node{ID: "b", Contract: "c", Gate: model.Gate{Type: model.GateTests},
+				Hazards: model.Hazards{}, Estimate: 1, Artifacts: []string{"src/b.ext"}},
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p := forcedOne{Detect(repoRoot, planDir)}
+
+	first, err := claims.Claim(planDir, claims.Options{By: "a1", Provider: ForClaims(p)})
+	if err != nil {
+		t.Fatalf("first claim at capacity 1: %v", err)
+	}
+	if _, err := claims.Claim(planDir, claims.Options{By: "a2", Provider: ForClaims(p)}); err == nil ||
+		!strings.Contains(err.Error(), "nothing claimable") {
+		t.Fatalf("capacity 1 must refuse a second concurrent claim: %v", err)
+	}
+
+	// Serial, not stuck: releasing the first restores the frontier and the
+	// second claimant proceeds. The released node returns to READY, so the
+	// successor may legitimately claim IT (same deterministic handle) —
+	// what matters is a fresh live worktree and the new holder on record.
+	handle, err := claims.Release(planDir, first.Node.ID, "a1", false)
+	if err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if err := p.Release(handle); err != nil {
+		t.Fatalf("workspace release: %v", err)
+	}
+	second, err := claims.Claim(planDir, claims.Options{By: "a2", Provider: ForClaims(p)})
+	if err != nil {
+		t.Fatalf("second claim after release: %v", err)
+	}
+	if second.Workspace == "" {
+		t.Fatal("the serial successor gets a worktree")
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(second.Workspace))); err != nil {
+		t.Fatalf("the successor's worktree must exist on disk: %v", err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if got := g.NodeByID(second.Node.ID).Claim.By; got != "a2" {
+		t.Fatalf("the successor holds the claim: %q", got)
+	}
+}
+
 // fakeRun scripts the p4 CLI at the runner seam, consistent with how
 // internal/vcs tests mock their commands.
 func fakeRun(t *testing.T, calls *[]string) runner {
