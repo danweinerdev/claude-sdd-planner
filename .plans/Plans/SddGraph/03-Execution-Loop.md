@@ -27,7 +27,7 @@ tasks:
     depends_on: ["3.2"]
   - id: "3.4"
     title: "sdd graph sync --report: parsers, buckets, observations"
-    status: planned
+    status: complete
     verification: "go test ./internal/graph/sync/... -count=1 — JUnit XML and go test -json parsers produce identical observation semantics on equivalent fixtures; four buckets reported: updated, unresolved (declared, absent), untracked (present, unclaimed — decomposition warning), ambiguous (same id passed AND failed — never guessed, node stays unverified); parametrized folding: bare id passes only if every case passed, one failing case fails it, any skipped/xfailed case withholds the fold; observations record result, seq (monotonic from seq_counter), artifact_digests (SHA-256 of declared artifacts at sync time), report_digest, isolation from the provider, provenance; per-test first-failure red_seq recorded; command-gate observations capture exit code + output digest with full output teed to Plans/<Plan>/.graph/logs/<node>.log; sync of a review-verdict report is refused here (review gates are phase 4)."
     justifies: "DD-5 (the only path to GREEN is a parsed mechanical artifact), DD-6, D-0022. Prevents narrated completion — there is no verb by which an agent asserts a pass."
     depends_on: ["3.3"]
@@ -214,22 +214,22 @@ kill.
 ## 3.4: sdd graph sync --report: parsers, buckets, observations
 
 ### Subtasks
-- [ ] Create `internal/graph/sync`: JUnit XML parser and `go test -json`
+- [x] Create `internal/graph/sync`: JUnit XML parser and `go test -json`
       parser normalizing to one internal report shape (id, outcome, case
       parameters).
-- [ ] Bucket computation: updated / unresolved / untracked / ambiguous;
+- [x] Bucket computation: updated / unresolved / untracked / ambiguous;
       ambiguous and unresolved never guessed at (node stays unverified).
-- [ ] Parametrized folding per the design's rules (bare id or one exact
+- [x] Parametrized folding per the design's rules (bare id or one exact
       case; all-pass to pass; skip/xfail withholds).
-- [ ] Observation assembly: result, seq (increment `seq_counter` under the
+- [x] Observation assembly: result, seq (increment `seq_counter` under the
       lock), artifact digests at sync time, report digest, isolation from
       the provider, provenance, per-test `red_seq` on first observed
       failure.
-- [ ] Command-gate observations: run is external — sync accepts
+- [x] Command-gate observations: run is external — sync accepts
       `--command-exit`, `--command-log` (or reads the teed log), records
       exit + output digest; full output tees to
       `Plans/<Plan>/.graph/logs/<node>.log` (gitignored).
-- [ ] `sync` refuses review-verdict inputs with a pointer to phase 4's
+- [x] `sync` refuses review-verdict inputs with a pointer to phase 4's
       review-gate flow.
 
 ### Notes
@@ -245,8 +245,24 @@ DD-6, § The execution loop (sync semantics), design OQ-3 resolution on
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `0cec5cb851a480edb199ad06fb94b5e4f41623ae`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `0cec5cb851a480edb199ad06fb94b5e4f41623ae`
+- Focused review: `git show 0cec5cb851a480edb199ad06fb94b5e4f41623ae`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `0cec5cb851a480edb199ad06fb94b5e4f41623ae`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `go test ./cmd/sdd/ ./internal/graph/... -count=1` | `.` | PASS (`exit 0`) | `ok across cmd/sdd 24.7s and all thirteen internal/graph packages; JUnit and go-test-json fixtures produce identical observation semantics with unknown formats refused by name; folding table verified (all-pass fold, one-fail fold is an observation, exact case declarable, skip withholds, conflicting exact duplicates are ambiguity); unresolved and ambiguous declared tests leave the node unverified with nothing written and the buckets explaining why; observations record seq from the incremented counter, worktree-rooted artifact digests with missing artifacts honestly unrecorded, report digest, isolation, provenance; red_seq records the first observed failure once and persists; stale-claimant sync refused whole and claimed nodes require --by; holder sync renews the lease; command gate records exit + output digest and tees the full log to .graph/logs/<node>.log; review and unspecified gates route away by name` |
+| `go vet ./...` | `.` | PASS (`exit 0`) | `no findings` |
+| `staticcheck ./internal/graph/...` | `.` | PASS (`exit 0`) | `no findings` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `walk-loop smoke in a temp git repo` | `built binary at 0cec5cb` | PASS | `claim -> red sync (fail at seq 1, red_seq armed, lease renewed) -> green sync (pass at seq 2, artifact digest anchored from the worktree); committed graph carries seq_counter 2, red_seqs test_impl:1, and the digest` |
 
 ### Trap
 The parsers will tempt you to resolve `ambiguous` by "last result wins" or
