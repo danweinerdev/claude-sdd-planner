@@ -6,6 +6,10 @@ phase: 5
 status: complete
 created: 2026-08-31
 updated: 2026-09-01
+waivers:
+  - code: SDD173
+    reason: "Two accepted exception classes land after this phase's frozen review by design. First, release bumps and any successor commits are reviewed by their own gates in a sequential multi-phase plan (same precedent as phases 1-4 and the Plans/SDD-Toolchain waivers). Second, the committed plan graph (SddGraph-Graph.json) is OBSERVATION BOOKKEEPING: recording the phase gate's own frozen review onto the graph necessarily post-dates the freeze, and graph observations are lifecycle-class state the SDD173 lifecycle-only classification predates — noted as pilot observation F-10, the same v1-graph coexistence class task 5.6 fixed for SDD163/SDD174."
+    accepted: "2026-09-01"
 deliverable: "The plan skill rewritten as a decomposition protocol with the structured interview, the implement skill rewritten as the walk loop, regenerated portable trees and synced docs with an advanced version floor, and the self-hosting pilot executed under graph execution"
 tasks:
   - id: "5.1"
