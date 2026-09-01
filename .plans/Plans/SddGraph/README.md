@@ -24,7 +24,7 @@ phases:
     depends_on: []
   - id: 2
     title: "Graph Store, Compiler, Convert"
-    status: in-progress
+    status: complete
     doc: "02-Graph-Store-Compiler-Convert.md"
     depends_on: [1]
   - id: 3

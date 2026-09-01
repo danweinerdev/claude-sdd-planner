@@ -3,7 +3,7 @@ title: "Graph Store, Compiler, Convert"
 type: phase
 plan: "SddGraph"
 phase: 2
-status: in-progress
+status: complete
 created: 2026-08-31
 updated: 2026-08-31
 deliverable: "Committed graph store with locked atomic writes, propose/assemble staging, the compile pipeline (batched errors, coverage, intent hashes, rendered views), v1 conversion with blocking sentinels, and guard coverage for every new surface"
@@ -374,20 +374,37 @@ D-0014, `Specs/SDD-Toolchain` FR-44.
 | `staticcheck ./internal/graph/... ./internal/hook/` | `.` | PASS (`exit 0`) | `no findings` |
 
 ## Acceptance Criteria
-- [ ] A payload authored from the 1.3 exemplar stages, assembles, compiles,
+- [x] A payload authored from the 1.3 exemplar stages, assembles, compiles,
       and renders valid views end to end on a fixture plan (DD-1, DD-2,
       DD-11).
-- [ ] Compile reports the full finding set in one pass and refuses with exit
+- [x] Compile reports the full finding set in one pass and refuses with exit
       1; intent hashes are formatting-insensitive and wording-sensitive
       (DD-4).
-- [ ] A converted v1 fixture blocks on its sentinels and lists each one
+- [x] A converted v1 fixture blocks on its sentinels and lists each one
       (DD-15).
-- [ ] Every new verb and graph artifact path is guard-covered; the parity
+- [x] Every new verb and graph artifact path is guard-covered; the parity
       test enforces it (D-0014, FR-44, FR-28 extension).
-- [ ] `make test` green, including the extended template round-trip gate;
+- [x] `make test` green, including the extended template round-trip gate;
       `go vet`/`staticcheck` clean; store tests pass with `-race`.
 
 ## Phase Completion Evidence
 
-<!-- Keep the exact `Pending — not complete.` line until completion. -->
-Pending — not complete.
+- Verified: 2026-08-31
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `39a31750362225d3ce885477f68621a70f470eac`
+- Identity recheck: `git rev-parse HEAD` at 2026-08-31 00:00 matched `39a31750362225d3ce885477f68621a70f470eac`
+- Final aligned review: Plans/SddGraph/reviews/05-sddgraph-code-review-39a3175.md; frozen: 9c1fbdaba6e650df3fa937dfd2e57f8bb76675ef..39a31750362225d3ce885477f68621a70f470eac
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `exit 0 at 39a3175: full gate green at phase end — go suite (all packages incl. the six new/extended graph packages, hook guard, cmd meta-registries and the FR-44 parity test), regression corpus, template gate (10 markdown templates + byte-compared graph-proposal JSON pair), portable drift and leak gates` |
+
+### Completed task identities
+
+- `2.1`: `085f4f123f1988300c643a322cc800c858e8450c`
+- `2.2`: `b011057eb8ee58439ea6fc764cacdeab45cc71c4`
+- `2.3`: `fe2b76ed66bdaaa974de0a3b09a9f603a48c0ec2`
+- `2.4`: `4f9e981133e7d6dd73d18db7ca492ff00fe603b6`
+- `2.5`: `10db7546b3c14ed42be02f10eb0293c71e63a661`
+- `2.6`: `b2281b8a9e601475a0cb55f9c55b1e4258bba10a`
