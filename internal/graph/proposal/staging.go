@@ -141,15 +141,19 @@ func Assemble(planDir string) (string, *model.Proposal, error) {
 	return assembled, merged, nil
 }
 
-// encodeProposal renders a proposal with the same conventions as the graph:
-// two-space indent, LF, trailing newline, deterministic order.
-func encodeProposal(p *model.Proposal) ([]byte, error) {
+// Encode renders a proposal with the same conventions as the graph:
+// two-space indent, LF, trailing newline, deterministic order. Exported for
+// producers that build proposals programmatically (`sdd graph convert`).
+func Encode(p *model.Proposal) ([]byte, error) {
 	out := *p
 	if out.Nodes == nil {
 		out.Nodes = []model.Node{}
 	}
 	return encodeJSON(&out)
 }
+
+// encodeProposal is the internal spelling Assemble uses.
+func encodeProposal(p *model.Proposal) ([]byte, error) { return Encode(p) }
 
 // newFragmentID returns a UUIDv7: time-ordered, so staging order and lexical
 // order agree and assembly is deterministic without a manifest.

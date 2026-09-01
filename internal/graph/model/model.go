@@ -46,11 +46,26 @@ const UntriagedSentinel = "untriaged"
 // Gate types. `tests` is the default and strongly preferred; `command` and
 // `review` exist because not all truth is test-shaped (DD-9). The vocabulary
 // is closed — there is no plugin surface.
+//
+// GateUnspecified is not a gate: it is conversion's blocking sentinel
+// (DD-15) — "nobody has specified how this node is verified". The model
+// represents it so a converted graph can be stored and diffed, and compile
+// refuses it with a per-node finding. The authoring schema deliberately does
+// not advertise it: authors specify gates, only `sdd graph convert` emits
+// the sentinel.
 const (
-	GateTests   = "tests"
-	GateCommand = "command"
-	GateReview  = "review"
+	GateTests       = "tests"
+	GateCommand     = "command"
+	GateReview      = "review"
+	GateUnspecified = "unspecified"
 )
+
+// NeedsContractPrefix marks a converted node whose v1 task title could not
+// be reduced to a falsifiable contract mechanically — which is every one of
+// them: titles name work, contracts state truths, and deriving one from the
+// other is a judgment (DD-15: the tool never asserts on the operator's
+// behalf). Compile refuses any contract carrying the prefix.
+const NeedsContractPrefix = "NEEDS-CONTRACT: "
 
 // Verification results and isolation levels (DD-5, DD-7).
 const (
@@ -94,6 +109,12 @@ type Node struct {
 	// ordering. It is not a time promise.
 	Estimate int    `json:"estimate"`
 	Phase    string `json:"phase,omitempty"`
+	// History is an authored annotation carried for the human reader —
+	// conversion writes the v1 task's completion record here ("complete in
+	// v1; revision …") so finished work keeps its provenance visible. It is
+	// NEVER machine-consumed: states derive from observations alone, and a
+	// history line grants no GREEN (DD-15: no retroactive observations).
+	History string `json:"history,omitempty"`
 	// Claim is tool-owned transient bookkeeping (DD-10): cleared on merge or
 	// lease expiry, the only mutable non-observation field.
 	Claim *Claim `json:"claim,omitempty"`

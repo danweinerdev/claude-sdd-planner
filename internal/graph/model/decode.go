@@ -60,7 +60,7 @@ var toolOwnedNodeKeys = map[string]string{
 var (
 	graphKeys        = []string{"version", "seq_counter", "nodes"}
 	proposalKeys     = []string{"version", "nodes"}
-	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "claim", "verification", "red_seqs"}
+	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
 	testKeys         = []string{"id", "file", "satisfies"}
 	claimKeys        = []string{"by", "lease_expires", "workspace"}
@@ -211,6 +211,7 @@ func (d *decoder) node(path string, raw any) Node {
 	n.Deps = d.stringList(path+".deps", obj["deps"])
 	n.Artifacts = d.stringList(path+".artifacts", obj["artifacts"])
 	n.Phase = d.optionalString(path+".phase", obj["phase"])
+	n.History = d.optionalString(path+".history", obj["history"])
 
 	if v, present := obj["estimate"]; present {
 		if e, ok := d.intVal(path+".estimate", v); ok {
@@ -265,6 +266,9 @@ func (d *decoder) gate(path string, raw any) Gate {
 	g.Type = d.requiredString(path, obj, "type")
 	switch g.Type {
 	case GateTests, GateCommand, GateReview, "":
+	case GateUnspecified:
+		// Representable so converted graphs store and diff; compile refuses
+		// it with a per-node finding (DD-15's sentinel-then-block).
 	default:
 		d.errf(path+".type", "%q is not a gate type; valid types are %q, %q, %q", g.Type, GateTests, GateCommand, GateReview)
 	}

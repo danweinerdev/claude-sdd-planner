@@ -146,6 +146,9 @@ func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated
 			fmt.Fprintf(&b, "- Artifacts: %s\n", strings.Join(n.Artifacts, ", "))
 		}
 		fmt.Fprintf(&b, "- Estimate: %d\n", n.Estimate)
+		if n.History != "" {
+			fmt.Fprintf(&b, "- History: %s\n", n.History)
+		}
 		fmt.Fprintf(&b, "- Observation: %s\n", describeObservation(n.Verification))
 		if n.Claim != nil {
 			fmt.Fprintf(&b, "- Claim: %s (lease expires %s)\n", n.Claim.By, n.Claim.LeaseExpires)
@@ -191,6 +194,8 @@ func describeGate(gate model.Gate) string {
 			return "review — full (carries completion-grade closure)"
 		}
 		return "review — lanes: " + strings.Join(gate.Lanes, ", ")
+	case model.GateUnspecified:
+		return "UNSPECIFIED (conversion sentinel; blocks compile until an operator states how this node is verified)"
 	default:
 		return gate.Type
 	}

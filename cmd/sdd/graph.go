@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	gconvert "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/convert"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -36,6 +37,53 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphInitCmd())
 	c.AddCommand(graphProposeCmd())
 	c.AddCommand(graphAssembleCmd())
+	c.AddCommand(graphConvertCmd())
+	return c
+}
+
+// graphConvertCmd converts a v1 markdown plan into a staged proposal whose
+// unmade judgments are blocking sentinels (DD-15): hazards untriaged, gates
+// unspecified, contracts marked NEEDS-CONTRACT. The converted graph does not
+// compile until an operator resolves each sentinel through the payload path.
+// Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
+func graphConvertCmd() *cobra.Command {
+	var plan string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "convert",
+		Short: "Convert a v1 markdown plan into a staged graph proposal with blocking sentinels",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph convert: --plan is required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph convert: %w", err)
+			}
+			res, err := gconvert.Run(root, repoRoot, plan)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK               bool   `json:"ok"`
+					Fragment         string `json:"fragment"`
+					Nodes            int    `json:"nodes"`
+					Phases           int    `json:"phases"`
+					CompletedCarried int    `json:"completed_carried"`
+				}{true, relPath(res.Fragment), res.Nodes, res.Phases, res.CompletedCarried})
+			}
+			fmt.Fprintf(c.OutOrStdout(),
+				"converted %d task(s) across %d phase(s) into %s (%d completed task(s) carry v1 provenance)\n"+
+					"every node carries blocking sentinels; resolve them in the staged payload, then `sdd compile --plan %s`\n"+
+					"(compile's rendered views target the v1 phase-doc filenames: retiring each v1 document is a deliberate, visible step)\n",
+				res.Nodes, res.Phases, relPath(res.Fragment), res.CompletedCarried, plan)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 

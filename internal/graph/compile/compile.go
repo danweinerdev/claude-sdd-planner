@@ -306,6 +306,15 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 			}
 		}
 
+		// Conversion sentinels (DD-15): a gate nobody specified and a
+		// contract nobody wrote block compile per node, never default.
+		if n.Gate.Type == model.GateUnspecified {
+			add(id, "gate is unspecified (conversion sentinel); state how this node is verified — tests, command, or review")
+		}
+		if strings.HasPrefix(n.Contract, model.NeedsContractPrefix) {
+			add(id, "contract is the conversion sentinel; replace it with a falsifiable sentence stating what is true when this node is done")
+		}
+
 		// Justifies: present, and every citation resolves.
 		if len(n.Justifies) == 0 {
 			add(id, "cites nothing; every node carries `justifies` naming the AC/FR/NFR/DD/D ids it exists for (an unsourced node is cut, not compiled)")
