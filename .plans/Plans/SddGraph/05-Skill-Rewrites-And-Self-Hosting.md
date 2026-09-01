@@ -15,7 +15,7 @@ tasks:
     justifies: "DD-13 (node granularity is one red-green cycle; the skill's output is a proposal payload, not markdown), DD-16 (structured resumable interview). Prevents the token-waste loop this whole design exists to remove from planning sessions."
   - id: "5.2"
     title: "Rewrite the implement skill as the graph walk loop"
-    status: planned
+    status: complete
     verification: "make test green after regeneration; manual protocol walkthrough documented in evidence: the rewritten commands/implement/SKILL.md drives next --claim -> write the node's named tests -> observe red (sync the failing report; hazard-discharging tests must record red_seq before green counts) -> implement -> sync the passing report -> merge; stopping rules present verbatim (2 consecutive failures propose split, 3 stop and escalate); INTENT-STALE and finding-demotion responses routed as judgment steps; the skill nowhere writes completion evidence prose as a gate input and nowhere edits Graph.json or rendered views directly."
     justifies: "DD-13, D-0022 (sync-only completion — the skill teaches showing reports, never asserting), DD-5 red-before-green walk protocol. Prevents narrated completion re-entering through skill prose after the binary closed the write path."
     depends_on: ["5.1"]
@@ -107,19 +107,19 @@ decompositions the silhouette check exists to reject.
 ## 5.2: Rewrite the implement skill as the graph walk loop
 
 ### Subtasks
-- [ ] Rewrite `commands/implement/SKILL.md` around the loop: `next --claim`
+- [x] Rewrite `commands/implement/SKILL.md` around the loop: `next --claim`
       → write named tests → run and **sync the failing report** → implement
       → sync the passing report → merge; repeat until the frontier is
       empty; surface `graph status` between rounds.
-- [ ] Stopping rules verbatim: 2 consecutive failures → propose `split`;
+- [x] Stopping rules verbatim: 2 consecutive failures → propose `split`;
       3 → stop and escalate to the user.
-- [ ] Reaction protocol: INTENT-STALE (re-read the changed requirement diff
+- [x] Reaction protocol: INTENT-STALE (re-read the changed requirement diff
       only; re-hash / rework / replan as judgment), finding-demotion (RED
       nodes re-enter the frontier), lease expiry and `release` etiquette.
-- [ ] Evidence language: rendered views and observation records replace
+- [x] Evidence language: rendered views and observation records replace
       narrated completion-evidence tables for graph plans; v1 plans keep the
       old protocol (routing by graph presence, as in 5.1).
-- [ ] Update `agents/code-implementer.md` dispatch expectations if the
+- [x] Update `agents/code-implementer.md` dispatch expectations if the
       inline-task contract (implement_task dispatches carry the task
       inline, per the repo's agent-prompt conventions) needs graph-node
       payloads.
@@ -133,8 +133,22 @@ trains the model to fight the tool. Design references: § The execution loop,
 
 ### Completion Evidence
 
-<!-- Keep the exact pending line until completion. -->
-Pending — not complete.
+- Verified: 2026-09-01
+- Repository: `.`
+- VCS: `git`
+- Revision / checkpoint: `aa914086a9d132a6db6be8315ccd5c20e6005f6b`
+- Identity recheck: `git rev-parse HEAD` at 2026-09-01 00:00 matched `aa914086a9d132a6db6be8315ccd5c20e6005f6b`
+- Focused review: `git show aa914086a9d132a6db6be8315ccd5c20e6005f6b`; complete task diff reviewed for correctness, scope, tests, maintainability, and task boundary
+- Reviewed candidate / final: `aa914086a9d132a6db6be8315ccd5c20e6005f6b`
+- Review result: PASS/Aligned
+
+| Command | Working directory | Result | Observable evidence |
+|---|---|---|---|
+| `make test` | `.` | PASS (`exit 0`) | `full gate green after regeneration: template gate 10 templates, portable drift and leak gates clean (the implement skill's .portable.md variant deliberately shadows generation until 5.3's variant decision; code-implementer has no derived prompt by design per D-0009, so both trees are unchanged and provenance stays clean); review package green including the three new gate-binding refusals (missing review_of, wrong plan, cross-gate reuse naming the prior gate); cmd/sdd suite green; the skill text contains the stopping rules verbatim (2 propose split, 3 stop and escalate), routes INTENT-STALE and finding-demotion as judgment steps, and nowhere writes completion-evidence prose as a gate input nor edits Graph.json or rendered views` |
+
+| Tool / inspection | Context | Result | Observable evidence |
+|---|---|---|---|
+| `manual walk-loop walkthrough (CLI, temp git repo, built binary at aa91408)` | `drove the rewritten skill's exact sequence on a hazard-carrying node: next --claim, red sync, workspace implement+commit, green sync, mainline integration, gate recording` | PASS | `claim payload printed contract/cited-text/tests/hazards/workspace as the skill promises; the named hazard-discharging test was observed red first (red_seq armed at seq 1); the clean green merged atomically (claim cleared, workspace released); the node then honestly derived STALE from the shared tree until the surviving workspace branch was integrated into mainline — the discovered integration step now documented in the skill — after which status read GREEN=2 closed=2/2; the gate-binding refusal fired on a wrong-plan artifact naming the mismatch and the correct artifact greened exactly one gate` |
 
 ## 5.3: Portable regeneration, documentation sync, version floor advance
 
