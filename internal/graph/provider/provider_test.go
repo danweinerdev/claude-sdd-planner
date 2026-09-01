@@ -103,8 +103,20 @@ func TestGitProviderWorktreeRoundTrip(t *testing.T) {
 	if _, err := os.Stat(ws.Dir); !os.IsNotExist(err) {
 		t.Fatal("release must remove the worktree")
 	}
-	if got := gitOK(t, repoRoot, "rev-parse", "graph/node-a"); got != workCommit {
-		t.Fatalf("the claim branch must keep the work reachable after release: %s != %s", got, workCommit)
+	branches := gitOK(t, repoRoot, "branch", "--format=%(refname:short)", "--contains", workCommit)
+	if !strings.Contains(branches, "graph/node-a-") {
+		t.Fatalf("the claim branch (graph/node-a-<suffix>) must keep the work reachable after release; containing branches: %q", branches)
+	}
+
+	// The suffix is per ALLOCATION: reclaiming the node after its worktree
+	// is gone must not collide with the surviving branch of the earlier
+	// claim (the post-gc reclaim story).
+	ws2, err := p.Allocate("node-a")
+	if err != nil {
+		t.Fatalf("reclaim after release must allocate despite the surviving branch: %v", err)
+	}
+	if err := p.Release(ws2.Handle); err != nil {
+		t.Fatalf("release reclaim: %v", err)
 	}
 }
 

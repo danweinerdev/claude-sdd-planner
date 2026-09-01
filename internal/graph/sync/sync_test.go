@@ -237,7 +237,7 @@ func TestSyncRefusesWithoutGuessing(t *testing.T) {
 
 func TestSyncClaimDiscipline(t *testing.T) {
 	node := testsNode("a", "test_a")
-	node.Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z"}
+	node.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 	planDir, repoRoot := fixture(t, node)
 	report := `<testsuite><testcase name="test_a"/></testsuite>`
 
@@ -314,13 +314,14 @@ func (dirtyProvider) Capacity() int                   { return 2 }
 func (dirtyProvider) Allocate(string) (provider.Workspace, error) {
 	return provider.Workspace{}, nil
 }
+func (dirtyProvider) HandleFor(string) string               { return "" }
 func (dirtyProvider) Release(string) error                  { return nil }
 func (dirtyProvider) Isolation(string, int) string          { return model.IsolationSharedDirty }
 func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
 
 func TestSharedDirtyPassRecordsProvisionally(t *testing.T) {
 	n := testsNode("a", "test_a")
-	n.Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z"}
+	n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 	planDir, repoRoot := fixture(t, n)
 	report := `<testsuite><testcase name="test_a"/></testsuite>`
 

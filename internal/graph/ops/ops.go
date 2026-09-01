@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -249,9 +250,12 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 
 // GCResult reports what gc reaped.
 type GCResult struct {
-	Workspaces     []string `json:"workspaces,omitempty"`
-	StalePayloads  []string `json:"stale_payloads,omitempty"`
-	Kept           []string `json:"kept,omitempty"`
+	// ExpiredClaims lists nodes whose lapsed claims gc expired (persisted)
+	// before reaping — the crash story's bookkeeping half.
+	ExpiredClaims []string `json:"expired_claims,omitempty"`
+	Workspaces    []string `json:"workspaces,omitempty"`
+	StalePayloads []string `json:"stale_payloads,omitempty"`
+	Kept          []string `json:"kept,omitempty"`
 }
 
 // GC reaps abandoned workspace state: ws-* directories no active claim
@@ -261,6 +265,14 @@ type GCResult struct {
 // claims' workspaces and payloads carrying novel nodes are never touched.
 func GC(root, repoRoot, plan string) (*GCResult, error) {
 	planDir := filepath.Join(root, "Plans", plan)
+	// The crash story's bookkeeping half runs first: persisting the expiry
+	// of lapsed claims is what makes a dead claimant's workspace
+	// unreferenced — and therefore reapable — while unexpired claims keep
+	// theirs untouchable.
+	expired, err := claims.ExpireLapsed(planDir, nil)
+	if err != nil {
+		return nil, err
+	}
 	g, err := gstore.Load(gstore.PathFor(planDir))
 	if err != nil {
 		return nil, err
@@ -276,7 +288,7 @@ func GC(root, repoRoot, plan string) (*GCResult, error) {
 		existing[id] = true
 	}
 
-	res := &GCResult{}
+	res := &GCResult{ExpiredClaims: expired}
 	prov := provider.Detect(repoRoot, planDir)
 
 	graphDir := filepath.Join(planDir, gstore.GraphDirName)
@@ -297,11 +309,14 @@ func GC(root, repoRoot, plan string) (*GCResult, error) {
 			res.Kept = append(res.Kept, handle)
 			continue
 		}
-		if err := prov.Release(handle); err != nil {
-			// Not a live worktree (or not git at all): remove the directory
-			// itself rather than leaving unreapable state.
+		// The provider gets first refusal (a live git worktree needs
+		// `worktree remove`, not a bare delete), but its success is not
+		// trusted to mean the directory is gone: plain and p4 providers
+		// no-op Release, and a half-torn worktree can "succeed" too.
+		provErr := prov.Release(handle)
+		if _, statErr := os.Stat(abs); statErr == nil {
 			if rmErr := os.RemoveAll(abs); rmErr != nil {
-				return nil, fmt.Errorf("graph gc: %s could not be reaped: %v (provider: %v)", handle, rmErr, err)
+				return nil, fmt.Errorf("graph gc: %s could not be reaped: %v (provider release: %v)", handle, rmErr, provErr)
 			}
 		}
 		res.Workspaces = append(res.Workspaces, handle)

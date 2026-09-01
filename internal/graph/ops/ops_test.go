@@ -169,7 +169,7 @@ func TestSplitDisciplines(t *testing.T) {
 	}
 	// A claimed node cannot be split from under its holder.
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.NodeByID("big").Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z"}
+		g.NodeByID("big").Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestSetTestsHolderDisciplineAndRedSeqPrune(t *testing.T) {
 	_, planDir := fixtureRoot(t)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		n := g.NodeByID("big")
-		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z"}
+		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 		n.RedSeqs = map[string]int{"test_big": 3}
 		return nil
 	}); err != nil {
@@ -220,16 +220,18 @@ func TestGCReapsOrphansAndStalePayloadsOnly(t *testing.T) {
 	root, planDir := fixtureRoot(t)
 	graphDir := filepath.Join(planDir, gstore.GraphDirName)
 
-	// An orphan workspace (no claim references it) and an active one.
-	if err := os.MkdirAll(filepath.Join(graphDir, "ws-orphan"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(graphDir, "ws-active"), 0o755); err != nil {
-		t.Fatal(err)
+	// An orphan workspace (no claim references it), an active one, and one
+	// referenced only by a LAPSED claim — the crash story.
+	for _, ws := range []string{"ws-orphan", "ws-active", "ws-crashed"} {
+		if err := os.MkdirAll(filepath.Join(graphDir, ws), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	activeHandle := "Plans/SamplePlan/.graph/ws-active"
+	crashedHandle := "Plans/SamplePlan/.graph/ws-crashed"
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.NodeByID("big").Claim = &model.Claim{By: "holder", LeaseExpires: "2026-09-01T00:00:00Z", Workspace: activeHandle}
+		g.NodeByID("big").Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z", Workspace: activeHandle}
+		g.NodeByID("helper").Claim = &model.Claim{By: "crashed", LeaseExpires: "2001-01-01T00:00:00Z", Workspace: crashedHandle}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -253,11 +255,14 @@ func TestGCReapsOrphansAndStalePayloadsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gc: %v", err)
 	}
-	if !reflect.DeepEqual(res.Workspaces, []string{"Plans/SamplePlan/.graph/ws-orphan"}) {
-		t.Fatalf("gc reaps exactly the orphan workspaces: %+v", res.Workspaces)
+	if !reflect.DeepEqual(res.ExpiredClaims, []string{"helper"}) {
+		t.Fatalf("gc persists the expiry of lapsed claims: %+v", res.ExpiredClaims)
+	}
+	if !reflect.DeepEqual(res.Workspaces, []string{crashedHandle, "Plans/SamplePlan/.graph/ws-orphan"}) {
+		t.Fatalf("gc reaps the orphan AND the expired claimant's workspace: %+v", res.Workspaces)
 	}
 	if !reflect.DeepEqual(res.Kept, []string{activeHandle}) {
-		t.Fatalf("gc never touches an active claim's workspace: %+v", res.Kept)
+		t.Fatalf("gc never touches an unexpired claim's workspace: %+v", res.Kept)
 	}
 	if !reflect.DeepEqual(res.StalePayloads, []string{"000-stale.json"}) {
 		t.Fatalf("gc reaps exactly the stale payloads: %+v", res.StalePayloads)
@@ -265,7 +270,20 @@ func TestGCReapsOrphansAndStalePayloadsOnly(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(graphDir, "ws-active")); err != nil {
 		t.Fatal("the active workspace must survive")
 	}
+	if _, err := os.Stat(filepath.Join(graphDir, "ws-crashed")); !os.IsNotExist(err) {
+		t.Fatal("the expired claimant's workspace must be reaped")
+	}
 	if _, err := os.Stat(filepath.Join(fragDir, "001-live.json")); err != nil {
 		t.Fatal("a payload with novel nodes must survive")
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("helper").Claim != nil {
+		t.Fatal("the lapsed claim must be cleared in the persisted graph")
+	}
+	if g.NodeByID("big").Claim == nil {
+		t.Fatal("the unexpired claim must survive gc")
 	}
 }

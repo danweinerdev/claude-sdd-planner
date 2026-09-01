@@ -14,6 +14,8 @@
 package provider
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -46,6 +48,10 @@ type Provider interface {
 	Capacity() int
 	// Allocate prepares a workspace for one node.
 	Allocate(nodeID string) (Workspace, error)
+	// HandleFor previews the handle Allocate will record for a node,
+	// without side effects. Claims persist it BEFORE allocating (the
+	// confirm-then-allocate ordering that makes gc concurrency-safe).
+	HandleFor(nodeID string) string
 	// Release tears a workspace down (merge or graceful abandonment; lease
 	// EXPIRY deliberately never calls this — an expired claimant's
 	// workspace is post-mortem evidence).
@@ -96,7 +102,8 @@ func (a claimsAdapter) Allocate(nodeID string) (string, error) {
 	ws, err := a.p.Allocate(nodeID)
 	return ws.Handle, err
 }
-func (a claimsAdapter) Release(handle string) error { return a.p.Release(handle) }
+func (a claimsAdapter) HandleFor(nodeID string) string { return a.p.HandleFor(nodeID) }
+func (a claimsAdapter) Release(handle string) error    { return a.p.Release(handle) }
 
 // --- git: a worktree per claim -------------------------------------------
 
@@ -113,8 +120,19 @@ type gitProvider struct {
 func (g *gitProvider) Kind() string  { return "git" }
 func (g *gitProvider) Capacity() int { return gitCapacity }
 
+func (g *gitProvider) wsDirFor(nodeID string) string {
+	return filepath.Join(g.planDir, gstore.GraphDirName, "ws-"+sanitize(nodeID))
+}
+
+// HandleFor is Allocate's handle, computed without side effects: the
+// workspace DIRECTORY is deterministic per node (only the branch carries a
+// per-allocation suffix), so the preview is exact.
+func (g *gitProvider) HandleFor(nodeID string) string {
+	return g.handleFor(g.wsDirFor(nodeID))
+}
+
 func (g *gitProvider) Allocate(nodeID string) (Workspace, error) {
-	wsDir := filepath.Join(g.planDir, gstore.GraphDirName, "ws-"+sanitize(nodeID))
+	wsDir := g.wsDirFor(nodeID)
 	if _, err := os.Stat(wsDir); err == nil {
 		// A leftover worktree (an expired claimant's post-mortem evidence,
 		// or a crashed allocate) is never silently reused or destroyed.
@@ -130,11 +148,20 @@ func (g *gitProvider) Allocate(nodeID string) (Workspace, error) {
 	return Workspace{Handle: g.handleFor(wsDir), Dir: wsDir}, nil
 }
 
-// branchFor names a claim's branch. Deterministic per node so the branch is
-// findable after the worktree is gone; a leftover branch from an earlier
-// claim fails the worktree add loudly, same posture as a leftover dir.
+// branchFor names a claim's branch: graph/<node>-<hex4>, unique per
+// ALLOCATION, not per node. A deterministic name would make the branch of an
+// earlier claim — which legitimately survives gc precisely so merged or
+// crashed work stays reachable — collide with the next claim's worktree add,
+// wedging every node that ever crashed once. The node id keeps branches
+// findable (`git branch --list 'graph/<node>-*'`); the suffix keeps history
+// append-only.
 func (g *gitProvider) branchFor(nodeID string) string {
-	return "graph/" + sanitize(nodeID)
+	var b [2]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Timestamps beat failing the claim over an entropy hiccup.
+		return fmt.Sprintf("graph/%s-%d", sanitize(nodeID), os.Getpid())
+	}
+	return "graph/" + sanitize(nodeID) + "-" + hex.EncodeToString(b[:])
 }
 
 func (g *gitProvider) handleFor(wsDir string) string {
@@ -201,6 +228,8 @@ func (p *p4Provider) Allocate(string) (Workspace, error) {
 	return Workspace{Handle: "", Dir: p.repoRoot}, nil
 }
 
+func (p *p4Provider) HandleFor(string) string { return "" }
+
 func (p *p4Provider) Release(string) error { return nil }
 
 func (p *p4Provider) Isolation(_ string, activeClaims int) string {
@@ -245,6 +274,7 @@ type plainProvider struct{ repoRoot string }
 func (p *plainProvider) Kind() string                       { return "plain" }
 func (p *plainProvider) Capacity() int                      { return 1 }
 func (p *plainProvider) Allocate(string) (Workspace, error) { return Workspace{Dir: p.repoRoot}, nil }
+func (p *plainProvider) HandleFor(string) string            { return "" }
 func (p *plainProvider) Release(string) error               { return nil }
 func (p *plainProvider) Isolation(_ string, activeClaims int) string {
 	if activeClaims <= 1 {

@@ -10,10 +10,16 @@
 // never destroyed by the takeover). Wall-clock comparison tolerates skew
 // because TTLs are minutes-scale and takeover itself is CAS-serialized.
 //
-// Provider side effects (workspace allocation) happen OUTSIDE the CAS cycle
-// and are confirmed inside it: allocate first, then record the claim only if
-// the node is still claimable; a lost race releases the workspace and
-// retries. No claim record ever names a workspace that does not exist.
+// Provider side effects (workspace allocation) happen AFTER the claim is
+// confirmed in the CAS cycle, never before: the claim record names the
+// workspace handle the provider will produce, then allocation follows, and
+// an allocation failure rolls the claim back. The ordering is what makes gc
+// safe to run concurrently with claiming — a workspace directory never
+// exists without a claim referencing it, so gc's unreferenced-workspace scan
+// can never reap an allocation in flight. The inverse window (a claim
+// briefly naming a workspace that does not exist yet) is harmless: a crash
+// there leaves a claim that expires naturally, and reaping a directory that
+// was never created is a no-op.
 package claims
 
 import (
@@ -41,6 +47,10 @@ type Provider interface {
 	// Allocate prepares a workspace for one node and returns its handle
 	// (opaque to the graph; "" means the shared tree).
 	Allocate(nodeID string) (string, error)
+	// HandleFor previews the handle Allocate will return for a node,
+	// without side effects. The claim record carries it BEFORE allocation
+	// runs, which is what closes the gc race (see the package comment).
+	HandleFor(nodeID string) string
 	// Release tears a workspace down after merge or abandonment.
 	Release(workspace string) error
 }
@@ -49,9 +59,10 @@ type Provider interface {
 // tree, no per-claim isolation handle.
 type StubProvider struct{}
 
-func (StubProvider) Capacity() int                    { return 1 }
-func (StubProvider) Allocate(string) (string, error)  { return "", nil }
-func (StubProvider) Release(string) error             { return nil }
+func (StubProvider) Capacity() int                   { return 1 }
+func (StubProvider) Allocate(string) (string, error) { return "", nil }
+func (StubProvider) HandleFor(string) string         { return "" }
+func (StubProvider) Release(string) error            { return nil }
 
 // Options configures one claim attempt.
 type Options struct {
@@ -118,13 +129,12 @@ func Claim(planDir string, o Options) (*Claimed, error) {
 			return nil, fmt.Errorf("graph claim: nothing claimable — %s", explain)
 		}
 
-		workspace, err := o.Provider.Allocate(candidate)
-		if err != nil {
-			// Allocation failure refuses the claim, not the node: nothing
-			// was recorded, the frontier is unchanged.
-			return nil, fmt.Errorf("graph claim: workspace allocation for %q failed, node left unclaimed: %w", candidate, err)
-		}
-
+		// Confirm FIRST, allocate after (see the package comment): the
+		// claim record — naming the handle the provider will produce —
+		// lands in the CAS cycle before any directory exists, so a
+		// concurrent gc can never mistake an allocation in flight for an
+		// unreferenced leftover.
+		handle := o.Provider.HandleFor(candidate)
 		leaseExpires := o.Now().Add(o.TTL).UTC().Format(time.RFC3339)
 		var claimedNode model.Node
 		raced := false
@@ -140,19 +150,46 @@ func Claim(planDir string, o Options) (*Claimed, error) {
 				raced = true
 				return nil
 			}
-			n.Claim = &model.Claim{By: o.By, LeaseExpires: leaseExpires, Workspace: workspace}
+			n.Claim = &model.Claim{By: o.By, LeaseExpires: leaseExpires, Workspace: handle}
 			claimedNode = *n
 			return nil
 		})
 		if err != nil {
-			_ = o.Provider.Release(workspace)
 			return nil, err
 		}
 		if raced {
 			// Someone else took it (or the graph moved) between selection
-			// and confirmation: give the workspace back and re-select.
-			_ = o.Provider.Release(workspace)
+			// and confirmation: nothing was recorded or allocated,
+			// re-select.
 			continue
+		}
+
+		workspace, allocErr := o.Provider.Allocate(candidate)
+		if allocErr != nil {
+			// Roll the claim back — but only OUR claim: match on the exact
+			// lease so a concurrent expiry+reclaim is never clobbered.
+			_, _ = gstore.Update(graphPath, func(fresh *model.Graph) error {
+				if n := fresh.NodeByID(candidate); n != nil && n.Claim != nil &&
+					n.Claim.By == o.By && n.Claim.LeaseExpires == leaseExpires {
+					n.Claim = nil
+				}
+				return nil
+			})
+			return nil, fmt.Errorf("graph claim: workspace allocation for %q failed, claim rolled back: %w", candidate, allocErr)
+		}
+		if workspace != handle {
+			// The provider disagreed with its own preview; the record
+			// carries the truth.
+			if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
+				if n := fresh.NodeByID(candidate); n != nil && n.Claim != nil &&
+					n.Claim.By == o.By && n.Claim.LeaseExpires == leaseExpires {
+					n.Claim.Workspace = workspace
+				}
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+			claimedNode.Claim.Workspace = workspace
 		}
 		return &Claimed{
 			Node:             claimedNode,
@@ -162,6 +199,25 @@ func Claim(planDir string, o Options) (*Claimed, error) {
 		}, nil
 	}
 	return nil, fmt.Errorf("graph claim: gave up after %d selection races; the frontier is contended, retry", claimAttempts)
+}
+
+// ExpireLapsed persists the expiry of every lapsed claim: the crash story's
+// bookkeeping half. gc runs it before reaping so a dead claimant's workspace
+// stops being referenced and becomes reapable; the workspace itself is
+// preserved until gc, as post-mortem evidence.
+func ExpireLapsed(planDir string, now func() time.Time) ([]string, error) {
+	if now == nil {
+		now = time.Now
+	}
+	var reclaimed []string
+	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		reclaimed = expireLapsed(g, now())
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return reclaimed, nil
 }
 
 // expireLapsed clears every claim whose lease has lapsed, in place, and

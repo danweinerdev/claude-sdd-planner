@@ -430,7 +430,7 @@ func TestCompileBatchesEveryFinding(t *testing.T) {
 	// so they enter through the store, never a payload).
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		claim := func(by string) *model.Claim {
-			return &model.Claim{By: by, LeaseExpires: "2026-09-01T00:00:00Z"}
+			return &model.Claim{By: by, LeaseExpires: "2099-01-01T00:00:00Z"}
 		}
 		g.Nodes = append(g.Nodes,
 			model.Node{ID: "claimed-a", Contract: "c", Justifies: []string{"AC-01"},

@@ -182,12 +182,12 @@ func (failingProvider) Allocate(string) (string, error) {
 func TestAllocationFailureLeavesTheNodeUnclaimed(t *testing.T) {
 	dir := testPlanDir(t, n("a", nil, 1))
 	_, err := Claim(dir, Options{By: "a1", Provider: failingProvider{}})
-	if err == nil || !strings.Contains(err.Error(), "node left unclaimed") {
+	if err == nil || !strings.Contains(err.Error(), "claim rolled back") {
 		t.Fatalf("allocation failure must refuse the claim: %v", err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(dir))
 	if g.NodeByID("a").Claim != nil {
-		t.Fatal("no claim record may name a workspace that does not exist")
+		t.Fatal("the confirmed-then-failed claim must be rolled back")
 	}
 }
 
