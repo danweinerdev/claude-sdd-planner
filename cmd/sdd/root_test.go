@@ -243,6 +243,7 @@ func handlerFlagSets() []struct {
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json", "claim", "by"}},
 		{"sdd graph release", []string{"plan", "by", "force", "json"}},
+		{"sdd graph sync", []string{"plan", "node", "by", "report", "command-exit", "command-log", "json"}},
 		{"sdd graph hazards", []string{"json"}},
 		{"sdd graph init", []string{"plan", "json"}},
 		{"sdd graph propose", []string{"plan", "file", "json"}},

@@ -30,6 +30,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	gsync "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/sync"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -48,6 +49,100 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphAssembleCmd())
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
+	c.AddCommand(graphSyncCmd())
+	return c
+}
+
+// graphSyncCmd records one observation from mechanical input — the only
+// path toward GREEN (DD-5). A red run is a SUCCESSFUL sync: recording the
+// failure is what arms red-before-green.
+func graphSyncCmd() *cobra.Command {
+	var plan, node, by, report, commandLog string
+	var commandExit int
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "sync",
+		Short: "Record a node's observation from a test report or command result",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, cmdArgs []string) error {
+			planDir, err := planDirFor(plan, "sync")
+			if err != nil {
+				return err
+			}
+			if node == "" {
+				return fmt.Errorf("graph sync: --node is required")
+			}
+			_, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph sync: %w", err)
+			}
+			opts := gsync.Options{PlanDir: planDir, RepoRoot: repoRoot, Node: node, By: by}
+			if report != "" {
+				raw, err := os.ReadFile(report)
+				if err != nil {
+					return fmt.Errorf("graph sync: %w", err)
+				}
+				opts.ReportName, opts.ReportBytes = report, raw
+			}
+			if c.Flags().Changed("command-exit") {
+				opts.CommandExit = &commandExit
+				if commandLog != "" {
+					raw, err := os.ReadFile(commandLog)
+					if err != nil {
+						return fmt.Errorf("graph sync: %w", err)
+					}
+					opts.CommandLog = raw
+				}
+			}
+			cfg, _ := store.LoadConfig(".")
+			opts.TTL = time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
+
+			res, err := gsync.Run(opts)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				if err := writeJSON(res); err != nil {
+					return err
+				}
+				if !res.Recorded {
+					return &refusedError{n: 1}
+				}
+				return nil
+			}
+			printBucket := func(name string, ids []string) {
+				if len(ids) > 0 {
+					fmt.Fprintf(c.OutOrStdout(), "%s: %s\n", name, strings.Join(ids, ", "))
+				}
+			}
+			printBucket("updated", res.Buckets.Updated)
+			printBucket("unresolved", res.Buckets.Unresolved)
+			printBucket("untracked", res.Buckets.Untracked)
+			printBucket("ambiguous", res.Buckets.Ambiguous)
+			if !res.Recorded {
+				return fmt.Errorf("graph sync: %s", res.Refusal)
+			}
+			fmt.Fprintf(c.OutOrStdout(), "recorded %s at seq %d (isolation %s)\n",
+				res.Observation.Result, res.Observation.Seq, res.Observation.Isolation)
+			for id, seq := range res.RedSeqsAdded {
+				fmt.Fprintf(c.OutOrStdout(), "red_seq[%s] = %d (first observed failure — arms red-before-green)\n", id, seq)
+			}
+			if res.LeaseRenewed != "" {
+				fmt.Fprintf(c.OutOrStdout(), "lease renewed to %s\n", res.LeaseRenewed)
+			}
+			if res.LogPath != "" {
+				fmt.Fprintf(c.OutOrStdout(), "output teed to %s\n", relPath(res.LogPath))
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id to record the observation for")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the node is claimed; renews the lease)")
+	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
+	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
+	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
 
