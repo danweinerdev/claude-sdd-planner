@@ -625,10 +625,12 @@ func doctorCmd() *cobra.Command {
 	var o doctorOpts
 	c := &cobra.Command{
 		Use:   "doctor",
-		Short: "Check the environment and repair the hook installation",
+		Short: "Check the environment and repair the Claude hook installation",
 		Long: `Reports the binary in use, the resolved planning root, and the embedded
-schema set, and regenerates hooks.json when it is absent or does not match this
-version's hook set.
+schema set. Under Claude Code, where CLAUDE_PLUGIN_ROOT identifies the active
+plugin, it also regenerates hooks.json when that file is absent or does not
+match this version's hook set. Portable runtimes carry no hooks, so doctor does
+not locate or inspect their plugin installation.
 
 Run it once when starting to use sdd in a project: a stale hooks.json is
 invisible otherwise, because the events it does declare keep firing while a

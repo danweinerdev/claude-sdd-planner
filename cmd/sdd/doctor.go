@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -59,7 +58,7 @@ type doctorOpts struct {
 func cmdDoctor(o doctorOpts) error {
 
 	rep := doctorReport{Version: version.Version}
-	pluginRoot, pluginSource := discoverPluginRoot()
+	pluginRoot, pluginSource := claudePluginRoot()
 	rep.PluginRoot, rep.PluginRootSource = pluginRoot, pluginSource
 	rep.HookBinary, rep.HookBinaryError = checkHookBinary(pluginRoot, pluginSource)
 	rep.HooksFile, rep.HooksFileError = checkHooksFile(pluginRoot, pluginSource, !o.Check)
@@ -124,9 +123,6 @@ func printDoctorReport(r doctorReport) {
 	fmt.Printf("sdd %s\n  binary: %s\n", r.Version, r.BinaryPath)
 	if r.PluginRoot != "" {
 		fmt.Printf("  plugin root: %s (via %s)\n", r.PluginRoot, r.PluginRootSource)
-		if r.PluginRootSource != "CLAUDE_PLUGIN_ROOT" {
-			fmt.Printf("  hooks: not applicable — portable installations carry no hooks; the runtime uses `sdd` from PATH\n")
-		}
 	}
 	// The hook binary is reported even when healthy: its absence is the one
 	// failure with no other symptom, so silence here would be ambiguous.
@@ -181,9 +177,9 @@ func printDoctorReport(r doctorReport) {
 // however long it takes them to do it. The write is small, idempotent, and
 // entirely within the plugin's own directory.
 func checkHooksFile(root, source string, repair bool) (path, problem string) {
-	// Hooks exist only in the Claude Code plugin tree; a portable
-	// (Codex/OpenCode) installation ships skills/ + shared/ and no hooks, so
-	// there is nothing to check or repair there.
+	// Hooks exist only when Claude Code identifies the active plugin root.
+	// Portable runtimes may install the plugin anywhere and carry no hooks, so
+	// an absent CLAUDE_PLUGIN_ROOT means there is nothing to check or repair.
 	if root == "" || source != "CLAUDE_PLUGIN_ROOT" {
 		return "", ""
 	}
@@ -211,13 +207,10 @@ func checkHooksFile(root, source string, repair bool) (path, problem string) {
 }
 
 func checkHookBinary(root, source string) (path, problem string) {
-	if root == "" {
-		return "", "no plugin root found (CLAUDE_PLUGIN_ROOT unset; no sdd-planner under " +
-			"${CODEX_HOME:-~/.codex}/plugins/cache or ~/.agents/plugins); cannot check the hook binary path"
-	}
-	// A portable (Codex/OpenCode) installation carries no hooks or pinned
-	// binary by design — the runtime invokes whatever `sdd` is on PATH.
-	if source != "CLAUDE_PLUGIN_ROOT" {
+	// A portable (Codex/OpenCode) runtime does not set CLAUDE_PLUGIN_ROOT and
+	// carries no hooks or pinned binary. Its installation path is irrelevant:
+	// the runtime invokes whatever `sdd` is on PATH.
+	if root == "" || source != "CLAUDE_PLUGIN_ROOT" {
 		return "", ""
 	}
 	name := "sdd"
@@ -238,68 +231,15 @@ func checkHookBinary(root, source string) (path, problem string) {
 	return p, ""
 }
 
-// discoverPluginRoot resolves the installed plugin tree, following the same
-// chain shared/agent-runtime.md documents for the skills themselves (G-3):
-//
-//  1. CLAUDE_PLUGIN_ROOT — the Claude Code runtime sets it explicitly.
-//  2. Codex's installed plugin cache:
-//     ${CODEX_HOME:-$HOME/.codex}/plugins/cache/<marketplace>/<plugin>/<version>/
-//  3. OpenCode's plugin directory: $HOME/.agents/plugins/<plugin>/
-//
-// A candidate counts only when it actually is this plugin: it must carry
-// shared/agent-runtime.md and a plugin.json whose name is "sdd-planner".
-// Returns the root and its provenance, or ("", "") when nothing resolves.
-func discoverPluginRoot() (root, source string) {
+// claudePluginRoot returns a plugin root only when Claude Code identifies the
+// active installation. Doctor needs the root solely for Claude's hook checks;
+// searching portable installation directories would incorrectly make their
+// arbitrary location part of the CLI's runtime contract.
+func claudePluginRoot() (root, source string) {
 	if r := os.Getenv("CLAUDE_PLUGIN_ROOT"); r != "" {
 		return r, "CLAUDE_PLUGIN_ROOT"
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", ""
-	}
-	codexHome := os.Getenv("CODEX_HOME")
-	if codexHome == "" {
-		codexHome = filepath.Join(home, ".codex")
-	}
-	if matches, _ := filepath.Glob(filepath.Join(codexHome, "plugins", "cache", "*", "*", "*")); len(matches) > 0 {
-		// Highest version last in lexical glob order; prefer the newest.
-		for i := len(matches) - 1; i >= 0; i-- {
-			if isSddPluginRoot(matches[i]) {
-				return matches[i], "codex plugin cache"
-			}
-		}
-	}
-	if matches, _ := filepath.Glob(filepath.Join(home, ".agents", "plugins", "*")); len(matches) > 0 {
-		for _, m := range matches {
-			if isSddPluginRoot(m) {
-				return m, "~/.agents/plugins"
-			}
-		}
-	}
 	return "", ""
-}
-
-// isSddPluginRoot applies agent-runtime.md's own root test: the sibling
-// shared/ resource must exist and the manifest must name this plugin.
-func isSddPluginRoot(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, "shared", "agent-runtime.md")); err != nil {
-		return false
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, "plugin.json"))
-	if err != nil {
-		// Legacy layout kept the manifest under .claude-plugin/.
-		raw, err = os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
-		if err != nil {
-			return false
-		}
-	}
-	var m struct {
-		Name string `json:"name"`
-	}
-	if json.Unmarshal(raw, &m) != nil {
-		return false
-	}
-	return m.Name == "sdd-planner"
 }
 
 // lockIgnorePattern is what a repository needs to keep the advisory lock

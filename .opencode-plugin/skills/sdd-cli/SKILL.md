@@ -19,9 +19,11 @@ and the task→command map, not every flag.
 ## Start here
 
 Run `sdd doctor` once when you begin using sdd in a project. It reports the
-binary in use, the resolved planning root, and the embedded schema set, and it
+binary in use, the resolved planning root, and the embedded schema set. Under
+Claude Code, where `CLAUDE_PLUGIN_ROOT` identifies the active plugin, it also
 regenerates `hooks.json` when that file is absent or does not match this
-plugin version's hook set.
+plugin version's hook set. Portable runtimes carry no hooks, so doctor neither
+locates nor inspects their plugin installation.
 
 That last part is why it matters: `hooks.json` is generated per platform, so a
 plugin upgrade leaves the previous version's file in place. The events it
@@ -72,7 +74,7 @@ to report without repairing.
 | Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |
 | Ledger: add / list / search / audit | `sdd decide add --statement TEXT [--accept] …` · `sdd decide list\|search` · `sdd decide validate [<ledger>]` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
-| Check the environment and repair the hooks | `sdd doctor [--check] [--json]` |
+| Check the environment (and repair Claude Code hooks) | `sdd doctor [--check] [--json]` |
 
 ## Discipline
 
