@@ -133,6 +133,34 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 		}
 		planText := strings.Join(planTextParts, "\n")
 
+		// Graph plans carry their citations in node `justifies` inside the
+		// committed <Plan>-Graph.json — rendered views hold `tasks: []` by
+		// design, so the v1 harvest above is empty for them. The citations
+		// resolve through the compiler's own CitationIndex opinion, PER
+		// SPEC: a citation resolving to one spec never satisfies another
+		// spec's same-numbered id, and an ambiguous bare citation covers
+		// neither (compile refuses it anyway).
+		graphPlan := false
+		graphCited := map[string]bool{}
+		if justifies, ok := planGraphJustifies(plan); ok {
+			graphPlan = true
+			index := BuildCitationIndex(r, plan)
+			for _, j := range justifies {
+				if hit, ok := index.Resolve(j); ok {
+					graphCited[hit.SourceRel+"\x00"+hit.ID] = true
+				}
+			}
+		}
+		graphCites := func(specRel, id string) bool {
+			return graphPlan && graphCited[specRel+"\x00"+id]
+		}
+		citeFix := func(v1 string) string {
+			if graphPlan {
+				return v1 + " For a graph plan, cite it in a node's `justifies` (qualified `Spec:ID` when related specs share id ranges)."
+			}
+			return v1
+		}
+
 		// Python joins each design's comment-stripped body with a JSON dump of
 		// its frontmatter, so a requirement cited only in a design's metadata
 		// still counts as covered.
@@ -151,11 +179,11 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 			ids := specDefinedIDs(spec)
 			for _, family := range []string{"FR", "NFR"} {
 				for _, id := range sortedSetSlice(ids[family]) {
-					if !strings.Contains(planText, id) {
+					if !strings.Contains(planText, id) && !graphCites(spec.Rel, id) {
 						out = append(out, traceabilityFinding{
 							Code: "SDD160", Plan: plan.Rel,
 							Message:    "Plan hierarchy never cites `" + id + "` from `" + spec.Rel + "`.",
-							Correction: "Cite the requirement in task verification/detail or phase acceptance criteria, or explicitly narrow the related specifications.",
+							Correction: citeFix("Cite the requirement in task verification/detail or phase acceptance criteria, or explicitly narrow the related specifications."),
 							Implicated: implicated,
 						})
 					}
@@ -170,13 +198,13 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 				}
 			}
 			for _, id := range sortedSetSlice(ids["AC"]) {
-				if strings.Contains(planText, id) {
+				if strings.Contains(planText, id) || graphCites(spec.Rel, id) {
 					continue
 				}
 				out = append(out, traceabilityFinding{
 					Code: "SDD162", Plan: plan.Rel,
 					Message:    "Plan hierarchy never cites `" + id + "` from `" + spec.Rel + "`.",
-					Correction: "Cite the acceptance criterion in task verification/detail or phase acceptance criteria.",
+					Correction: citeFix("Cite the acceptance criterion in task verification/detail or phase acceptance criteria."),
 					Implicated: implicated,
 				})
 			}
@@ -234,9 +262,21 @@ func init() {
     justifies: FR-01
 `),
 			"Specs/Sample/README.md": validSpecTemplate,
+		}}, {Name: "graph-plan-justifies-ac", Files: map[string]string{
+			// The committed graph's node justifies satisfy the AC demand
+			// without any phase-doc citation text.
+			"Plans/Sample/README.md":        tracePlan(""),
+			"Plans/Sample/01-One.md":        tracePhase("Does the thing."),
+			"Plans/Sample/Sample-Graph.json": traceGraphJSON,
+			"Specs/Sample/README.md":        validSpecTemplate,
 		}}},
 	})
 }
+
+// traceGraphJSON is the examples' committed graph: one node whose justifies
+// cover the fixture spec's whole surface, bare ids (single spec, no
+// ambiguity).
+const traceGraphJSON = `{"version":1,"seq_counter":0,"nodes":[{"id":"n1","contract":"c","justifies":["FR-01","NFR-01","AC-01"],"gate":{"type":"tests","tests":[{"id":"t","file":"f.ext"}]},"hazards":[],"estimate":1}]}`
 
 // metaJSONText renders frontmatter the way Python's
 // json.dumps(meta, default=str) does, for the design-side coverage search.
@@ -313,6 +353,13 @@ func init() {
 			"Plans/Sample/README.md": tracePlan(""),
 			"Plans/Sample/01-One.md": tracePhase("Covers FR-01 and NFR-01."),
 			"Specs/Sample/README.md": validSpecTemplate,
+		}}, {Name: "graph-plan-justifies", Files: map[string]string{
+			// A graph plan's citations live in node justifies, not phase
+			// text: the committed graph satisfies traceability by itself.
+			"Plans/Sample/README.md":        tracePlan(""),
+			"Plans/Sample/01-One.md":        tracePhase("Does the thing."),
+			"Plans/Sample/Sample-Graph.json": traceGraphJSON,
+			"Specs/Sample/README.md":        validSpecTemplate,
 		}}},
 	})
 

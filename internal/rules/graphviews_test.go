@@ -121,3 +121,101 @@ func TestPhaseOwnershipExemptsGeneratedViews(t *testing.T) {
 		t.Error("a non-generated unlisted phase doc must still fire SDD163")
 	}
 }
+
+// Graph-plan traceability (verified defect, sdd <= 2.8.3): the SDD160/162
+// harvest read only phase-doc tasks[] text — empty by design for graph
+// plans — so an approved graph plan could NEVER pass validate even though
+// compile enforced coverage on the same tree. The citations live in node
+// justifies inside <Plan>-Graph.json; the harvest resolves them with the
+// same CitationIndex opinion the compiler uses, per spec (a citation
+// resolving to one spec never covers another spec's same-numbered id).
+
+func traceSpec(name string) string {
+	return `---
+title: "` + name + `"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# ` + name + `
+
+## Functional Requirements
+
+- **FR-01**: ` + name + ` requirement one.
+
+## Acceptance Criteria
+
+- [ ] **AC-01**: ` + name + ` criterion one.
+`
+}
+
+func traceGraph(justifies ...string) string {
+	nodes := ""
+	for i, j := range justifies {
+		if i > 0 {
+			nodes += ","
+		}
+		nodes += `{"id":"n` + string(rune('a'+i)) + `","contract":"c","justifies":["` + j + `"],"gate":{"type":"tests","tests":[{"id":"t","file":"f.ext"}]},"hazards":[],"estimate":1}`
+	}
+	return `{"version":1,"seq_counter":0,"nodes":[` + nodes + `]}`
+}
+
+const traceGraphPlan = `---
+title: "P"
+type: plan
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: []
+related: [Specs/A, Specs/B]
+phases: []
+---
+
+# P
+
+## Overview
+
+x.
+`
+
+func TestGraphPlanTraceabilityResolvesJustifies(t *testing.T) {
+	r := rootFrom(t, map[string]string{
+		"Specs/A/README.md":  traceSpec("A"),
+		"Specs/B/README.md":  traceSpec("B"),
+		"Plans/P/README.md":  traceGraphPlan,
+		"Plans/P/P-Graph.json": traceGraph("Specs/A:FR-01", "A:AC-01", "Specs/B:FR-01", "B:AC-01"),
+	})
+	for _, d := range Run(r) {
+		if d.Code == "SDD160" || d.Code == "SDD162" {
+			t.Errorf("full per-spec coverage via graph justifies must satisfy traceability: %s %s", d.Code, d.Message)
+		}
+	}
+}
+
+func TestGraphPlanTraceabilityIsPerSpec(t *testing.T) {
+	// Specs/B's criterion is uncovered; a BARE ambiguous justification of
+	// AC-01 covers neither spec (never first-wins).
+	r := rootFrom(t, map[string]string{
+		"Specs/A/README.md":  traceSpec("A"),
+		"Specs/B/README.md":  traceSpec("B"),
+		"Plans/P/README.md":  traceGraphPlan,
+		"Plans/P/P-Graph.json": traceGraph("Specs/A:FR-01", "Specs/A:AC-01", "Specs/B:FR-01", "AC-01"),
+	})
+	var hits []string
+	for _, d := range Run(r) {
+		if d.Code == "SDD162" {
+			hits = append(hits, d.Message)
+		}
+	}
+	joined := strings.Join(hits, "\n")
+	if !strings.Contains(joined, "`AC-01` from `Specs/B/README.md`") {
+		t.Errorf("the uncovered spec's criterion must still be reported:\n%s", joined)
+	}
+	if strings.Contains(joined, "Specs/A/README.md") {
+		t.Errorf("the qualified-covered spec must be satisfied:\n%s", joined)
+	}
+}

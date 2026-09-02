@@ -1,6 +1,9 @@
 package rules
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -51,3 +54,30 @@ func stripGraphViewSection(body string) string {
 }
 
 var tripleNewlineRe = regexp.MustCompile(`\n{3,}`)
+
+// planGraphJustifies loads a plan's committed graph (`<Plan>-Graph.json`
+// beside the README) and returns every node's justifies entries. (nil,
+// false) when no graph exists or it does not parse — the graph subsystem
+// owns malformed-graph refusals; traceability just falls back to the v1
+// harvest. Decoding is deliberately minimal and tolerant: this reader wants
+// citations, not the full model, and must not fail when the model grows.
+func planGraphJustifies(plan *Artifact) ([]string, bool) {
+	dir := filepath.Dir(plan.AbsPath)
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
+	if err != nil {
+		return nil, false
+	}
+	var g struct {
+		Nodes []struct {
+			Justifies []string `json:"justifies"`
+		} `json:"nodes"`
+	}
+	if json.Unmarshal(raw, &g) != nil {
+		return nil, false
+	}
+	var out []string
+	for _, n := range g.Nodes {
+		out = append(out, n.Justifies...)
+	}
+	return out, true
+}
