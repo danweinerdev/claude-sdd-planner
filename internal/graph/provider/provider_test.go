@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,39 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
+
+func TestGitPruneMergedBranchesToleratesConcurrentWorktreeAttach(t *testing.T) {
+	var calls []string
+	run := func(_ string, name string, args ...string) ([]byte, error) {
+		cmd := name + " " + strings.Join(args, " ")
+		calls = append(calls, cmd)
+		switch cmd {
+		case "git branch --list graph/* --format=%(refname:short)|%(worktreepath)":
+			return []byte("graph/n1-abcd|\n"), nil
+		case "git merge-base --is-ancestor graph/n1-abcd HEAD":
+			return nil, nil
+		case "git branch -d graph/n1-abcd":
+			return nil, errors.New("branch is now checked out")
+		case "git branch --list graph/n1-abcd --format=%(refname:short)|%(worktreepath)":
+			return []byte("graph/n1-abcd|C:/repo/Plans/Demo/.graph/ws-n1\n"), nil
+		default:
+			t.Fatalf("unexpected command: %s", cmd)
+			return nil, nil
+		}
+	}
+
+	p := &gitProvider{repoRoot: "C:/repo", planDir: "C:/repo/Plans/Demo", run: run}
+	pruned, err := p.PruneMergedBranches()
+	if err != nil {
+		t.Fatalf("a concurrent worktree attach is a benign delete race: %v", err)
+	}
+	if len(pruned) != 0 {
+		t.Fatalf("the newly checked-out branch must survive: %v", pruned)
+	}
+	if len(calls) != 4 {
+		t.Fatalf("expected listing, ancestry, delete, and checkout recheck; got %v", calls)
+	}
+}
 
 func gitOK(t *testing.T, dir string, args ...string) string {
 	t.Helper()

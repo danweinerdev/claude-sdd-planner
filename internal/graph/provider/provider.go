@@ -217,6 +217,22 @@ func (g *gitProvider) PruneMergedBranches() ([]string, error) {
 			continue // unmerged: the only reference to that work
 		}
 		if _, err := g.run(g.repoRoot, "git", "branch", "-d", name); err != nil {
+			// Allocation can attach a worktree after the listing above but
+			// before deletion. In that race, branch -d is the promised safety
+			// net: re-check checkout state and treat its refusal as benign.
+			// A branch concurrently pruned by another gc is benign too.
+			current, checkErr := g.run(g.repoRoot, "git", "branch", "--list", name,
+				"--format=%(refname:short)|%(worktreepath)")
+			if checkErr == nil {
+				line := strings.TrimSpace(string(current))
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "|", 2)
+				if len(parts) == 2 && parts[1] != "" {
+					continue
+				}
+			}
 			return pruned, fmt.Errorf("pruning merged branch %s: %w", name, err)
 		}
 		pruned = append(pruned, name)
