@@ -35,6 +35,7 @@ type evidenceOpts struct {
 	ToolResult  string
 	Focused     string
 	FinalReview string
+	Frozen      string
 	Date        string
 	Revision    string
 	DryRun      bool
@@ -126,12 +127,28 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 		}
 	}
 
+	// The final-review line is composed here, not by the caller: path
+	// normalized planning-root-relative, frozen suffix appended, refusal
+	// when no range exists anywhere (SDD166's exact shape, emitted by the
+	// same binary that validates it).
+	finalReview := o.FinalReview
+	if finalReview != "" {
+		root, rootErr := store.FindPlanningRoot(filepath.Dir(path))
+		if rootErr != nil {
+			return fmt.Errorf("evidence add: resolving the planning root for --final-review: %w", rootErr)
+		}
+		finalReview, err = composeFinalReview(root, finalReview, o.Frozen)
+		if err != nil {
+			return err
+		}
+	}
+
 	section := renderEvidence(evidenceInput{
 		Date: when, Repository: ".", VCS: string(repo.Kind()), Revision: rev,
 		VerifiedBy: o.VerifiedBy, WorkingDir: o.WorkingDir, Result: o.Result,
 		Tool: o.Tool, ToolContext: o.ToolContext, ToolResult: o.ToolResult,
 		Focused: o.Focused, IsTask: o.Task != "",
-		FinalReview: o.FinalReview, TaskIdentities: identities,
+		FinalReview: finalReview, TaskIdentities: identities,
 		PhaseIdentities: phaseIdentities,
 	})
 
@@ -367,6 +384,17 @@ func renderEvidence(in evidenceInput) string {
 	b.WriteString("|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| `%s` | `%s` | PASS (`exit 0`) | `%s` |\n",
 		in.VerifiedBy, in.WorkingDir, in.Result)
+	// The Tool/inspection table renders BEFORE the identities sections:
+	// SDD157/SDD158 require those sections to contain only identity
+	// entries, and the first layout (table after) produced evidence this
+	// binary's own validator rejected — hit at three phase closes of the
+	// SddGraph plan before being fixed here.
+	if in.Tool != "" {
+		b.WriteString("\n| Tool / inspection | Context | Result | Observable evidence |\n")
+		b.WriteString("|---|---|---|---|\n")
+		fmt.Fprintf(&b, "| `%s` | `%s` | PASS | `%s` |\n",
+			in.Tool, orDefault(in.ToolContext, "."), orDefault(in.ToolResult, in.Result))
+	}
 	if len(in.PhaseIdentities) > 0 {
 		b.WriteString("\n### Completed phase identities\n\n")
 		for _, p := range in.PhaseIdentities {
@@ -379,13 +407,55 @@ func renderEvidence(in evidenceInput) string {
 			fmt.Fprintf(&b, "- `%s`: `%s`\n", t.ID, t.Revision)
 		}
 	}
-	if in.Tool != "" {
-		b.WriteString("\n| Tool / inspection | Context | Result | Observable evidence |\n")
-		b.WriteString("|---|---|---|---|\n")
-		fmt.Fprintf(&b, "| `%s` | `%s` | PASS | `%s` |\n",
-			in.Tool, orDefault(in.ToolContext, "."), orDefault(in.ToolResult, in.Result))
-	}
 	return b.String()
+}
+
+// composeFinalReview builds the SDD166 line from its parts: the review path
+// normalized to planning-root-relative, then `; frozen: <identity>`. A
+// caller who already composed the suffix gets the path half normalized and
+// the rest preserved; a bare path with no range anywhere refuses now rather
+// than writing a line the validator rejects later.
+func composeFinalReview(root, arg, frozen string) (string, error) {
+	if arg == "" {
+		return "", nil
+	}
+	if i := strings.Index(arg, "; frozen:"); i >= 0 {
+		norm, err := normalizeReviewPath(root, strings.TrimSpace(arg[:i]))
+		if err != nil {
+			return "", err
+		}
+		return norm + arg[i:], nil
+	}
+	if frozen == "" {
+		return "", fmt.Errorf("evidence add: --final-review needs --frozen <base>..<endpoint>; " +
+			"SDD166 requires `- Final aligned review: <path>; frozen: <identity>` and a bare path would be refused")
+	}
+	norm, err := normalizeReviewPath(root, arg)
+	if err != nil {
+		return "", err
+	}
+	return norm + "; frozen: " + frozen, nil
+}
+
+// normalizeReviewPath renders a review artifact path planning-root-relative,
+// accepting root-relative, CWD-relative, and absolute spellings — the three
+// forms callers actually typed during the SddGraph closes.
+func normalizeReviewPath(root, arg string) (string, error) {
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(arg))); err == nil {
+		return filepath.ToSlash(arg), nil
+	}
+	if abs, err := filepath.Abs(arg); err == nil {
+		if _, statErr := os.Stat(abs); statErr == nil {
+			rootAbs, rerr := filepath.Abs(root)
+			if rerr == nil {
+				if rel, rerr := filepath.Rel(rootAbs, abs); rerr == nil && !strings.HasPrefix(rel, "..") {
+					return filepath.ToSlash(rel), nil
+				}
+			}
+			return "", fmt.Errorf("evidence add: final review %s lies outside the planning root %s; the recorded path must be planning-root-relative", arg, root)
+		}
+	}
+	return "", fmt.Errorf("evidence add: final review %s does not exist (checked planning-root-relative and as given)", arg)
 }
 
 func orDefault(v, fallback string) string {
