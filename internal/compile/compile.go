@@ -147,6 +147,10 @@ func Compile(s *schema.Schema, payload string, opts Options) *Result {
 		if opts.Upgrade {
 			fmLines = upgradeFrontmatter(s, doc, fmLines, res)
 		}
+		// Tool-owned fields are stamped on every path, preserve included:
+		// the compiled entries carry the managed path's exact semantics
+		// (status/created from disk or defaults, updated always today).
+		fmLines = upsertToolOwnedLines(s, fm, fmLines)
 		res.Output = emitPreserved(s, fmLines, doc, ordered, canonical)
 	} else {
 		res.Output = emit(s, fm, doc, ordered, canonical)

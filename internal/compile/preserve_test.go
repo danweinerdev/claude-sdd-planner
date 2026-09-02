@@ -100,3 +100,91 @@ func TestUndeclaredFrontmatterKeyManagedVsPreserve(t *testing.T) {
 		}
 	})
 }
+
+// planPayloadNoTrio is what `sdd template plan --for-apply` style payloads
+// carry: no tool-owned fields (SPK021 refuses them), nested phases[] intact.
+const planPayloadNoTrio = `---
+title: "Thing"
+type: plan
+tags: [x]
+related: []
+phases:
+  - id: 1
+    name: First
+---
+
+# Thing
+
+## Overview
+A thing.
+
+## Non-Goals
+- not that
+
+## Architecture
+Some architecture.
+
+## Key Decisions
+- decided X
+
+## Dependencies
+- none
+
+## Plan Completion Evidence
+- pending
+`
+
+// TestPreserveCreateStampsToolOwnedFields (verified defect, sdd <= 2.8.2):
+// the preserve branch discarded the compiled frontmatter wholesale, so a
+// plan created through the tool's own write path carried no status, created,
+// or updated — invalid by construction, refused by this binary's own
+// validator (SDD010 x3, SDD012, SDD013 x2), unrepairable by migrate, and
+// unexpressable in the payload (SPK021). Tool-owned fields must be stamped
+// into the preserved block exactly as the managed path stamps them.
+func TestPreserveCreateStampsToolOwnedFields(t *testing.T) {
+	r := Compile(loadPlan(t), planPayloadNoTrio, Options{Today: "2026-09-02"})
+	if !r.OK() {
+		t.Fatalf("create must succeed: %+v", r.Refusals)
+	}
+	fm := frontmatterBlock(t, r.Output)
+	for _, want := range []string{"status: draft", "created: 2026-09-02", "updated: 2026-09-02"} {
+		if !strings.Contains(fm, want) {
+			t.Errorf("created plan must carry %q; frontmatter:\n%s", want, fm)
+		}
+	}
+	if !strings.Contains(fm, "phases:\n  - id: 1\n    name: First") {
+		t.Errorf("nested frontmatter must stay verbatim:\n%s", fm)
+	}
+}
+
+// TestPreserveEditRestampsToolOwnedFields: an edit whose payload (correctly)
+// omits the tool-owned trio must carry the on-disk values through — the
+// defect stripped them from previously valid files, byte-identical to the
+// broken create output.
+func TestPreserveEditRestampsToolOwnedFields(t *testing.T) {
+	existing := artifact.Parse(planSrc)
+	r := Compile(loadPlan(t), planPayloadNoTrio, Options{Today: "2026-09-02", Existing: existing})
+	if !r.OK() {
+		t.Fatalf("edit must succeed: %+v", r.Refusals)
+	}
+	fm := frontmatterBlock(t, r.Output)
+	for _, want := range []string{
+		"status: draft",       // carried from disk
+		"created: 2026-08-01", // carried from disk, never restamped
+		"updated: 2026-09-02", // restamped on every write
+	} {
+		if !strings.Contains(fm, want) {
+			t.Errorf("edited plan must carry %q; frontmatter:\n%s", want, fm)
+		}
+	}
+}
+
+func frontmatterBlock(t *testing.T, output string) string {
+	t.Helper()
+	rest := strings.TrimPrefix(output, "---\n")
+	end := strings.Index(rest, "\n---")
+	if !strings.HasPrefix(output, "---\n") || end < 0 {
+		t.Fatalf("output has no frontmatter block:\n%s", output)
+	}
+	return rest[:end]
+}

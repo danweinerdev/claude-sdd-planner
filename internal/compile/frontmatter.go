@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -117,4 +118,51 @@ func modelsIdentically(source, rendered, today string) bool {
 // default is declared as its YAML text.
 func appendDefaults(lines []string, key, value string) []string {
 	return append(lines, key+": "+value)
+}
+
+// upsertToolOwnedLines merges the compiled tool-owned fields into a
+// preserved frontmatter block. The preserve path renders the payload's block
+// nearly verbatim to keep nested structure the flat model cannot carry — but
+// tool-owned fields are the tool's to stamp on EVERY path (FR-18): before
+// this merge, a preserve-mode create emitted no status/created/updated at
+// all (invalid by construction, refused by this binary's own validator,
+// unrepairable by migrate, unexpressable in the payload per SPK021), and a
+// preserve-mode edit stripped them from previously valid files.
+//
+// Lines already present are left byte-untouched (renderFrontmatter restamps
+// an existing `updated` in place; status/created lines were verified
+// consistent against disk by SPK021's check); missing keys are inserted in
+// schema order, each after the nearest preceding schema field present.
+func upsertToolOwnedLines(s *schema.Schema, fm []artifact.FMEntry, lines []string) []string {
+	value := map[string]string{}
+	for _, e := range fm {
+		value[e.Key] = e.Value
+	}
+	present := func(key string) int {
+		for i, l := range lines {
+			if strings.HasPrefix(l, key+":") {
+				return i
+			}
+		}
+		return -1
+	}
+	insertAt := -1 // index of the last schema field's line seen so far
+	for _, f := range s.Frontmatter {
+		if i := present(f.Key); i >= 0 {
+			insertAt = i
+			continue
+		}
+		if f.Ownership() != schema.Tool {
+			continue
+		}
+		v, ok := value[f.Key]
+		if !ok || v == "" {
+			continue
+		}
+		line := f.Key + ": " + v
+		at := insertAt + 1
+		lines = append(lines[:at], append([]string{line}, lines[at:]...)...)
+		insertAt = at
+	}
+	return lines
 }
