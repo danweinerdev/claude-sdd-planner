@@ -856,3 +856,147 @@ func TestGraphViewSectionInsertsBeforeEvidence(t *testing.T) {
 		t.Fatalf("exactly one graph-view section after re-render, got %d", c)
 	}
 }
+
+// twoSpecRoot extends the fixture with a second related spec that shares id
+// ranges with the first (FR-01, AC-01) — the cross-spec collision surface
+// reported against 2.8.3.
+func twoSpecRoot(t *testing.T) string {
+	root := fixtureRoot(t, fixtureSpec)
+	other := `---
+title: "Other Spec"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# Other Spec
+
+## Functional Requirements
+
+- **FR-01**: The other plan's requirement one.
+
+## Acceptance Criteria
+
+- [ ] **AC-01**: The other spec's criterion one.
+`
+	if err := os.MkdirAll(filepath.Join(root, "Specs", "Other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Specs", "Other", "README.md"), []byte(other), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := os.ReadFile(filepath.Join(root, "Plans", "SamplePlan", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(plan), "related: [Specs/Sample, Designs/Sample]",
+		"related: [Specs/Sample, Specs/Other, Designs/Sample]", 1)
+	if updated == string(plan) {
+		t.Fatalf("fixture plan related line not found:\n%s", plan)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Plans", "SamplePlan", "README.md"), []byte(updated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// TestAmbiguousBareCitationRefused: a bare id defined by two related specs
+// must refuse with the qualified spellings, never first-wins-resolve.
+func TestAmbiguousBareCitationRefused(t *testing.T) {
+	root := twoSpecRoot(t)
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "w", "contract": "works", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t", "file": "f.ext"}]}, "hazards": []}
+  ]
+}
+`)
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile must refuse with findings, not fail: %v", err)
+	}
+	joined := ""
+	for _, f := range findings {
+		joined += f.String() + "\n"
+	}
+	if !strings.Contains(joined, `cites "AC-01", which is defined by more than one related source`) {
+		t.Fatalf("ambiguous bare citation must refuse:\n%s", joined)
+	}
+	if !strings.Contains(joined, "Specs/Other:AC-01") || !strings.Contains(joined, "Specs/Sample:AC-01") {
+		t.Fatalf("the refusal must name the qualified spellings:\n%s", joined)
+	}
+}
+
+// TestPerSpecACCoverageAndQualifiedCitations: qualified citations resolve,
+// coverage is per spec (one spec's citation never satisfies the other
+// spec's same-numbered criterion), and the qualified fingerprint embeds
+// under the citation as written.
+func TestPerSpecACCoverageAndQualifiedCitations(t *testing.T) {
+	root := twoSpecRoot(t)
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "w1", "contract": "sample ones", "justifies": ["Specs/Sample:AC-01", "Sample:FR-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t1", "file": "f.ext"}]}, "hazards": []},
+    {"id": "w2", "contract": "sample twos", "justifies": ["AC-02"], "deps": ["w1"],
+     "gate": {"type": "tests", "tests": [{"id": "t2", "file": "f.ext"}]}, "hazards": []},
+    {"id": "gate-final", "contract": "reviewed", "justifies": ["Specs/Sample:AC-01"], "deps": ["w2"],
+     "gate": {"type": "review", "lanes": "full"}, "hazards": []}
+  ]
+}
+`)
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile must refuse with findings, not fail: %v", err)
+	}
+	joined := ""
+	for _, f := range findings {
+		joined += f.String() + "\n"
+	}
+	if !strings.Contains(joined, "Specs/Other:AC-01 has no covering node") {
+		t.Fatalf("the other spec's same-numbered criterion must stay uncovered:\n%s", joined)
+	}
+	if strings.Contains(joined, `cites "Specs/Sample:AC-01"`) || strings.Contains(joined, `cites "Sample:FR-01"`) {
+		t.Fatalf("qualified citations must resolve:\n%s", joined)
+	}
+
+	// Cover the other spec explicitly: the compile greens and the
+	// fingerprints embed under the citations as written.
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "w3", "contract": "other ones", "justifies": ["Other:AC-01"], "deps": ["w2"],
+     "gate": {"type": "tests", "tests": [{"id": "t3", "file": "f.ext"}]}, "hazards": []},
+    {"id": "gate-2", "contract": "other reviewed", "justifies": ["Other:AC-01"], "deps": ["w3"],
+     "gate": {"type": "review", "lanes": "full"}, "hazards": []}
+  ]
+}
+`)
+	// Re-stage the full set: the first refusal left everything staged, so
+	// assemble both fragments into one proposal.
+	if _, _, err := proposal.Assemble(filepath.Join(root, "Plans", "SamplePlan")); err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	res, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected clean compile, got:\n%v", findings)
+	}
+	g, err := gstore.Load(res.GraphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w1 := g.NodeByID("w1")
+	if !strings.HasPrefix(w1.IntentHashes["Specs/Sample:AC-01"], "sha256:") {
+		t.Fatalf("qualified citation must fingerprint under its written spelling: %+v", w1.IntentHashes)
+	}
+	if !strings.HasPrefix(g.NodeByID("w3").IntentHashes["Other:AC-01"], "sha256:") {
+		t.Fatalf("basename-qualified citation must fingerprint: %+v", g.NodeByID("w3").IntentHashes)
+	}
+}

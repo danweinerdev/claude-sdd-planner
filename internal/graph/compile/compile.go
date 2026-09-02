@@ -42,8 +42,10 @@ import (
 // the written graph, so the dry-run and the render can never disagree.
 func deriveClosure(repoRoot string, sources *sourceSet) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
 	currentHashes := map[string]string{}
-	for id, item := range sources.items {
-		currentHashes[id] = item.Hash
+	for _, key := range sources.index.Keys() {
+		if _, item, ok := sources.resolveItem(key); ok {
+			currentHashes[key] = item.Hash
+		}
 	}
 	digester := digest.New(repoRoot)
 	return func(g *model.Graph) (map[string]states.NodeState, map[string]bool) {
@@ -115,13 +117,16 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	for i := range p.Nodes {
 		n := &p.Nodes[i]
 		for _, cited := range n.Justifies {
-			item, ok := sources.items[cited]
+			_, item, ok := sources.resolveItem(cited)
 			if !ok {
 				continue // D-NNNN citations resolve but are not fingerprinted
 			}
 			if n.IntentHashes == nil {
 				n.IntentHashes = map[string]string{}
 			}
+			// Keyed by the citation AS WRITTEN — qualified spellings
+			// included — so states' staleness lookups match what
+			// CurrentIntent serves under the same keys.
 			n.IntentHashes[cited] = item.Hash
 		}
 		if len(n.IntentHashes) > 0 {
@@ -180,7 +185,16 @@ func CurrentIntent(root, repoRoot, plan string) (map[string]intent.Item, error) 
 	if err != nil {
 		return nil, err
 	}
-	return sources.items, nil
+	// Every unambiguous citation SPELLING gets an entry — bare where
+	// unique, qualified always — so a graph's intent_hashes keys (stored
+	// as written) always find their current counterpart.
+	out := map[string]intent.Item{}
+	for _, key := range sources.index.Keys() {
+		if _, item, ok := sources.resolveItem(key); ok {
+			out[key] = item
+		}
+	}
+	return out, nil
 }
 
 // Validate runs the full semantic pass over a graph as it stands (an empty
@@ -230,11 +244,41 @@ func selectProposal(planDir string) (string, []byte, error) {
 
 // sourceSet is the resolution context: which ids exist (per the validator's
 // own reachability), their fingerprints, and the decision ledger's statuses.
-type sourceSet struct {
-	items     map[string]intent.Item // FR/NFR/AC/DD -> fingerprint
-	acIDs     []string               // every live AC across reachable specs, sorted
-	decisions map[string]string      // D-NNNN -> status
+// acPair is one direct spec's acceptance criterion — the unit of the
+// per-spec coverage demand (DD-4: the plan's OWN requirement surface, per
+// spec; a citation resolving to one spec never satisfies another spec's
+// same-numbered criterion).
+type acPair struct {
+	SourceRel string
+	Qualifier string
+	ID        string
 }
+
+type sourceSet struct {
+	// index is the validator's citation-resolution opinion, shared verbatim
+	// (bare and qualified spellings, ambiguity marked, never first-wins).
+	index *rules.CitationIndex
+	// items carries each reachable source's fingerprintable requirement
+	// text: sourceRel -> bare id -> item.
+	items     map[string]map[string]intent.Item
+	acPairs   []acPair          // direct specs x defined ACs, sorted
+	decisions map[string]string // D-NNNN -> status
+}
+
+// resolveItem resolves one citation spelling to its defining source's
+// fingerprintable item: unambiguous resolution AND extractable text, the
+// same bar the flat lookup set before qualified spellings existed.
+func (s *sourceSet) resolveItem(cited string) (rules.CitationHit, intent.Item, bool) {
+	hit, ok := s.index.Resolve(cited)
+	if !ok {
+		return rules.CitationHit{}, intent.Item{}, false
+	}
+	item, ok := s.items[hit.SourceRel][hit.ID]
+	return hit, item, ok
+}
+
+// acKey keys per-spec AC coverage.
+func acKey(sourceRel, id string) string { return sourceRel + "\x00" + id }
 
 // identifierSources loads the root and collects everything the plan's
 // related graph lets its nodes cite.
@@ -248,42 +292,44 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	if !ok {
 		return nil, fmt.Errorf("compile: %s does not exist; the plan's README carries the `related` graph citations resolve through", planRel)
 	}
-	out := &sourceSet{items: map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
-	// Coverage is an exit code over the plan's OWN requirement surface
-	// (DD-4): only specs the plan's README directly relates put their ACs
-	// on the coverage demand. Transitively reachable specs (a design's
-	// background citations — often another plan's requirement surface)
-	// stay citable below but demand nothing here.
-	directSpec := map[string]bool{}
-	for _, src := range rules.DirectRelatedSources(loaded, planArt) {
-		if src.Kind() == "spec" {
-			directSpec[src.Rel] = true
-		}
-	}
-	for _, src := range rules.RelatedIdentifierSources(loaded, planArt) {
-		kind := src.Kind()
-		if kind != "spec" && kind != "design" {
-			continue
-		}
+	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
+	out.index = rules.BuildCitationIndex(loaded, planArt)
+	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
 		items := intent.Items(body)
 		// Only ids the validator agrees are defined enter the set — Items
 		// and DefinedIdentifiers use the same patterns, but the inventory is
-		// the validator's call.
+		// the validator's call (the index carries that inventory).
+		per := map[string]intent.Item{}
 		for _, family := range rules.IdentifierFamilies() {
-			for id := range rules.DefinedIdentifiers(src, family) {
+			for _, id := range out.index.DefinedBy(src.Rel, family) {
 				if item, ok := items[id]; ok {
-					if _, dup := out.items[id]; !dup {
-						out.items[id] = item
-					}
-				}
-				if family == "AC" && directSpec[src.Rel] {
-					out.acIDs = append(out.acIDs, id)
+					per[id] = item
 				}
 			}
 		}
+		out.items[src.Rel] = per
 	}
-	sort.Strings(out.acIDs)
+	// Coverage is an exit code over the plan's OWN requirement surface
+	// (DD-4): only specs the plan's README directly relates put their ACs
+	// on the coverage demand — and the demand is PER SPEC. Transitively
+	// reachable specs stay citable but demand nothing here.
+	for _, src := range rules.DirectRelatedSources(loaded, planArt) {
+		if src.Kind() != "spec" {
+			continue
+		}
+		for _, id := range out.index.DefinedBy(src.Rel, "AC") {
+			out.acPairs = append(out.acPairs, acPair{
+				SourceRel: src.Rel, Qualifier: rules.SourceQualifier(src.Rel), ID: id,
+			})
+		}
+	}
+	sort.Slice(out.acPairs, func(i, j int) bool {
+		if out.acPairs[i].Qualifier != out.acPairs[j].Qualifier {
+			return out.acPairs[i].Qualifier < out.acPairs[j].Qualifier
+		}
+		return out.acPairs[i].ID < out.acPairs[j].ID
+	})
 	return out, nil
 }
 
@@ -404,10 +450,14 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 			add(id, "cites nothing; every node carries `justifies` naming the AC/FR/NFR/DD/D ids it exists for (an unsourced node is cut, not compiled)")
 		}
 		for _, cited := range n.Justifies {
-			if _, ok := sources.items[cited]; ok {
-				if strings.HasPrefix(cited, "AC-") {
-					citedACs[cited] = true
+			if hit, _, ok := sources.resolveItem(cited); ok {
+				if strings.HasPrefix(hit.ID, "AC-") {
+					citedACs[acKey(hit.SourceRel, hit.ID)] = true
 				}
+				continue
+			}
+			if suggestions := sources.index.Ambiguous(cited); len(suggestions) > 0 {
+				add(id, "cites %q, which is defined by more than one related source; qualify it (%s)", cited, strings.Join(suggestions, ", "))
 				continue
 			}
 			if status, ok := sources.decisions[cited]; ok {
@@ -425,12 +475,24 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 		add("graph", "dependency cycle: %s", strings.Join(append(append([]string{}, cycle...), cycle[0]), " -> "))
 	}
 
-	// AC coverage: every live AC across reachable specs has a covering node
-	// (DD-4: coverage is an exit code, not a review judgment).
-	for _, ac := range sources.acIDs {
-		if !citedACs[ac] {
-			add("graph", "%s has no covering node; cover it or retire it in the spec", ac)
+	// AC coverage: every AC of every DIRECTLY related spec has a covering
+	// node, per spec (DD-4: coverage is an exit code, not a review
+	// judgment; one spec's citation never covers another spec's
+	// same-numbered criterion). The finding names the bare id when it is
+	// unique across the demand, the qualified spelling when it is not.
+	bareCount := map[string]int{}
+	for _, p := range sources.acPairs {
+		bareCount[p.ID]++
+	}
+	for _, p := range sources.acPairs {
+		if citedACs[acKey(p.SourceRel, p.ID)] {
+			continue
 		}
+		label := p.ID
+		if bareCount[p.ID] > 1 {
+			label = p.Qualifier + ":" + p.ID
+		}
+		add("graph", "%s has no covering node; cover it or retire it in the spec", label)
 	}
 
 	// Coverage invariant (DD-9): every node inside the dependency closure of
