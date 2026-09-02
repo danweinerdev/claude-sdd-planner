@@ -135,6 +135,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
 	// mutating, phase 4: records gate observations and finding demotions
 	"review": false,
+	// mutating: batch observation recording (the converted-plan on-ramp)
+	"reverify": false,
 }
 
 var (

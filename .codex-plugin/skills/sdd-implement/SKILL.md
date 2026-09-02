@@ -144,7 +144,7 @@ v1 markdown plans keep this protocol until converted.
    exists for Perforce or no-SCM planning roots, so leave the task non-complete
    and report that limitation rather than claiming lifecycle completion.
 
-When a v1 plan keeps generating drift the evidence rules exist to catch, offer conversion instead of more discipline: `sdd graph convert --plan <Name>` (its sentinels are real judgments to resolve through the payload path, never defaults).
+When a v1 plan keeps generating drift the evidence rules exist to catch, offer conversion instead of more discipline: `sdd graph convert --plan <Name>` (its sentinels are real judgments to resolve through the payload path, never defaults). After a converted plan compiles, run the on-ramp before walking: history grants nothing, so every completed v1 task is an unverified node until observations exist — `sdd graph reverify --plan <Name> --report <suite report>` (add `--command-exit`/`--command-log` for command gates) folds one real run against every foldable node in dependency order, and the frontier then offers the genuinely remaining work instead of the already-done past.
 
 ## Escalate
 

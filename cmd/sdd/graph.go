@@ -29,9 +29,9 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
+	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
-	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	gsync "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/sync"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
@@ -52,6 +52,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
+	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
@@ -302,6 +303,99 @@ func graphSyncCmd() *cobra.Command {
 	return c
 }
 
+// graphReverifyCmd is the converted plan's on-ramp: history grants nothing
+// (DD-15), so after `sdd graph convert` every completed v1 task is an
+// unverified node until observations exist. One real suite run — a report
+// for tests gates, an exit code and log for command gates — folds against
+// every unclaimed, non-review node in dependency order, with skips and
+// refusals collected into one summary instead of aborting the batch.
+// Mutating: guard-covered per D-0014.
+func graphReverifyCmd() *cobra.Command {
+	var plan, report, commandLog string
+	var commandExit int
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "reverify",
+		Short: "Fold one real run's results against every foldable node (the converted-plan on-ramp)",
+		Long: `Fold one set of inputs against every unclaimed, non-review node in dependency order.
+
+The same --report is reused for every tests gate; the same --command-exit (and
+--command-log) is reused for every command gate; the process exit code maps
+refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			planDir, err := planDirFor(plan, "reverify")
+			if err != nil {
+				return err
+			}
+			_, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph reverify: %w", err)
+			}
+			opts := gsync.ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot}
+			if report != "" {
+				raw, err := os.ReadFile(report)
+				if err != nil {
+					return fmt.Errorf("graph reverify: %w", err)
+				}
+				opts.ReportName, opts.ReportBytes = report, raw
+			}
+			if c.Flags().Changed("command-exit") {
+				opts.CommandExit = &commandExit
+				if commandLog != "" {
+					raw, err := os.ReadFile(commandLog)
+					if err != nil {
+						return fmt.Errorf("graph reverify: %w", err)
+					}
+					opts.CommandLog = raw
+				}
+			}
+			cfg, _ := store.LoadConfig(".")
+			opts.TTL = time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
+
+			res, err := gsync.Reverify(opts)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				if err := writeJSON(struct {
+					OK bool `json:"ok"`
+					*gsync.ReverifyResult
+				}{res.Refusals == 0, res}); err != nil {
+					return err
+				}
+			} else {
+				w := c.OutOrStdout()
+				for _, o := range res.Outcomes {
+					switch {
+					case o.Result != "":
+						fmt.Fprintf(w, "  %-28s %s at seq %d\n", o.Node, o.Result, o.Seq)
+					case o.Skipped != "":
+						fmt.Fprintf(w, "  %-28s skipped: %s\n", o.Node, o.Skipped)
+					default:
+						fmt.Fprintf(w, "  %-28s refused: %s\n", o.Node, o.Refused)
+					}
+				}
+				fmt.Fprintf(w, "recorded %d pass(es), %d failure(s); %d skipped, %d refused\n",
+					res.Passes, res.Failures, res.Skips, res.Refusals)
+				if len(res.Untracked) > 0 {
+					fmt.Fprintf(w, "untracked report ids (decomposition warning, aggregated once): %d\n", len(res.Untracked))
+				}
+			}
+			if res.Refusals > 0 {
+				return &refusedError{n: res.Refusals}
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&report, "report", "", "same test report (JUnit XML .xml or `go test -json` .json) folded against every foldable tests gate")
+	c.Flags().IntVar(&commandExit, "command-exit", 0, "same exit code folded against every foldable command gate")
+	c.Flags().StringVar(&commandLog, "command-log", "", "same captured output folded against every command gate (teed to each node log)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
 // graphReviewCmd records a review gate's observation from a persisted
 // frozen Aligned review artifact (DD-9, D-0020): the gate greens only from
 // all three freeze signals read together, and findings that name scope
@@ -436,7 +530,7 @@ func compileCmd() *cobra.Command {
 			if len(findings) > 0 {
 				if asJSON {
 					out := struct {
-						OK       bool              `json:"ok"`
+						OK       bool               `json:"ok"`
 						Findings []gcompile.Finding `json:"findings"`
 					}{false, findings}
 					if err := writeJSON(out); err != nil {
@@ -546,11 +640,11 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 				Weight int    `json:"critical_weight"`
 			}
 			out := struct {
-				OK       bool                    `json:"ok"`
-				Plan     string                  `json:"plan"`
-				States   map[states.State]int    `json:"states"`
-				Claimed  int                     `json:"claimed"`
-				Frontier []row                   `json:"frontier"`
+				OK       bool                 `json:"ok"`
+				Plan     string               `json:"plan"`
+				States   map[states.State]int `json:"states"`
+				Claimed  int                  `json:"claimed"`
+				Frontier []row                `json:"frontier"`
 			}{true, plan, counts, claimed, nil}
 			for _, id := range frontier {
 				out.Frontier = append(out.Frontier, row{id, string(derived[id].State), weight[id]})
@@ -897,4 +991,3 @@ func graphHazardsCmd() *cobra.Command {
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the vocabulary as JSON")
 	return c
 }
-
