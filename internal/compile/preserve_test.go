@@ -188,3 +188,64 @@ func frontmatterBlock(t *testing.T, output string) string {
 	}
 	return rest[:end]
 }
+
+// The canonical DD declaration form is a top-level bold bullet inside the
+// fixed Design Decisions slot. collectFromMatched must register payload-owned
+// ids before SPK040 checks self-citations elsewhere in the same design.
+func TestDesignPayloadDeclaredDDResolvesSelfCitation(t *testing.T) {
+	s, err := schema.Load("design")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := `---
+title: "D"
+tags: []
+related: []
+---
+
+# D
+
+## Overview
+The architecture follows DD-1.
+
+## Non-Goals
+None.
+
+## Architecture
+Architecture.
+
+### Components
+Components.
+
+### Data Flow
+Flow.
+
+### Interfaces
+Interfaces.
+
+## Design Decisions
+
+- **DD-1**: Choose the stable path.
+  Context: c. Decision: x. Rationale: y.
+
+## Error Handling
+Errors.
+
+## Testing Strategy
+Tests.
+
+### Structural Verification
+Checks.
+
+## Migration / Rollout
+Rollout.
+`
+	r := Compile(s, payload, Options{Today: "2026-09-02"})
+	if !r.OK() {
+		t.Fatalf("canonical payload-owned DD declaration must resolve its self-citation: %+v", r.Refusals)
+	}
+	if !strings.Contains(r.Output, "The architecture follows DD-1.") ||
+		!strings.Contains(r.Output, "- **DD-1**: Choose the stable path.") {
+		t.Fatalf("compiled design lost declaration or citation:\n%s", r.Output)
+	}
+}

@@ -156,6 +156,10 @@ func renderTemplateFor(artifactType string, forApply bool) (string, error) {
 	b.WriteString("# {{TITLE}}\n")
 	for _, h := range s.Headings {
 		b.WriteString("\n" + h.Text + "\n\n")
+		if h.TemplateBody != "" {
+			b.WriteString(h.TemplateBody + "\n")
+			continue
+		}
 		if h.DefaultBody != "" {
 			b.WriteString(h.DefaultBody + "\n")
 			continue

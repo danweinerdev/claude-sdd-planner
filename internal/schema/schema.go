@@ -140,6 +140,12 @@ type Heading struct {
 	// "Pending — not complete."), so the correct stub is schema data rather
 	// than something the migration invents.
 	DefaultBody string `json:"defaultBody,omitempty"`
+	// TemplateBody is richer guidance emitted only by `sdd template`.
+	// It is deliberately distinct from DefaultBody: migration may insert a
+	// neutral TODO for an absent section, while a fresh template can show a
+	// placeholder declaration without asserting that the migrated artifact
+	// actually made that decision.
+	TemplateBody string `json:"templateBody,omitempty"`
 }
 
 // Title is the heading text without its leading hashes.

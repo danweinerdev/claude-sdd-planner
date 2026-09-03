@@ -115,6 +115,7 @@
       "depth": 2,
       "required": true,
       "idNamespace": "DD",
+	  "templateBody": "<!-- Declare each decision as a top-level bold bullet. Heading-form decisions (`### DD-N`) are subsections, not declarations, and are not registered by `sdd apply`. -->\n\n- **DD-1**: [Title].\n  Context: [what forces this decision]. Options considered: (a) […]; (b) […].\n  Decision: [chosen option]. Rationale: [why this over the alternatives].",
       "defaultBody": "TODO: section inserted by `sdd migrate`; content required by the schema."
     },
     {
