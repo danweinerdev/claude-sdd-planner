@@ -581,6 +581,11 @@ func parseGitFrozenIdentity(value string) []string {
 // target root itself, only its artifact directories are lifecycle, so source
 // under the same root stays material.
 func phaseLifecyclePaths(r *Root, phase, review *Artifact, targetRoot string) map[string]bool {
+	// Canonicalize like LoadRootRepo canonicalized r.Dir and every AbsPath:
+	// a short-named TMP (Windows 8.3) or symlinked /tmp (macOS) targetRoot
+	// otherwise fails filepath.Rel against the canonical spellings and every
+	// lifecycle path silently drops out of the allowed set.
+	targetRoot = vcs.CanonPath(targetRoot)
 	paths := []string{phase.AbsPath, review.AbsPath}
 	for _, dir := range artifactDirs {
 		paths = append(paths, filepath.Join(r.Dir, dir))
