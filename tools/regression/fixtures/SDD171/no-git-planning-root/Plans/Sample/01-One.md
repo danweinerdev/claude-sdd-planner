@@ -1,7 +1,7 @@
 ---
 title: Sample Phase
 type: phase
-status: in-progress
+status: complete
 created: 2024-01-01
 updated: 2024-01-01
 plan: Sample

@@ -101,7 +101,7 @@ Plans/<PlanName>/
 └── .graph/                 # gitignored: staged payloads, interview ledger, workspaces
 ```
 
-The graph is the plan. Rendered views carry a generation marker and are overwritten on the next compile; a view whose every node is closed becomes a frozen view the renderer refuses to change.
+The graph is the plan. Rendered views carry a generation marker and are overwritten on the next compile; a view whose every node is closed becomes a frozen view the renderer refuses to change. Commit the graph, README, and views once at the end of the planning session — never per compile (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Context
 - Orchestration and role prompts: `shared/orchestration.md`

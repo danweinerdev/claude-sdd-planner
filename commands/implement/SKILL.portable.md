@@ -119,20 +119,22 @@ v1 markdown plans keep this protocol until converted.
    update frontmatter. A task with absent, pending, vague, or failing evidence
    stays non-complete.
 9. Write the task status, checkboxes, and completion evidence in-flow as each
-   fact becomes known; do not commit these individual writes (D-0019). A
+   fact becomes known; do not commit these individual writes (D-0024). A
    task-related decision-ledger entry is written in-flow only **after** the
    user has explicitly approved its exact, unmodified text
-   (`shared/decision-log.md` write gate). At task closeout, record all
-   accumulated task-related updates once per affected SCM root
+   (`shared/decision-log.md` write gate). Do not commit at task closeout:
+   every accumulated lifecycle update is recorded once per affected SCM root
+   at phase close, alongside the final review and debrief
    (`shared/autonomy.md` § SCM boundary cadence).
-   This lifecycle record must preserve the task's complete state and must not
+   That lifecycle record must preserve every task's complete state and must not
    mix source or another feature slice. Re-read the recorded artifact and run
    `sdd validate --scope Plans/<PlanName> --format json` from the target
-   repository root, resolving any diagnostics on the tasks just completed;
-   completion is not finalized while either the
-   implementation or lifecycle record lacks its durable native SCM identity. A
-   planning root without approved durable lifecycle transport may preserve
-   handoff state but remains non-complete.
+   repository root, resolving any diagnostics on the tasks just completed; a
+   committed-copy check reported as pending is expected mid-phase, and phase
+   completion is not finalized while either the implementation or the
+   lifecycle record lacks its durable native SCM identity. A planning root
+   without approved durable lifecycle transport may preserve handoff state but
+   remains non-complete.
 
    **Git adapter:** in a commit-capable workflow where commits are authorized,
    make the task-close commit once per affected root after the immutable

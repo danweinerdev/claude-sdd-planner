@@ -120,7 +120,10 @@ a fresh scaffold of the new frozen range.
 planning repository at which the phase and plan README were reviewed. Before
 phase completion, the validator loads both artifacts at that commit and compares
 their lifecycle-normalized content with current artifacts. It permits only
-lifecycle fields, completion evidence, and checklist state to change. This
+lifecycle fields, completion evidence, and checklist state to change in those
+two documents. Every other planning-root artifact — specs, designs, the ledger,
+other phase docs, the review itself — is lifecycle after the frozen endpoint
+and rides in the phase-close commit (D-0024). This
 binding uses the planning SCM identity directly; SDD stores no custom intent
 hashes. A planning SCM without this validated adapter keeps the phase
 non-complete with an explicit diagnostic.

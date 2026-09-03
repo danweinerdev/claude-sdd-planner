@@ -69,7 +69,7 @@ When you need to define the requirements for a feature before designing or imple
 ```
 Specs/<FeatureName>/README.md
 ```
-Plus decision-ledger entries in `Decisions/decisions.md` for user-resolved questions.
+Plus decision-ledger entries in `Decisions/decisions.md` for user-resolved questions. Write in flow; commit once at the end of the session, never per artifact or per amendment (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Document Structure
 See `shared/templates/spec.md`:

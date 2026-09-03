@@ -45,7 +45,7 @@ When you need to define the technical architecture for a component or system bef
 ```
 Designs/<ComponentName>/README.md
 ```
-Plus decision-ledger entries in `Decisions/decisions.md` for user-made design choices and resolved questions.
+Plus decision-ledger entries in `Decisions/decisions.md` for user-made design choices and resolved questions. Write in flow; commit once at the end of the session, never per artifact or per amendment (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Document Structure
 See `shared/templates/design.md`:

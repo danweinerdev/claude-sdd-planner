@@ -59,7 +59,7 @@ Promoting a `proposed` entry is an **append-equivalent event** (`shared/decision
 Run the audit defined in `shared/decision-log.md` § Hygiene: missed collisions among `accepted` entries, superseded entries still cited by live artifacts, `scope` references to artifacts that no longer exist, prose decision sections never promoted to the ledger, `proposed` entries older than 30 days, fired `refresh_when` triggers on `assumption` entries, duplicate-id repair, and malformed entries. Report findings; repairs and rotation (also defined there) run only with the user's go-ahead.
 
 ## Output
-Appends to (or creates) `Decisions/decisions.md`. Never deletes or rewrites accepted entries — status and supersession links are the only permitted mutations.
+Appends to (or creates) `Decisions/decisions.md`. Never deletes or rewrites accepted entries — status and supersession links are the only permitted mutations. The write is not a commit: the entry rides in the boundary commit of the session or phase that produced it (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Context
 - Convention (single source of truth): `shared/decision-log.md`

@@ -294,7 +294,10 @@ func TestScopeGateEquivalenceGitBacked(t *testing.T) {
 		}
 	}
 
-	before, after := samplePhase("planned"), samplePhase("complete")
+	// The committed-copy check runs at phase boundaries (D-0024), so the
+	// flip closes the phase as well as the task.
+	before := samplePhase("planned")
+	after := strings.Replace(samplePhase("complete"), "status: in-progress", "status: complete", 1)
 	full := introducedByFlip(t, dir, "", "Plans/Sample/01-One.md", before, after)
 	scoped := introducedByFlip(t, dir, "Plans/Sample", "Plans/Sample/01-One.md", before, after)
 

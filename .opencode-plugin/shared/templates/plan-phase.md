@@ -96,9 +96,9 @@ no credentials or user-identifying paths anywhere in evidence
  revision/checkpoint. Git adapter: phase `Revision / checkpoint` is a full
  40-hex native Git commit and may be a validated integration merge. The
  non-merge rule applies only to atomic task implementation evidence; commit the
- feature slice before recording evidence, then commit only lifecycle/evidence
- bookkeeping separately. Dirty Git, no-SCM, and unsupported SCM adapters remain
- non-complete.
+ feature slice before recording evidence, then record lifecycle/evidence
+ bookkeeping in the phase-close commit — never per task (D-0024). Dirty Git,
+ no-SCM, and unsupported SCM adapters remain non-complete.
 The exact table columns are
 `Command | Working directory | Result | Observable evidence` or
 `Tool / inspection | Context | Result | Observable evidence`. Command results

@@ -72,7 +72,7 @@ name or description field; do not request an agent or model.
    `HEAD` in the planning-root atomic commit with the debrief, evidence/status,
    and plan phase-array update. Record a repo-owned ledger in that commit when
    it shares the root; otherwise record its root once at the same boundary
-   (D-0019). In Git, commit only in commit-capable workflows where commits are
+   (D-0024). In Git, commit only in commit-capable workflows where commits are
    authorized. Unsupported planning or target SCM adapters keep the phase
    non-complete.
 6. Material findings create new planned tasks. Implement each as a complete,

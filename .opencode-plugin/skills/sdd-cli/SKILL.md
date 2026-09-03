@@ -97,6 +97,11 @@ to report without repairing.
 - **The ledger is append-through-the-tool.** `decide add` runs the collision
   check; a collision with an accepted entry stops for the user. Never
   append to `decisions.md` by hand and never auto-resolve a collision.
+- **Writes are not commits.** Every write above lands in the working tree;
+  lifecycle state is committed once at phase open and once at phase close
+  (`shared/autonomy.md` § SCM boundary cadence, D-0024). `task complete`
+  reports committed-copy checks as pending mid-phase — that is the expected
+  state, not a prompt to commit per task.
 - **Silence a check only with a reasoned waiver, never by editing around it.**
   A `waivers:` entry (`code` + `reason`) marks a finding as accepted; it is
   still reported, as `waived`, with the reason attached. Ledger waivers cover

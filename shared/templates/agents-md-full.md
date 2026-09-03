@@ -35,9 +35,10 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
   proof. Write artifacts in-flow, but never commit per edit; decision-ledger
   entries are never written without explicit user approval of the exact text.
   **Git adapter:** in commit-capable workflows where commits are authorized,
-  commit the verified feature slice first, then record once per affected root at
-  task closeout. Shared-root task artifacts and ledgers use one boundary commit;
-  external roots record once at the same boundary (D-0019). Dirty or no-SCM work
+  commit the verified feature slice first and record lifecycle state once per
+  affected root at phase close — never at task closeout, never per amendment or
+  decision. Shared-root artifacts and ledgers use one boundary commit; external
+  roots record once at the same boundary (D-0024). Dirty or no-SCM work
   remains non-complete until a durable native checkpoint exists.
 - Use `planning-config.json` to resolve the planning root and any externally targeted repository paths. There is no local companion config.
 - Consult the plugin's frontmatter schema, templates, and language-verification references when creating or changing artifacts.
@@ -55,7 +56,9 @@ artifact and ledger update as it becomes known and record once per affected SCM
 root at session close — never per artifact, skill, approval, review, or
 decision. Phase close follows the same rule: one planning-root atomic commit
 carries the final review, debrief, phase updates, plan phase-array update, and
-— when final plan checks are ready — plan completion evidence/status (D-0019).
+— when final plan checks are ready — plan completion evidence/status (D-0024).
+The expected shape of a phase's history is one lifecycle commit at open, N
+implementation commits, one lifecycle commit at close.
 
 ## Review And Execution
 

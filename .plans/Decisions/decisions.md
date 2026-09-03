@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-08-31
+updated: 2026-09-02
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -220,7 +220,7 @@ decisions:
     reversibility: two-way
   - id: D-0019
     kind: decision
-    status: accepted
+    status: superseded
     date: 2026-08-16
     decided_by: user-approved
     statement: "SDD lifecycle records commit once per affected root at closeout boundaries: commit the verified feature slice first, then record planning artifacts and ledgers in one boundary commit per root at task closeout, at the end of a contiguous spec/design/plan session, or at phase/plan close — never per edit and never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies an immediate commit."
@@ -229,6 +229,7 @@ decisions:
     scope: []
     tags: []
     reversibility: two-way
+    superseded_by: D-0024
   - id: D-0020
     kind: decision
     status: accepted
@@ -277,7 +278,20 @@ decisions:
     scope: []
     tags: [tracking, integrations, graph]
     reversibility: two-way
+  - id: D-0024
+    kind: decision
+    status: accepted
+    supersedes: D-0019
+    date: 2026-09-02
+    decided_by: user-approved
+    statement: "SDD lifecycle records commit at phase boundaries only: one commit when a phase (or plan) opens, N implementation commits, one commit at phase close carrying every task status, evidence, amendment, decision, review, and debrief written during the phase; plus one commit at the end of a contiguous spec/design/plan session outside implementation. Never per edit, never at task closeout, never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies a commit."
+    rejected: []
+    rationale: "Supersedes the task-closeout boundary: in practice it produced 6:1 bookkeeping-to-code ratios (ConfigPlane phase 4). Task-level validator checks no longer require committed evidence; phase completion does."
+    scope: []
+    tags: []
+    reversibility: two-way
 ---
+
 
 
 

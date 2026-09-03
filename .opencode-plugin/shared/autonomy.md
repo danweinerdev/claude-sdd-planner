@@ -29,3 +29,28 @@ Cross-skill view of what runs autonomously versus what stops for the user. Each 
 | Target repo unresolvable | `shared/path-resolution.md` — ask, never guess or clone |
 | External review lanes on a repo that isn't the session's project | `sdd-code-review` trust gate |
 | Rehearsal opt-in for high-risk plans | `sdd-plan` — costs real implementation spend |
+
+## SCM boundary cadence
+
+Planning artifacts are **written in flow and committed at boundaries** (D-0024).
+Writing never implies a commit. In a commit-capable Git workflow where commits
+are authorized, the only lifecycle commits are:
+
+| Boundary | One commit carrying |
+|---|---|
+| Phase (or plan) open | The plan/phase status flip and any interview or payload output |
+| Phase close | Every task status, checked subtask, completion evidence, spec/design amendment, decision entry, review artifact, debrief, and plan phase-array update written during the phase |
+| End of a contiguous spec/design/plan session outside implementation | Every artifact and ledger entry the session produced |
+| A `Not-Aligned` gate round | The resolved review plus the tasks it routed and the amendments it required — then implementation resumes; the next round is a fresh review |
+
+Implementation commits stay pure: one clean, complete, bisectable revision per
+task with no planning-artifact bytes. Between boundaries a complete task's
+record stays uncommitted — `sdd validate` asks for the committed copy only once
+the phase is complete, and the whole planning root counts as lifecycle after a
+frozen review endpoint, so amendments do not need their own pre-review commit.
+Never commit per task (`in-progress` flips, `complete with evidence`), per
+amendment, per decision, or per review. The expected shape of a phase's history
+is one lifecycle commit, N implementation commits, one lifecycle commit.
+External planning roots record once at the same boundary. A Not-Aligned round
+is the one legitimate extra: its routed tasks change the phase doc's intent, so
+they must be committed before the next `reviewed_planning_revision`.

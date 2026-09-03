@@ -1099,12 +1099,6 @@
         "severity": "error"
       },
       {
-        "code": "SDD171",
-        "line": 26,
-        "path": "Plans/Sample/01-One.md",
-        "severity": "error"
-      },
-      {
         "code": "SDD172",
         "line": 26,
         "path": "Plans/Sample/01-One.md",
@@ -4515,12 +4509,6 @@
         "severity": "error"
       },
       {
-        "code": "SDD171",
-        "line": 26,
-        "path": "Plans/Sample/01-One.md",
-        "severity": "error"
-      },
-      {
         "code": "SDD172",
         "line": 26,
         "path": "Plans/Sample/01-One.md",
@@ -4667,6 +4655,30 @@
         "line": 26,
         "path": "Plans/Sample/01-One.md",
         "severity": "error"
+      },
+      {
+        "code": "SDD069",
+        "line": 22,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD070",
+        "line": 51,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD157",
+        "line": 51,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD166",
+        "line": 51,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
       }
     ],
     "exit": 1
@@ -4705,12 +4717,6 @@
       },
       {
         "code": "SDD169",
-        "line": 26,
-        "path": "Plans/Sample/01-One.md",
-        "severity": "error"
-      },
-      {
-        "code": "SDD171",
         "line": 26,
         "path": "Plans/Sample/01-One.md",
         "severity": "error"

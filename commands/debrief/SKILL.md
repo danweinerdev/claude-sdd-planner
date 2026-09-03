@@ -64,6 +64,8 @@ When a plan phase has been completed (or substantially completed) and you want t
 Plans/<PlanName>/notes/<NN>-<Phase-Name>.md
 ```
 
+The debrief is part of the phase-close commit, together with the phase's statuses, evidence, review, and any amendments — not a commit of its own (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+
 ## Document Structure
 See `shared/templates/debrief.md`:
 - **Decisions Made**: Key choices with rationale

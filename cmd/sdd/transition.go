@@ -119,8 +119,9 @@ func cmdComplete(kind, path string, o completeOpts) error {
 	}
 	fmt.Printf("marked %s complete in %s\n", describeTarget(kind, o.ID, path), path)
 	if len(pending) > 0 {
-		fmt.Printf("  next: commit this change; %d evidence check(s) verify the "+
-			"committed copy at HEAD and stay unmet until then\n", len(pending))
+		fmt.Printf("  next: %d evidence check(s) verify the committed copy at HEAD "+
+			"and stay unmet until the phase-close lifecycle commit (D-0024) — "+
+			"do not commit per task\n", len(pending))
 	}
 	return nil
 }

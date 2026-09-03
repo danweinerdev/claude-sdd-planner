@@ -309,6 +309,9 @@ type evidenceTarget struct {
 	Name     string
 	Line     int
 	Body     string
+	// IsTask marks a task's `### Completion Evidence` (Status is then the
+	// task's, Artifact the phase that carries it).
+	IsTask bool
 }
 
 // evidenceTargets reproduces both Python call sites for _evidence: _headings'
@@ -359,6 +362,7 @@ func evidenceTargets(r *Root) []evidenceTarget {
 			out = append(out, evidenceTarget{
 				Artifact: a, Status: metaStr(m, "status"),
 				Name: "Task " + id + " Completion Evidence", Line: info.Line, Body: blocks[0],
+				IsTask: true,
 			})
 		}
 	}
@@ -488,7 +492,12 @@ func runEvidence(r *Root, t evidenceTarget, emit func(Diagnostic)) {
 			Message:    "`" + name + "` cannot complete with VCS `" + label + "` because no validated native identity adapter is available.",
 			Correction: "Keep the entity non-complete until a validated native SCM and lifecycle adapter are available."})
 	}
-	if t.Status == "complete" {
+	// Durable-lifecycle checks (committed at HEAD / submitted to the depot)
+	// run at phase boundaries only (D-0024): a plan/phase's own evidence when
+	// it is complete, and a task's evidence once its phase is complete. A
+	// complete task inside an in-progress phase is valid uncommitted — its
+	// record rides in the phase-close commit, never a per-task one.
+	if t.Status == "complete" && (!t.IsTask || a.Status() == "complete") {
 		verifyEvidenceCommitted(r, a, name, body, line, emit)
 	}
 	rows := evidenceRows(body)
@@ -629,7 +638,7 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 	tracked, err := repo.FileAt("HEAD", relative)
 	if err != nil {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
-			Message: "`" + name + "` completion evidence is not committed at HEAD.", Correction: "Create the separate scoped lifecycle/evidence commit before finalizing completion."})
+			Message: "`" + name + "` completion evidence is not committed at HEAD.", Correction: "Record it in the phase-close lifecycle commit before finalizing completion (D-0024)."})
 		return
 	}
 	committed := ParseArtifactBytes(tracked, a.Rel)
@@ -772,13 +781,13 @@ func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committe
 	if !lifecycleComplete || !haveBody {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message:    "`" + name + "` lifecycle completion is not " + commitDesc + ".",
-			Correction: "Commit the complete status, checked criteria/subtasks, and evidence in the scoped lifecycle commit."})
+			Correction: "Commit the complete status, checked criteria/subtasks, and evidence in the phase-close lifecycle commit (D-0024)."})
 		return
 	}
 	if strings.TrimSpace(noComments(body)) != strings.TrimSpace(noComments(committedBody)) {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message:    "`" + name + "` completion evidence differs from its committed section.",
-			Correction: "Commit the populated evidence and lifecycle status in a scoped bookkeeping commit."})
+			Correction: "Commit the populated evidence and lifecycle status in the phase-close lifecycle commit (D-0024)."})
 	}
 }
 
@@ -1143,6 +1152,16 @@ func init() {
 		},
 		Good: []Example{
 			validGitTaskEvidenceExample("clean-git-identity"),
+			// D-0024: a complete task's record is committed at phase close,
+			// not per task — uncommitted inside an in-progress phase is valid.
+			{Name: "task-uncommitted-mid-phase", Files: map[string]string{
+				"code.txt":               "code\n",
+				"Plans/Sample/01-One.md": taskEvidencePhase("complete", validGitTaskEvidenceBody()),
+			}, Setup: [][]string{
+				{"git", "init", "-q"},
+				{"git", "add", "code.txt"},
+				{"git", "commit", "-q", "-m", "impl"},
+			}},
 			// G-6: a deliberate expected-failure experiment is first-class
 			// command evidence when the Result cell names the exact status:
 			// `PASS (exit N, expected)`.
@@ -1190,8 +1209,11 @@ func init() {
 		Code: "SDD171", Severity: Error, PyFunc: "_verify_evidence_committed",
 		What:      "a complete entity's lifecycle bookkeeping has no validated durable adapter for the planning root's SCM",
 		CheckRoot: evidenceCheckRoot("SDD171"),
+		// The durable-adapter check runs at phase boundaries (D-0024), so the
+		// example's phase is complete too — a complete task inside an
+		// in-progress phase is not yet asked for a durable record.
 		Bad: []Example{{Name: "no-git-planning-root", Files: map[string]string{
-			"Plans/Sample/01-One.md": taskEvidencePhase("complete", `- Verified: 2024-01-01
+			"Plans/Sample/01-One.md": replaceFirst(taskEvidencePhase("complete", `- Verified: 2024-01-01
 - Repository: {{REPO}}
 - VCS: git
 - Revision / checkpoint: `+validGitEvidenceRev+`
@@ -1202,7 +1224,7 @@ func init() {
 
 | Command | Working directory | Result | Observable evidence |
 | --- | --- | --- | --- |
-| `+"`go test ./...`"+` | . | PASS (exit 0) | ok |`),
+| `+"`go test ./...`"+` | . | PASS (exit 0) | ok |`), "status: in-progress", "status: complete"),
 		}}},
 		Good: []Example{validGitTaskEvidenceExample("git-planning-root")},
 	})

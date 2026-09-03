@@ -87,7 +87,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 
 ### 5. Commit
 Use the VCS label the coordinator passed (consult `shared/vcs-detection.md` in the plugin directory only for the operations table, or if no label was passed).
-- **git**: stage your changes and make exactly **one clean, non-merge commit per task**, message `[<Plan>/<Phase>] Task <X.Y>: <title>`; never push. The commit contains the complete task and its tests — the whole feature slice and nothing else. No planning-artifact or evidence bookkeeping goes in it (the coordinator records lifecycle separately), and no second task's work rides along. If the task cannot land as one complete, buildable, test-passing commit, that is a plan-structure problem — STOP and report it rather than committing a half-wired state.
+- **git**: stage your changes and make exactly **one clean, non-merge commit per task**, message `[<Plan>/<Phase>] Task <X.Y>: <title>`; never push. The commit contains the complete task and its tests — the whole feature slice and nothing else. No planning-artifact or evidence bookkeeping goes in it (the coordinator records lifecycle once at phase close, D-0024), and no second task's work rides along. If the task cannot land as one complete, buildable, test-passing commit, that is a plan-structure problem — STOP and report it rather than committing a half-wired state.
 - **perforce**: keep the task's changes in a single pending changelist with that description; do not submit unless the coordinator instructed it.
 - **none**: report "no VCS — changes on disk only" plus the file list.
 

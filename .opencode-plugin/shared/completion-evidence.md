@@ -81,10 +81,13 @@ statement. A ranged review uses the task commit's direct first parent and ends
 at that task commit.
 
 Record completion status and evidence through the planning root's validated
-lifecycle SCM adapter in a separate scoped lifecycle commit. The current Git
-planning adapter is strict: lifecycle artifacts and final phase reviews must be
-committed at planning `HEAD`. Another SCM may complete only after a validated
-native revision and lifecycle adapter exists. No-SCM cannot complete.
+lifecycle SCM adapter in the phase-close lifecycle commit — never a per-task
+one (`shared/autonomy.md` § SCM boundary cadence, D-0024). The current Git
+planning adapter is strict at the phase boundary: once a phase is complete, its
+own evidence, every task's record, and the final phase review must be
+committed at planning `HEAD`. A complete task inside an in-progress phase is
+valid uncommitted. Another SCM may complete only after a validated native
+revision and lifecycle adapter exists. No-SCM cannot complete.
 
 ### Perforce adapter
 
@@ -100,8 +103,9 @@ equal the recorded changelist number, and the identity recheck must name it.
 
 Task-level lifecycle bookkeeping is durable when the planning artifact's
 have-revision in the depot carries the completed status, checked subtasks, and
-identical evidence: submit the scoped lifecycle changelist after the
-transition, exactly as the Git adapter expects its scoped lifecycle commit.
+identical evidence: submit the phase-close lifecycle changelist once the phase
+completes, exactly as the Git adapter expects its phase-close lifecycle commit
+(D-0024).
 Phase-gate machinery (frozen four-lane review ranges) remains Git-validated;
 a Perforce phase completes only when a validated Perforce phase-review
 identity adapter exists.

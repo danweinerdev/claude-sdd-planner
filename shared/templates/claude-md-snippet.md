@@ -20,3 +20,4 @@ Planning artifacts live at the planning root defined by `planning-config.json` (
 
 Typical lifecycle: `setup → research → brainstorm → specify → design → plan → implement → code-review → debrief` (all `/sdd-planner:*`).
 
+**Commit cadence (D-0024):** planning artifacts are written in flow and committed only at boundaries — one commit at phase open, one at phase close carrying every status, evidence, amendment, decision, review, and debrief, and one at the end of a spec/design/plan session. Never commit per task, per amendment, or per decision; implementation commits carry no planning bytes.

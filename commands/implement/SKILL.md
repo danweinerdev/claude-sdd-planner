@@ -56,6 +56,8 @@ A clean pass by the claim holder **merges atomically**: observation recorded (wi
 
 **Then integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`) — merge it into the mainline checkout now. Until the bytes land on the mainline, the node honestly derives STALE from the shared tree's perspective (the recorded digests name bytes mainline doesn't have); integration self-heals it to GREEN. Don't stack un-integrated branches: integrate after every merge, before the next claim of dependent work.
 
+**Commit cadence.** The workspace commit above is the only per-node commit. `<Name>-Graph.json`, rendered views, and the plan README change on every verb and are committed at phase boundaries — when a review gate greens, or the plan opens or closes — never per sync (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+
 ### 4. Between Rounds
 
 - `sdd graph status --plan <Name>` between claims; `sdd graph path` when choosing what to unblock first.
@@ -96,7 +98,7 @@ v1 markdown plans keep their protocol until converted (D-0022's v1 clause). The 
 - **Evidence-gated completion** per `shared/completion-evidence.md`: no status flips to `complete` without conforming retrospective evidence; reject evidence-free success reports — a success report contains the verification commands actually run and their pasted output, never "tests should pass".
 - **Per-task quality scan** (`sdd-planner:quality-scanner`, intent-blind, via `shared/templates/quality-scan-prompt.md`); max 2 review-fix cycles, then block and escalate.
 - **Phase gate** per `shared/review-artifacts.md`: every task complete with evidence, clean worktree, frozen revision range, a persisted resolved frozen **Aligned** four-lane review, populated Phase Completion Evidence, and `sdd validate` passing.
-- **Lifecycle bookkeeping** in separate scoped commits, never mixed into implementation revisions.
+- **Lifecycle bookkeeping** at phase boundaries only (`shared/autonomy.md` § SCM boundary cadence, D-0024): write statuses and evidence in flow, commit them once at phase close alongside the review and debrief — never per task, never per amendment, never mixed into implementation revisions. `sdd task complete` reports its committed-copy checks as pending until then; that is not a request to commit.
 
 When a v1 plan keeps generating drift the evidence rules exist to catch, offer conversion instead of more discipline: `sdd graph convert --plan <Name>`. After a converted plan compiles, run the on-ramp before walking: history grants nothing, so every completed v1 task is an unverified node until observations exist — `sdd graph reverify --plan <Name> --report <suite report>` (add `--command-exit`/`--command-log` for command gates) folds one real run against every foldable node in dependency order, and the frontier then offers the genuinely remaining work instead of the already-done past.
 

@@ -568,11 +568,27 @@ func parseGitFrozenIdentity(value string) []string {
 	return []string{m[1], m[2]}
 }
 
-// phaseLifecyclePaths ports _git_phase_lifecycle_paths: the explicit lifecycle
+// phaseLifecyclePaths ports _git_phase_lifecycle_paths: the lifecycle
 // artifacts permitted to change after a frozen review, as target-relative
 // paths. Anything else changing is material and voids the review.
+//
+// Under D-0024 the whole planning root is lifecycle: every artifact directory
+// (specs, designs, decisions, reviews, other phase docs) may change after the
+// endpoint, because the phase-close commit is the one place those amendments
+// land. The review's own phase and plan README are still held to the
+// intent comparison below — widening the path set does not widen what may
+// change *inside* the governed documents. When the planning root is the
+// target root itself, only its artifact directories are lifecycle, so source
+// under the same root stays material.
 func phaseLifecyclePaths(r *Root, phase, review *Artifact, targetRoot string) map[string]bool {
 	paths := []string{phase.AbsPath, review.AbsPath}
+	for _, dir := range artifactDirs {
+		paths = append(paths, filepath.Join(r.Dir, dir))
+	}
+	paths = append(paths, filepath.Join(r.Dir, "planning-config.json"))
+	for _, a := range r.Artifacts {
+		paths = append(paths, a.AbsPath)
+	}
 	if planName := planNameFor(phase); planName != "" {
 		paths = append(paths, filepath.Join(r.Dir, "Plans", planName, "README.md"))
 		for _, a := range r.Artifacts {
@@ -600,6 +616,18 @@ func phaseLifecyclePaths(r *Root, phase, review *Artifact, targetRoot string) ma
 		allowed[filepath.ToSlash(rel)] = true
 	}
 	return allowed
+}
+
+// underLifecycleDir reports whether p lives under one of the allowed
+// planning-root artifact directories (the directory entries phaseLifecyclePaths
+// adds), so a new or renamed artifact there counts as lifecycle too.
+func underLifecycleDir(allowed map[string]bool, p string) bool {
+	for i := len(p) - 1; i > 0; i-- {
+		if p[i] == '/' && allowed[p[:i]] {
+			return true
+		}
+	}
+	return false
 }
 
 // verifyGitPhasePostReviewState ports _verify_git_phase_post_review_state,
@@ -673,7 +701,7 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	}
 	var material []string
 	for p := range changed {
-		if !allowed[p] {
+		if !allowed[p] && !underLifecycleDir(allowed, p) {
 			material = append(material, p)
 		}
 	}
@@ -681,7 +709,7 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 		sortStrings(material)
 		fail("Committed target paths changed after the frozen phase review are not lifecycle-only: "+
 			strings.Join(material, ", ")+".",
-			"Rerun the full phase review after source, test, configuration, or other material changes.")
+			"Rerun the full phase review after source, test, configuration, or other material changes (planning-root artifacts are lifecycle, D-0024).")
 		return
 	}
 
