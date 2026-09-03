@@ -1148,6 +1148,23 @@ func init() {
 					for plan := range planNames {
 						if tasks[[2]string{plan, tracked}] {
 							matches = append(matches, plan)
+							continue
+						}
+						// Graph plans anchor follow-ups in the committed
+						// graph: live node ids and the retired register
+						// (the append-only tombstone place), with the
+						// convert spelling accepted both ways (3.3 <->
+						// task-3-3). A frozen review is immutable, so an
+						// in-place rebuild that supersedes the tracked v1
+						// task records the old id via `sdd graph retire`
+						// rather than editing the review.
+						if planArt, ok := r.ByPath["Plans/"+plan+"/README.md"]; ok {
+							if ids, ok := planGraphIDs(planArt); ok {
+								converted := "task-" + strings.ReplaceAll(tracked, ".", "-")
+								if ids[tracked] || ids[converted] {
+									matches = append(matches, plan)
+								}
+							}
 						}
 					}
 					id := metaStr(m, "id")
@@ -1156,7 +1173,7 @@ func init() {
 						emit(Diagnostic{
 							Code: "SDD096", Severity: Error, Path: a.Rel, Line: 1,
 							Message:    "Follow-up `" + id + "` points to unknown task `" + tracked + "`.",
-							Correction: "Reference an existing task in a related plan.",
+							Correction: "Reference an existing task in a related plan, a graph node id, or record the superseded v1 id in the plan graph's retired register (`sdd graph retire`).",
 						})
 					case len(matches) > 1:
 						// Python interpolates the list built by iterating
@@ -1188,7 +1205,20 @@ func init() {
     justifies: FR-01
 `, false, true),
 		}}},
-		Good: []Example{{Name: "followup-known-task", Files: map[string]string{
+		Good: []Example{{Name: "followup-retired-in-graph", Files: map[string]string{
+			// The frozen-review escape: the tracked v1 task was superseded
+			// by a graph rebuild, and its id lives in the committed graph's
+			// retired register (`sdd graph retire`) — the follow-up keeps
+			// resolving without editing the immutable review.
+			"Retro/graph-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+					"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \"3.3\"\n",
+					"### F-01 — one\n\nText.\n", ""),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md":         validPlan(false),
+			"Plans/Sample/Sample-Graph.json": `{"version":1,"seq_counter":0,"nodes":[],"retired":["task-3-3"]}`,
+		}}, {Name: "followup-known-task", Files: map[string]string{
 			"Retro/sample-review.md": replaceFirst(
 				reviewWithBlocks(
 					"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",

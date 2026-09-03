@@ -248,6 +248,32 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 	return err
 }
 
+// Retire appends an id to the graph's append-only retired register without
+// touching any node — the tombstone for identifiers that never became graph
+// nodes, most importantly v1 task ids superseded by an in-place graph
+// rebuild: frozen reviews' follow-ups keep resolving against the register
+// (the review itself is immutable), and compile keeps refusing the id's
+// reuse forever, the same stable-identifier discipline split enforces.
+func Retire(planDir, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("graph retire: an empty id retires nothing")
+	}
+	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		if g.NodeByID(id) != nil {
+			return fmt.Errorf("graph retire: %q is a live node; retire nodes by splitting or cutting them, not by register edit", id)
+		}
+		for _, r := range g.Retired {
+			if r == id {
+				return fmt.Errorf("graph retire: %q is already retired", id)
+			}
+		}
+		g.Retired = append(g.Retired, id)
+		sort.Strings(g.Retired)
+		return nil
+	})
+	return err
+}
+
 // GCResult reports what gc reaped.
 type GCResult struct {
 	// ExpiredClaims lists nodes whose lapsed claims gc expired (persisted)

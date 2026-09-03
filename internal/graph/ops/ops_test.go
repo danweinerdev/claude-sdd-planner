@@ -393,3 +393,30 @@ func TestGCPrunesMergedClaimBranches(t *testing.T) {
 		t.Error("non-graph branches are outside gc's jurisdiction")
 	}
 }
+
+// TestRetireTombstonesAnId: the register accepts ids that never were graph
+// nodes (a superseded v1 task id), refuses live nodes and duplicates, and
+// stays sorted append-only.
+func TestRetireTombstonesAnId(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+
+	if err := Retire(planDir, "3.3"); err != nil {
+		t.Fatalf("retiring a never-a-node id must succeed: %v", err)
+	}
+	if err := Retire(planDir, "3.3"); err == nil || !strings.Contains(err.Error(), "already retired") {
+		t.Fatalf("duplicate retirement must refuse: %v", err)
+	}
+	if err := Retire(planDir, "big"); err == nil || !strings.Contains(err.Error(), "live node") {
+		t.Fatalf("retiring a live node must refuse: %v", err)
+	}
+	if err := Retire(planDir, "  "); err == nil {
+		t.Fatal("an empty id must refuse")
+	}
+	if err := Retire(planDir, "1.9"); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if len(g.Retired) != 2 || g.Retired[0] != "1.9" || g.Retired[1] != "3.3" {
+		t.Fatalf("register must stay sorted append-only: %v", g.Retired)
+	}
+}

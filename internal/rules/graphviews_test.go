@@ -219,3 +219,48 @@ func TestGraphPlanTraceabilityIsPerSpec(t *testing.T) {
 		t.Errorf("the qualified-covered spec must be satisfied:\n%s", joined)
 	}
 }
+
+// SDD096 graph fallback (verified defect, sdd <= 2.8.3): a frozen —
+// immutable — review whose follow-up tracked a v1 task that an in-place
+// graph rebuild retired left the root PERMANENTLY invalid: tracked_in
+// resolved only against v1 phase-doc tasks, reviews declare no waivers, and
+// the artifact cannot be edited. The sanctioned exit: tracked_in also
+// resolves against the plan's committed graph — live node ids and the
+// append-only retired register (the tool's own tombstone place), with the
+// convert spelling (3.3 <-> task-3-3) accepted.
+func TestFollowupTracksGraphNodesAndRetiredIds(t *testing.T) {
+	reviewFor := func(tracked string) string {
+		return replaceFirst(
+			reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \""+tracked+"\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+			`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`)
+	}
+	graph := `{"version":1,"seq_counter":0,"nodes":[{"id":"node-x","contract":"c","justifies":["FR-01"],"gate":{"type":"tests","tests":[{"id":"t","file":"f.ext"}]},"hazards":[],"estimate":1}],"retired":["task-3-3"]}`
+
+	for _, tc := range []struct {
+		name, tracked string
+		fires         bool
+	}{
+		{"retired-tombstone-convert-spelling", "3.3", false},
+		{"retired-tombstone-exact", "task-3-3", false},
+		{"live-graph-node", "node-x", false},
+		{"nowhere", "9.9", true},
+	} {
+		r := rootFrom(t, map[string]string{
+			"Retro/sample-review.md":         reviewFor(tc.tracked),
+			"Plans/Sample/README.md":         validPlan(false),
+			"Plans/Sample/Sample-Graph.json": graph,
+		})
+		fired := false
+		for _, d := range Run(r) {
+			if d.Code == "SDD096" {
+				fired = true
+			}
+		}
+		if fired != tc.fires {
+			t.Errorf("%s: SDD096 fired=%v, want %v", tc.name, fired, tc.fires)
+		}
+	}
+}

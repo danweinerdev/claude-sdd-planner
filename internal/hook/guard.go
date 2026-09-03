@@ -137,6 +137,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"review": false,
 	// mutating: batch observation recording (the converted-plan on-ramp)
 	"reverify": false,
+	// mutating: appends to the graph's retired register
+	"retire": false,
 }
 
 var (

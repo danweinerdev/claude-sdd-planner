@@ -55,6 +55,36 @@ func stripGraphViewSection(body string) string {
 
 var tripleNewlineRe = regexp.MustCompile(`\n{3,}`)
 
+// planGraphIDs loads a plan's committed graph and returns every id that can
+// anchor a follow-up: live node ids AND the append-only retired register —
+// the tool's own tombstone place, which is what lets a frozen (immutable)
+// review's tracked_in survive an in-place graph rebuild that superseded its
+// v1 task.
+func planGraphIDs(plan *Artifact) (map[string]bool, bool) {
+	dir := filepath.Dir(plan.AbsPath)
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
+	if err != nil {
+		return nil, false
+	}
+	var g struct {
+		Nodes []struct {
+			ID string `json:"id"`
+		} `json:"nodes"`
+		Retired []string `json:"retired"`
+	}
+	if json.Unmarshal(raw, &g) != nil {
+		return nil, false
+	}
+	ids := map[string]bool{}
+	for _, n := range g.Nodes {
+		ids[n.ID] = true
+	}
+	for _, id := range g.Retired {
+		ids[id] = true
+	}
+	return ids, true
+}
+
 // planGraphJustifies loads a plan's committed graph (`<Plan>-Graph.json`
 // beside the README) and returns every node's justifies entries. (nil,
 // false) when no graph exists or it does not parse — the graph subsystem

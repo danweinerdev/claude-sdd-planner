@@ -57,6 +57,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphGCCmd())
+	c.AddCommand(graphRetireCmd())
 	c.AddCommand(graphPathCmd())
 	c.AddCommand(graphRiskCmd())
 	c.AddCommand(graphShapeCmd())
@@ -299,6 +300,44 @@ func graphSyncCmd() *cobra.Command {
 	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphRetireCmd tombstones an id that never became a graph node — most
+// importantly a v1 task id superseded by an in-place graph rebuild, so a
+// frozen review's follow-up keeps resolving (SDD096 reads the register) and
+// the id can never be reused. Mutating: guard-covered per D-0014.
+func graphRetireCmd() *cobra.Command {
+	var plan, id string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "retire",
+		Short: "Tombstone an id in the graph's append-only retired register",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			planDir, err := planDirFor(plan, "retire")
+			if err != nil {
+				return err
+			}
+			if id == "" {
+				return fmt.Errorf("graph retire: --id is required")
+			}
+			if err := ops.Retire(planDir, id); err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK      bool   `json:"ok"`
+					Retired string `json:"retired"`
+				}{true, id})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "retired %s (append-only; the id can never be reused, and follow-ups tracking it keep resolving)\n", id)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&id, "id", "", "the id to tombstone (e.g. a superseded v1 task id)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
