@@ -104,6 +104,13 @@ var (
 	idDecl = regexp.MustCompile(`^\s*[-*+]\s*(?:\[[ xX]\]\s*)?(~~)?\*\*([A-Z]+-\d+)\*\*(~~)?\s*:`)
 	idTok  = regexp.MustCompile(`\b([A-Z]{1,4})-(\d{1,4})\b`)
 	listRe = regexp.MustCompile(`^(\s*)[*+](\s+)`)
+	// looseDecl mirrors the validator's DD definition breadth
+	// (internal/rules/index.go specDefinitionRe["DD"]): a `##`–`####` heading
+	// or a loose bold bullet whose bold text STARTS with the id — the two
+	// forms real designs use (`### DD-1 — Title`, `- **DD-1 — Title**: …`).
+	// Consulted only for namespaces declaring headingDeclarations; everywhere
+	// else idDecl remains the single declaration syntax.
+	looseDecl = regexp.MustCompile(`^\s*(?:#{2,4}\s+|-\s+\*\*)([A-Z]+-\d+)\b`)
 )
 
 // Compile matches the payload against the schema, allocates identifiers,
@@ -129,8 +136,8 @@ func Compile(s *schema.Schema, payload string, opts Options) *Result {
 	matched, ordered, canonical := matchSections(s, doc, res, opts.Upgrade, opts.StubSections)
 	fm := compileFrontmatter(s, doc, opts, res)
 	existingIDs, retiredIDs := collectIdentifiers(s, opts.Existing)
-	applyIdentifiers(s, matched, existingIDs, retiredIDs, opts, res)
-	currentIDs, currentRetired := collectFromMatched(s, matched)
+	applyIdentifiers(s, matched, ordered, existingIDs, retiredIDs, opts, res)
+	currentIDs, currentRetired := collectFromMatched(s, matched, ordered)
 	checkCitations(s, matched, currentIDs, currentRetired, res)
 
 	if !res.OK() {
@@ -542,6 +549,14 @@ func (is identSet) add(ns string, n int) {
 
 func (is identSet) has(ns string, n int) bool { return is[ns] != nil && is[ns][n] }
 
+func (is identSet) merge(other identSet) {
+	for ns, nums := range other {
+		for n := range nums {
+			is.add(ns, n)
+		}
+	}
+}
+
 func (is identSet) max(ns string) int {
 	m := 0
 	for n := range is[ns] {
@@ -583,13 +598,19 @@ func collectIdentifiers(s *schema.Schema, doc *artifact.Doc) (live, retired iden
 			scanBody(folded[i].Body, h.IDNamespace, live, retired)
 		}
 	}
+	for _, n := range s.Namespaces {
+		if !n.HeadingDeclarations {
+			continue
+		}
+		live.merge(looseNamespaceIDs(folded, n.Name))
+	}
 	return
 }
 
 // collectFromMatched reads live and retired identifiers out of the sections
 // being compiled right now (after allocation), which is what a citation must
 // resolve against — not just what the prior artifact on disk had.
-func collectFromMatched(s *schema.Schema, matched map[string]*artifact.Section) (live, retired identSet) {
+func collectFromMatched(s *schema.Schema, matched map[string]*artifact.Section, ordered []artifact.Section) (live, retired identSet) {
 	live, retired = identSet{}, identSet{}
 	for _, h := range s.Headings {
 		if h.IDNamespace == "" {
@@ -600,6 +621,17 @@ func collectFromMatched(s *schema.Schema, matched map[string]*artifact.Section) 
 			continue
 		}
 		scanBody(sec.Body, h.IDNamespace, live, retired)
+	}
+	// Loose-form declarations live OUTSIDE the matched slots: an undeclared
+	// `### DD-1 — Title` is an additional section in `ordered`, so a scan
+	// limited to matched bodies produced an empty candidate table and every
+	// self-citation in the document refused with SPK040 "available DD
+	// identifiers: (empty)".
+	for _, n := range s.Namespaces {
+		if !n.HeadingDeclarations {
+			continue
+		}
+		live.merge(looseNamespaceIDs(ordered, n.Name))
 	}
 	return
 }
@@ -622,6 +654,39 @@ func scanBody(body []string, idNamespace string, live, retired identSet) {
 	}
 }
 
+// scanLooseSection registers identifiers a section declares in the
+// validator's broader forms: its own heading line (`### DD-1 — Title` is an
+// undeclared slot hoisted OUT of the namespace section by matchSections, so
+// per-slot body scans never see it) and heading/loose-bullet lines within its
+// body. Live-only: the loose forms have no retirement syntax — `~~` retirement
+// stays a property of the canonical bullet.
+func scanLooseSection(sec *artifact.Section, idNamespace string, live identSet) {
+	scanLoose := func(text string) {
+		m := looseDecl.FindStringSubmatch(text)
+		if m == nil {
+			return
+		}
+		if ns, num, ok := splitID(m[1]); ok && ns == idNamespace {
+			live.add(ns, num)
+		}
+	}
+	scanLoose(sec.Heading)
+	for _, vl := range artifact.VisibleLines(sec.Body) {
+		scanLoose(vl.Text)
+	}
+}
+
+// looseNamespaceIDs collects every loose-form identifier for one namespace
+// across a whole document. The validator's index is position-independent (it
+// scans the full body), so recognition here must be too.
+func looseNamespaceIDs(sections []artifact.Section, idNamespace string) identSet {
+	live := identSet{}
+	for i := range sections {
+		scanLooseSection(&sections[i], idNamespace, live)
+	}
+	return live
+}
+
 func splitID(id string) (string, int, bool) {
 	ns, rest, ok := strings.Cut(id, "-")
 	if !ok {
@@ -636,7 +701,7 @@ func splitID(id string) (string, int, bool) {
 
 // applyIdentifiers enforces FR-45: payload identifiers are assertions verified
 // against the artifact's current set, and an item with no identifier is new.
-func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, live, retired identSet, opts Options, res *Result) {
+func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, ordered []artifact.Section, live, retired identSet, opts Options, res *Result) {
 	carry := newCarryState()
 	for _, h := range s.Headings {
 		if h.IDNamespace == "" {
@@ -651,6 +716,20 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 		payload := identSet{}
 		nextFree := maxOf(live.max(h.IDNamespace), retired.max(h.IDNamespace))
 
+		// Loose-form declarations (heading sections, loose bold bullets) are
+		// recognized payload content: they count as present (so an edit of a
+		// heading-form design does not read as retiring every DD), and their
+		// numbers are claimed (so allocation and supersede carry never hand a
+		// heading's id to an unnumbered bullet item).
+		loose := identSet{}
+		if nsDef.HeadingDeclarations {
+			loose = looseNamespaceIDs(ordered, h.IDNamespace)
+			payload.merge(loose)
+			if m := loose.max(h.IDNamespace); m > nextFree {
+				nextFree = m
+			}
+		}
+
 		// A payload declaring an identifier the artifact doesn't know about
 		// yet (fresh creation, Existing == nil) still claims that number: a
 		// later unidentified item in the same section must not collide with
@@ -663,6 +742,7 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 		// AC-03s and two AC-04s, reported as "carried forward", corrupting
 		// every downstream citation. Claiming first makes that impossible.
 		declared := identSet{}
+		declared.merge(loose)
 		for _, line := range sec.Body {
 			m := idDecl.FindStringSubmatch(line)
 			if m == nil {
@@ -727,6 +807,18 @@ func applyIdentifiers(s *schema.Schema, matched map[string]*artifact.Section, li
 							joinOrNone(live.list(ns, *nsDef))))
 				}
 				continue
+			}
+			// A loose-form declaration (`- **DD-1 — Title**: …`) is a
+			// declaration, not an unidentified item. Without this check the
+			// allocator renumbered it — assigning DD-3 to a line that already
+			// declared DD-1 — silently corrupting every citation of the id.
+			if nsDef.HeadingDeclarations {
+				if lm := looseDecl.FindStringSubmatch(line); lm != nil {
+					if ns, num, ok := splitID(lm[1]); ok && ns == h.IDNamespace {
+						payload.add(ns, num)
+						continue
+					}
+				}
 			}
 			// An unidentified item in an identifier-bearing section is new.
 			if isNewItem(line) {

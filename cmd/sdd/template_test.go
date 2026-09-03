@@ -77,8 +77,8 @@ func TestDesignTemplateShowsCanonicalDDDeclaration(t *testing.T) {
 		if !strings.Contains(body, "\n- **DD-1**: [Title].") {
 			t.Errorf("forApply=%v: design template must show the canonical DD bullet declaration:\n%s", forApply, body)
 		}
-		if !strings.Contains(body, "Heading-form decisions (`### DD-N`) are subsections, not declarations") {
-			t.Errorf("forApply=%v: template must explicitly reject the tempting heading form", forApply)
+		if !strings.Contains(body, "only bullet items get automatic allocation") {
+			t.Errorf("forApply=%v: template must steer authors to the canonical bullet form", forApply)
 		}
 	}
 }

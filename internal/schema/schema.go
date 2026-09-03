@@ -154,10 +154,19 @@ func (h Heading) Title() string {
 }
 
 // Namespace is an identifier namespace the tool allocates from (FR-20).
+//
+// HeadingDeclarations mirrors the validator's breadth for this namespace
+// (internal/rules/index.go specDefinitionRe["DD"]): identifiers are also
+// declared by `##`–`####` headings and loose bold bullets anywhere in the
+// document, not only by canonical `- **ID**:` bullets inside the owning slot.
+// Recognition-only: allocation, carry, and retirement still operate on the
+// canonical bullet form. Without this, `sdd apply` refused designs that
+// `sdd validate` blesses and whose DD ids plans already cite.
 type Namespace struct {
-	Name   string `json:"name"`
-	Prefix string `json:"prefix"`
-	Width  int    `json:"width"`
+	Name                string `json:"name"`
+	Prefix              string `json:"prefix"`
+	Width               int    `json:"width"`
+	HeadingDeclarations bool   `json:"headingDeclarations,omitempty"`
 }
 
 // Format renders n as this namespace's identifier, e.g. 7 -> "FR-07".
