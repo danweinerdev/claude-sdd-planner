@@ -1,6 +1,6 @@
 {
   "name": "sdd-planner",
-  "version": "2.8.5",
+  "version": "2.8.6",
   "minSddVersion": "2.7.0",
   "description": "Spec-driven development planning skills for research, requirements, designs, implementation plans, execution, review, debriefs, and validation.",
   "author": {
