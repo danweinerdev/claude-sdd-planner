@@ -310,6 +310,62 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 	return err
 }
 
+// Rehash re-embeds a node's cited intent fingerprints from the current
+// sources — the acknowledgment that ends an INTENT-STALE episode after the
+// walker re-read the cited requirement's diff and judged the change
+// **cosmetic**. Deliberately explicit and scoped: one node, optionally a
+// subset of its citations; a behavioral change is rework, never a rehash.
+// Holder-only while claimed. A citation that no longer resolves refuses —
+// that is a replan signal, not drift to paper over.
+func Rehash(root, repoRoot, plan, nodeID, by string, cited []string) ([]string, error) {
+	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
+	if err != nil {
+		return nil, fmt.Errorf("graph rehash: %w", err)
+	}
+	items := snap.Items
+	planDir := filepath.Join(root, "Plans", plan)
+	var updated []string
+	_, err = gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		updated = updated[:0]
+		n := g.NodeByID(nodeID)
+		if n == nil {
+			return fmt.Errorf("graph rehash: node %q does not exist", nodeID)
+		}
+		if n.Claim != nil && n.Claim.By != by {
+			return fmt.Errorf("graph rehash: %q is claimed by %q; only the holder acknowledges its intent drift", nodeID, n.Claim.By)
+		}
+		if len(n.IntentHashes) == 0 {
+			return fmt.Errorf("graph rehash: %q embeds no intent fingerprints", nodeID)
+		}
+		targets := cited
+		if len(targets) == 0 {
+			for key := range n.IntentHashes {
+				targets = append(targets, key)
+			}
+			sort.Strings(targets)
+		}
+		for _, key := range targets {
+			recorded, tracked := n.IntentHashes[key]
+			if !tracked {
+				return fmt.Errorf("graph rehash: %q does not fingerprint %q; rehash covers embedded citations only", nodeID, key)
+			}
+			current, ok := items[key]
+			if !ok {
+				return fmt.Errorf("graph rehash: citation %q no longer resolves in the current sources — that is not cosmetic drift; rework or replan the node", key)
+			}
+			if current.Hash != recorded {
+				updated = append(updated, key)
+			}
+			n.IntentHashes[key] = current.Hash
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 // Retire appends an id to the graph's append-only retired register without
 // touching any node — the tombstone for identifiers that never became graph
 // nodes, most importantly v1 task ids superseded by an in-place graph

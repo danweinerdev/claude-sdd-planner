@@ -1113,3 +1113,62 @@ func TestSetArtifactsNarrowingHealsDirectoryOverlapStaleness(t *testing.T) {
 		t.Fatal("the recorded observation is history and must remain untouched")
 	}
 }
+
+// TestRehashAcknowledgesCosmeticIntentDrift covers the INTENT-STALE exit
+// path: after the walker judges a cited requirement's diff cosmetic, rehash
+// re-embeds the current fingerprint — and nothing else.
+func TestRehashAcknowledgesCosmeticIntentDrift(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+
+	// Embed a deliberately stale fingerprint for the citation "AC-01".
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+		n.IntentHashes = map[string]string{"AC-01": "sha256:stale"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Rehash(root, root, "SamplePlan", "big", "impostor", nil); err == nil {
+		t.Fatal("only the holder rehashes a claimed node")
+	}
+	updated, err := Rehash(root, root, "SamplePlan", "big", "holder", nil)
+	if err != nil {
+		t.Fatalf("holder rehash: %v", err)
+	}
+	if len(updated) != 1 || updated[0] != "AC-01" {
+		t.Fatalf("updated: %v", updated)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	fresh := g.NodeByID("big").IntentHashes["AC-01"]
+	if fresh == "sha256:stale" || !strings.HasPrefix(fresh, "sha256:") {
+		t.Fatalf("fingerprint must be re-embedded from current sources: %q", fresh)
+	}
+
+	// Idempotent: a second rehash reports no drift.
+	updated, err = Rehash(root, root, "SamplePlan", "big", "holder", nil)
+	if err != nil {
+		t.Fatalf("idempotent rehash: %v", err)
+	}
+	if len(updated) != 0 {
+		t.Fatalf("no drift expected on second rehash: %v", updated)
+	}
+
+	// Refusals: unknown node, uncited key, unresolvable citation.
+	if _, err := Rehash(root, root, "SamplePlan", "missing", "", nil); err == nil {
+		t.Fatal("a nonexistent node refuses")
+	}
+	if _, err := Rehash(root, root, "SamplePlan", "big", "holder", []string{"AC-77"}); err == nil {
+		t.Fatal("a citation the node does not fingerprint refuses")
+	}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("big").IntentHashes["AC-99"] = "sha256:orphaned"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Rehash(root, root, "SamplePlan", "big", "holder", []string{"AC-99"}); err == nil {
+		t.Fatal("a citation that no longer resolves is a replan signal, not a rehash")
+	}
+}

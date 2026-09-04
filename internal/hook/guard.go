@@ -143,6 +143,10 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"repair-intent": false,
 	// mutating: replaces a node's declared read-only inputs
 	"set-inputs": false,
+	// mutating: replaces a node's declared artifact write-set
+	"set-artifacts": false,
+	// mutating: re-embeds cited intent fingerprints (cosmetic-drift ack)
+	"rehash": false,
 }
 
 var (

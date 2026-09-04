@@ -60,6 +60,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSetInputsCmd())
 	c.AddCommand(graphRepairIntentCmd())
 	c.AddCommand(graphSetArtifactsCmd())
+	c.AddCommand(graphRehashCmd())
 	c.AddCommand(graphGCCmd())
 	c.AddCommand(graphRetireCmd())
 	c.AddCommand(graphPathCmd())
@@ -354,6 +355,51 @@ func graphSetArtifactsCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id to edit")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
 	c.Flags().StringVar(&file, "file", "", "JSON array of artifact paths: [\"src/x.rs\", \"fixtures/y/\"]")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphRehashCmd acknowledges judged-cosmetic intent drift by re-embedding
+// current requirement fingerprints on one node.
+func graphRehashCmd() *cobra.Command {
+	var plan, node, by string
+	var cited []string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "rehash",
+		Short: "Re-embed a node's cited intent fingerprints after judging the requirement diff cosmetic",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" {
+				return fmt.Errorf("graph rehash: --plan and --node are required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return err
+			}
+			updated, err := ops.Rehash(root, repoRoot, plan, node, by, cited)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK      bool     `json:"ok"`
+					Node    string   `json:"node"`
+					Updated []string `json:"updated"`
+				}{true, node, updated})
+			}
+			if len(updated) == 0 {
+				fmt.Fprintf(c.OutOrStdout(), "no drift: %s's embedded fingerprints already match the current sources\n", node)
+			} else {
+				fmt.Fprintf(c.OutOrStdout(), "rehashed %s: %s (judged cosmetic by the rehasher — a behavioral change is rework, not a rehash)\n", node, strings.Join(updated, ", "))
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id whose citations to rehash")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
+	c.Flags().StringArrayVar(&cited, "cited", nil, "citation id(s) to rehash (default: every embedded citation)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
