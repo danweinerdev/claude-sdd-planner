@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -996,5 +997,119 @@ func TestSplitRefusesCompetingClaimOnCASRetry(t *testing.T) {
 	}
 	if g.NodeByID("big").Claim == nil || g.NodeByID("big").Claim.By != "racer" {
 		t.Fatal("the competing claim must be preserved")
+	}
+}
+
+func TestSetArtifactsHolderDisciplineAndValidation(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+		n.Artifacts = []string{"crates/"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	narrowed := []string{"Cargo.toml", "rust-toolchain.toml"}
+	if err := SetArtifacts(planDir, "big", "impostor", narrowed); err == nil {
+		t.Fatal("only the holder edits a claimed node's artifacts")
+	}
+	if err := SetArtifacts(planDir, "big", "holder", narrowed); err != nil {
+		t.Fatalf("holder set-artifacts: %v", err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if got := g.NodeByID("big").Artifacts; !reflect.DeepEqual(got, narrowed) {
+		t.Fatalf("artifacts: %v", got)
+	}
+
+	// An unclaimed node is editable by anyone (same rule as set-tests).
+	if err := SetArtifacts(planDir, "helper", "", []string{"src/helper.rs"}); err != nil {
+		t.Fatalf("unclaimed set-artifacts: %v", err)
+	}
+
+	if err := SetArtifacts(planDir, "missing", "holder", narrowed); err == nil {
+		t.Fatal("a nonexistent node refuses")
+	}
+	if err := SetArtifacts(planDir, "big", "holder", nil); err == nil {
+		t.Fatal("an empty write-set anchors nothing")
+	}
+	if err := SetArtifacts(planDir, "big", "holder", []string{"  "}); err == nil {
+		t.Fatal("a blank artifact path refuses")
+	}
+	if err := SetArtifacts(planDir, "big", "holder", []string{"a.rs", "a.rs"}); err == nil {
+		t.Fatal("duplicate artifact paths refuse")
+	}
+	if err := SetArtifacts(planDir, "feature-gate", "", narrowed); err == nil {
+		t.Fatal("a review gate's recorded digests are the reviewed diff, not a declared write-set")
+	}
+}
+
+// TestSetArtifactsNarrowingHealsDirectoryOverlapStaleness is the verb's
+// reason to exist end to end: a node whose over-broad directory write-set
+// was re-staled by a descendant's verified merge derives GREEN again once
+// the declaration is narrowed to the files the node actually owns — with
+// the recorded observation untouched.
+func TestSetArtifactsNarrowingHealsDirectoryOverlapStaleness(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+
+	// The ancestor "helper" verified a directory write-set plus one owned
+	// file; a descendant then legitimately added a file under the same
+	// directory, so the directory's digest no longer matches the record.
+	if err := os.MkdirAll(filepath.Join(root, "crates", "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "crates", "a", "lib.rs"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Cargo.toml"), []byte("[workspace]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := digest.New(root)
+	recordedDir := d.Artifact("crates/")
+	recordedFile := d.Artifact("Cargo.toml")
+	if recordedDir == "" || recordedFile == "" {
+		t.Fatal("fixture digests must record")
+	}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("helper")
+		n.Artifacts = []string{"crates/", "Cargo.toml"}
+		n.Verification = &model.Verification{
+			Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			ArtifactDigests: map[string]string{"crates/": recordedDir, "Cargo.toml": recordedFile},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The descendant's verified merge adds a file under crates/.
+	if err := os.WriteFile(filepath.Join(root, "crates", "a", "new.rs"), []byte("descendant"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	derive := func() states.NodeState {
+		g, err := gstore.Load(gstore.PathFor(planDir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digest.New(root).Artifact})
+		return s["helper"]
+	}
+	if ns := derive(); ns.State != states.Stale || len(ns.DigestStale) != 1 || ns.DigestStale[0] != "crates/" {
+		t.Fatalf("directory overlap must derive STALE on crates/: %+v", ns)
+	}
+
+	// Narrowing the write-set to the owned file heals the derive without
+	// touching the observation.
+	if err := SetArtifacts(planDir, "helper", "", []string{"Cargo.toml"}); err != nil {
+		t.Fatalf("set-artifacts: %v", err)
+	}
+	if ns := derive(); ns.State != states.Green {
+		t.Fatalf("narrowed write-set must derive GREEN: %+v", ns)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	v := g.NodeByID("helper").Verification
+	if v == nil || v.ArtifactDigests["crates/"] != recordedDir {
+		t.Fatal("the recorded observation is history and must remain untouched")
 	}
 }

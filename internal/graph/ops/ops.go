@@ -270,6 +270,46 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 	return err
 }
 
+// SetArtifacts replaces a node's declared artifact write-set under the lock.
+// Holder-only when the node is claimed. The verb exists for the same reason
+// set-tests does: a declaration can be wrong — most often an over-broad
+// directory write-set that overlaps descendants' files, which re-stales the
+// node on every one of their verified merges (digest staleness exists to
+// catch silent edits, not verified downstream work). The recorded
+// observation is untouched history: a newly declared path with no recorded
+// digest derives STALE until the node's next real sync — a redeclared
+// write-set owes a fresh observation.
+func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
+	if len(artifacts) == 0 {
+		return fmt.Errorf("graph set-artifacts: at least one artifact is required (a node with no write-set anchors nothing)")
+	}
+	seen := map[string]bool{}
+	for _, a := range artifacts {
+		if strings.TrimSpace(a) == "" {
+			return fmt.Errorf("graph set-artifacts: every artifact needs a nonempty path")
+		}
+		if seen[a] {
+			return fmt.Errorf("graph set-artifacts: artifact %q declared twice", a)
+		}
+		seen[a] = true
+	}
+	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID(nodeID)
+		if n == nil {
+			return fmt.Errorf("graph set-artifacts: node %q does not exist", nodeID)
+		}
+		if n.Claim != nil && n.Claim.By != by {
+			return fmt.Errorf("graph set-artifacts: %q is claimed by %q; only the holder edits its artifacts", nodeID, n.Claim.By)
+		}
+		if n.Gate.Type == model.GateReview {
+			return fmt.Errorf("graph set-artifacts: %q is a review gate; its recorded digests are the reviewed diff, not a declared write-set", nodeID)
+		}
+		n.Artifacts = artifacts
+		return nil
+	})
+	return err
+}
+
 // Retire appends an id to the graph's append-only retired register without
 // touching any node — the tombstone for identifiers that never became graph
 // nodes, most importantly v1 task ids superseded by an in-place graph

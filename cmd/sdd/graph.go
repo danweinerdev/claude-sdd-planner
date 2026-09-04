@@ -59,6 +59,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphSetInputsCmd())
 	c.AddCommand(graphRepairIntentCmd())
+	c.AddCommand(graphSetArtifactsCmd())
 	c.AddCommand(graphGCCmd())
 	c.AddCommand(graphRetireCmd())
 	c.AddCommand(graphPathCmd())
@@ -306,6 +307,53 @@ writing the graph.`,
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().StringVar(&node, "node", "", "repair only this node (default: every node)")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned backfills without writing the graph")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphSetArtifactsCmd edits one node's declared artifact write-set under
+// the lock.
+func graphSetArtifactsCmd() *cobra.Command {
+	var plan, node, by, file string
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "set-artifacts",
+		Short: "Replace a node's declared artifact write-set (holder-only while claimed)",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" || file == "" {
+				return fmt.Errorf("graph set-artifacts: --plan, --node, and --file are all required")
+			}
+			planDir, err := planDirFor(plan, "set-artifacts")
+			if err != nil {
+				return err
+			}
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				return fmt.Errorf("graph set-artifacts: %w", err)
+			}
+			var artifacts []string
+			if err := json.Unmarshal(raw, &artifacts); err != nil {
+				return fmt.Errorf("graph set-artifacts: %s is not a JSON array of artifact paths: %v", file, err)
+			}
+			if err := ops.SetArtifacts(planDir, node, by, artifacts); err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK        bool   `json:"ok"`
+					Node      string `json:"node"`
+					Artifacts int    `json:"artifacts"`
+				}{true, node, len(artifacts)})
+			}
+			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", len(artifacts), node)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id to edit")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
+	c.Flags().StringVar(&file, "file", "", "JSON array of artifact paths: [\"src/x.rs\", \"fixtures/y/\"]")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
