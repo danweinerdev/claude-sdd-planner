@@ -3771,6 +3771,258 @@
     ],
     "exit": 1
   },
+  "SDD156/conversion-empty-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/conversion-foreign-view": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD151",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/conversion-malformed-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/conversion-missing-generated-view": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/conversion-missing-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD156/conversion-unaccounted-task": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
   "SDD156/task-ids-removed": {
     "diagnostics": [
       {
@@ -4092,6 +4344,258 @@
         "code": "SDD164",
         "line": 1,
         "path": "Specs/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-empty-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-foreign-view": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD151",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-malformed-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-missing-generated-view": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-missing-graph": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD164/conversion-unaccounted-task": {
+    "diagnostics": [
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD156",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD164",
+        "line": 1,
+        "path": "Plans/Sample/01-One.md",
         "severity": "error"
       }
     ],

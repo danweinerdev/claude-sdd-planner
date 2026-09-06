@@ -735,3 +735,94 @@ func designWithDecisions(decisions string) string {
 	return replaceFirst(validDesign("Text."),
 		"## Design Decisions\n\nText.\n", "## Design Decisions\n\n"+decisions)
 }
+
+// --- graph-conversion fixtures (SDD156/SDD164 exemption) --------------------
+//
+// The append-only rules exempt a v1 PHASE document whose removal a deliberate
+// graph conversion explains: the owning same-plan graph accounts for every
+// task id (live node or retired register) and the plan README declares a
+// generated replacement view. These helpers build that state so the Good/Bad
+// examples exercise the exemption instead of hand-rolled YAML.
+
+// graphNode renders one strictly-valid committed-graph node.
+func graphNode(id string) string {
+	return `{"id":"` + id + `","contract":"contract for ` + id + `","gate":{"type":"tests","tests":[{"id":"t-` + id + `","file":"t.ext"}]},"hazards":[],"estimate":1}`
+}
+
+// graphPlanJSON renders a committed graph (schema v1) with the given live node
+// ids and retired ids. The node shape is strictly decodable — the same shape
+// the model's DecodeGraph demands.
+func graphPlanJSON(live, retired []string) string {
+	parts := make([]string, 0, len(live))
+	for _, id := range live {
+		parts = append(parts, graphNode(id))
+	}
+	out := `{"version":1,"seq_counter":0,"nodes":[` + strings.Join(parts, ",") + `]`
+	if len(retired) > 0 {
+		quoted := make([]string, 0, len(retired))
+		for _, id := range retired {
+			quoted = append(quoted, `"`+id+`"`)
+		}
+		out += `,"retired":[` + strings.Join(quoted, ",") + `]`
+	}
+	return out + `}`
+}
+
+// generatedPhaseView renders a compile-generated phase view for the given plan
+// and phase ordinal: a `type: phase` document carrying the source-of-truth
+// marker (the exact spelling the renderer emits, keyed on the plan name), with
+// the sections a phase artifact requires so it contributes no unrelated noise.
+func generatedPhaseView(planName, phaseOrdinal, title string) string {
+	return `---
+title: "` + title + `"
+type: phase
+plan: "` + planName + `"
+phase: ` + phaseOrdinal + `
+status: planned
+created: 2024-01-01
+updated: 2024-01-01
+deliverable: "Graph view"
+tasks: []
+---
+
+# Phase ` + phaseOrdinal + `: ` + title + `
+
+` + GeneratedViewMarkerPrefix + planName + `-Graph.json. Regenerate with ` + "`sdd compile --plan " + planName + "`. Edits here are overwritten. -->" + `
+
+## Overview
+
+Rendered.
+
+## Acceptance Criteria
+
+- [ ] Every node in this phase is closed (derived from the graph).
+
+## Phase Completion Evidence
+
+Pending — not complete.
+`
+}
+
+// v1PhaseWithTasks renders a v1 phase document for the given plan and phase
+// ordinal whose tasks[] declares each given task id.
+func v1PhaseWithTasks(planName, phaseOrdinal string, taskIDs ...string) string {
+	block := ""
+	for _, id := range taskIDs {
+		block += "\n  - id: \"" + id + "\"\n    title: Task " + id + "\n    status: planned\n    verification: x\n    justifies: FR-01\n"
+	}
+	return phaseWithTasks(phaseOrdinal, planName, block)
+}
+
+// planReadmeWithPhaseDoc renders a plan README whose phases[] lists a single
+// entry with the given doc filename.
+func planReadmeWithPhaseDoc(doc string) string {
+	return planWithPhase(map[string]string{"id": "1", "title": "One", "status": "planned", "doc": doc})
+}
+
+// conversionRemoveSetup is the git setup shared by the graph-conversion
+// examples: commit the fixture as the baseline, then stage the v1 phase doc's
+// removal. A function rather than a package var so it is built at example
+// registration time, after appendOnlySetup is initialized.
+func conversionRemoveSetup() [][]string {
+	return afterCommit([]string{"git", "rm", "-q", "Plans/Sample/01-One.md"})
+}

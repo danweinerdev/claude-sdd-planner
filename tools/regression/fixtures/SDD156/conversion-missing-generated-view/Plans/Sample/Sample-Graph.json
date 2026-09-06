@@ -1,0 +1,1 @@
+{"version":1,"seq_counter":0,"nodes":[{"id":"task-1-1","contract":"contract for task-1-1","gate":{"type":"tests","tests":[{"id":"t-task-1-1","file":"t.ext"}]},"hazards":[],"estimate":1},{"id":"task-1-2","contract":"contract for task-1-2","gate":{"type":"tests","tests":[{"id":"t-task-1-2","file":"t.ext"}]},"hazards":[],"estimate":1}]}

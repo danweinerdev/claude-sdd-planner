@@ -3,9 +3,13 @@ package rules
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Family: Validator._append_only_repository_history — SDD154/155/156 (a
@@ -20,6 +24,12 @@ import (
 //
 // Diagnostics carry no artifact: the subject may not exist any more. Python
 // passes path= explicitly for the same reason.
+//
+// One narrow exemption (see phaseConversionExcuses): a v1 PHASE document that
+// disappears or changes type during a deliberate graph conversion is not a
+// removal — its task ids survive as graph nodes (or the retired register), so
+// SDD156 and SDD164 for that document are suppressed. Every other artifact
+// kind, and every non-converted phase, keeps the normal append-only checks.
 
 var specRetainedRemovedRe = regexp.MustCompile(
 	`(?im)^\s*-\s+(?:\[[ xX]\]\s+)?\*\*((?:FR|NFR|AC)-\d{2,})\*\*\s*:\s*removed\s+[—-]\s+see\s+\S.*$`)
@@ -191,15 +201,136 @@ func appendOnlyHistory(r *Root) []appendOnlyFinding {
 			if !source.present {
 				content = ""
 			}
-			out = append(out, checkRetainedIDs(kind, baseline, content, artifactRelative, source.name)...)
+			excused := false
+			if kind == "phase" {
+				excused = phaseConversionExcuses(repo, baseline, repositoryRelative, source.name)
+			}
+			out = append(out, checkRetainedIDs(kind, baseline, content, artifactRelative, source.name, excused)...)
 		}
 	}
 	return out
 }
 
-// checkRetainedIDs ports _check_retained_ids.
-func checkRetainedIDs(kind, baseline, current, rel, sourceName string) []appendOnlyFinding {
+// readSourceFile returns a repository-relative path's bytes from one
+// repository state: the worktree on disk or the staged index. ok is false when
+// the file is absent from that state — which is itself meaningful: an unstaged
+// graph must never excuse a staged deletion.
+func readSourceFile(repo vcs.Repo, repoRel, sourceName string) ([]byte, bool) {
+	if sourceName == "index" {
+		raw, err := repo.FileInIndex(repoRel)
+		if err != nil {
+			return nil, false
+		}
+		return raw, true
+	}
+	raw, err := os.ReadFile(filepath.Join(repo.Root(), filepath.FromSlash(repoRel)))
+	if err != nil {
+		return nil, false
+	}
+	return raw, true
+}
+
+// phaseConversionExcuses reports whether a v1 phase document's removal or
+// replacement in one repository state (worktree or index) is a deliberate
+// graph conversion, in which case SDD156/SDD164 for that document in that
+// state are suppressed.
+//
+// The recognition is deliberately narrow — every condition must hold, each
+// evaluated against the SAME state (worktree history against the worktree
+// graph/README/views, index history against the index graph/README/views):
+//
+//  1. the owning same-plan graph exists in that state,
+//  2. it parses as a valid graph (the strict model decoder),
+//  3. it carries at least one live (replacement) node,
+//  4. every baseline task id is accounted for by a live node id or the
+//     append-only retired register, under the convert naming (1.1 -> task-1-1),
+//     and
+//  5. the current plan README (same state) declares a generated replacement
+//     phase view — same plan, same phase ordinal, source-of-truth marker — so
+//     a graph stub or an arbitrary graph in a parent cannot excuse a deletion.
+func phaseConversionExcuses(repo vcs.Repo, baseline, phaseRepoRel, sourceName string) bool {
+	baseArt := parseArtifactBytes([]byte(baseline), "", "")
+	if baseArt == nil || baseArt.Meta == nil {
+		return false
+	}
+	phaseID := metaStr(baseArt.Meta, "phase")
+	if phaseID == "" {
+		return false
+	}
+	baselineTasks := frontmatterEntryIDs(baseline, "tasks")
+	if len(baselineTasks) == 0 {
+		return false
+	}
+
+	planDir := path.Dir(phaseRepoRel)
+	planName := path.Base(planDir)
+
+	graphBytes, ok := readSourceFile(repo, path.Join(planDir, planName+"-Graph.json"), sourceName)
+	if !ok {
+		return false
+	}
+	g, err := model.DecodeGraph(graphBytes)
+	if err != nil || len(g.Nodes) == 0 {
+		return false
+	}
+	ids := map[string]bool{}
+	for _, n := range g.Nodes {
+		ids[n.ID] = true
+	}
+	for _, id := range g.Retired {
+		ids[id] = true
+	}
+	for taskID := range baselineTasks {
+		if !ids[taskNodeID(taskID)] {
+			return false
+		}
+	}
+
+	readmeBytes, ok := readSourceFile(repo, path.Join(planDir, "README.md"), sourceName)
+	if !ok {
+		return false
+	}
+	readmeArt := parseArtifactBytes(readmeBytes, "", "")
+	if readmeArt == nil || readmeArt.Meta == nil {
+		return false
+	}
+	for _, p := range asAnyList(readmeArt.Meta["phases"]) {
+		m := planEntry(p)
+		if m == nil {
+			continue
+		}
+		doc := metaStr(m, "doc")
+		if doc == "" {
+			continue
+		}
+		viewBytes, ok := readSourceFile(repo, path.Join(planDir, doc), sourceName)
+		if !ok || !IsGeneratedView(string(viewBytes)) {
+			continue
+		}
+		viewArt := parseArtifactBytes(viewBytes, "", "")
+		if viewArt == nil || viewArt.Meta == nil {
+			continue
+		}
+		if metaStr(viewArt.Meta, "plan") != planName {
+			continue
+		}
+		if metaStr(viewArt.Meta, "phase") != phaseID {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// checkRetainedIDs ports _check_retained_ids. excused marks a phase document
+// whose removal was recognized as a deliberate graph conversion; in that case
+// both SDD164 (disappeared/type-changed) and SDD156 (task id removed) are
+// suppressed, because the graph accounts for the document's task ids.
+func checkRetainedIDs(kind, baseline, current, rel, sourceName string, excused bool) []appendOnlyFinding {
 	var out []appendOnlyFinding
+	if excused {
+		return out
+	}
 
 	currentArtifact := parseArtifactBytes([]byte(current), "", "")
 	if currentArtifact == nil || currentArtifact.Meta == nil ||
@@ -323,49 +454,204 @@ func init() {
 		Code: "SDD156", Severity: Error, PyFunc: "_check_retained_ids",
 		What:      "a previously tracked phase task id was removed",
 		CheckRoot: appendOnlyCheckRoot("SDD156"),
-		Bad: []Example{{
-			Name: "task-ids-removed",
-			Files: map[string]string{
-				"Plans/Sample/README.md": validPlan(false),
-				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+		Bad: []Example{
+			{
+				Name: "task-ids-removed",
+				Files: map[string]string{
+					"Plans/Sample/README.md": validPlan(false),
+					"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
   - id: "1.1"
     title: First
     status: planned
     verification: x
     justifies: FR-01
 `, false, true),
+				},
+				Setup: afterCommit([]string{"git", "rm", "-q", "Plans/Sample/01-One.md"}),
 			},
-			Setup: afterCommit([]string{"git", "rm", "-q", "Plans/Sample/01-One.md"}),
-		}},
-		Good: []Example{{
-			Name: "task-ids-retained",
-			Files: map[string]string{
-				"Plans/Sample/README.md": validPlan(false),
-				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+			// A graph conversion is the sanctioned way to remove a v1 phase;
+			// each of these perturbs one requirement of that exemption, so the
+			// task ids must still be reported as removed.
+			{
+				Name: "conversion-unaccounted-task",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-missing-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":  planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":  v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md": generatedPhaseView("Sample", "1", "One"),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-malformed-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": `{"version":1,"nodes":[`,
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-empty-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": `{"version":1,"seq_counter":0,"nodes":[]}`,
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-missing-generated-view",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        phaseDoc("Sample", "1", "One", "planned"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-foreign-view",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Other", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+		},
+		Good: []Example{
+			{
+				Name: "task-ids-retained",
+				Files: map[string]string{
+					"Plans/Sample/README.md": validPlan(false),
+					"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
   - id: "1.1"
     title: First
     status: planned
     verification: x
     justifies: FR-01
 `, false, true),
+				},
+				Setup: appendOnlySetup,
 			},
-			Setup: appendOnlySetup,
-		}},
+			{
+				// A deliberate graph conversion removes the v1 phase document
+				// while its task ids survive as graph nodes — no task id was
+				// lost, so SDD156 stays quiet.
+				Name: "converted-phase-excused",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+		},
 	})
 
 	Register(&Rule{
 		Code: "SDD164", Severity: Error, PyFunc: "_check_retained_ids",
 		What:      "a previously tracked artifact changed type or disappeared",
 		CheckRoot: appendOnlyCheckRoot("SDD164"),
-		Bad: []Example{{
-			Name:  "artifact-deleted",
-			Files: map[string]string{"Specs/Sample/README.md": validSpecTemplate},
-			Setup: afterCommit([]string{"git", "rm", "-q", "Specs/Sample/README.md"}),
-		}},
-		Good: []Example{{
-			Name:  "artifact-retained",
-			Files: map[string]string{"Specs/Sample/README.md": validSpecTemplate},
-			Setup: appendOnlySetup,
-		}},
+		Bad: []Example{
+			{
+				Name:  "artifact-deleted",
+				Files: map[string]string{"Specs/Sample/README.md": validSpecTemplate},
+				Setup: afterCommit([]string{"git", "rm", "-q", "Specs/Sample/README.md"}),
+			},
+			{
+				Name: "conversion-unaccounted-task",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-missing-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":  planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":  v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md": generatedPhaseView("Sample", "1", "One"),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-malformed-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": `{"version":1,"nodes":[`,
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-empty-graph",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": `{"version":1,"seq_counter":0,"nodes":[]}`,
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-missing-generated-view",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        phaseDoc("Sample", "1", "One", "planned"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+			{
+				Name: "conversion-foreign-view",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Other", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+		},
+		Good: []Example{
+			{
+				Name:  "artifact-retained",
+				Files: map[string]string{"Specs/Sample/README.md": validSpecTemplate},
+				Setup: appendOnlySetup,
+			},
+			{
+				// The same deliberate conversion as SDD156's Good example: the
+				// v1 phase document disappears, but the graph accounts for it,
+				// so SDD164 stays quiet too.
+				Name: "converted-phase-excused",
+				Files: map[string]string{
+					"Plans/Sample/README.md":         planReadmeWithPhaseDoc("01-core.md"),
+					"Plans/Sample/01-One.md":         v1PhaseWithTasks("Sample", "1", "1.1", "1.2"),
+					"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+					"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1", "task-1-2"}, nil),
+				},
+				Setup: conversionRemoveSetup(),
+			},
+		},
 	})
 }

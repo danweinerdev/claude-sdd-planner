@@ -55,6 +55,16 @@ func stripGraphViewSection(body string) string {
 
 var tripleNewlineRe = regexp.MustCompile(`\n{3,}`)
 
+// taskNodeID maps a v1 task id to its graph node id — the convert naming:
+// `2.3` -> `task-2-3`. Stable and reversible, byte-identical to
+// internal/graph/convert's nodeID (rules cannot import convert: compile and
+// convert import rules, so the mapping is repeated here instead). reviews.go's
+// SDD096 and appendonly.go's graph-conversion exemption both use it, so the
+// validator's recognition and the converter's emission can never drift.
+func taskNodeID(taskID string) string {
+	return "task-" + strings.ReplaceAll(taskID, ".", "-")
+}
+
 // planGraphIDs loads a plan's committed graph and returns every id that can
 // anchor a follow-up: live node ids AND the append-only retired register —
 // the tool's own tombstone place, which is what lets a frozen (immutable)

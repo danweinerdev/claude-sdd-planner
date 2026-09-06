@@ -1160,7 +1160,7 @@ func init() {
 						// rather than editing the review.
 						if planArt, ok := r.ByPath["Plans/"+plan+"/README.md"]; ok {
 							if ids, ok := planGraphIDs(planArt); ok {
-								converted := "task-" + strings.ReplaceAll(tracked, ".", "-")
+								converted := taskNodeID(tracked)
 								if ids[tracked] || ids[converted] {
 									matches = append(matches, plan)
 								}
