@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -70,7 +72,7 @@ func fixtureRoot(t *testing.T) (root, planDir string) {
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		g.Nodes = append(g.Nodes,
 			model.Node{ID: "big", Contract: "does too much", Justifies: []string{"AC-01"},
-				Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_big", File: "t.ext"}}},
+				Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_big", File: "t.ext"}}},
 				Hazards: model.Hazards{"external-format"}, Estimate: 3, Phase: "01-core",
 				Deps: []string{"helper"}},
 			model.Node{ID: "helper", Contract: "helps", Justifies: []string{"AC-01"},
@@ -418,5 +420,581 @@ func TestRetireTombstonesAnId(t *testing.T) {
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if len(g.Retired) != 2 || g.Retired[0] != "1.9" || g.Retired[1] != "3.3" {
 		t.Fatalf("register must stay sorted append-only: %v", g.Retired)
+	}
+}
+
+// --- split intent-anchoring fixtures and tests ---------------------------------
+
+const hashingSpec = `---
+title: "Sample Spec"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# Sample Spec
+
+## Functional Requirements
+
+- **FR-01**: The loader SHALL accept every documented key.
+
+## Acceptance Criteria
+
+- [ ] **AC-01**: A valid config loads with zero findings.
+- [ ] **AC-02**: An unknown key names itself in the refusal.
+`
+
+const hashingDecisions = `---
+title: "Decisions"
+type: decision-log
+status: active
+created: 2026-08-01
+updated: 2026-08-01
+tags: []
+related: []
+decisions:
+  - id: D-0001
+    kind: decision
+    status: accepted
+    date: 2026-08-01
+    decided_by: user
+    statement: "An accepted truth."
+    scope: []
+---
+
+# Decisions
+`
+
+const hashingPlan = `---
+title: "Sample Plan"
+type: plan
+status: draft
+created: 2026-08-01
+updated: 2026-08-01
+tags: []
+related: [Specs/Sample]
+phases: []
+---
+
+# Sample Plan
+`
+
+// hashingFixture builds a root whose graph is finding-free: an anchored
+// parent node (justifies FR-01, AC-01, AC-02) plus a terminal full review
+// gate covering it. Split retires the parent, so this is the "before" state.
+func hashingFixture(t *testing.T) (root, planDir string) {
+	t.Helper()
+	root = t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("planning-config.json", `{"planningRoot": "."}`)
+	write("Specs/Sample/README.md", hashingSpec)
+	write("Decisions/decisions.md", hashingDecisions)
+	write("Plans/SamplePlan/README.md", hashingPlan)
+	planDir = filepath.Join(root, "Plans", "SamplePlan")
+	if _, err := gstore.Init(planDir); err != nil {
+		t.Fatal(err)
+	}
+	sources, err := gcompile.NewSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := model.Node{ID: "big", Contract: "does too much", Justifies: []string{"FR-01", "AC-01", "AC-02"},
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_big", File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1}
+	sources.Anchor(&big)
+	gate := model.Node{ID: "gate", Contract: "survives review", Justifies: []string{"AC-01"}, Deps: []string{"big"},
+		Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}
+	sources.Anchor(&gate)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, big, gate)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return root, planDir
+}
+
+// TestSplitAnchorsChildrenOwnHashes: split embeds each child's OWN
+// justifications — bare, qualified, and D-only — and never copies the
+// parent's map (a citation the child does not carry must not ride along).
+func TestSplitAnchorsChildrenOwnHashes(t *testing.T) {
+	root, planDir := hashingFixture(t)
+	children := `{
+  "version": 1,
+  "nodes": [
+    {"id": "big-bare", "contract": "bare", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t1", "file": "t.ext"}]}, "hazards": []},
+    {"id": "big-qual", "contract": "qualified", "justifies": ["Sample:AC-02"],
+     "gate": {"type": "tests", "tests": [{"id": "t2", "file": "t.ext"}]}, "hazards": []},
+    {"id": "big-d", "contract": "decision", "justifies": ["D-0001"],
+     "gate": {"type": "tests", "tests": [{"id": "t3", "file": "t.ext"}]}, "hazards": []}
+  ]
+}
+`
+	if _, err := Split(root, root, "SamplePlan", "big", []byte(children)); err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(g.NodeByID("big-bare").IntentHashes["AC-01"], "sha256:") {
+		t.Fatalf("bare citation must fingerprint: %+v", g.NodeByID("big-bare").IntentHashes)
+	}
+	if !strings.HasPrefix(g.NodeByID("big-qual").IntentHashes["Sample:AC-02"], "sha256:") {
+		t.Fatalf("qualified citation must fingerprint under its written spelling: %+v", g.NodeByID("big-qual").IntentHashes)
+	}
+	if len(g.NodeByID("big-d").IntentHashes) != 0 {
+		t.Fatalf("a D-only child must carry no fingerprints: %+v", g.NodeByID("big-d").IntentHashes)
+	}
+	// Non-inheritance: the parent cited FR-01, but no child does — so no
+	// child may carry the parent's FR-01 hash.
+	for _, id := range []string{"big-bare", "big-qual", "big-d"} {
+		if g.NodeByID(id).IntentHashes["FR-01"] != "" {
+			t.Fatalf("child %s must not inherit the parent's FR-01 hash", id)
+		}
+	}
+}
+
+// TestSplitChildGoesStaleOnSourceDrift: the child's hash is a real anchor,
+// so a source edit after the split derives the (verified) child INTENT-STALE.
+func TestSplitChildGoesStaleOnSourceDrift(t *testing.T) {
+	root, planDir := hashingFixture(t)
+	children := `{
+  "version": 1,
+  "nodes": [
+    {"id": "big-bare", "contract": "bare", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "t1", "file": "t.ext"}]}, "hazards": []},
+    {"id": "big-qual", "contract": "qualified", "justifies": ["AC-02"],
+     "gate": {"type": "tests", "tests": [{"id": "t2", "file": "t.ext"}]}, "hazards": []},
+    {"id": "big-d", "contract": "decision", "justifies": ["D-0001"],
+     "gate": {"type": "tests", "tests": [{"id": "t3", "file": "t.ext"}]}, "hazards": []}
+  ]
+}
+`
+	if _, err := Split(root, root, "SamplePlan", "big", []byte(children)); err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	// Record a pass on the child so the intent axis is evaluated.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("big-bare").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Drift AC-01's wording.
+	drifted := strings.Replace(hashingSpec, "A valid config loads with zero findings.", "A valid config loads with zero complaints.", 1)
+	if drifted == hashingSpec {
+		t.Fatal("fixture drift did not apply")
+	}
+	if err := os.WriteFile(filepath.Join(root, "Specs", "Sample", "README.md"), []byte(drifted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := gcompile.LoadIntentSnapshot(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := states.Derive(states.Inputs{Graph: g, CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions})
+	ns := st["big-bare"]
+	if ns.State != states.Stale || len(ns.IntentStale) != 1 || ns.IntentStale[0] != "AC-01" {
+		t.Fatalf("a split child whose source drifted must derive INTENT-STALE: %+v", ns)
+	}
+}
+
+// --- repair-intent fixtures and tests -----------------------------------------
+
+// repairRoot builds a root with two related specs (so a bare AC-01 is
+// ambiguous), FR/AC ids in Sample, and an accepted decision, plus an
+// initialized empty graph. Individual tests seed the nodes they need.
+func repairRoot(t *testing.T) (root, planDir string) {
+	t.Helper()
+	root = t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := `---
+title: "Other Spec"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# Other Spec
+
+## Acceptance Criteria
+
+- [ ] **AC-01**: The other spec's criterion one.
+`
+	write("planning-config.json", `{"planningRoot": "."}`)
+	write("Specs/Sample/README.md", hashingSpec)
+	write("Specs/Other/README.md", other)
+	write("Decisions/decisions.md", hashingDecisions)
+	plan := strings.Replace(hashingPlan, "related: [Specs/Sample]", "related: [Specs/Sample, Specs/Other]", 1)
+	write("Plans/SamplePlan/README.md", plan)
+	planDir = filepath.Join(root, "Plans", "SamplePlan")
+	if _, err := gstore.Init(planDir); err != nil {
+		t.Fatal(err)
+	}
+	return root, planDir
+}
+
+func repNode(id string, justifies []string, hashes map[string]string) model.Node {
+	return model.Node{ID: id, Contract: "c", Justifies: justifies, IntentHashes: hashes,
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_" + id, File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1}
+}
+
+func TestRepairIntentSelectedNodeBackfillsOnlyThatNode(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			repNode("missing", []string{"AC-02"}, nil),
+			repNode("other-missing", []string{"AC-02"}, nil),
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := RepairIntent(root, root, "SamplePlan", "missing", false)
+	if err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if len(res.Changes) != 1 || res.Changes[0].Node != "missing" || res.Changes[0].Cited != "AC-02" {
+		t.Fatalf("changes: %+v", res.Changes)
+	}
+	if !strings.HasPrefix(res.Changes[0].Hash, "sha256:") {
+		t.Fatalf("the backfilled hash must be a real fingerprint: %q", res.Changes[0].Hash)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("missing").IntentHashes["AC-02"] == "" {
+		t.Fatal("the selected node must be repaired")
+	}
+	if g.NodeByID("other-missing").IntentHashes != nil {
+		t.Fatal("an unselected node must be left alone")
+	}
+}
+
+func TestRepairIntentWholeGraphRefusesAtomically(t *testing.T) {
+	root, planDir := repairRoot(t)
+	pass := func(id string) model.Node {
+		n := repNode(id, []string{"AC-02"}, nil)
+		return n
+	}
+	claimed := pass("claimed")
+	claimed.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+	verified := pass("verified")
+	verified.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
+	redseq := pass("redseq")
+	redseq.RedSeqs = map[string]int{"test_redseq": 2}
+	ambiguous := repNode("ambiguous", []string{"AC-02", "AC-01"}, nil) // AC-01 bare is ambiguous here
+	unresolved := repNode("unresolved", []string{"AC-02", "AC-99"}, nil)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, repNode("missing", []string{"AC-02"}, nil),
+			claimed, verified, redseq, ambiguous, unresolved)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = RepairIntent(root, root, "SamplePlan", "", false)
+	if err == nil {
+		t.Fatal("a whole-graph repair with ineligible candidates must refuse")
+	}
+	for _, want := range []string{
+		"is claimed by",
+		"recorded verification",
+		"red observations",
+		"more than one related source",
+		"resolves in no related spec",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal missing %q:\n%s", want, err)
+		}
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("a refused repair must write nothing")
+	}
+}
+
+func TestRepairIntentIdempotent(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			repNode("missing", []string{"AC-02"}, nil),
+			repNode("partial", []string{"FR-01", "AC-02"}, map[string]string{"FR-01": "sha256:existing"}),
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := RepairIntent(root, root, "SamplePlan", "", false)
+	if err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if len(res.Changes) != 2 {
+		t.Fatalf("first repair must backfill both missing entries: %+v", res.Changes)
+	}
+	// The existing FR-01 hash must be untouched (never overwritten).
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("partial").IntentHashes["FR-01"] != "sha256:existing" {
+		t.Fatal("a nonempty hash must never be overwritten")
+	}
+	// Second run: zero changes.
+	res2, err := RepairIntent(root, root, "SamplePlan", "", false)
+	if err != nil {
+		t.Fatalf("idempotent re-run must not error: %v", err)
+	}
+	if len(res2.Changes) != 0 || len(res2.Repaired) != 0 {
+		t.Fatalf("idempotent re-run must report zero changes: %+v", res2)
+	}
+}
+
+func TestRepairIntentDryRunByteIdentical(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, repNode("missing", []string{"AC-02"}, nil))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := RepairIntent(root, root, "SamplePlan", "", true)
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if !res.DryRun || len(res.Changes) != 1 || res.Changes[0].Node != "missing" {
+		t.Fatalf("dry-run must plan the same changes without writing: %+v", res)
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("a dry-run must not change the graph")
+	}
+}
+
+func TestRepairIntentPreservesStaleHashAndDOnly(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			repNode("stale", []string{"FR-01"}, map[string]string{"FR-01": "sha256:STALE"}),
+			repNode("d-only", []string{"D-0001"}, nil),
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := RepairIntent(root, root, "SamplePlan", "", false)
+	if err != nil {
+		t.Fatalf("a stale-but-anchored node and a D-only node must not refuse: %v", err)
+	}
+	if len(res.Changes) != 0 {
+		t.Fatalf("nothing is repairable here: %+v", res.Changes)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("stale").IntentHashes["FR-01"] != "sha256:STALE" {
+		t.Fatal("a nonempty (stale) hash must be preserved")
+	}
+}
+
+func TestRepairIntentNamedNodeMustExist(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := RepairIntent(root, root, "SamplePlan", "nope", false); err == nil ||
+		!strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("a named --node must exist: %v", err)
+	}
+	_ = planDir
+}
+
+// TestRepairIntentRefusesAmbiguousOrUnresolvedEvenWithoutMissingHash: a node
+// whose ONLY citation is ambiguous or unresolved — or whose fingerprintable
+// citation is already anchored alongside an ambiguous/unresolved one — must
+// refuse atomically. needsRepair is false for all of these, so the guard is
+// that the refusal does not depend on there being a missing hash to backfill.
+func TestRepairIntentRefusesAmbiguousOrUnresolvedEvenWithoutMissingHash(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			repNode("only-ambiguous", []string{"AC-01"}, nil),                                           // bare AC-01 is ambiguous here
+			repNode("only-unknown", []string{"AC-99"}, nil),                                             // resolves nowhere
+			repNode("mixed", []string{"FR-01", "AC-01"}, map[string]string{"FR-01": "sha256:existing"}), // anchored + ambiguous
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = RepairIntent(root, root, "SamplePlan", "", false)
+	if err == nil {
+		t.Fatal("a graph carrying only ambiguous/unresolved citations must refuse")
+	}
+	for _, want := range []string{"more than one related source", "resolves in no related spec"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal missing %q:\n%s", want, err)
+		}
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("a refused repair must write nothing")
+	}
+}
+
+// TestRepairIntentSelectedNodeRefusesAmbiguousOnly: --node on a node whose
+// only citation is ambiguous refuses, and leaves the graph byte-identical.
+func TestRepairIntentSelectedNodeRefusesAmbiguousOnly(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, repNode("only-ambiguous", []string{"AC-01"}, nil))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = RepairIntent(root, root, "SamplePlan", "only-ambiguous", false)
+	if err == nil || !strings.Contains(err.Error(), "more than one related source") {
+		t.Fatalf("a selected ambiguous-only node must refuse: %v", err)
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("a refused selected-node repair must write nothing")
+	}
+}
+
+// contendWith wraps the real store.Update so the mutation fn, on its FIRST
+// invocation, also lands a competing mutation (the compete callback) before
+// that attempt's compare-and-swap write. The outer write therefore collides on
+// digest, the store re-reads the fresh graph, and the mutation must re-plan
+// against the competing state — the exact read-modify-write race the
+// compare-and-swap exists to close. No sleeps: the nested update completes
+// synchronously inside the first attempt.
+func contendWith(t *testing.T, path string, compete func(*model.Graph) error) updateFunc {
+	t.Helper()
+	var done bool
+	return func(path string, fn func(*model.Graph) error) (*model.Graph, error) {
+		wrapped := func(g *model.Graph) error {
+			if done {
+				return fn(g)
+			}
+			done = true
+			if err := fn(g); err != nil {
+				return err
+			}
+			if _, err := gstore.Update(path, compete); err != nil {
+				return err
+			}
+			return nil
+		}
+		return gstore.Update(path, wrapped)
+	}
+}
+
+// TestRepairIntentRefusesCompetingClaimOnCASRetry drives a real digest
+// collision: the first attempt computes the repair, then a competing claim
+// lands via a nested store.Update before that attempt's write. The retry must
+// re-plan against the freshly claimed node, refuse, and preserve the competing
+// write (claim present, no backfilled hash).
+func TestRepairIntentRefusesCompetingClaimOnCASRetry(t *testing.T) {
+	root, planDir := repairRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, repNode("missing", []string{"AC-02"}, nil))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := gstore.PathFor(planDir)
+	_, err := repairIntentWith(root, root, "SamplePlan", "missing", false,
+		contendWith(t, path, func(g *model.Graph) error {
+			g.NodeByID("missing").Claim = &model.Claim{By: "racer", LeaseExpires: "2099-01-01T00:00:00Z"}
+			return nil
+		}))
+	if err == nil || !strings.Contains(err.Error(), "is claimed by") {
+		t.Fatalf("the retry must re-plan against the competing claim and refuse: %v", err)
+	}
+	g, err := gstore.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := g.NodeByID("missing")
+	if n.Claim == nil || n.Claim.By != "racer" {
+		t.Fatalf("the competing claim must be preserved: %+v", n.Claim)
+	}
+	if len(n.IntentHashes) != 0 {
+		t.Fatalf("the repair must not backfill over a competing claim: %+v", n.IntentHashes)
+	}
+}
+
+// TestSplitRefusesCompetingClaimOnCASRetry drives the same collision for split:
+// the first attempt computes the split, a competing claim lands on the parent,
+// and the retry must refuse and leave the freshly claimed parent in place.
+func TestSplitRefusesCompetingClaimOnCASRetry(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	path := gstore.PathFor(planDir)
+	_, err := splitWith(root, root, "SamplePlan", "big", []byte(splitChildren),
+		contendWith(t, path, func(g *model.Graph) error {
+			g.NodeByID("big").Claim = &model.Claim{By: "racer", LeaseExpires: "2099-01-01T00:00:00Z"}
+			return nil
+		}))
+	if err == nil || !strings.Contains(err.Error(), "claimed") {
+		t.Fatalf("the retry must re-plan against the competing claim and refuse: %v", err)
+	}
+	g, err := gstore.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("big") == nil {
+		t.Fatal("the freshly claimed parent must not be removed")
+	}
+	if g.NodeByID("big").Claim == nil || g.NodeByID("big").Claim.By != "racer" {
+		t.Fatal("the competing claim must be preserved")
 	}
 }

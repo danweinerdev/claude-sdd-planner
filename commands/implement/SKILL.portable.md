@@ -37,6 +37,7 @@ The loop is **claim → red → green → sync → merge**, repeated until the f
 ### Reaction Protocol
 
 - **INTENT-STALE:** a cited requirement's fingerprint changed. Re-read the *diff of that requirement only*; then judge — cosmetic change → recompile refreshes the hash; behavioral change → rework the node; contract invalidated → replan. A judgment step; never auto-pick.
+- **Missing fingerprints:** a node cites a fingerprintable requirement but carries no `intent_hashes` entry (e.g. children from an older `split`). `sdd graph repair-intent --plan <Name> [--node <id>] [--dry-run]` backfills only missing/empty hashes on unclaimed, unverified nodes with no red observations — never overwriting an existing hash, refusing atomically on any claimed, verified, red-observed, or ambiguous/unresolved node.
 - **Finding demotion:** demoted nodes re-enter the workable set like any red node. Rework them; the gate going seq-stale after rework is the system asking for re-review.
 - **Lease expiry / crashes:** an expired claim's workspace is preserved as post-mortem evidence. Inspect if useful, then `sdd graph gc --plan <Name>`; the node returns to the frontier. A stale claimant's late sync is refused.
 - **Abandoning a node:** `sdd graph release <id> --by <identity>` — never squat on a claim you aren't working.

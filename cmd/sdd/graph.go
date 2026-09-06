@@ -12,6 +12,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
+	c.AddCommand(graphRepairIntentCmd())
 	c.AddCommand(graphGCCmd())
 	c.AddCommand(graphRetireCmd())
 	c.AddCommand(graphPathCmd())
@@ -156,6 +158,83 @@ func graphSetTestsCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id to edit")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
 	c.Flags().StringVar(&file, "file", "", "JSON array of tests: [{\"id\": ..., \"file\": ..., \"satisfies\": [...]}]")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphRepairIntentCmd backfills missing intent fingerprints on unclaimed,
+// unverified nodes (the conservative migration for nodes the split bug left
+// unanchored). Mutating: guard-covered per D-0014.
+func graphRepairIntentCmd() *cobra.Command {
+	var plan, node string
+	var dryRun, asJSON bool
+	c := &cobra.Command{
+		Use:   "repair-intent",
+		Short: "Backfill missing intent fingerprints on unclaimed, unverified nodes",
+		Long: `Backfill missing/empty intent_hashes entries on UNCLAIMED, UNVERIFIED nodes
+with no red observations. Deliberately conservative: it never overwrites a
+nonempty hash (even a stale one) and refuses atomically if any selected repair
+candidate is claimed, verified, red-observed, or cites an ambiguous/unresolved
+requirement. With no --node it considers every node, leaving already-anchored
+and D-only nodes alone; --dry-run reports the same planned changes without
+writing the graph.`,
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph repair-intent: --plan is required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph repair-intent: %w", err)
+			}
+			res, err := ops.RepairIntent(root, repoRoot, plan, node, dryRun)
+			if err != nil {
+				var refusal *ops.RefusedError
+				if !errors.As(err, &refusal) {
+					return err // malformed/operational: exit 2
+				}
+				// Eligibility-policy refusal: authoritative, exit 1. With
+				// --json the reasons go on stdout as a structured document;
+				// without it the full reason list is the error text.
+				if asJSON {
+					if werr := writeJSON(struct {
+						OK      bool     `json:"ok"`
+						Reasons []string `json:"reasons"`
+					}{false, refusal.Reasons}); werr != nil {
+						return werr
+					}
+				}
+				return &refusedError{n: len(refusal.Reasons), msg: refusal.Error()}
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK bool `json:"ok"`
+					*ops.RepairIntentResult
+				}{true, res})
+			}
+			w := c.OutOrStdout()
+			if len(res.Changes) == 0 {
+				if dryRun {
+					fmt.Fprintln(w, "nothing to repair")
+				} else {
+					fmt.Fprintln(w, "nothing to repair (every fingerprintable citation is already anchored)")
+				}
+				return nil
+			}
+			verb := "repaired"
+			if dryRun {
+				verb = "would repair"
+			}
+			for _, ch := range res.Changes {
+				fmt.Fprintf(w, "%s %s: %s -> %s\n", verb, ch.Node, ch.Cited, ch.Hash)
+			}
+			fmt.Fprintf(w, "%s %d fingerprint(s) across %d node(s)\n", verb, len(res.Changes), len(res.Repaired))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "repair only this node (default: every node)")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned backfills without writing the graph")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
@@ -632,17 +711,15 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	if err != nil {
 		return true, fmt.Errorf("next: %w", err)
 	}
-	items, err := gcompile.CurrentIntent(root, repoRoot, plan)
+	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
 	if err != nil {
 		return true, fmt.Errorf("next: %w", err)
 	}
-	hashes := make(map[string]string, len(items))
-	for id, item := range items {
-		hashes[id] = item.Hash
-	}
+	hashes := snap.Hashes()
 	digester := digest.New(repoRoot)
 	statesInputs := func(g *model.Graph) states.Inputs {
-		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact, CurrentIntentHashes: hashes}
+		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
+			CurrentIntentHashes: hashes, DecisionExemptions: snap.Exemptions}
 	}
 
 	if !claim {
@@ -734,7 +811,7 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	}
 	var cited []citedText
 	for _, id := range node.Justifies {
-		cited = append(cited, citedText{ID: id, Text: items[id].Normalized})
+		cited = append(cited, citedText{ID: id, Text: snap.Items[id].Normalized})
 	}
 	if jsonOut {
 		return true, writeJSON(struct {

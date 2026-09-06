@@ -103,7 +103,7 @@ var denyWithArgs = []struct{ head, args *regexp.Regexp }{
 var SddVerbReadOnly = map[string]bool{
 	"validate": true, "show": true, "list": true, "next": true,
 	"version": true, "doctor": true, "schema": true,
-	"hook": true, // reads a payload and decides; writes nothing
+	"hook":  true, // reads a payload and decides; writes nothing
 	"apply": false, "section": false, "migrate": false,
 	"evidence": false, "task": false, "phase": false, "plan": false,
 	"spec": false, "design": false,
@@ -139,6 +139,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"reverify": false,
 	// mutating: appends to the graph's retired register
 	"retire": false,
+	// mutating: backfills missing intent fingerprints
+	"repair-intent": false,
 }
 
 var (

@@ -56,7 +56,9 @@ type NodeState struct {
 	// IntentStale lists cited ids whose embedded fingerprint no longer
 	// matches the requirement's current text — the INTENT-STALE diagnostic,
 	// distinct because its remedy (re-hash / rework / replan) is a judgment
-	// call.
+	// call. Fail-closed: it also lists justifications that carry no embedded
+	// hash and are not exempt decisions (deleted, unlinked, ambiguous, or
+	// never-anchored citations).
 	IntentStale []string
 	// IsolationStale: the pass was observed with non-clean isolation
 	// (shared-dirty, or an asserted record). Provisionally accepted, never
@@ -82,8 +84,16 @@ type Inputs struct {
 	// "" when the file is missing or unreadable.
 	ArtifactDigest func(rel string) string
 	// CurrentIntentHashes maps cited id -> the requirement's current
-	// fingerprint, "" / absent when the id no longer resolves.
+	// fingerprint, "" / absent when the id no longer resolves. nil disables
+	// the intent axis entirely (a pure caller intentionally not checking
+	// intent passes nil for both intent fields).
 	CurrentIntentHashes map[string]string
+	// DecisionExemptions is the set of cited ids that are legitimate exempt
+	// decisions — accepted decision-ledger entries, which carry no fingerprint
+	// by design. It travels alongside CurrentIntentHashes, produced from the
+	// same source-resolution snapshot: a cited id absent from both maps is
+	// stale (fail-closed), never silently exempted by name shape.
+	DecisionExemptions map[string]bool
 }
 
 // Derive computes every node's state in one topological pass.
@@ -175,10 +185,38 @@ func Derive(in Inputs) map[string]NodeState {
 				sort.Strings(ns.DigestStale)
 			}
 			if in.CurrentIntentHashes != nil {
+				seen := map[string]bool{}
+				// Recorded hashes that no longer match their current
+				// fingerprint — including a source deleted since the
+				// observation (the current map simply has no entry for it).
 				for cited, recorded := range n.IntentHashes {
+					if recorded == "" {
+						continue // An empty entry still needs disposition checking below.
+					}
+					seen[cited] = true
 					if in.CurrentIntentHashes[cited] != recorded {
 						ns.IntentStale = append(ns.IntentStale, cited)
 					}
+				}
+				// Fail closed on the actual citation disposition: a
+				// recorded-pass node carrying a justification with NO
+				// embedded hash is stale UNLESS that citation is positively
+				// identified as an exempt decision. Every other disposition —
+				// fingerprintable-with-no-hash (the split bug), deleted,
+				// unlinked, ambiguous, or unresolved (a citation that has
+				// since vanished from the current tree) — is stale, so a PASS
+				// can never silently derive GREEN against text it never
+				// anchored to or a citation that no longer exists. There is
+				// no name-shape exemption here: a D-looking string is stale
+				// unless the caller placed it in DecisionExemptions.
+				for _, cited := range n.Justifies {
+					if seen[cited] {
+						continue
+					}
+					if in.DecisionExemptions[cited] {
+						continue
+					}
+					ns.IntentStale = append(ns.IntentStale, cited)
 				}
 				sort.Strings(ns.IntentStale)
 			}

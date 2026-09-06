@@ -591,6 +591,65 @@ func TestCompileInputSelection(t *testing.T) {
 	}
 }
 
+// TestValidateFlagsMissingAndPartialFingerprints: the transition gate flags a
+// stored node that cites a currently fingerprintable requirement with no
+// embedded hash (missing entirely, or present-but-empty) and names the source
+// plus the repair path — while a D-only node stays valid.
+func TestValidateFlagsMissingAndPartialFingerprints(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes,
+			model.Node{ID: "missing", Contract: "c", Justifies: []string{"AC-01"},
+				Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
+			model.Node{ID: "partial", Contract: "c", Justifies: []string{"AC-01", "FR-01"},
+				IntentHashes: map[string]string{"AC-01": "sha256:aaaa"},
+				Gate:         model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
+			model.Node{ID: "empty", Contract: "c", Justifies: []string{"AC-01"},
+				IntentHashes: map[string]string{"AC-01": ""},
+				Gate:         model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
+			model.Node{ID: "d-only", Contract: "c", Justifies: []string{"D-0001"},
+				Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings, err := Validate(root, root, "SamplePlan", g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, f := range findings {
+		joined += f.String() + "\n"
+	}
+	for _, want := range []string{
+		`missing: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
+		`partial: cites "FR-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
+		`empty: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing finding %q in:\n%s", want, joined)
+		}
+	}
+	// The already-hashed citation must NOT be flagged, and a D-only node
+	// must not be flagged (decisions are never fingerprinted).
+	if strings.Contains(joined, `partial: cites "AC-01"`) {
+		t.Errorf("a present hash must not be flagged:\n%s", joined)
+	}
+	if strings.Contains(joined, "d-only: cites") {
+		t.Errorf("a D-only node must not be flagged for fingerprints:\n%s", joined)
+	}
+	// The finding names the supported repair path.
+	if !strings.Contains(joined, "sdd graph repair-intent") {
+		t.Errorf("the finding must name the repair path:\n%s", joined)
+	}
+}
+
 func TestLaneAwareness(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
 	// One work node, one subset-lane checkpoint over it, one typo'd lane —

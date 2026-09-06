@@ -22,6 +22,12 @@ import (
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
+// updateFunc is the compare-and-swap primitive every locked mutation is built
+// on (the store's read-modify-write loop). It is a parameter, not a package
+// hook, so the CAS-retry tests can drive a genuine digest collision through
+// the real store.Update while production passes it unchanged.
+type updateFunc func(path string, fn func(*model.Graph) error) (*model.Graph, error)
+
 // SplitResult reports a split.
 type SplitResult struct {
 	Retired  string   `json:"retired"`
@@ -38,6 +44,13 @@ type SplitResult struct {
 // reused. The mutation is gated like a compile: it must introduce no
 // semantic finding the compiler would refuse.
 func Split(root, repoRoot, plan, nodeID string, childrenPayload []byte) (*SplitResult, error) {
+	return splitWith(root, repoRoot, plan, nodeID, childrenPayload, gstore.Update)
+}
+
+// splitWith is Split with the CAS primitive injected, so the CAS-retry tests
+// can force a genuine digest collision and prove the fresh re-plan refuses a
+// parent claimed between the read and the write.
+func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, update updateFunc) (*SplitResult, error) {
 	planDir := filepath.Join(root, "Plans", plan)
 	p, err := model.DecodeProposal(childrenPayload)
 	if err != nil {
@@ -47,39 +60,45 @@ func Split(root, repoRoot, plan, nodeID string, childrenPayload []byte) (*SplitR
 		return nil, fmt.Errorf("graph split: a split produces at least two children; %d supplied", len(p.Nodes))
 	}
 
-	// Build the candidate graph in memory, then gate it on introduced
-	// findings before anything is written.
-	current, err := gstore.Load(gstore.PathFor(planDir))
+	// One citation-resolution snapshot for the whole split. The children are
+	// anchored against it AND the before/after validations re-derive from it,
+	// so a spec edit landing mid-split cannot re-anchor children against text
+	// the gate did not validate.
+	sources, err := gcompile.NewSources(root, repoRoot, plan)
 	if err != nil {
 		return nil, err
 	}
-	candidate, res, err := applySplit(current, nodeID, p)
-	if err != nil {
-		return nil, err
-	}
-	before, err := gcompile.Validate(root, repoRoot, plan, current)
-	if err != nil {
-		return nil, err
-	}
-	after, err := gcompile.Validate(root, repoRoot, plan, candidate)
-	if err != nil {
-		return nil, err
-	}
-	if introduced := introducedFindings(before, after); len(introduced) > 0 {
-		var b strings.Builder
-		b.WriteString("graph split: refused — the split would introduce findings compile refuses:\n")
-		for _, f := range introduced {
-			fmt.Fprintf(&b, "  %s\n", f.String())
-		}
-		return nil, fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+	// Anchor each child's OWN justifications — never the original's map. A
+	// child cites a subset of the original's requirements, and copying the
+	// original's hashes would bless citations the child no longer carries.
+	// This runs BEFORE semantic validation so the missing-fingerprint guard
+	// sees anchored children, not unfingerprinted construction input.
+	for i := range p.Nodes {
+		sources.Anchor(&p.Nodes[i])
 	}
 
-	if _, err := gstore.Update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
-		rebuilt, _, err := applySplit(fresh, nodeID, p)
+	// The whole gate moves inside the store's compare-and-swap: the candidate
+	// is re-derived from the FRESH graph, and before/after are both computed
+	// here — against the same snapshot — rather than against a stale outer
+	// baseline that another writer may have moved.
+	var res *SplitResult
+	if _, err := update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
+		before := sources.Validate(fresh)
+		rebuilt, splitRes, err := applySplit(fresh, nodeID, p)
 		if err != nil {
 			return err
 		}
+		after := sources.Validate(rebuilt)
+		if introduced := introducedFindings(before, after); len(introduced) > 0 {
+			var b strings.Builder
+			b.WriteString("graph split: refused — the split would introduce findings compile refuses:\n")
+			for _, f := range introduced {
+				fmt.Fprintf(&b, "  %s\n", f.String())
+			}
+			return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+		}
 		*fresh = *rebuilt
+		res = splitRes
 		return nil
 	}); err != nil {
 		return nil, err

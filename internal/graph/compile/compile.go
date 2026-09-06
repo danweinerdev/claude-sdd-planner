@@ -41,18 +41,14 @@ import (
 // closed predicate. One closure, applied to both the preflight preview and
 // the written graph, so the dry-run and the render can never disagree.
 func deriveClosure(repoRoot string, sources *sourceSet) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
-	currentHashes := map[string]string{}
-	for _, key := range sources.index.Keys() {
-		if _, item, ok := sources.resolveItem(key); ok {
-			currentHashes[key] = item.Hash
-		}
-	}
+	snap := sources.intentSnapshot()
 	digester := digest.New(repoRoot)
 	return func(g *model.Graph) (map[string]states.NodeState, map[string]bool) {
 		st := states.Derive(states.Inputs{
 			Graph:               g,
 			ArtifactDigest:      digester.Artifact,
-			CurrentIntentHashes: currentHashes,
+			CurrentIntentHashes: snap.Hashes(),
+			DecisionExemptions:  snap.Exemptions,
 		})
 		return st, review.Closed(g, st)
 	}
@@ -116,19 +112,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	var added []string
 	for i := range p.Nodes {
 		n := &p.Nodes[i]
-		for _, cited := range n.Justifies {
-			_, item, ok := sources.resolveItem(cited)
-			if !ok {
-				continue // D-NNNN citations resolve but are not fingerprinted
-			}
-			if n.IntentHashes == nil {
-				n.IntentHashes = map[string]string{}
-			}
-			// Keyed by the citation AS WRITTEN — qualified spellings
-			// included — so states' staleness lookups match what
-			// CurrentIntent serves under the same keys.
-			n.IntentHashes[cited] = item.Hash
-		}
+		Anchor(n, sources.resolveItem)
 		if len(n.IntentHashes) > 0 {
 			hashes[n.ID] = n.IntentHashes
 		}
@@ -175,37 +159,17 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	return &Result{GraphPath: graphPath, Added: added, Hashes: hashes, Consumed: payloadPath, Views: views}, nil, nil
 }
 
-// CurrentIntent returns every requirement fingerprint reachable from the
-// plan's related graph right now: cited id -> its Item (normalized text +
-// hash). The walk loop consumes it twice — states recheck embedded hashes
-// against it (INTENT-STALE), and `next --claim` inlines the cited text into
-// the context payload so an agent never re-reads specs wholesale.
-func CurrentIntent(root, repoRoot, plan string) (map[string]intent.Item, error) {
-	sources, err := identifierSources(root, repoRoot, plan)
-	if err != nil {
-		return nil, err
-	}
-	// Every unambiguous citation SPELLING gets an entry — bare where
-	// unique, qualified always — so a graph's intent_hashes keys (stored
-	// as written) always find their current counterpart.
-	out := map[string]intent.Item{}
-	for _, key := range sources.index.Keys() {
-		if _, item, ok := sources.resolveItem(key); ok {
-			out[key] = item
-		}
-	}
-	return out, nil
-}
-
 // Validate runs the full semantic pass over a graph as it stands (an empty
 // proposal against it) — the transition gate `graph split` and friends use
-// to prove a mutation introduces no findings that compile would refuse.
+// to prove a mutation introduces no findings that compile would refuse. When
+// a caller already holds a Sources snapshot, use Sources.Validate instead so
+// the before/after comparison shares that snapshot rather than re-resolving.
 func Validate(root, repoRoot, plan string, g *model.Graph) ([]Finding, error) {
-	sources, err := identifierSources(root, repoRoot, plan)
+	sources, err := NewSources(root, repoRoot, plan)
 	if err != nil {
 		return nil, err
 	}
-	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, sources), nil
+	return sources.Validate(g), nil
 }
 
 // selectProposal picks the compile input: the assembled proposal when it
@@ -277,6 +241,26 @@ func (s *sourceSet) resolveItem(cited string) (rules.CitationHit, intent.Item, b
 	return hit, item, ok
 }
 
+// intentSnapshot resolves the plan's citation dispositions from this source
+// set: every unambiguous citation spelling that resolves to a fingerprintable
+// item, plus every accepted decision (the legitimate exemptions). A citation
+// that is deleted, unlinked, or ambiguous lands in neither half — the
+// fail-closed signal states.Derive reads.
+func (s *sourceSet) intentSnapshot() IntentSnapshot {
+	snap := IntentSnapshot{Items: map[string]intent.Item{}, Exemptions: map[string]bool{}}
+	for _, key := range s.index.Keys() {
+		if _, item, ok := s.resolveItem(key); ok {
+			snap.Items[key] = item
+		}
+	}
+	for id, status := range s.decisions {
+		if status == "accepted" {
+			snap.Exemptions[id] = true
+		}
+	}
+	return snap
+}
+
 // acKey keys per-spec AC coverage.
 func acKey(sourceRel, id string) string { return sourceRel + "\x00" + id }
 
@@ -341,10 +325,15 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 		out = append(out, Finding{Where: where, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	// Merged view: master nodes plus proposal nodes.
+	// Merged view: master nodes plus proposal nodes. stored marks the master
+	// nodes — the missing-fingerprint guard applies to them (a committed node
+	// must carry a hash for every fingerprintable citation), while proposal
+	// nodes are construction input compile anchors AFTER this pass.
 	merged := map[string]*model.Node{}
+	stored := map[string]bool{}
 	for i := range g.Nodes {
 		merged[g.Nodes[i].ID] = &g.Nodes[i]
+		stored[g.Nodes[i].ID] = true
 	}
 	// Duplicate ids: within the proposal, and against the master graph
 	// (phase-1 review followup FU-01 — the model layer deliberately does not
@@ -453,6 +442,14 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 			if hit, _, ok := sources.resolveItem(cited); ok {
 				if strings.HasPrefix(hit.ID, "AC-") {
 					citedACs[acKey(hit.SourceRel, hit.ID)] = true
+				}
+				// The fail-closed half of INTENT-STALE: a committed node
+				// citing a currently fingerprintable requirement with no
+				// embedded hash (missing, or present but empty) cannot be
+				// verified against the text it claims to satisfy. Proposal
+				// nodes are exempt — compile anchors them after this pass.
+				if stored[id] && n.IntentHashes[cited] == "" {
+					add(id, "cites %q (defined in %s) with no embedded intent fingerprint; repair with `sdd graph repair-intent --plan <plan> --node %s`", cited, hit.SourceRel, id)
 				}
 				continue
 			}

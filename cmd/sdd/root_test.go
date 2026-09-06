@@ -58,7 +58,7 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 	want := map[string]bool{
 		"apply": true, "compile": true, "decide": true, "doctor": true, "evidence": true,
 		"graph": true,
-		"hook": true, "list": true, "migrate": true, "next": true,
+		"hook":  true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
 		"review": true, "schema": true, "section": true, "show": true,
 		"spec": true, "design": true,
@@ -254,6 +254,7 @@ func handlerFlagSets() []struct {
 		{"sdd graph export", []string{"plan", "format", "json"}},
 		{"sdd graph split", []string{"plan", "node", "file", "json"}},
 		{"sdd graph set-tests", []string{"plan", "node", "by", "file", "json"}},
+		{"sdd graph repair-intent", []string{"plan", "node", "dry-run", "json"}},
 		{"sdd graph gc", []string{"plan", "json"}},
 		{"sdd graph retire", []string{"plan", "id", "json"}},
 		{"sdd graph hazards", []string{"json"}},

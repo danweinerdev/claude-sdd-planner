@@ -45,9 +45,17 @@ func main() {
 	os.Exit(exitCode(err))
 }
 
-type refusedError struct{ n int }
+type refusedError struct {
+	n   int
+	msg string // optional detail; printed verbatim instead of the summary
+}
 
-func (e *refusedError) Error() string { return fmt.Sprintf("refused: %d violation(s)", e.n) }
+func (e *refusedError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return fmt.Sprintf("refused: %d violation(s)", e.n)
+}
 
 func writeJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)

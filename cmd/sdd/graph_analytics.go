@@ -48,16 +48,13 @@ func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	if err != nil {
 		return nil, err
 	}
-	items, err := gcompile.CurrentIntent(root, repoRoot, plan)
+	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
 	if err != nil {
 		return nil, fmt.Errorf("graph %s: %w", verb, err)
 	}
-	hashes := make(map[string]string, len(items))
-	for id, item := range items {
-		hashes[id] = item.Hash
-	}
 	digester := digest.New(repoRoot)
-	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact, CurrentIntentHashes: hashes})
+	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
+		CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions})
 	ctx := &analyticsCtx{planDir: planDir, g: g, st: st, closed: greview.Closed(g, st),
 		adjacency: algorithms.Graph{}, estimate: map[string]int{}}
 	for i := range g.Nodes {
