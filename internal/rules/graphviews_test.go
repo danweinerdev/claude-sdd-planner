@@ -100,9 +100,9 @@ Rendered.
 // SDD163 x5) — while a rogue non-generated unlisted doc still fires.
 func TestPhaseOwnershipExemptsGeneratedViews(t *testing.T) {
 	r := rootFrom(t, map[string]string{
-		"Plans/Sample/README.md":  planReadmeWithGraphView(true),
-		"Plans/Sample/01-One.md":  viewPhaseDoc("1", "One", false),
-		"Plans/Sample/02-view.md": viewPhaseDoc("2", "view", true),
+		"Plans/Sample/README.md":   planReadmeWithGraphView(true),
+		"Plans/Sample/01-One.md":   viewPhaseDoc("1", "One", false),
+		"Plans/Sample/02-view.md":  viewPhaseDoc("2", "view", true),
 		"Plans/Sample/03-rogue.md": viewPhaseDoc("3", "rogue", false),
 	})
 	diags := Run(r)
@@ -184,9 +184,9 @@ x.
 
 func TestGraphPlanTraceabilityResolvesJustifies(t *testing.T) {
 	r := rootFrom(t, map[string]string{
-		"Specs/A/README.md":  traceSpec("A"),
-		"Specs/B/README.md":  traceSpec("B"),
-		"Plans/P/README.md":  traceGraphPlan,
+		"Specs/A/README.md":    traceSpec("A"),
+		"Specs/B/README.md":    traceSpec("B"),
+		"Plans/P/README.md":    traceGraphPlan,
 		"Plans/P/P-Graph.json": traceGraph("Specs/A:FR-01", "A:AC-01", "Specs/B:FR-01", "B:AC-01"),
 	})
 	for _, d := range Run(r) {
@@ -196,13 +196,28 @@ func TestGraphPlanTraceabilityResolvesJustifies(t *testing.T) {
 	}
 }
 
+func TestGraphCoverageDoesNotDemandTransitiveSpecs(t *testing.T) {
+	r := rootFrom(t, map[string]string{
+		"Specs/A/README.md":        traceSpec("A"),
+		"Specs/B/README.md":        traceSpec("B"),
+		"Designs/Bridge/README.md": strings.Replace(strings.Replace(traceSpec("Bridge"), "type: spec", "type: design", 1), "related: []", "related: [Specs/B]", 1),
+		"Plans/P/README.md":        strings.Replace(traceGraphPlan, "related: [Specs/A, Specs/B]", "related: [Specs/A, Designs/Bridge]", 1),
+		"Plans/P/P-Graph.json":     traceGraph("Specs/A:FR-01", "Specs/A:AC-01"),
+	})
+	for _, d := range Run(r) {
+		if d.Code == "SDD160" || d.Code == "SDD161" || d.Code == "SDD162" {
+			t.Errorf("transitive sources are citable, not additional graph coverage obligations: %s %s", d.Code, d.Message)
+		}
+	}
+}
+
 func TestGraphPlanTraceabilityIsPerSpec(t *testing.T) {
 	// Specs/B's criterion is uncovered; a BARE ambiguous justification of
 	// AC-01 covers neither spec (never first-wins).
 	r := rootFrom(t, map[string]string{
-		"Specs/A/README.md":  traceSpec("A"),
-		"Specs/B/README.md":  traceSpec("B"),
-		"Plans/P/README.md":  traceGraphPlan,
+		"Specs/A/README.md":    traceSpec("A"),
+		"Specs/B/README.md":    traceSpec("B"),
+		"Plans/P/README.md":    traceGraphPlan,
 		"Plans/P/P-Graph.json": traceGraph("Specs/A:FR-01", "Specs/A:AC-01", "Specs/B:FR-01", "AC-01"),
 	})
 	var hits []string

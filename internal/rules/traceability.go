@@ -144,6 +144,14 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 		graphCited := map[string]bool{}
 		if justifies, ok := planGraphJustifies(plan); ok {
 			graphPlan = true
+			// Match graph compile's coverage boundary: transitive sources stay
+			// citable, but only directly related specs demand implementation.
+			specs = nil
+			for _, source := range DirectRelatedSources(r, plan) {
+				if source.Kind() == "spec" {
+					specs = append(specs, source)
+				}
+			}
 			index := BuildCitationIndex(r, plan)
 			for _, j := range justifies {
 				if hit, ok := index.Resolve(j); ok {
