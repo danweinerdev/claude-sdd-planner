@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestInputKeysAreUnambiguous(t *testing.T) {
+	decls := []Input{
+		{Root: InputRootRepository, Path: "a.md", Section: &InputSection{HeadingPath: []string{"A/B"}}},
+		{Root: InputRootRepository, Path: "a.md", Section: &InputSection{HeadingPath: []string{"A", "B"}}},
+		{Root: InputRootRepository, Path: "a.md#A/B"},
+		{Root: InputRootPlanning, Path: "a.md", Section: &InputSection{HeadingPath: []string{"A", "B"}}},
+	}
+	seen := map[string]bool{}
+	for _, decl := range decls {
+		key := InputKey(decl)
+		if seen[key] {
+			t.Fatalf("different input declarations share a fingerprint key: %s", key)
+		}
+		seen[key] = true
+	}
+}
+
+func TestDuplicateInputsRefused(t *testing.T) {
+	_, err := DecodeInputs([]byte(`[{"root":"repository","path":"a.md"},{"root":"repository","path":"a.md"}]`))
+	if err == nil {
+		t.Fatal("duplicate input declarations must be refused")
+	}
+}
+
 // fullGraph is a canonical full-featured fixture: three nodes covering the
 // three gate types, a claim, a verification with provenance, red_seqs,
 // and all three hazards shapes (filled, untriaged, explicit empty).
@@ -266,6 +290,7 @@ func TestBatchedErrors(t *testing.T) {
 func TestProposalRejectsToolOwnedFields(t *testing.T) {
 	cases := map[string]string{
 		"intent_hashes": `"intent_hashes": {"AC-01": "sha256:x"}`,
+		"input_hashes":  `"input_hashes": {"repository:docs/x.md": "sha256:x"}`,
 		"claim":         `"claim": {"by": "me", "lease_expires": "2026-08-31T00:00:00Z"}`,
 		"verification":  `"verification": {"result": "pass", "seq": 1, "isolation": "clean"}`,
 		"red_seqs":      `"red_seqs": {"test_x": 1}`,
@@ -285,6 +310,43 @@ func TestProposalRejectsToolOwnedFields(t *testing.T) {
 	// seq_counter is itself tool-owned at the proposal level.
 	_, err := DecodeProposal([]byte(`{"version": 1, "seq_counter": 5, "nodes": []}`))
 	wantFinding(t, err, `unknown key "seq_counter"`)
+}
+
+// TestInputDecodeRoundTrip: inputs decode strictly; a bad root selector, an
+// empty heading path, and an unknown input key are all refusals.
+func TestInputDecodeRoundTrip(t *testing.T) {
+	src := `{"version": 1, "nodes": [{"id": "a", "contract": "c", "hazards": [],
+		"gate": {"type": "tests"}, "inputs": [
+			{"root": "repository", "path": "docs/a.md"},
+			{"root": "planning", "path": "Plans/x/README.md",
+			 "section": {"heading_path": ["A", "B"]}}
+		]}]}`
+	p, err := DecodeProposal([]byte(src))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	n := p.Nodes[0]
+	if len(n.Inputs) != 2 {
+		t.Fatalf("inputs = %d, want 2", len(n.Inputs))
+	}
+	if n.Inputs[0].Section != nil {
+		t.Fatalf("first input should be whole-file, got section")
+	}
+	if n.Inputs[1].Section == nil || len(n.Inputs[1].Section.HeadingPath) != 2 {
+		t.Fatalf("second input section = %+v", n.Inputs[1].Section)
+	}
+
+	// Bad root selector.
+	_, err = DecodeInputs([]byte(`[{"root": "cwd", "path": "x.md"}]`))
+	wantFinding(t, err, `"cwd" is not an input root`)
+
+	// Empty heading path.
+	_, err = DecodeInputs([]byte(`[{"root": "repository", "path": "x.md", "section": {"heading_path": []}}]`))
+	wantFinding(t, err, "must be a nonempty list of heading titles")
+
+	// Unknown key on the input object.
+	_, err = DecodeInputs([]byte(`[{"root": "repository", "path": "x.md", "foo": 1}]`))
+	wantFinding(t, err, `unknown key "foo"`)
 }
 
 func TestLanesRejections(t *testing.T) {

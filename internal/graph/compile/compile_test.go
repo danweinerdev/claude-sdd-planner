@@ -244,7 +244,7 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, closed := deriveClosure(root, sources)(g2)
+	st, closed := deriveClosure(root, sources, NewInputResolver(root, root))(g2)
 	again, err := renderViews(root, "SamplePlan", g2, st, closed)
 	if err != nil {
 		t.Fatal(err)

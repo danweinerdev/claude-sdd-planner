@@ -3896,6 +3896,12 @@
         "line": 1,
         "path": "Plans/Sample/01-One.md",
         "severity": "error"
+      },
+      {
+        "code": "SDD180",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
       }
     ],
     "exit": 1
@@ -4473,6 +4479,12 @@
         "code": "SDD164",
         "line": 1,
         "path": "Plans/Sample/01-One.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD180",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
         "severity": "error"
       }
     ],
@@ -5581,6 +5593,17 @@
         "code": "SDD179",
         "line": 8,
         "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD180/missing-prd-section": {
+    "diagnostics": [
+      {
+        "code": "SDD180",
+        "line": 1,
+        "path": "Plans/P/README.md",
         "severity": "error"
       }
     ],

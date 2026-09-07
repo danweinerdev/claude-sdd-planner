@@ -48,13 +48,15 @@ func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
+	sources, err := gcompile.NewSources(root, repoRoot, plan)
 	if err != nil {
 		return nil, fmt.Errorf("graph %s: %w", verb, err)
 	}
+	snap := sources.IntentSnapshot()
 	digester := digest.New(repoRoot)
 	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions})
+		CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions,
+		CurrentInputHashes: sources.InputResolver().GraphHashes(g)})
 	ctx := &analyticsCtx{planDir: planDir, g: g, st: st, closed: greview.Closed(g, st),
 		adjacency: algorithms.Graph{}, estimate: map[string]int{}}
 	for i := range g.Nodes {
@@ -294,7 +296,8 @@ func graphShowCmd() *cobra.Command {
 					Closed bool        `json:"closed"`
 					Stale  []string    `json:"stale_artifacts,omitempty"`
 					Intent []string    `json:"stale_intent,omitempty"`
-				}{true, n, string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale})
+					Inputs []string    `json:"stale_inputs,omitempty"`
+				}{true, n, string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale})
 			}
 			w := c.OutOrStdout()
 			fmt.Fprintf(w, "%s  [%s]\n", n.ID, ns.State)
@@ -310,6 +313,9 @@ func graphShowCmd() *cobra.Command {
 			if len(n.Artifacts) > 0 {
 				fmt.Fprintf(w, "  artifacts: %s\n", strings.Join(n.Artifacts, ", "))
 			}
+			if len(n.Inputs) > 0 {
+				fmt.Fprintf(w, "  inputs: %s\n", describeInputsBrief(n.Inputs))
+			}
 			fmt.Fprintf(w, "  estimate: %d\n", n.Estimate)
 			if v := n.Verification; v != nil {
 				fmt.Fprintf(w, "  observation: %s at seq %d (isolation %s)\n", v.Result, v.Seq, v.Isolation)
@@ -323,6 +329,9 @@ func graphShowCmd() *cobra.Command {
 			if len(ns.IntentStale) > 0 {
 				fmt.Fprintf(w, "  INTENT-STALE: %s (re-read the cited requirements)\n", strings.Join(ns.IntentStale, ", "))
 			}
+			if len(ns.InputStale) > 0 {
+				fmt.Fprintf(w, "  INPUT-STALE: %s (re-read the declared inputs)\n", strings.Join(ns.InputStale, ", "))
+			}
 			if cl := n.Claim; cl != nil {
 				fmt.Fprintf(w, "  claim: %s (lease expires %s)\n", cl.By, cl.LeaseExpires)
 			}
@@ -332,6 +341,20 @@ func graphShowCmd() *cobra.Command {
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
+}
+
+// describeInputsBrief renders a node's declared inputs compactly for
+// `graph show`.
+func describeInputsBrief(inputs []model.Input) string {
+	parts := make([]string, len(inputs))
+	for i, in := range inputs {
+		s := in.Root + ":" + in.Path
+		if in.Section != nil {
+			s += "#" + strings.Join(in.Section.HeadingPath, " / ")
+		}
+		parts[i] = s
+	}
+	return strings.Join(parts, ", ")
 }
 
 // graphExportCmd renders the graph in presentation formats. Presentation

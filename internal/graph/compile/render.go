@@ -184,6 +184,9 @@ func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated
 		if len(n.Artifacts) > 0 {
 			fmt.Fprintf(&b, "- Artifacts: %s\n", strings.Join(n.Artifacts, ", "))
 		}
+		if len(n.Inputs) > 0 {
+			fmt.Fprintf(&b, "- Inputs: %s\n", describeInputs(n.Inputs))
+		}
 		fmt.Fprintf(&b, "- Estimate: %d\n", n.Estimate)
 		if n.History != "" {
 			fmt.Fprintf(&b, "- History: %s\n", n.History)
@@ -270,6 +273,16 @@ func describeHazards(h model.Hazards) string {
 	default:
 		return strings.Join(h, ", ")
 	}
+}
+
+// describeInputs renders a node's declared read-only inputs for views:
+// `root:path` (whole file) or `root:path#Heading / Path` (section).
+func describeInputs(inputs []model.Input) string {
+	parts := make([]string, len(inputs))
+	for i, in := range inputs {
+		parts[i] = "`" + describeInputSpec(in) + "`"
+	}
+	return strings.Join(parts, ", ")
 }
 
 func describeObservation(v *model.Verification) string {

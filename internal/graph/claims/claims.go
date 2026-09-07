@@ -77,6 +77,9 @@ type Options struct {
 	// StatesInputs builds the derive inputs for a graph snapshot; the caller
 	// wires digest and intent sources (nil axes are simply disabled).
 	StatesInputs func(*model.Graph) states.Inputs
+	// ValidateCandidate checks required read context against the fresh node
+	// before recording a claim or allocating its workspace.
+	ValidateCandidate func(*model.Node) error
 }
 
 func (o *Options) fill() {
@@ -149,6 +152,11 @@ func Claim(planDir string, o Options) (*Claimed, error) {
 			if stillCandidate, _ := selectableSet(fresh, o); !stillCandidate[candidate] {
 				raced = true
 				return nil
+			}
+			if o.ValidateCandidate != nil {
+				if err := o.ValidateCandidate(n); err != nil {
+					return err
+				}
 			}
 			n.Claim = &model.Claim{By: o.By, LeaseExpires: leaseExpires, Workspace: handle}
 			claimedNode = *n

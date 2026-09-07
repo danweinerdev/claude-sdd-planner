@@ -57,6 +57,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
+	c.AddCommand(graphSetInputsCmd())
 	c.AddCommand(graphRepairIntentCmd())
 	c.AddCommand(graphGCCmd())
 	c.AddCommand(graphRetireCmd())
@@ -66,6 +67,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphStatusCmd())
 	c.AddCommand(graphShowCmd())
 	c.AddCommand(graphExportCmd())
+	c.AddCommand(graphAuditCmd())
 	return c
 }
 
@@ -158,6 +160,75 @@ func graphSetTestsCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id to edit")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
 	c.Flags().StringVar(&file, "file", "", "JSON array of tests: [{\"id\": ..., \"file\": ..., \"satisfies\": [...]}]")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphSetInputsCmd replaces one node's declared read-only inputs under the
+// lock. Mutating: guard-covered per D-0014.
+func graphSetInputsCmd() *cobra.Command {
+	var plan, node, file string
+	var dryRun, asJSON bool
+	c := &cobra.Command{
+		Use:   "set-inputs",
+		Short: "Replace a node's declared read-only inputs",
+		Long: `Replace one node's declared read-only inputs (whole files or Markdown
+sections) from a JSON input array. Eligibility is deliberately conservative:
+the node must be UNCLAIMED, UNVERIFIED, and carry no red observations — a node
+with evidence is never re-pointed at different input text. The tool resolves
+each input and owns the embedded input_hashes; no other node field changes.
+--dry-run reports the same planned change without writing the graph.`,
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" || file == "" {
+				return fmt.Errorf("graph set-inputs: --plan, --node, and --file are all required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph set-inputs: %w", err)
+			}
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				return fmt.Errorf("graph set-inputs: %w", err)
+			}
+			decl, err := model.DecodeInputs(raw)
+			if err != nil {
+				return fmt.Errorf("graph set-inputs: %s is not a JSON array of {root, path, section?}:\n%w", file, err)
+			}
+			res, err := ops.SetInputs(root, repoRoot, plan, node, decl, dryRun)
+			if err != nil {
+				var refusal *ops.RefusedError
+				if !errors.As(err, &refusal) {
+					return err // malformed/operational: exit 2
+				}
+				if asJSON {
+					if werr := writeJSON(struct {
+						OK      bool     `json:"ok"`
+						Reasons []string `json:"reasons"`
+					}{false, refusal.Reasons}); werr != nil {
+						return werr
+					}
+				}
+				return &refusedError{n: len(refusal.Reasons), msg: refusal.Error()}
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK bool `json:"ok"`
+					*ops.SetInputsResult
+				}{true, res})
+			}
+			verb := "set"
+			if dryRun {
+				verb = "would set"
+			}
+			fmt.Fprintf(c.OutOrStdout(), "%s %d input(s) on %s\n", verb, res.Inputs, node)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id to edit")
+	c.Flags().StringVar(&file, "file", "", "JSON array of inputs: [{\"root\": \"repository|planning\", \"path\": ..., \"section\": {\"heading_path\": [...]}}]")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned change without writing the graph")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
@@ -711,15 +782,18 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	if err != nil {
 		return true, fmt.Errorf("next: %w", err)
 	}
-	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
+	sources, err := gcompile.NewSources(root, repoRoot, plan)
 	if err != nil {
 		return true, fmt.Errorf("next: %w", err)
 	}
+	snap := sources.IntentSnapshot()
 	hashes := snap.Hashes()
 	digester := digest.New(repoRoot)
+	inRes := sources.InputResolver()
 	statesInputs := func(g *model.Graph) states.Inputs {
 		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-			CurrentIntentHashes: hashes, DecisionExemptions: snap.Exemptions}
+			CurrentIntentHashes: hashes, DecisionExemptions: snap.Exemptions,
+			CurrentInputHashes: inRes.GraphHashes(g)}
 	}
 
 	if !claim {
@@ -800,6 +874,14 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	prov := provider.Detect(repoRoot, planDir)
 	claimed, err := claims.Claim(planDir, claims.Options{
 		By: by, TTL: ttl, StatesInputs: statesInputs, Provider: provider.ForClaims(prov),
+		ValidateCandidate: func(n *model.Node) error {
+			for _, spec := range n.Inputs {
+				if _, err := inRes.Resolve(spec); err != nil {
+					return &refusedError{n: 1, msg: fmt.Sprintf("next: node %s has an unresolved required input: %v", n.ID, err)}
+				}
+			}
+			return nil
+		},
 	})
 	if err != nil {
 		return true, err
@@ -813,16 +895,40 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	for _, id := range node.Justifies {
 		cited = append(cited, citedText{ID: id, Text: snap.Items[id].Normalized})
 	}
+	type inputText struct {
+		Root     string   `json:"root"`
+		Path     string   `json:"path"`
+		Kind     string   `json:"kind"`
+		Digest   string   `json:"digest"`
+		Binary   bool     `json:"binary,omitempty"`
+		Headings []string `json:"headings,omitempty"`
+		Text     string   `json:"text,omitempty"`
+	}
+	inputs := []inputText{}
+	for _, spec := range node.Inputs {
+		it := inputText{Root: spec.Root, Path: spec.Path, Kind: string(inputsKind(spec))}
+		if resolved, err := inRes.Resolve(spec); err == nil {
+			it.Kind = string(resolved.Kind)
+			it.Digest = resolved.Digest
+			it.Binary = resolved.Binary
+			it.Headings = resolved.Headings
+			it.Text = resolved.Text
+		} else {
+			return true, fmt.Errorf("next: required input resolution failed after candidate validation: %w", err)
+		}
+		inputs = append(inputs, it)
+	}
 	if jsonOut {
 		return true, writeJSON(struct {
 			OK           bool        `json:"ok"`
 			Node         model.Node  `json:"node"`
 			Cited        []citedText `json:"cited"`
+			Inputs       []inputText `json:"inputs"`
 			LeaseExpires string      `json:"lease_expires"`
 			By           string      `json:"by"`
 			Workspace    string      `json:"workspace,omitempty"`
 			Reclaimed    []string    `json:"reclaimed_expired,omitempty"`
-		}{true, node, cited, claimed.LeaseExpires, by, claimed.Workspace, claimed.ReclaimedExpired})
+		}{true, node, cited, inputs, claimed.LeaseExpires, by, claimed.Workspace, claimed.ReclaimedExpired})
 	}
 	fmt.Printf("claimed %s (by %s, lease expires %s)\n\n", node.ID, by, claimed.LeaseExpires)
 	fmt.Printf("contract: %s\n", node.Contract)
@@ -831,6 +937,17 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 			fmt.Printf("justifies %s: %s\n", c.ID, c.Text)
 		} else {
 			fmt.Printf("justifies %s\n", c.ID)
+		}
+	}
+	for _, in := range inputs {
+		label := in.Root + ":" + in.Path
+		if len(in.Headings) > 0 {
+			label += "#" + strings.Join(in.Headings, " / ")
+		}
+		if in.Text != "" {
+			fmt.Printf("input %s (%s):\n%s\n", label, in.Kind, in.Text)
+		} else {
+			fmt.Printf("input %s (%s, digest %s, binary=%t)\n", label, in.Kind, in.Digest, in.Binary)
 		}
 	}
 	fmt.Printf("gate: %s\nhazards: %s\n", describeGateBrief(node.Gate), describeHazardsBrief(node.Hazards))
@@ -847,6 +964,15 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 		fmt.Printf("reclaimed expired claim(s): %s\n", strings.Join(claimed.ReclaimedExpired, ", "))
 	}
 	return true, nil
+}
+
+// inputsKind previews a declared input's kind for the claim context before
+// resolution (a section input reports "section" even if it fails to resolve).
+func inputsKind(spec model.Input) string {
+	if spec.Section != nil {
+		return "section"
+	}
+	return "file"
 }
 
 func describeGateBrief(g model.Gate) string {

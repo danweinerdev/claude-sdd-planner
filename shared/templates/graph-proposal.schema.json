@@ -68,6 +68,41 @@
         "history": {
           "type": "string",
           "description": "Authored annotation for the human reader (conversion records a v1 task's completion provenance here). Never machine-consumed: states derive from observations alone, and history grants no GREEN."
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/input" },
+          "description": "Declared read-only context this node reads but never writes: whole files, or sections of Markdown files. Compile fingerprints each at embed time; an edit to a declared input later derives INPUT-STALE. Paths resolve against the declared root (repository or planning), never the working directory."
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "path"],
+      "properties": {
+        "root": {
+          "enum": ["repository", "planning"],
+          "description": "Which explicit root the path resolves against: the repository root or the planning root. Never the process working directory."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Root-relative file path (forward slashes). Absolute paths, `..` segments, and symlink escapes are refused."
+        },
+        "section": { "$ref": "#/definitions/inputSection" }
+      }
+    },
+    "inputSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading_path"],
+      "properties": {
+        "heading_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "A unique suffix of the target heading's ancestry chain: the target heading's title followed by its immediate ancestors' titles in order. The heading plus its nested subsections (until the next same-or-higher level) is selected; a missing or ambiguous match refuses, never falls back."
         }
       }
     },

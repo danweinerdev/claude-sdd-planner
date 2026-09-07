@@ -62,6 +62,7 @@ A node is **one red→green cycle**: one falsifiable contract, verified by named
 - **Justifies** — the AC/FR/NFR/DD/D ids that demand it. A node with no source is cut, not compiled.
 - **Tests** — the runner-visible test ids (and file) that gate it. Name them now; the implement loop writes them first and must observe them red.
 - **Artifacts** — the file set the node touches. Disjoint artifact sets are what let claims run in parallel; overlaps serialize.
+- **Inputs** — read-only context the node *reads but never writes*: whole files, or sections of Markdown files, declared as `{"root": "repository"|"planning", "path": "...", "section": {"heading_path": ["..."]}}`. The root is the explicit repository or planning root (never the working directory); the path is root-relative. A `section` selects one heading (plus its nested subsections) by a unique suffix of its ancestry chain — a missing or ambiguous heading refuses. Inputs are fingerprinted at compile time, so a later edit to a declared input derives INPUT-STALE, the same ripple intent hashes give citations. Use them for docs/PRDs/specs the work must stay anchored to, never as a substitute for `justifies`.
 - **Hazards** — triage against the closed vocabulary from `sdd graph hazards`. An empty list (`[]`) is a legitimate *explicit* claim of "no failure classes here"; silence is not — untriaged hazards block compile. Never invent hazards the operator didn't confirm, and never claim `[]` on the operator's behalf: hazard triage is an interview-grade judgment. Each declared hazard needs a test whose `satisfies` names it, shaped as the vocabulary requires.
 - **Estimate** — relative positive integer cost weight (throughput analytics only, not a time promise).
 - **Deps** — real ordering only. A dep exists because the node consumes the other's output, not because it "comes after".
@@ -72,7 +73,7 @@ Do **not** shape the decomposition like a document. Node count follows from red�
 ### 5. Author, Propose, Compile
 
 1. **New plan only:** create `Plans/<Name>/README.md` from `shared/templates/plan-readme.md` (`status: draft`, `phases: []`, related specs listed), then `sdd graph init --plan <Name>`.
-2. Start from the tool's exemplar: `sdd template graph-proposal --out payload.json` (add `--schema` to see the JSON Schema). Fill it from steps 2–4. The payload carries **no tool-owned fields** (`intent_hashes`, `claim`, `verification`, `red_seqs`) — the tool computes those and refuses payloads that assert them.
+2. Start from the tool's exemplar: `sdd template graph-proposal --out payload.json` (add `--schema` to see the JSON Schema). Fill it from steps 2–4. The payload carries **no tool-owned fields** (`intent_hashes`, `input_hashes`, `claim`, `verification`, `red_seqs`) — the tool computes those and refuses payloads that assert them.
 3. `sdd graph propose --plan <Name> --file payload.json` — strict decode; refusals carry JSON paths and did-you-mean suggestions. Large decompositions may stage several fragments and `sdd graph assemble` them.
 4. `sdd compile --plan <Name>` — semantic validation, batched: every finding at once (unsourced nodes, uncovered ACs, dangling deps, cycles, unknown hazards or lanes, undischarged hazards, coverage gaps). **The repair loop is file edits:** fix the staged payload at the paths the findings name and re-run `sdd compile`; a refused compile leaves the graph untouched and the payload staged. On success, compile embeds intent fingerprints, appends to the committed graph, renders the phase-doc views and README projection, and consumes the payload.
 
@@ -83,6 +84,7 @@ Structure is measurable — read it back before calling the plan done:
 - `sdd graph shape` — the silhouette. **CHAIN is a re-proposal signal**: a serial graph means order-of-thought decomposition, so return to step 4 and find the independent concerns. HOURGLASS names a waist to consider gating or splitting.
 - `sdd graph path` — critical-path length vs total estimate; the ceiling prices how much parallelism the decomposition even permits.
 - `sdd graph risk` — cut vertices; consider a review gate at each.
+- `sdd graph audit --plan <Name> --json` — the formal read-only audit: node/test/gate/hazard counts, coverage by source and identifier family, per-node staleness, duplicate and cross-node shared tests, unresolved inputs. FR/NFR/DD coverage is informative; the AC coverage gap (a directly related spec's uncovered criterion) is the mandatory compile error the audit's findings carry.
 - Present the compiled graph to the user through these read-backs plus `sdd graph export --format plan` (the flat reading view). Iterate through steps 4–6 until it reflects their intent.
 
 ### 7. Approve and Record Decisions

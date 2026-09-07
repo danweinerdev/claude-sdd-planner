@@ -51,6 +51,7 @@ func (d *decoder) errf(path, format string, args ...any) {
 // payload asserting one is refused loudly, never silently discarded.
 var toolOwnedNodeKeys = map[string]string{
 	"intent_hashes": "compile embeds requirement hashes",
+	"input_hashes":  "compile embeds input fingerprints",
 	"claim":         "`next --claim` records claims under the store lock",
 	"verification":  "`graph sync` records observations from parsed reports",
 	"red_seqs":      "`graph sync` records first-failure seqs from parsed reports",
@@ -60,9 +61,11 @@ var toolOwnedNodeKeys = map[string]string{
 var (
 	graphKeys        = []string{"version", "seq_counter", "nodes", "retired"}
 	proposalKeys     = []string{"version", "nodes"}
-	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
+	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
 	testKeys         = []string{"id", "file", "satisfies"}
+	inputKeys        = []string{"root", "path", "section"}
+	inputSectionKeys = []string{"heading_path"}
 	claimKeys        = []string{"by", "lease_expires", "workspace"}
 	verificationKeys = []string{"result", "seq", "artifact_digests", "report_digest", "isolation", "provenance"}
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
@@ -118,6 +121,27 @@ func DecodeProposal(data []byte) (*Proposal, error) {
 		return nil, d.errs
 	}
 	return &Proposal{Version: g.Version, Nodes: g.Nodes}, nil
+}
+
+// DecodeInputs strictly decodes a bare JSON array of input objects — the
+// shape `graph set-inputs --file` accepts. The same strict posture as
+// DecodeProposal: unknown keys, malformed values, and bad root selectors are
+// errors carrying a JSON path.
+func DecodeInputs(data []byte) ([]Input, error) {
+	raw, err := parse(data)
+	if err != nil {
+		return nil, err
+	}
+	d := &decoder{}
+	_, ok := raw.([]any)
+	if !ok {
+		return nil, DecodeErrors{{Msg: fmt.Sprintf("must be a JSON array of input objects, got %s", typeName(raw))}}
+	}
+	out := d.inputList("", raw)
+	if len(d.errs) > 0 {
+		return nil, d.errs
+	}
+	return out, nil
 }
 
 // parse turns raw bytes into the generic value tree, reporting JSON syntax
@@ -216,6 +240,10 @@ func (d *decoder) node(path string, raw any) Node {
 	n.Phase = d.optionalString(path+".phase", obj["phase"])
 	n.History = d.optionalString(path+".history", obj["history"])
 
+	if v, present := obj["inputs"]; present {
+		n.Inputs = d.inputList(path+".inputs", v)
+	}
+
 	if v, present := obj["estimate"]; present {
 		if e, ok := d.intVal(path+".estimate", v); ok {
 			if e < 1 {
@@ -243,6 +271,9 @@ func (d *decoder) node(path string, raw any) Node {
 	if !d.proposal {
 		if v, present := obj["intent_hashes"]; present {
 			n.IntentHashes = d.stringMap(path+".intent_hashes", v)
+		}
+		if v, present := obj["input_hashes"]; present {
+			n.InputHashes = d.stringMap(path+".input_hashes", v)
 		}
 		if v, present := obj["claim"]; present {
 			n.Claim = d.claim(path+".claim", v)
@@ -346,6 +377,88 @@ func (d *decoder) test(path string, raw any) Test {
 		File:      d.requiredString(path, obj, "file"),
 		Satisfies: d.stringList(path+".satisfies", obj["satisfies"]),
 	}
+}
+
+// inputList decodes a node's declared read-only inputs.
+func (d *decoder) inputList(path string, raw any) []Input {
+	list, ok := raw.([]any)
+	if !ok {
+		d.errf(path, "must be a list of input objects, got %s", typeName(raw))
+		return nil
+	}
+	out := make([]Input, 0, len(list))
+	seen := map[string]bool{}
+	for i, item := range list {
+		in := d.input(fmt.Sprintf("%s[%d]", path, i), item)
+		key := InputKey(in)
+		if seen[key] {
+			d.errf(fmt.Sprintf("%s[%d]", path, i), "duplicate input declaration")
+		}
+		seen[key] = true
+		out = append(out, in)
+	}
+	return out
+}
+
+// input decodes one declared input. `root` must name one of the two explicit
+// roots; `section`, when present, must carry a nonempty heading path.
+func (d *decoder) input(path string, raw any) Input {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return Input{}
+	}
+	d.unknownKeys(path, obj, inputKeys)
+
+	in := Input{
+		Root: d.requiredString(path, obj, "root"),
+		Path: d.requiredString(path, obj, "path"),
+	}
+	switch in.Root {
+	case InputRootRepository, InputRootPlanning:
+	default:
+		d.errf(path+".root", "%q is not an input root; valid roots are %q and %q", in.Root, InputRootRepository, InputRootPlanning)
+	}
+	if v, present := obj["section"]; present {
+		in.Section = d.inputSection(path+".section", v)
+	}
+	return in
+}
+
+func (d *decoder) inputSection(path string, raw any) *InputSection {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object with a heading_path list, got %s", typeName(raw))
+		return nil
+	}
+	d.unknownKeys(path, obj, inputSectionKeys)
+	sec := &InputSection{}
+	if v, present := obj["heading_path"]; present {
+		list, ok := v.([]any)
+		if !ok {
+			d.errf(path+".heading_path", "must be a nonempty list of heading titles, got %s", typeName(v))
+			return sec
+		}
+		if len(list) == 0 {
+			d.errf(path+".heading_path", "must be a nonempty list of heading titles")
+			return sec
+		}
+		for i, item := range list {
+			s, ok := item.(string)
+			if !ok {
+				d.errf(fmt.Sprintf("%s.heading_path[%d]", path, i), "must be a string, got %s", typeName(item))
+				continue
+			}
+			if strings.TrimSpace(s) == "" {
+				d.errf(fmt.Sprintf("%s.heading_path[%d]", path, i), "must be a non-empty string")
+				continue
+			}
+			sec.HeadingPath = append(sec.HeadingPath, s)
+		}
+	} else {
+		d.errf(path, "missing required field heading_path")
+	}
+	return sec
 }
 
 func (d *decoder) claim(path string, raw any) *Claim {

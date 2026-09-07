@@ -52,9 +52,11 @@ func Anchor(n *model.Node, resolve Resolver) {
 // the validator's own reachability), their fingerprints, and the decision
 // ledger's statuses. It carries the same resolution opinion every consumer
 // needs, built once, so embed, validate, and repair can never disagree about
-// what a citation means.
+// what a citation means. It also carries the input resolver, so validation
+// and split anchor both citations and declared inputs from one snapshot.
 type Sources struct {
-	set *sourceSet
+	set   *sourceSet
+	inRes *InputResolver
 }
 
 // NewSources loads one plan's citation-resolution snapshot.
@@ -63,7 +65,7 @@ func NewSources(root, repoRoot, plan string) (*Sources, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Sources{set: set}, nil
+	return &Sources{set: set, inRes: NewInputResolver(root, set.inputRepoRoot)}, nil
 }
 
 // Anchor embeds fingerprints for the node's own justifications against this
@@ -72,11 +74,23 @@ func (s *Sources) Anchor(n *model.Node) {
 	Anchor(n, s.set.resolveItem)
 }
 
+// AnchorInputs resolves and embeds fingerprints for the node's declared
+// inputs against this snapshot's root pair.
+func (s *Sources) AnchorInputs(n *model.Node) error {
+	return s.inRes.AnchorInputs(n)
+}
+
+// InputResolver returns this snapshot's input resolver (the shared input
+// opinion), for callers that need input hashes or resolved text.
+func (s *Sources) InputResolver() *InputResolver {
+	return s.inRes
+}
+
 // Validate runs the semantic pass over g, treating every node as stored (an
 // empty proposal against it) — the same gate compile applies, including the
 // missing-fingerprint guard, against this snapshot.
 func (s *Sources) Validate(g *model.Graph) []Finding {
-	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set)
+	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set, s.inRes)
 }
 
 // CitationKind classifies one justification against the snapshot: how it

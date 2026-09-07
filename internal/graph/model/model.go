@@ -77,6 +77,14 @@ const (
 	IsolationAsserted    = "asserted"
 )
 
+// Input root selectors: which explicit root a declared input's path resolves
+// against. Never the process working directory — the two roots travel with
+// every graph operation, so a session running anywhere resolves identically.
+const (
+	InputRootRepository = "repository"
+	InputRootPlanning   = "planning"
+)
+
 // Graph is the committed master graph: structure plus observations, nothing
 // derivable.
 type Graph struct {
@@ -122,6 +130,14 @@ type Node struct {
 	// NEVER machine-consumed: states derive from observations alone, and a
 	// history line grants no GREEN (DD-15: no retroactive observations).
 	History string `json:"history,omitempty"`
+	// Inputs is the node's declared read-only context: whole files, or
+	// sections of Markdown files, the work reads but never writes. Compile
+	// fingerprints each at embed time so a later edit to a declared input
+	// ripples INPUT-STALE, the same posture intent hashes give citations.
+	Inputs []Input `json:"inputs,omitempty"`
+	// InputHashes is tool-owned: the fingerprint of each declared input,
+	// keyed by InputKey. Rejected in proposal payloads.
+	InputHashes map[string]string `json:"input_hashes,omitempty"`
 	// Claim is tool-owned transient bookkeeping (DD-10): cleared on merge or
 	// lease expiry, the only mutable non-observation field.
 	Claim *Claim `json:"claim,omitempty"`
@@ -219,6 +235,40 @@ type Test struct {
 	ID        string   `json:"id"`
 	File      string   `json:"file"`
 	Satisfies []string `json:"satisfies,omitempty"`
+}
+
+// Input is one declared read-only context file — a whole file, or a section
+// of a Markdown file — the node reads but never writes. Its path resolves
+// against exactly one of the two explicit roots (repository or planning),
+// never the process working directory.
+type Input struct {
+	// Root names the base directory the path resolves against: "repository"
+	// or "planning".
+	Root string `json:"root"`
+	// Path is the root-relative file path (forward slashes). Absolute paths,
+	// `..` segments, and symlink escapes are refused at resolve time.
+	Path string `json:"path"`
+	// Section, when present, selects one heading (plus its nested
+	// subsections) instead of the whole file. The heading path is a unique
+	// suffix of the target heading's ancestry chain.
+	Section *InputSection `json:"section,omitempty"`
+}
+
+// InputSection selects a heading within a Markdown input by its heading
+// path: ancestor titles followed by the target heading's title. A unique
+// suffix of the ancestry chain selects the target;
+// a missing or ambiguous match refuses, never falls back.
+type InputSection struct {
+	HeadingPath []string `json:"heading_path"`
+}
+
+// InputKey returns the stable map key a declared input is fingerprinted
+// under: the root selector, the path, and — when a section is selected — the
+// heading path. A structured encoding prevents literal slashes or '#' in a
+// path/title from aliasing another declaration and corrupting the resolver cache.
+func InputKey(in Input) string {
+	key, _ := json.Marshal(in) // This concrete string/slice struct cannot fail encoding.
+	return string(key)
 }
 
 // Claim records who is working a node and until when. Double-claim

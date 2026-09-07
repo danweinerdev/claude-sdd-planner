@@ -312,6 +312,55 @@ func TestCycleMembersAreBlockedDefensively(t *testing.T) {
 	}
 }
 
+// TestInputStaleness pins the INPUT-STALE axis: a recorded-pass node whose
+// declared input changed, no longer resolves, or carries no embedded hash
+// derives STALE; a nil CurrentInputHashes disables the axis.
+func TestInputStaleness(t *testing.T) {
+	spec := model.Input{Root: model.InputRootRepository, Path: "docs/readme.md"}
+	key := model.InputKey(spec)
+
+	// Changed: the recorded digest no longer matches the current content.
+	n := node("a", nil, pass(1))
+	n.Inputs = []model.Input{spec}
+	n.InputHashes = map[string]string{key: "sha256:old"}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{n}}
+	s := Derive(Inputs{Graph: g, CurrentInputHashes: map[string]string{key: "sha256:new"}})
+	if s["a"].State != Stale || len(s["a"].InputStale) != 1 || s["a"].InputStale[0] != key {
+		t.Fatalf("a changed input must be INPUT-STALE: %+v", s["a"])
+	}
+
+	// Unresolvable: the input is absent from the current hash map.
+	s = Derive(Inputs{Graph: g, CurrentInputHashes: map[string]string{}})
+	if s["a"].State != Stale || len(s["a"].InputStale) != 1 {
+		t.Fatalf("an unresolvable input must be INPUT-STALE: %+v", s["a"])
+	}
+
+	// Missing fingerprint: declared but no embedded hash.
+	nm := node("missing", nil, pass(1))
+	nm.Inputs = []model.Input{spec}
+	gm := &model.Graph{Version: 1, Nodes: []model.Node{nm}}
+	sm := Derive(Inputs{Graph: gm, CurrentInputHashes: map[string]string{key: "sha256:cur"}})
+	if sm["missing"].State != Stale || len(sm["missing"].InputStale) != 1 {
+		t.Fatalf("a declared input with no hash must be INPUT-STALE: %+v", sm["missing"])
+	}
+
+	// Matching: GREEN.
+	ok := node("ok", nil, pass(1))
+	ok.Inputs = []model.Input{spec}
+	ok.InputHashes = map[string]string{key: "sha256:cur"}
+	gok := &model.Graph{Version: 1, Nodes: []model.Node{ok}}
+	sok := Derive(Inputs{Graph: gok, CurrentInputHashes: map[string]string{key: "sha256:cur"}})
+	if sok["ok"].State != Green {
+		t.Fatalf("a matching input must stay GREEN: %+v", sok["ok"])
+	}
+
+	// Axis disabled: GREEN.
+	sdis := Derive(Inputs{Graph: g})
+	if sdis["a"].State != Green {
+		t.Fatalf("nil CurrentInputHashes must disable the input axis: %+v", sdis["a"])
+	}
+}
+
 // TestNothingDerivableIsStored pins the DD-3 rule at the API level: Derive
 // takes a graph and returns states; running it twice over the same inputs is
 // pure, and mutating the returned map cannot affect a later derive.

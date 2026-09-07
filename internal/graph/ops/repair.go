@@ -41,11 +41,12 @@ type RepairIntentResult struct {
 	DryRun bool `json:"dry_run,omitempty"`
 }
 
-// RefusedError is an eligibility-policy refusal: repair computed a plan but
-// declined to write it because at least one selected node is ineligible (cites
-// an ambiguous or unresolved requirement, or is claimed, verified, or
-// red-observed). It is authoritative — exit 1 at the CLI — and never an
-// operational "could not run" error (exit 2).
+// RefusedError is an eligibility-policy refusal: a verb computed a plan but
+// declined to write it because at least one selected node is ineligible
+// (repair-intent: cites an ambiguous or unresolved requirement, or is
+// claimed, verified, or red-observed; set-inputs: claimed, verified, or
+// red-observed, or declares an unresolvable input). It is authoritative —
+// exit 1 at the CLI — and never an operational "could not run" error (exit 2).
 type RefusedError struct {
 	// Reasons is every ineligibility, sorted for determinism.
 	Reasons []string `json:"reasons"`
@@ -53,7 +54,7 @@ type RefusedError struct {
 
 func (e *RefusedError) Error() string {
 	var b strings.Builder
-	b.WriteString("graph repair-intent: refused (no partial repair):\n")
+	b.WriteString("graph: refused (atomic — nothing was written):\n")
 	for _, r := range e.Reasons {
 		fmt.Fprintf(&b, "  %s\n", r)
 	}

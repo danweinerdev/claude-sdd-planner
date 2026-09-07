@@ -128,7 +128,7 @@ var sddDecideReadOnly = map[string]bool{
 var SddGraphVerbReadOnly = map[string]bool{
 	// read surface
 	"hazards": true, "status": true, "show": true, "export": true,
-	"path": true, "risk": true, "shape": true,
+	"path": true, "risk": true, "shape": true, "audit": true,
 	// mutating, phase 2
 	"init": false, "propose": false, "assemble": false, "convert": false,
 	// mutating, later phases (reserved: denied before they exist)
@@ -141,6 +141,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"retire": false,
 	// mutating: backfills missing intent fingerprints
 	"repair-intent": false,
+	// mutating: replaces a node's declared read-only inputs
+	"set-inputs": false,
 }
 
 var (

@@ -75,6 +75,9 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 	// sees anchored children, not unfingerprinted construction input.
 	for i := range p.Nodes {
 		sources.Anchor(&p.Nodes[i])
+		if err := sources.AnchorInputs(&p.Nodes[i]); err != nil {
+			return nil, fmt.Errorf("graph split: child %q: %w", p.Nodes[i].ID, err)
+		}
 	}
 
 	// The whole gate moves inside the store's compare-and-swap: the candidate

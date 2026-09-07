@@ -60,6 +60,12 @@ type NodeState struct {
 	// hash and are not exempt decisions (deleted, unlinked, ambiguous, or
 	// never-anchored citations).
 	IntentStale []string
+	// InputStale lists declared inputs whose embedded fingerprint no longer
+	// matches the current content — including an input that no longer
+	// resolves (deleted, ambiguous section, path now escapes) or that carries
+	// no embedded hash at all. Fail-closed: a recorded pass can never derive
+	// GREEN against input text it never anchored to, or that has moved.
+	InputStale []string
 	// IsolationStale: the pass was observed with non-clean isolation
 	// (shared-dirty, or an asserted record). Provisionally accepted, never
 	// GREEN: the mandatory clean re-verify is what lifts it (DD-7).
@@ -94,6 +100,10 @@ type Inputs struct {
 	// same source-resolution snapshot: a cited id absent from both maps is
 	// stale (fail-closed), never silently exempted by name shape.
 	DecisionExemptions map[string]bool
+	// CurrentInputHashes maps input key -> the input's current fingerprint,
+	// "" / absent when the input no longer resolves. nil disables the input
+	// axis entirely.
+	CurrentInputHashes map[string]string
 }
 
 // Derive computes every node's state in one topological pass.
@@ -220,10 +230,24 @@ func Derive(in Inputs) map[string]NodeState {
 				}
 				sort.Strings(ns.IntentStale)
 			}
+			if in.CurrentInputHashes != nil {
+				// Fail closed on the input disposition: a declared input with
+				// no embedded hash, or whose embedded hash no longer matches
+				// the current content (including an input that no longer
+				// resolves), is stale. There is no exemption shape for inputs.
+				for _, spec := range n.Inputs {
+					key := model.InputKey(spec)
+					recorded := n.InputHashes[key]
+					if recorded == "" || in.CurrentInputHashes[key] != recorded {
+						ns.InputStale = append(ns.InputStale, key)
+					}
+				}
+				sort.Strings(ns.InputStale)
+			}
 			if v.Isolation != model.IsolationClean {
 				ns.IsolationStale = true
 			}
-			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || ns.IsolationStale {
+			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale {
 				ns.State = Stale
 			} else {
 				ns.State = Green

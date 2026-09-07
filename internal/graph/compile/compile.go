@@ -37,10 +37,11 @@ import (
 
 // deriveClosure builds the derive pass the render path projects: full
 // three-axis states (digest from the shared tree, current intent
-// fingerprints from the same sources compile embeds from) plus the D-0022
+// fingerprints from the same sources compile embeds from, current input
+// fingerprints from the shared input resolver) plus the D-0022
 // closed predicate. One closure, applied to both the preflight preview and
 // the written graph, so the dry-run and the render can never disagree.
-func deriveClosure(repoRoot string, sources *sourceSet) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
+func deriveClosure(repoRoot string, sources *sourceSet, inRes *InputResolver) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
 	snap := sources.intentSnapshot()
 	digester := digest.New(repoRoot)
 	return func(g *model.Graph) (map[string]states.NodeState, map[string]bool) {
@@ -49,6 +50,7 @@ func deriveClosure(repoRoot string, sources *sourceSet) func(*model.Graph) (map[
 			ArtifactDigest:      digester.Artifact,
 			CurrentIntentHashes: snap.Hashes(),
 			DecisionExemptions:  snap.Exemptions,
+			CurrentInputHashes:  inRes.GraphHashes(g),
 		})
 		return st, review.Closed(g, st)
 	}
@@ -101,8 +103,9 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	inRes := NewInputResolver(root, sources.inputRepoRoot)
 
-	findings := semanticFindings(g, p, sources)
+	findings := semanticFindings(g, p, sources, inRes)
 	if len(findings) > 0 {
 		return nil, findings, nil
 	}
@@ -113,6 +116,9 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	for i := range p.Nodes {
 		n := &p.Nodes[i]
 		Anchor(n, sources.resolveItem)
+		if err := inRes.AnchorInputs(n); err != nil {
+			return nil, nil, fmt.Errorf("compile: %w", err)
+		}
 		if len(n.IntentHashes) > 0 {
 			hashes[n.ID] = n.IntentHashes
 		}
@@ -125,7 +131,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	// render will project, so the derive pass runs on the preview graph.
 	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, Retired: g.Retired}
 	preview.Nodes = append(append(preview.Nodes, g.Nodes...), p.Nodes...)
-	deriveFor := deriveClosure(repoRoot, sources)
+	deriveFor := deriveClosure(repoRoot, sources, inRes)
 	pst, pclosed := deriveFor(preview)
 	if err := preflightViews(root, plan, preview, pst, pclosed); err != nil {
 		return nil, nil, err
@@ -219,6 +225,7 @@ type acPair struct {
 }
 
 type sourceSet struct {
+	inputRepoRoot string
 	// index is the validator's citation-resolution opinion, shared verbatim
 	// (bare and qualified spellings, ambiguity marked, never first-wins).
 	index *rules.CitationIndex
@@ -277,6 +284,7 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 		return nil, fmt.Errorf("compile: %s does not exist; the plan's README carries the `related` graph citations resolve through", planRel)
 	}
 	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
+	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
 	out.index = rules.BuildCitationIndex(loaded, planArt)
 	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
@@ -319,7 +327,7 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 
 // semanticFindings is the batched pass: every invariant, every violation,
 // one report, deterministic order.
-func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []Finding {
+func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inRes *InputResolver) []Finding {
 	var out []Finding
 	add := func(where, format string, args ...any) {
 		out = append(out, Finding{Where: where, Msg: fmt.Sprintf(format, args...)})
@@ -464,6 +472,32 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet) []F
 				continue
 			}
 			add(id, "cites %q, which resolves in no related spec, design, or decision ledger", cited)
+		}
+
+		seenTests := map[[2]string]bool{}
+		for _, test := range n.Gate.Tests {
+			key := [2]string{test.File, test.ID}
+			if seenTests[key] {
+				add(id, "declares test %q in %q more than once", test.ID, test.File)
+			}
+			seenTests[key] = true
+		}
+
+		// Declared inputs: every one must resolve (missing/ambiguous
+		// headings, escapes, directories, binary/non-Markdown sections all
+		// refuse — never fall back), and a committed node must carry the
+		// embedded fingerprint for each. Proposal nodes are anchored after
+		// this pass, so the missing-fingerprint guard applies only to stored
+		// nodes — the same split compile makes for citations.
+		for _, spec := range n.Inputs {
+			key := model.InputKey(spec)
+			if _, err := inRes.Resolve(spec); err != nil {
+				add(id, "declared input %q does not resolve: %v", describeInputSpec(spec), err)
+				continue
+			}
+			if stored[id] && n.InputHashes[key] == "" {
+				add(id, "declares input %q with no embedded input fingerprint; re-set it with `sdd graph set-inputs --plan <plan> --node %s`", describeInputSpec(spec), id)
+			}
 		}
 	}
 

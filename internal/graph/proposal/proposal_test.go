@@ -214,6 +214,18 @@ func TestSchemaConstantsMatchModel(t *testing.T) {
 	if !strings.Contains(string(lanes), `"full"`) {
 		t.Errorf(`lanes schema does not carry the "full" form: %s`, lanes)
 	}
+
+	// input.root enum == the model's input-root constants, in order.
+	input := definition(t, doc, "input")
+	rawRoots := input["properties"].(map[string]any)["root"].(map[string]any)["enum"].([]any)
+	var gotRoots []string
+	for _, v := range rawRoots {
+		gotRoots = append(gotRoots, v.(string))
+	}
+	wantRoots := []string{model.InputRootRepository, model.InputRootPlanning}
+	if strings.Join(gotRoots, ",") != strings.Join(wantRoots, ",") {
+		t.Errorf("input.root enum %v != model constants %v", gotRoots, wantRoots)
+	}
 }
 
 func TestSchemaRequiredListsMatchDecoder(t *testing.T) {
