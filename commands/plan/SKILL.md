@@ -94,6 +94,8 @@ Structure is measurable — read it back before calling the plan done:
 
 ## Output
 
+For tracked legacy tasks retired during conversion, `sdd graph retire --plan <Name> --id <graph-id> --source-rev <commit-or-ref> --source-path <repository-relative-old-file> --source-id <original-id> --replaced-by <replacement-node> --dry-run` verifies Git provenance before recording it. Remove `--dry-run` to apply. Retired provenance is historical, separate from live `inputs`; never retain duplicate task documents solely because their history must remain findable.
+
 ```
 Plans/<PlanName>/
 ├── README.md               # identity prose + rendered phases[] + Graph View section

@@ -98,6 +98,9 @@ type Graph struct {
 	// memory) cannot silently re-bind. Tool-owned: proposals carrying it
 	// are refused by the strict decoder's unknown-key rule.
 	Retired []string `json:"retired,omitempty"`
+	// RetirementSources is immutable historical provenance, not live input
+	// context or execution evidence. Written only by graph retire.
+	RetirementSources map[string]RetirementRecord `json:"retirement_sources,omitempty"`
 }
 
 // Node is one unit of work: a falsifiable contract, its dependencies, the
@@ -260,6 +263,18 @@ type Input struct {
 // a missing or ambiguous match refuses, never falls back.
 type InputSection struct {
 	HeadingPath []string `json:"heading_path"`
+}
+
+type RetirementSource struct {
+	VCS      string `json:"vcs"`
+	Revision string `json:"revision"`
+	Path     string `json:"path"`
+	SourceID string `json:"source_id"`
+}
+
+type RetirementRecord struct {
+	Source     RetirementSource `json:"source"`
+	ReplacedBy []string         `json:"replaced_by,omitempty"`
 }
 
 // InputKey returns the stable map key a declared input is fingerprinted

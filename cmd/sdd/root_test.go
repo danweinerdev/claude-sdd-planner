@@ -257,7 +257,7 @@ func handlerFlagSets() []struct {
 		{"sdd graph set-inputs", []string{"plan", "node", "file", "dry-run", "json"}},
 		{"sdd graph repair-intent", []string{"plan", "node", "dry-run", "json"}},
 		{"sdd graph gc", []string{"plan", "json"}},
-		{"sdd graph retire", []string{"plan", "id", "json"}},
+		{"sdd graph retire", []string{"plan", "id", "json", "source-rev", "source-path", "source-id", "replaced-by", "dry-run"}},
 		{"sdd graph hazards", []string{"json"}},
 		{"sdd graph audit", []string{"plan", "json"}},
 		{"sdd graph init", []string{"plan", "json"}},

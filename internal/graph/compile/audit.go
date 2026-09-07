@@ -23,17 +23,18 @@ import (
 // AuditReport is the structured audit result. OK is false when the mandatory
 // compile validation produced findings; everything else is informative.
 type AuditReport struct {
-	OK               bool              `json:"ok"`
-	Plan             string            `json:"plan"`
-	Graph            string            `json:"graph"`
-	Schema           int               `json:"schema_version"`
-	Counts           AuditCounts       `json:"counts"`
-	Coverage         []SourceCoverage  `json:"coverage,omitempty"`
-	Findings         []Finding         `json:"findings,omitempty"`
-	Stale            []StaleNode       `json:"stale,omitempty"`
-	DuplicateTests   []DuplicateTest   `json:"duplicate_tests,omitempty"`
-	SharedTests      []SharedTest      `json:"shared_tests,omitempty"`
-	UnresolvedInputs []UnresolvedInput `json:"unresolved_inputs,omitempty"`
+	OK                bool                              `json:"ok"`
+	Plan              string                            `json:"plan"`
+	Graph             string                            `json:"graph"`
+	Schema            int                               `json:"schema_version"`
+	Counts            AuditCounts                       `json:"counts"`
+	Coverage          []SourceCoverage                  `json:"coverage,omitempty"`
+	Findings          []Finding                         `json:"findings,omitempty"`
+	Stale             []StaleNode                       `json:"stale,omitempty"`
+	DuplicateTests    []DuplicateTest                   `json:"duplicate_tests,omitempty"`
+	SharedTests       []SharedTest                      `json:"shared_tests,omitempty"`
+	UnresolvedInputs  []UnresolvedInput                 `json:"unresolved_inputs,omitempty"`
+	RetirementSources map[string]model.RetirementRecord `json:"retirement_sources,omitempty"`
 }
 
 // AuditCounts is the structural census.
@@ -137,6 +138,7 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 	rep.Counts.Nodes = len(g.Nodes)
 	rep.Counts.Retired = len(g.Retired)
 	rep.Counts.RetiredIDs = append([]string(nil), g.Retired...)
+	rep.RetirementSources = g.RetirementSources
 
 	// Per-node census: gate type, hazard triage, tests, inputs, staleness,
 	// duplicate and shared tests.

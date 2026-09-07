@@ -72,6 +72,49 @@ Run setup in each worktree; it auto-detects worktrees and inherits `planningRoot
 > /sdd-planner:setup /path/to/another-worktree                                  # inherited
 ```
 
+## Graph sources and historical retirement
+
+Graph nodes distinguish **justifies** (requirement IDs), **inputs** (read-only context),
+and **artifacts** (implementation write sets). An input can reference any whole file or
+a uniquely selected Markdown section, including PRDs outside the planning directory:
+
+```json
+{
+  "root": "repository",
+  "path": "docs/PRDs/Feature.md",
+  "section": {"heading_path": ["Storage", "Durability"]}
+}
+```
+
+`repository` resolves against the plan's configured target repository; `planning` uses
+the planning root. Markdown inputs need no SDD frontmatter. A heading-path suffix must
+select exactly one section (including its nested subsections); missing or ambiguous
+matches refuse rather than falling back. Compile and split fingerprint the selected
+content, and edits outside that selection do not stale it. Missing inputs refuse claims.
+
+`sdd graph set-inputs --plan Feature --node storage --file inputs.json --dry-run`
+previews a JSON input array for an untouched node; remove `--dry-run` to apply.
+`sdd graph audit --plan Feature --json` reports source coverage, input resolution,
+source staleness, test identity sharing and structural findings using the compiler's
+own checks. FR/NFR/DD coverage is reported separately from mandatory AC coverage.
+
+Historical retirement is different: the old file can leave the worktree while an ID
+retains a verifiable location in Git. For example (substitute actual plan/IDs/paths):
+
+```bash
+sdd graph retire --plan Feature --id task-1-1 \
+  --source-rev HEAD --source-path .plans/Plans/Feature/01-Old.md \
+  --source-id 1.1 --replaced-by storage --dry-run
+```
+
+The tool resolves `HEAD` to an immutable commit, checks the original ID is declared in
+that historical file, and records the source plus replacement IDs. Remove `--dry-run`
+to record it. Existing retired IDs can gain provenance, but recorded provenance cannot
+be rewritten. The Git repository containing the plan supplies the history, even if the
+plan targets a different implementation repository. These are historical records, not
+live inputs or completion evidence. A missing Git object is reported as unverifiable;
+the tool neither silently blesses it nor fetches history or creates retention refs.
+
 ## Commands
 
 Claude Code names shown; in Codex/OpenCode the same skills are `sdd-research`, `sdd-plan`, etc., invoked by natural language.

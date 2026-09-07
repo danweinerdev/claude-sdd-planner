@@ -129,7 +129,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	// view the new nodes would change) must leave the graph untouched and
 	// the payload staged. The dry-run needs the same derived truth the real
 	// render will project, so the derive pass runs on the preview graph.
-	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, Retired: g.Retired}
+	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, Retired: g.Retired, RetirementSources: g.RetirementSources}
 	preview.Nodes = append(append(preview.Nodes, g.Nodes...), p.Nodes...)
 	deriveFor := deriveClosure(repoRoot, sources, inRes)
 	pst, pclosed := deriveFor(preview)
@@ -226,6 +226,7 @@ type acPair struct {
 
 type sourceSet struct {
 	inputRepoRoot string
+	planDir       string
 	// index is the validator's citation-resolution opinion, shared verbatim
 	// (bare and qualified spellings, ambiguity marked, never first-wins).
 	index *rules.CitationIndex
@@ -285,6 +286,7 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	}
 	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
 	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
+	out.planDir = filepath.Dir(planArt.AbsPath)
 	out.index = rules.BuildCitationIndex(loaded, planArt)
 	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
@@ -331,6 +333,9 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 	var out []Finding
 	add := func(where, format string, args ...any) {
 		out = append(out, Finding{Where: where, Msg: fmt.Sprintf(format, args...)})
+	}
+	for _, problem := range rules.RetirementProblems(sources.planDir, g) {
+		add("graph", "%s", problem)
 	}
 
 	// Merged view: master nodes plus proposal nodes. stored marks the master

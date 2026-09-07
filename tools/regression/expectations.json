@@ -5608,5 +5608,16 @@
       }
     ],
     "exit": 1
+  },
+  "SDD181/unverifiable-retirement": {
+    "diagnostics": [
+      {
+        "code": "SDD181",
+        "line": 1,
+        "path": "Plans/P/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
   }
 }

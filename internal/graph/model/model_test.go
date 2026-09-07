@@ -29,6 +29,17 @@ func TestDuplicateInputsRefused(t *testing.T) {
 	}
 }
 
+func TestRetirementSourcesRemainToolOwned(t *testing.T) {
+	raw := []byte(`{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"1111111111111111111111111111111111111111","path":"old.md","source_id":"1.1"}}}}`)
+	g, err := DecodeGraph(raw)
+	if err != nil || g.RetirementSources["old"].Source.SourceID != "1.1" {
+		t.Fatalf("graph retirement provenance did not round trip: %+v %v", g, err)
+	}
+	if _, err := DecodeProposal(raw); err == nil {
+		t.Fatal("a proposal must not assert historical provenance")
+	}
+}
+
 // fullGraph is a canonical full-featured fixture: three nodes covering the
 // three gate types, a claim, a verification with provenance, red_seqs,
 // and all three hazards shapes (filled, untriaged, explicit empty).

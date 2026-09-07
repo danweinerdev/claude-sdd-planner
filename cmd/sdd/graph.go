@@ -459,8 +459,9 @@ func graphSyncCmd() *cobra.Command {
 // frozen review's follow-up keeps resolving (SDD096 reads the register) and
 // the id can never be reused. Mutating: guard-covered per D-0014.
 func graphRetireCmd() *cobra.Command {
-	var plan, id string
-	var asJSON bool
+	var plan, id, sourceRev, sourcePath, sourceID string
+	var replacements []string
+	var asJSON, dryRun bool
 	c := &cobra.Command{
 		Use:   "retire",
 		Short: "Tombstone an id in the graph's append-only retired register",
@@ -472,6 +473,42 @@ func graphRetireCmd() *cobra.Command {
 			}
 			if id == "" {
 				return fmt.Errorf("graph retire: --id is required")
+			}
+			if sourceRev != "" || sourcePath != "" || sourceID != "" || len(replacements) != 0 || dryRun {
+				if sourceRev == "" || sourcePath == "" || sourceID == "" {
+					return fmt.Errorf("graph retire: historical retirement requires --source-rev, --source-path and --source-id together")
+				}
+				root := filepath.Dir(filepath.Dir(planDir))
+				record, err := ops.RetireWithSource(root, plan, id, model.RetirementSource{VCS: "git", Revision: sourceRev, Path: sourcePath, SourceID: sourceID}, replacements, dryRun)
+				if err != nil {
+					var refusal *ops.RefusedError
+					if errors.As(err, &refusal) {
+						if asJSON {
+							if werr := writeJSON(struct {
+								OK      bool     `json:"ok"`
+								Reasons []string `json:"reasons"`
+							}{false, refusal.Reasons}); werr != nil {
+								return werr
+							}
+						}
+						return &refusedError{n: len(refusal.Reasons), msg: refusal.Error()}
+					}
+					return err
+				}
+				if asJSON {
+					return writeJSON(struct {
+						OK      bool                   `json:"ok"`
+						Retired string                 `json:"retired"`
+						Record  model.RetirementRecord `json:"record"`
+						DryRun  bool                   `json:"dry_run,omitempty"`
+					}{true, id, record, dryRun})
+				}
+				verb := "recorded"
+				if dryRun {
+					verb = "would record"
+				}
+				fmt.Fprintf(c.OutOrStdout(), "%s retirement %s from %s:%s (%s)\n", verb, id, record.Source.Revision, record.Source.Path, record.Source.SourceID)
+				return nil
 			}
 			if err := ops.Retire(planDir, id); err != nil {
 				return err
@@ -488,6 +525,11 @@ func graphRetireCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().StringVar(&id, "id", "", "the id to tombstone (e.g. a superseded v1 task id)")
+	c.Flags().StringVar(&sourceRev, "source-rev", "", "historical Git revision, resolved to an immutable commit")
+	c.Flags().StringVar(&sourcePath, "source-path", "", "path in the plan's Git repository at that revision")
+	c.Flags().StringVar(&sourceID, "source-id", "", "identifier declared in the historical source")
+	c.Flags().StringSliceVar(&replacements, "replaced-by", nil, "replacement node IDs (repeatable)")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "validate historical provenance without writing it")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }

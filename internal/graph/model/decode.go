@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -59,7 +60,7 @@ var toolOwnedNodeKeys = map[string]string{
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "nodes", "retired"}
+	graphKeys        = []string{"version", "seq_counter", "nodes", "retired", "retirement_sources"}
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
@@ -200,6 +201,9 @@ func (d *decoder) graph(raw any) *Graph {
 	if v, present := obj["retired"]; present && !d.proposal {
 		g.Retired = d.stringList("retired", v)
 	}
+	if v, present := obj["retirement_sources"]; present && !d.proposal {
+		g.RetirementSources = d.retirementSources(v)
+	}
 	nodesRaw, present := obj["nodes"]
 	if !present {
 		d.errf("nodes", "missing required field")
@@ -214,6 +218,46 @@ func (d *decoder) graph(raw any) *Graph {
 		g.Nodes = append(g.Nodes, d.node(fmt.Sprintf("nodes[%d]", i), item))
 	}
 	return g
+}
+
+func (d *decoder) retirementSources(raw any) map[string]RetirementRecord {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf("retirement_sources", "must be an object keyed by retired id")
+		return nil
+	}
+	out := map[string]RetirementRecord{}
+	var keys []string
+	for id := range obj {
+		keys = append(keys, id)
+	}
+	sort.Strings(keys)
+	for _, id := range keys {
+		path := "retirement_sources." + id
+		record, ok := obj[id].(map[string]any)
+		if !ok {
+			d.errf(path, "must be an object")
+			continue
+		}
+		d.unknownKeys(path, record, []string{"source", "replaced_by"})
+		source, ok := record["source"].(map[string]any)
+		if !ok {
+			d.errf(path+".source", "must be an object")
+			continue
+		}
+		d.unknownKeys(path+".source", source, []string{"vcs", "revision", "path", "source_id"})
+		s := RetirementSource{
+			VCS:      d.requiredString(path+".source", source, "vcs"),
+			Revision: d.requiredString(path+".source", source, "revision"),
+			Path:     d.requiredString(path+".source", source, "path"),
+			SourceID: d.requiredString(path+".source", source, "source_id"),
+		}
+		if s.VCS != "git" {
+			d.errf(path+".source.vcs", "must be git")
+		}
+		out[id] = RetirementRecord{Source: s, ReplacedBy: d.stringList(path+".replaced_by", record["replaced_by"])}
+	}
+	return out
 }
 
 func (d *decoder) node(path string, raw any) Node {

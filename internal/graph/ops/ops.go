@@ -156,7 +156,7 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 		}
 	}
 
-	out := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter}
+	out := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, RetirementSources: g.RetirementSources}
 	out.Retired = append(append([]string(nil), g.Retired...), nodeID)
 	sort.Strings(out.Retired)
 
