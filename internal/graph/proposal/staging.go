@@ -47,6 +47,10 @@ func AssembledPath(planDir string) string {
 // a proposal AGAINST a graph, and the master node-id check below needs one
 // to check against.
 func Stage(planDir string, payload []byte) (string, error) {
+	return stageWithID(planDir, payload, newFragmentID)
+}
+
+func stageWithID(planDir string, payload []byte, candidateID func() string) (string, error) {
 	g, err := gstore.Load(gstore.PathFor(planDir))
 	if err != nil {
 		return "", fmt.Errorf("graph propose: %w (run `sdd graph init --plan <name>` first)", err)
@@ -71,7 +75,11 @@ func Stage(planDir string, payload []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, newFragmentID()+".json")
+	id, err := reserveFragmentID(dir, candidateID())
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, id+".json")
 	if err := istore.WriteAtomic(path, string(payload)); err != nil {
 		return "", err
 	}
@@ -79,7 +87,7 @@ func Stage(planDir string, payload []byte) (string, error) {
 }
 
 // Assemble merges every staged fragment into one proposal set, in staging
-// order (fragment ids are time-ordered, so lexical order is arrival order).
+// reservation order (fragment ids are allocated monotonically across processes).
 // A node id declared by two fragments is a collision naming both files; any
 // refusal leaves every fragment untouched. On success the merged proposal is
 // written to AssembledPath and the consumed fragments are removed.
@@ -155,8 +163,8 @@ func Encode(p *model.Proposal) ([]byte, error) {
 // encodeProposal is the internal spelling Assemble uses.
 func encodeProposal(p *model.Proposal) ([]byte, error) { return Encode(p) }
 
-// newFragmentID returns a UUIDv7: time-ordered, so staging order and lexical
-// order agree and assembly is deterministic without a manifest.
+// newFragmentID proposes a UUIDv7. Its random suffix does not order calls in
+// the same millisecond; reserveFragmentID supplies that cross-process guarantee.
 func newFragmentID() string {
 	var b [16]byte
 	ms := uint64(time.Now().UnixMilli())
