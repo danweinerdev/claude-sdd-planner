@@ -33,8 +33,8 @@ import (
 // absolute; callers obtain them from planning-root resolution, never from the
 // working directory.
 type Roots struct {
-	// Repository is the absolute repository root (planning-config.json's
-	// home). Inputs with root "repository" resolve here.
+	// Repository is the absolute target repository root, including plan mappings.
+	// It need not contain planning-config.json.
 	Repository string
 	// Planning is the absolute planning root. Inputs with root "planning"
 	// resolve here.
