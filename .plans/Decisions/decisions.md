@@ -3,7 +3,7 @@ title: "Decision Ledger"
 type: decision-log
 status: active
 created: 2026-07-13
-updated: 2026-09-02
+updated: 2026-09-08
 tags: [decisions]
 related: [Research/decision-log.md]
 decisions:
@@ -43,7 +43,8 @@ decisions:
     reversibility: one-way
   - id: D-0004
     kind: decision
-    status: accepted
+    status: superseded
+    superseded_by: D-0025
     date: 2026-07-13
     decided_by: user
     supersedes: D-0001
@@ -290,16 +291,20 @@ decisions:
     scope: []
     tags: []
     reversibility: two-way
+  - id: D-0025
+    kind: decision
+    status: accepted
+    date: 2026-09-08
+    decided_by: user-approved
+    supersedes: D-0004
+    statement: "Decision authority belongs to the repository it represents, never to an implicit cross-repository global ledger. Repositories without explicit decision-log selection retain the conventional locations: <planning-root>/Decisions/decisions.md for internal planning roots and <repo-root>/DECISIONS.md for external planning roots. An opted-in repository uses its existing planning-config.json to select one logically repository-owned collection under its configured planning root, internal or external, with explicit fork mode and stable collection and repository identities. In-repository forks may use a sibling file in Decisions while preserving inherited files. No additional persistent repo-root policy or support files are required. External ledger history is versioned independently; a configuration pointer does not make those bytes part of source-repository history. Authority-changing selection, bindings, overrides, reconciliation, restoration and detachment require exact-text user approval; known malformed or removed fork authority must not silently fall back to another ledger."
+    rejected: [additional repo-root selector files, mandatory repo-root storage for opted-in external planning, implicit inheritance from filenames or remotes, automatic local precedence, accidental cross-repository shared authority]
+    rationale: "Separates explicit repository ownership and authority selection from physical ledger storage, reusing existing planning configuration and directories without mixing inherited and downstream histories."
+    confirmation: "Verify legacy discovery compatibility, sibling-file adoption, externally stored owner-bound ledgers, unchanged inherited bytes, no additional persistent repo-root files, and refusal of unresolved or mismatched authority."
+    scope: []
+    tags: [decision-log, architecture, multi-repo, forks]
+    reversibility: two-way
 ---
-
-
-
-
-
-
-
-
-
 
 # Decision Ledger
 

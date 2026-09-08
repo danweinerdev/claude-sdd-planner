@@ -1,0 +1,1326 @@
+{
+  "version": 1,
+  "seq_counter": 0,
+  "nodes": [
+    {
+      "id": "fork-model",
+      "contract": "Versioned fork/config, owner, binding, basis and authority-event models reject duplicate or unsupported keys/types and losslessly reparse hostile supported values without changing legacy models.",
+      "justifies": [
+        "FR-01",
+        "FR-04",
+        "FR-10",
+        "FR-17",
+        "DD-3",
+        "DD-4",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-3": "sha256:ac8464dcb7b0828bc8fc1e4d1d69ee3d992e538fa4b45c7d63b6345c069af0c7",
+        "DD-4": "sha256:22d54323e52837a96d540fcc32f3c5c37bb5e8de7f24f0c77d9d8dd4842b66da",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-04": "sha256:9e15e6dbad162a32375c0576c8de713fee4191d2a52f51688e47eedf8403db20",
+        "FR-10": "sha256:3fe85a5a2b483c7c7e1f27aa5d5c72691fa92aa564646dfc2121075370c78c55",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkModelHostileRoundTrip",
+            "file": "internal/decisionview/model_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkModelRejectsUnsupportedVersions",
+            "file": "internal/decisionview/model_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/model.go",
+        "internal/decisionview/model_test.go"
+      ],
+      "estimate": 3,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "config-selection",
+      "contract": "The represented repository's existing config explicitly selects a planning-root ledger and matching owner/collection; internal and external roots work and malformed selection never falls back or creates root files.",
+      "justifies": [
+        "FR-01",
+        "FR-02",
+        "FR-04",
+        "FR-15",
+        "FR-17",
+        "D-0025",
+        "DD-1",
+        "AC-01",
+        "AC-02",
+        "AC-12"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "DD-1": "sha256:d9ee469c32b66fea97ef0a917ac7f7188ae82d924cd50247fc9f32a63a8f408d",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-02": "sha256:3d97d48cf73c6e4b6fa6cd791db5dbbcee126cc63b613894d5c97091d195e45a",
+        "FR-04": "sha256:9e15e6dbad162a32375c0576c8de713fee4191d2a52f51688e47eedf8403db20",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c"
+      },
+      "deps": [
+        "fork-model"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkSelectionHostileConfig",
+            "file": "internal/decisionview/selection_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkSelectionInternalExternalOwners",
+            "file": "internal/decisionview/selection_test.go"
+          },
+          {
+            "id": "TestForkSelectionLegacyAndMalformed",
+            "file": "internal/decisionview/selection_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/selection.go",
+        "internal/decisionview/selection_test.go",
+        "internal/store/store.go",
+        "internal/rules/repo.go"
+      ],
+      "estimate": 3,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "canonical-bases",
+      "contract": "entry-v1 encoding and retained basis values are deterministic across independent same-seed runs, include every supported decision field, and distinguish relevant value edits from layout-only changes.",
+      "justifies": [
+        "FR-10",
+        "FR-18",
+        "NFR-01",
+        "DD-4",
+        "AC-07",
+        "AC-08",
+        "AC-16"
+      ],
+      "intent_hashes": {
+        "AC-07": "sha256:f0dbeb6cbb2abbeda1f20fc5c3cfc18201b969fe5491028d229d159b1e7ef863",
+        "AC-08": "sha256:940b57b6dd21617650a2b3ed625de06b0d6eb0015a9c6ebf638275cdba21bd03",
+        "AC-16": "sha256:03062660c2be3dfa4e51bd79ca80bbc88e5c5817f5e2f07339b1a5c330231bb7",
+        "DD-4": "sha256:22d54323e52837a96d540fcc32f3c5c37bb5e8de7f24f0c77d9d8dd4842b66da",
+        "FR-10": "sha256:3fe85a5a2b483c7c7e1f27aa5d5c72691fa92aa564646dfc2121075370c78c55",
+        "FR-18": "sha256:42aef9d48b8c827eaf80ce84127fc01fae2097aed97e04e4f8cbb71c15bc1d52",
+        "NFR-01": "sha256:3fac551023be5b48d262ee1bdfb082b662c2503c90175d4c2268160c47cf4a73"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkCanonicalHostileRoundTrip",
+            "file": "internal/decisionview/canonical_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkCanonicalSeedReplay",
+            "file": "internal/decisionview/canonical_test.go",
+            "satisfies": [
+              "deterministic-replay"
+            ]
+          },
+          {
+            "id": "TestForkCanonicalFieldMatrix",
+            "file": "internal/decisionview/canonical_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "external-format",
+        "deterministic-replay"
+      ],
+      "artifacts": [
+        "internal/decisionview/canonical.go",
+        "internal/decisionview/canonical_test.go"
+      ],
+      "estimate": 3,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "collection-loading",
+      "contract": "Canonical ledgers and explicitly owned archives load as independent namespaces through contained repository/planning anchors; hostile locators, escapes and identity/collection defects fail without read side effects.",
+      "justifies": [
+        "FR-02",
+        "FR-03",
+        "FR-04",
+        "NFR-02",
+        "NFR-03",
+        "DD-3",
+        "AC-03",
+        "AC-10",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-3": "sha256:ac8464dcb7b0828bc8fc1e4d1d69ee3d992e538fa4b45c7d63b6345c069af0c7",
+        "FR-02": "sha256:3d97d48cf73c6e4b6fa6cd791db5dbbcee126cc63b613894d5c97091d195e45a",
+        "FR-03": "sha256:142f6a002deadd2e67ad88c762117e9b8b6a74193f11aa9c12c48d7281541409",
+        "FR-04": "sha256:9e15e6dbad162a32375c0576c8de713fee4191d2a52f51688e47eedf8403db20",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea"
+      },
+      "deps": [
+        "config-selection"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkCollectionsHostileSources",
+            "file": "internal/decisionview/collections_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkCollectionsContainedReadOnly",
+            "file": "internal/decisionview/collections_test.go"
+          },
+          {
+            "id": "TestForkCollectionsOwnArchivesAndIDs",
+            "file": "internal/decisionview/collections_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/collections.go",
+        "internal/decisionview/collections_test.go",
+        "internal/decisionview/paths.go",
+        "internal/decisionview/paths_windows.go",
+        "internal/decisionview/paths_posix.go",
+        "internal/dlg/ledger.go",
+        "internal/dlg/validate.go",
+        "internal/dlg/collection.go",
+        "internal/schema/decision-log.json"
+      ],
+      "estimate": 5,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "source-continuity",
+      "contract": "Binding continuity and target-basis freshness match an independent lifecycle matrix, preserving compatible evolution while making rebinding and incompatible history invalidation explicit and reproducible.",
+      "justifies": [
+        "FR-10",
+        "FR-11",
+        "FR-18",
+        "NFR-01",
+        "NFR-04",
+        "DD-5",
+        "AC-07",
+        "AC-08",
+        "AC-16"
+      ],
+      "intent_hashes": {
+        "AC-07": "sha256:f0dbeb6cbb2abbeda1f20fc5c3cfc18201b969fe5491028d229d159b1e7ef863",
+        "AC-08": "sha256:940b57b6dd21617650a2b3ed625de06b0d6eb0015a9c6ebf638275cdba21bd03",
+        "AC-16": "sha256:03062660c2be3dfa4e51bd79ca80bbc88e5c5817f5e2f07339b1a5c330231bb7",
+        "DD-5": "sha256:efc02c1cf3eead243254c443d8e5e4fee878ffafe1936289e82fe1f7e1a5d339",
+        "FR-10": "sha256:3fe85a5a2b483c7c7e1f27aa5d5c72691fa92aa564646dfc2121075370c78c55",
+        "FR-11": "sha256:cea0241b0f732ece176206bbdbdf49da755721c664b548a998200e4db8655161",
+        "FR-18": "sha256:42aef9d48b8c827eaf80ce84127fc01fae2097aed97e04e4f8cbb71c15bc1d52",
+        "NFR-01": "sha256:3fac551023be5b48d262ee1bdfb082b662c2503c90175d4c2268160c47cf4a73",
+        "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8"
+      },
+      "deps": [
+        "canonical-bases",
+        "collection-loading"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkContinuityIndependentMatrix",
+            "file": "internal/decisionview/continuity_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkContinuitySeedReplay",
+            "file": "internal/decisionview/continuity_test.go",
+            "satisfies": [
+              "deterministic-replay"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "deterministic-replay"
+      ],
+      "artifacts": [
+        "internal/decisionview/continuity.go",
+        "internal/decisionview/continuity_test.go"
+      ],
+      "estimate": 4,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "effective-authority",
+      "contract": "Parent-first composition produces independently specified binding/history/unresolved sets, never auto-precedes or transfers overrides, and preserves ancestor failures even when file order opposes inheritance order.",
+      "justifies": [
+        "FR-06",
+        "FR-07",
+        "FR-08",
+        "FR-11",
+        "FR-12",
+        "NFR-01",
+        "NFR-04",
+        "DD-6",
+        "DD-7",
+        "AC-04",
+        "AC-05",
+        "AC-08",
+        "AC-10"
+      ],
+      "intent_hashes": {
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-05": "sha256:32b8e9b905449e1ddbd3c4424674f04c0d267e1316f49ae2396d408815cc7cad",
+        "AC-08": "sha256:940b57b6dd21617650a2b3ed625de06b0d6eb0015a9c6ebf638275cdba21bd03",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "DD-6": "sha256:8917828a9897e5c61e1927d09f44ecfdf223df84e8b06d1793452eac25b561ea",
+        "DD-7": "sha256:d8f83f8455edfc784cbb870db2ae821beff4002a47e51b39e7195706ae8e213b",
+        "FR-06": "sha256:e297cf74420d60c3e36909ad20e66530995e253686cf0f9724a61800446a9e20",
+        "FR-07": "sha256:7da0bd10eeeb2ca37fafbb29d06114f2fcaed6219ab2e7a5b09f16b39f5e3a5e",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-11": "sha256:cea0241b0f732ece176206bbdbdf49da755721c664b548a998200e4db8655161",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "NFR-01": "sha256:3fac551023be5b48d262ee1bdfb082b662c2503c90175d4c2268160c47cf4a73",
+        "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8"
+      },
+      "deps": [
+        "source-continuity"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkEffectiveIndependentSets",
+            "file": "internal/decisionview/resolve_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkEffectiveReverseNaturalOrder",
+            "file": "internal/decisionview/resolve_test.go",
+            "satisfies": [
+              "order-sensitive"
+            ]
+          },
+          {
+            "id": "TestForkEffectiveStaleAncestorAndDuplicates",
+            "file": "internal/decisionview/resolve_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "order-sensitive"
+      ],
+      "artifacts": [
+        "internal/decisionview/resolve.go",
+        "internal/decisionview/resolve_test.go",
+        "internal/decisionview/collisions.go"
+      ],
+      "estimate": 5,
+      "phase": "02-authority"
+    },
+    {
+      "id": "citations-and-scopes",
+      "contract": "Qualified and legacy citations retain source identity while effective applicability and related scopes stay inside the declared logical owner; ambiguous or missing context cannot capture a local ID or hide an affected constraint.",
+      "justifies": [
+        "FR-04",
+        "FR-05",
+        "FR-08",
+        "FR-15",
+        "DD-7",
+        "DD-8",
+        "AC-03",
+        "AC-12"
+      ],
+      "intent_hashes": {
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "DD-7": "sha256:d8f83f8455edfc784cbb870db2ae821beff4002a47e51b39e7195706ae8e213b",
+        "DD-8": "sha256:7d72a69bc67179cd0af6c5176f3169ce430f5c14a7f4bf5966ab5a46c64844d9",
+        "FR-04": "sha256:9e15e6dbad162a32375c0576c8de713fee4191d2a52f51688e47eedf8403db20",
+        "FR-05": "sha256:5365ecb218232a61a1593b855c7c3b90e98388b077c448803dd8bb30fd46c982",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840"
+      },
+      "deps": [
+        "effective-authority"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkCitationScopeIndependentSets",
+            "file": "internal/decisionview/citations_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkCitationHostileRoundTrip",
+            "file": "internal/decisionview/citations_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkLegacyContextAndExternalOwners",
+            "file": "internal/decisionview/citations_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/citations.go",
+        "internal/decisionview/citations_test.go",
+        "internal/decisionview/scopes.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority"
+    },
+    {
+      "id": "atomic-local-store",
+      "contract": "The local fork store round-trips complete bytes through its public API, rejects stale writers under a real guard and preserves source/unrelated bytes without retaining new repo-root support files.",
+      "justifies": [
+        "FR-02",
+        "FR-09",
+        "FR-16",
+        "NFR-02",
+        "NFR-03",
+        "DD-2",
+        "DD-10",
+        "AC-06",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "DD-2": "sha256:df8aa88c2532cb8257942e4639093cc82ed93d309f480f9aa31a6f73439b5c11",
+        "FR-02": "sha256:3d97d48cf73c6e4b6fa6cd791db5dbbcee126cc63b613894d5c97091d195e45a",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkStorePublicRoundTrip",
+            "file": "internal/decisionview/store_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkStoreCASNoOpGuard",
+            "file": "internal/decisionview/store_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkStorePreservesRootFootprint",
+            "file": "internal/decisionview/store_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/store.go",
+        "internal/decisionview/store_test.go",
+        "internal/decisionview/store_windows.go",
+        "internal/decisionview/store_posix.go"
+      ],
+      "estimate": 4,
+      "phase": "01-foundations"
+    },
+    {
+      "id": "approved-change-preview",
+      "contract": "Preview computes complete exact-byte local/config changes and independent authority deltas for adoption, whole overrides, reconciliation, restoration, rebinding and detachment without writing or claiming human approval.",
+      "justifies": [
+        "FR-07",
+        "FR-08",
+        "FR-09",
+        "FR-16",
+        "DD-6",
+        "DD-9",
+        "DD-12",
+        "AC-04",
+        "AC-06",
+        "AC-09"
+      ],
+      "intent_hashes": {
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "DD-6": "sha256:8917828a9897e5c61e1927d09f44ecfdf223df84e8b06d1793452eac25b561ea",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-07": "sha256:7da0bd10eeeb2ca37fafbb29d06114f2fcaed6219ab2e7a5b09f16b39f5e3a5e",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "citations-and-scopes",
+        "canonical-bases"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkPreviewIndependentAuthorityDelta",
+            "file": "internal/decisionview/preview_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkPreviewExactHostileEnvelope",
+            "file": "internal/decisionview/preview_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkPreviewNoWriteAndNoImplicitAuthority",
+            "file": "internal/decisionview/preview_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/preview.go",
+        "internal/decisionview/preview_test.go",
+        "internal/decisionview/lifecycle.go"
+      ],
+      "estimate": 5,
+      "phase": "02-authority"
+    },
+    {
+      "id": "transaction-journal",
+      "contract": "Private planning-root journals and shared collection barriers round-trip durable operation state and serialize competing owners without allowing readers to create support files or ignore pending authority.",
+      "justifies": [
+        "FR-16",
+        "NFR-02",
+        "NFR-03",
+        "DD-10",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea"
+      },
+      "deps": [
+        "atomic-local-store"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkJournalPublicRoundTrip",
+            "file": "internal/decisionview/journal_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkJournalSharedBarrierNoOpGuard",
+            "file": "internal/decisionview/journal_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkJournalReadOnlyAndPrivate",
+            "file": "internal/decisionview/journal_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/journal.go",
+        "internal/decisionview/journal_test.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority"
+    },
+    {
+      "id": "cross-store-publication",
+      "contract": "Applying an approved multi-file envelope across source/planning stores exposes only old/new complete or recovery-required authority, refuses stale inputs and never overwrites external divergence or claims cross-volume rename atomicity.",
+      "justifies": [
+        "FR-08",
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "AC-02",
+        "AC-06",
+        "AC-09",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "transaction-journal",
+        "approved-change-preview",
+        "config-selection"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkTransactionPublicRoundTrip",
+            "file": "internal/decisionview/transaction_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkTransactionSourceRaceNoOpGuard",
+            "file": "internal/decisionview/transaction_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkTransactionCrossStoreFailpoints",
+            "file": "internal/decisionview/transaction_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/transaction.go",
+        "internal/decisionview/transaction_test.go"
+      ],
+      "estimate": 5,
+      "phase": "02-authority"
+    },
+    {
+      "id": "explicit-recovery",
+      "contract": "Inspection is side-effect-free and approved recovery handles every interrupted publication/reply state without activating staged intent, erasing committed history or overwriting divergent files.",
+      "justifies": [
+        "FR-09",
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "DD-12",
+        "AC-06",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "cross-store-publication"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkRecoveryPublicRoundTrip",
+            "file": "internal/decisionview/recovery_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkRecoveryDivergenceNoOpGuard",
+            "file": "internal/decisionview/recovery_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkRecoveryCrashAndLostReply",
+            "file": "internal/decisionview/recovery_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/recovery.go",
+        "internal/decisionview/recovery_test.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority"
+    },
+    {
+      "id": "decision-read-cli",
+      "contract": "Real CLI effective/history/lookup/list/search reads share resolution, preserve legacy output and return complete diagnostics even under filters; unsupported capability is never advertised as full fork support.",
+      "justifies": [
+        "FR-13",
+        "FR-17",
+        "NFR-04",
+        "DD-9",
+        "DD-11",
+        "AC-01",
+        "AC-11",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-11": "sha256:4556a54429bd3944ba54d27a51d43f1159e661f6b481890d5b04357af7bc9e81",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8"
+      },
+      "deps": [
+        "citations-and-scopes"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkReadCLIRealEntryPoint",
+            "file": "cmd/sdd/decide_fork_read_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkReadCLIHostileJSON",
+            "file": "cmd/sdd/decide_fork_read_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkReadCLILegacyAndFilteredFailures",
+            "file": "cmd/sdd/decide_fork_read_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "external-format"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide.go",
+        "cmd/sdd/decide_fork_read.go",
+        "cmd/sdd/decide_fork_read_test.go",
+        "cmd/sdd/root.go",
+        "cmd/sdd/root_test.go",
+        "internal/hook/guard.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "decision-write-cli",
+      "contract": "Real fork CLI preview/apply/inspect/recover and existing local add paths preserve exact approval, local-only mutation and truthful transaction outcomes through a public create-save-load lifecycle.",
+      "justifies": [
+        "FR-08",
+        "FR-09",
+        "FR-13",
+        "FR-16",
+        "DD-9",
+        "DD-10",
+        "DD-12",
+        "AC-02",
+        "AC-04",
+        "AC-06",
+        "AC-09",
+        "AC-13",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "explicit-recovery",
+        "decision-read-cli"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkWriteCLIRealEntryPoint",
+            "file": "cmd/sdd/decide_fork_write_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkWriteCLIPublicRoundTrip",
+            "file": "cmd/sdd/decide_fork_write_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkWriteCLIApprovalAndRecovery",
+            "file": "cmd/sdd/decide_fork_write_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "persists-state"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide.go",
+        "cmd/sdd/decide_fork_write.go",
+        "cmd/sdd/decide_fork_write_test.go",
+        "cmd/sdd/root.go",
+        "cmd/sdd/root_test.go",
+        "internal/hook/guard.go"
+      ],
+      "estimate": 4,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "authority-core-review",
+      "contract": "The integrated authority, approval and transaction core has a frozen Aligned full four-lane review covering its aggregate implementation diff.",
+      "justifies": [
+        "D-0022",
+        "AC-06",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55"
+      },
+      "deps": [
+        "decision-write-cli"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "validation-consumers",
+      "contract": "Focused and root validation consume the same independent effective/diagnostic sets as the CLI, preserve legacy verdicts and propagate structural/stale versus could-not-run failures with the required exits.",
+      "justifies": [
+        "FR-12",
+        "FR-13",
+        "FR-14",
+        "FR-15",
+        "FR-17",
+        "NFR-05",
+        "AC-01",
+        "AC-03",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-14",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "decision-read-cli"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkValidationRealEntryPoint",
+            "file": "cmd/sdd/decide_fork_validate_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkValidationIndependentSets",
+            "file": "cmd/sdd/decide_fork_validate_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkValidationLegacyCorpus",
+            "file": "cmd/sdd/decide_fork_validate_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "derives-state"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide_validate.go",
+        "cmd/sdd/decide_fork_validate_test.go",
+        "cmd/sdd/root.go",
+        "internal/dlg/validate_all.go",
+        "internal/dlg/history.go",
+        "internal/dlg/gitutil.go",
+        "internal/rules/decisionlogs.go",
+        "internal/rules/decisions.go",
+        "internal/rules/root.go",
+        "internal/rules/fork_decisions_test.go",
+        "internal/compile/compile.go",
+        "internal/compile/fork_citations_test.go",
+        "tools/regression/fixtures/"
+      ],
+      "estimate": 5,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "graph-intent-consumer",
+      "contract": "Graph source/intent and decision-exemption reads resolve qualified and legacy-context decisions consistently, retaining historical identity and refusing unresolved authority without modifying graph completion semantics.",
+      "justifies": [
+        "FR-05",
+        "FR-12",
+        "FR-14",
+        "DD-8",
+        "AC-03",
+        "AC-10",
+        "AC-11",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-8": "sha256:7d72a69bc67179cd0af6c5176f3169ce430f5c14a7f4bf5966ab5a46c64844d9",
+        "FR-05": "sha256:5365ecb218232a61a1593b855c7c3b90e98388b077c448803dd8bb30fd46c982",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578"
+      },
+      "deps": [
+        "validation-consumers"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkGraphIntentRealEntryPoint",
+            "file": "cmd/sdd/graph_fork_intent_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkGraphIntentIndependentSets",
+            "file": "internal/graph/compile/fork_intent_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/graph/compile/anchor.go",
+        "internal/graph/compile/compile.go",
+        "internal/graph/compile/fork_intent.go",
+        "internal/graph/compile/fork_intent_test.go",
+        "cmd/sdd/graph_fork_intent_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "hook-context-consumer",
+      "contract": "SessionStart uses the shared effective view, preserves nonfatal legacy no-ops and retains unresolved/truncation warnings without injecting hidden originals as competing instructions.",
+      "justifies": [
+        "FR-13",
+        "FR-14",
+        "NFR-04",
+        "DD-11",
+        "AC-01",
+        "AC-11",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-11": "sha256:4556a54429bd3944ba54d27a51d43f1159e661f6b481890d5b04357af7bc9e81",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8"
+      },
+      "deps": [
+        "validation-consumers"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkSessionStartRealEntryPoint",
+            "file": "cmd/sdd/hook_fork_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkSessionStartHostileJSON",
+            "file": "cmd/sdd/hook_fork_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkSessionStartWarningsAndBudget",
+            "file": "internal/hook/sessionstart_fork_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/hook/sessionstart.go",
+        "internal/hook/sessionstart_fork_test.go",
+        "cmd/sdd/hook_fork_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers"
+    },
+    {
+      "id": "workflows-and-portable",
+      "contract": "Every required decision workflow including decide check, onboarding and setup documents the real fork commands/capability and storage contracts, preserves intent isolation and generates matching portable guidance.",
+      "justifies": [
+        "FR-14",
+        "FR-17",
+        "NFR-03",
+        "NFR-05",
+        "DD-11",
+        "D-0025",
+        "AC-11",
+        "AC-14",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "DD-11": "sha256:4556a54429bd3944ba54d27a51d43f1159e661f6b481890d5b04357af7bc9e81",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "decision-write-cli",
+        "graph-intent-consumer",
+        "hook-context-consumer"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkWorkflowCommandsAndReferences",
+            "file": "cmd/sdd/fork_workflows_test.go",
+            "satisfies": [
+              "ships-prose"
+            ]
+          },
+          {
+            "id": "TestForkWorkflowIntentIsolation",
+            "file": "internal/portable/fork_workflows_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "ships-prose"
+      ],
+      "artifacts": [
+        "commands/",
+        "skills/",
+        "agents/",
+        "shared/",
+        "README.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".claude-plugin/plugin.json",
+        "internal/version/version.go",
+        "internal/provision/provision.go",
+        "cmd/sdd/fork_workflows_test.go",
+        "internal/portable/fork_workflows_test.go",
+        ".codex-plugin/",
+        ".opencode-plugin/"
+      ],
+      "estimate": 4,
+      "phase": "04-integration"
+    },
+    {
+      "id": "end-to-end-contract",
+      "contract": "Independent same-seed end-to-end CLI scenarios agree across every consumer, preserve source/unrelated bytes through upstream updates and recovery, and distinguish structural/candidate/operational outcomes without private fixture data.",
+      "justifies": [
+        "FR-01",
+        "FR-02",
+        "FR-03",
+        "FR-04",
+        "FR-05",
+        "FR-06",
+        "FR-07",
+        "FR-08",
+        "FR-09",
+        "FR-10",
+        "FR-11",
+        "FR-12",
+        "FR-13",
+        "FR-14",
+        "FR-15",
+        "FR-16",
+        "FR-17",
+        "FR-18",
+        "NFR-01",
+        "NFR-02",
+        "NFR-03",
+        "NFR-04",
+        "NFR-05",
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-13",
+        "AC-14",
+        "AC-15",
+        "AC-16"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-05": "sha256:32b8e9b905449e1ddbd3c4424674f04c0d267e1316f49ae2396d408815cc7cad",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-07": "sha256:f0dbeb6cbb2abbeda1f20fc5c3cfc18201b969fe5491028d229d159b1e7ef863",
+        "AC-08": "sha256:940b57b6dd21617650a2b3ed625de06b0d6eb0015a9c6ebf638275cdba21bd03",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "AC-16": "sha256:03062660c2be3dfa4e51bd79ca80bbc88e5c5817f5e2f07339b1a5c330231bb7",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-02": "sha256:3d97d48cf73c6e4b6fa6cd791db5dbbcee126cc63b613894d5c97091d195e45a",
+        "FR-03": "sha256:142f6a002deadd2e67ad88c762117e9b8b6a74193f11aa9c12c48d7281541409",
+        "FR-04": "sha256:9e15e6dbad162a32375c0576c8de713fee4191d2a52f51688e47eedf8403db20",
+        "FR-05": "sha256:5365ecb218232a61a1593b855c7c3b90e98388b077c448803dd8bb30fd46c982",
+        "FR-06": "sha256:e297cf74420d60c3e36909ad20e66530995e253686cf0f9724a61800446a9e20",
+        "FR-07": "sha256:7da0bd10eeeb2ca37fafbb29d06114f2fcaed6219ab2e7a5b09f16b39f5e3a5e",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-10": "sha256:3fe85a5a2b483c7c7e1f27aa5d5c72691fa92aa564646dfc2121075370c78c55",
+        "FR-11": "sha256:cea0241b0f732ece176206bbdbdf49da755721c664b548a998200e4db8655161",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "FR-18": "sha256:42aef9d48b8c827eaf80ce84127fc01fae2097aed97e04e4f8cbb71c15bc1d52",
+        "NFR-01": "sha256:3fac551023be5b48d262ee1bdfb082b662c2503c90175d4c2268160c47cf4a73",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea",
+        "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "workflows-and-portable",
+        "authority-core-review"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkEndToEndRealEntryPoint",
+            "file": "cmd/sdd/fork_e2e_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkEndToEndSeedReplay",
+            "file": "cmd/sdd/fork_e2e_test.go",
+            "satisfies": [
+              "deterministic-replay"
+            ]
+          },
+          {
+            "id": "TestForkEndToEndHostileFormats",
+            "file": "cmd/sdd/fork_e2e_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "deterministic-replay",
+        "external-format"
+      ],
+      "artifacts": [
+        "cmd/sdd/fork_e2e_test.go",
+        "tools/forkfixtures/"
+      ],
+      "estimate": 4,
+      "phase": "04-integration"
+    },
+    {
+      "id": "full-repository-gate",
+      "contract": "The complete repository test, template, frozen-corpus and portable gates pass, with Go vet and supported cross-compilation checks passing and native path/recovery evidence supplied by the implementation tests.",
+      "justifies": [
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "end-to-end-contract"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test \u0026\u0026 go vet ./... \u0026\u0026 make build-all \u0026\u0026 make plugins-check"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "04-integration"
+    },
+    {
+      "id": "full-feature-review",
+      "contract": "The complete integrated feature has a frozen Aligned full four-lane review whose aggregate diff digest still matches all covered implementation nodes.",
+      "justifies": [
+        "D-0022",
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "full-repository-gate"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "04-integration"
+    }
+  ]
+}
