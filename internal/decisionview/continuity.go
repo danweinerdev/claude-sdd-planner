@@ -32,6 +32,33 @@ func BindCollection(id string, owner OwnerID, c *Collection) (Binding, error) {
 	}
 	b := Binding{Version: Version1, ID: id, OwnerID: owner, CollectionID: c.ID, Source: c.Locator, CanonicalContent: make([]map[string]any, 0, len(c.Entries))}
 	b.Source.Archives = append([]string(nil), c.Locator.Archives...)
+	if c.Metadata != nil {
+		b.ForkSource = true
+		b.ParentBindingID = c.Metadata.ParentBindingID
+		b.ForkBindings = map[string]string{}
+		b.ForkEvents = map[string]string{}
+		for _, source := range c.Metadata.Bindings {
+			if source.ID == "" || b.ForkBindings[source.ID] != "" {
+				return Binding{}, fmt.Errorf("%w: duplicate or missing source binding ID", ErrInvalidCollection)
+			}
+			digest, err := forkMetadataDigest(source)
+			if err != nil {
+				return Binding{}, err
+			}
+			b.ForkBindings[source.ID] = digest
+		}
+		for _, event := range c.Metadata.Events {
+			if b.ForkEvents[event.ID] != "" {
+				return Binding{}, fmt.Errorf("%w: duplicate source event ID", ErrInvalidCollection)
+			}
+			digest, err := forkMetadataDigest(event)
+			if err != nil {
+				return Binding{}, err
+			}
+			b.ForkEvents[event.ID] = digest
+			b.ForkEventOrder = append(b.ForkEventOrder, event.ID)
+		}
+	}
 	for _, key := range continuityIDs(c.Entries) {
 		copy, err := copyEntry(c.Entries[key])
 		if err != nil {
@@ -70,6 +97,43 @@ func CheckContinuity(b Binding, c *Collection) ([]Diagnostic, error) {
 	}
 	if c.Metadata != nil && c.Metadata.RepositoryID != b.OwnerID {
 		issue("Source owner no longer matches binding " + b.ID)
+	}
+	if b.ForkSource && c.Metadata == nil {
+		issue("Source fork declaration was removed from " + b.ID)
+		return out, nil
+	}
+	if b.ForkSource {
+		bindings := map[string]string{}
+		events := map[string]string{}
+		for _, record := range c.Metadata.Bindings {
+			digest, err := forkMetadataDigest(record)
+			if err != nil {
+				return nil, err
+			}
+			bindings[record.ID] = digest
+		}
+		for _, event := range c.Metadata.Events {
+			digest, err := forkMetadataDigest(event)
+			if err != nil {
+				return nil, err
+			}
+			events[event.ID] = digest
+		}
+		keys := make([]string, 0, len(b.ForkBindings))
+		for id := range b.ForkBindings {
+			keys = append(keys, id)
+		}
+		sort.Strings(keys)
+		for _, id := range keys {
+			if bindings[id] != b.ForkBindings[id] {
+				issue("Retained source binding " + id + " was changed or removed")
+			}
+		}
+		for i, id := range b.ForkEventOrder {
+			if i >= len(c.Metadata.Events) || c.Metadata.Events[i].ID != id || events[id] != b.ForkEvents[id] {
+				issue("Retained source authority event " + id + " was changed, reordered or removed")
+			}
+		}
 	}
 	seen := map[string]bool{}
 	for _, old := range b.CanonicalContent {
@@ -225,7 +289,33 @@ func bindingDigest(b Binding) (string, error) {
 	if archives == nil {
 		archives = []string{}
 	}
-	return DigestEntry(CanonicalVersion, map[string]any{"bindingId": b.ID, "ownerId": string(b.OwnerID), "collectionId": string(b.CollectionID), "root": string(b.Source.Root), "path": b.Source.Path, "archives": archives, "entries": records})
+	bindings := b.ForkBindings
+	if bindings == nil {
+		bindings = map[string]string{}
+	}
+	events := b.ForkEvents
+	if events == nil {
+		events = map[string]string{}
+	}
+	order := b.ForkEventOrder
+	if order == nil {
+		order = []string{}
+	}
+	return DigestEntry(CanonicalVersion, map[string]any{"bindingId": b.ID, "ownerId": string(b.OwnerID), "collectionId": string(b.CollectionID), "root": string(b.Source.Root), "path": b.Source.Path, "archives": archives, "entries": records, "forkSource": b.ForkSource, "parentBindingId": b.ParentBindingID, "forkBindings": bindings, "forkEvents": events, "forkEventOrder": order})
+}
+
+// Flat fingerprints of retained metadata preserve source fork history without
+// recursively copying entire ancestor metadata snapshots into each binding.
+func forkMetadataDigest(value any) (string, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	var object map[string]any
+	if err := modelStrictJSON(raw, &object); err != nil {
+		return "", err
+	}
+	return DigestEntry(CanonicalVersion, object)
 }
 func equalLineage(a, b []string) bool {
 	if len(a) != len(b) {

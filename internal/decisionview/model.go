@@ -175,15 +175,19 @@ func (v ForkConfig) Validate() error {
 // Binding preserves the source baseline. Canonical content is data here;
 // baseline completeness and continuity are checked by the collection resolver.
 type Binding struct {
-	Version          SchemaVersion    `json:"version" yaml:"version"`
-	ID               string           `json:"id,omitempty" yaml:"id,omitempty"`
-	OwnerID          OwnerID          `json:"ownerId" yaml:"ownerId"`
-	CollectionID     CollectionID     `json:"collectionId" yaml:"collectionId"`
-	Source           SourceLocator    `json:"source" yaml:"source"`
-	ParentBindingID  string           `json:"parentBindingId,omitempty" yaml:"parentBindingId,omitempty"`
-	Description      string           `json:"description,omitempty" yaml:"description,omitempty"`
-	CanonicalHash    string           `json:"canonicalHash,omitempty" yaml:"canonicalHash,omitempty"`
-	CanonicalContent []map[string]any `json:"canonicalContent,omitempty" yaml:"canonicalContent,omitempty"`
+	Version          SchemaVersion     `json:"version" yaml:"version"`
+	ID               string            `json:"id,omitempty" yaml:"id,omitempty"`
+	OwnerID          OwnerID           `json:"ownerId" yaml:"ownerId"`
+	CollectionID     CollectionID      `json:"collectionId" yaml:"collectionId"`
+	Source           SourceLocator     `json:"source" yaml:"source"`
+	ParentBindingID  string            `json:"parentBindingId,omitempty" yaml:"parentBindingId,omitempty"`
+	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
+	CanonicalHash    string            `json:"canonicalHash,omitempty" yaml:"canonicalHash,omitempty"`
+	CanonicalContent []map[string]any  `json:"canonicalContent,omitempty" yaml:"canonicalContent,omitempty"`
+	ForkSource       bool              `json:"forkSource,omitempty" yaml:"forkSource,omitempty"`
+	ForkBindings     map[string]string `json:"forkBindings,omitempty" yaml:"forkBindings,omitempty"`
+	ForkEvents       map[string]string `json:"forkEvents,omitempty" yaml:"forkEvents,omitempty"`
+	ForkEventOrder   []string          `json:"forkEventOrder,omitempty" yaml:"forkEventOrder,omitempty"`
 }
 
 func (v Binding) Validate() error {
@@ -569,8 +573,8 @@ func modelStrictJSON(data []byte, out any) error {
 	return nil
 }
 func modelJSONValue(d *json.Decoder, depth int) error {
-	if depth > 64 {
-		return fmt.Errorf("decisionview: JSON nesting exceeds 64")
+	if depth > 256 {
+		return fmt.Errorf("decisionview: JSON nesting exceeds 256")
 	}
 	t, err := d.Token()
 	if err != nil {
@@ -614,8 +618,8 @@ func modelJSONValue(d *json.Decoder, depth int) error {
 var rawMessageType = reflect.TypeOf(json.RawMessage{})
 
 func modelJSONKeys(data []byte, typ reflect.Type, at string, depth int) error {
-	if depth > 64 {
-		return fmt.Errorf("decisionview: model nesting exceeds 64")
+	if depth > 256 {
+		return fmt.Errorf("decisionview: model nesting exceeds 256")
 	}
 	for typ.Kind() == reflect.Pointer {
 		if depth > 0 && bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
@@ -684,7 +688,7 @@ func modelYAMLJSON(root *yaml.Node) ([]byte, error) {
 	active := map[*yaml.Node]bool{}
 	var convert func(*yaml.Node, int) (any, error)
 	convert = func(n *yaml.Node, depth int) (any, error) {
-		if n == nil || depth > 64 || active[n] {
+		if n == nil || depth > 256 || active[n] {
 			return nil, fmt.Errorf("decisionview: cyclic or excessively nested YAML")
 		}
 		active[n] = true

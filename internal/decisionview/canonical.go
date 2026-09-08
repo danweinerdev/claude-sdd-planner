@@ -73,8 +73,8 @@ func canonicalString(out *bytes.Buffer, s string) error {
 	return nil
 }
 func encodeCanonicalValue(out *bytes.Buffer, v reflect.Value, depth int) error {
-	if depth > 64 {
-		return fmt.Errorf("decisionview: canonical nesting exceeds 64 (or input is cyclic)")
+	if depth > 256 {
+		return fmt.Errorf("decisionview: canonical nesting exceeds 256 (or input is cyclic)")
 	}
 	if !v.IsValid() {
 		out.WriteByte('n')
@@ -186,7 +186,7 @@ func (p *canonicalParser) count() (int, error) {
 	return n, nil
 }
 func (p *canonicalParser) value(depth int) (any, error) {
-	if depth > 64 || p.pos >= len(p.data) {
+	if depth > 256 || p.pos >= len(p.data) {
 		return nil, fmt.Errorf("decisionview: truncated or deeply nested canonical value")
 	}
 	tag := p.data[p.pos]

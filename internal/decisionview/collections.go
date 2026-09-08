@@ -35,6 +35,7 @@ type Collection struct {
 	Locator     SourceLocator
 	Files       []CollectionFile
 	Entries     map[string]map[string]any
+	EntryPaths  map[string]string
 	Metadata    *ForkMetadata
 	Diagnostics []dlg.Diagnostic
 	Digests     map[string]string
@@ -64,7 +65,7 @@ func LoadCollection(roots Roots, id CollectionID, locator SourceLocator) (*Colle
 		return nil, err
 	}
 	members := append([]string{locator.Path}, archives...)
-	c := &Collection{ID: id, Locator: locator, Entries: map[string]map[string]any{}, Digests: map[string]string{}}
+	c := &Collection{ID: id, Locator: locator, Entries: map[string]map[string]any{}, EntryPaths: map[string]string{}, Digests: map[string]string{}}
 	var ledgers []*dlg.Ledger
 	for i, name := range members {
 		raw, info, err := readCollectionFile(r, name)
@@ -120,6 +121,7 @@ func LoadCollection(roots Roots, id CollectionID, locator SourceLocator) (*Colle
 				// never overwrite the first record in the explanatory snapshot.
 				if _, exists := c.Entries[key]; !exists {
 					c.Entries[key] = entry
+					c.EntryPaths[key] = name
 				}
 			}
 		}
@@ -293,7 +295,7 @@ func collectionFrontmatter(raw []byte) (map[string]*yaml.Node, error) {
 	active := map[*yaml.Node]bool{}
 	var visit func(*yaml.Node, int) error
 	visit = func(n *yaml.Node, depth int) error {
-		if n == nil || depth > 64 || active[n] {
+		if n == nil || depth > 256 || active[n] {
 			return fmt.Errorf("%w: cyclic or excessively nested YAML", ErrInvalidCollection)
 		}
 		active[n] = true
