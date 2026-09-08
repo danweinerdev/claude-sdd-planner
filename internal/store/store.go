@@ -141,6 +141,11 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 // Config is the subset of planning-config.json this tool needs.
 type Config struct {
 	PlanningRoot string `json:"planningRoot"`
+	// Fork selection is interpreted by decisionview, not by legacy root
+	// discovery. Raw values preserve absence versus explicit null and avoid
+	// changing old config behavior before the repository explicitly opts in.
+	RepositoryID json.RawMessage `json:"repositoryId,omitempty"`
+	DecisionLog  json.RawMessage `json:"decisionLog,omitempty"`
 	// GraphLeaseTtlMinutes bounds a claimed graph node's lease
 	// (Designs/SddGraph DD-10). Zero means the 30-minute default; any value
 	// satisfies correctness — leases are liveness bookkeeping, double-claim
