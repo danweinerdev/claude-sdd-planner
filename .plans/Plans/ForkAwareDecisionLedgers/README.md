@@ -1,7 +1,7 @@
 ---
 title: "Fork-Aware Decision Ledgers"
 type: plan
-status: draft
+status: active
 created: 2026-09-08
 updated: 2026-09-08
 tags: [decision-log, forks, graph]

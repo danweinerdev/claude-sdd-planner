@@ -17,6 +17,8 @@ All 18 spec requirements remain in scope. Inherited records are read-only, local
 
 **Ledger reconciliation resolved:** D-0025 now records the user's exact-text-approved config-selection/planning-root-storage rule. The former repo-root-selector proposal is withdrawn. Implementation may follow the approved rule; real adoption and every later authority-changing ledger/config operation still require their own exact-text approval under D-0018. No fork is activated by this design.
 
+Non-functional traceability: NFR-01 is realized by DD-3's bounded traversal, DD-4's versioned canonical encoding and DD-7's deterministic composition; NFR-02 by side-effect-free snapshot reads and DD-10's explicit publication/recovery protocol; NFR-03 by DD-1/DD-3's named-root containment and planning-root-only support storage; NFR-04 by provenance-bearing resolver interfaces and the complete CLI/hook diagnostic contract; NFR-05 by the Testing Strategy and Structural Verification gates, including frozen legacy verdicts and generated portable agreement.
+
 ## Non-Goals
 - No new persistent repo-root ledger, selector, `.sdd/` directory, generation tree, lock or journal. Extend only the existing planning configuration there. Short-lived atomic replacement staging is not authority and is cleaned at success/rollback or explicit crash recovery.
 - No inherited-file writes, remote fetch/clone/authentication, live sibling checkout, implicit precedence, semantic merge, scope remapping or multi-parent inheritance.
