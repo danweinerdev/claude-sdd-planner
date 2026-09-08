@@ -130,14 +130,19 @@ func diag(l *Ledger, code, message, correction string, line int, path string, se
 // A nil Ledger means parsing failed and the caller must not validate further —
 // every failure here already reported why.
 func ParseLedger(path string) (*Ledger, []Diagnostic) {
-	var out []Diagnostic
-
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, []Diagnostic{diag(nil, "DLG001",
 			"Cannot read ledger as UTF-8: "+err.Error(),
 			"Store the ledger as readable UTF-8.", 1, path, Operational)}
 	}
+	return ParseLedgerBytes(path, raw)
+}
+
+// ParseLedgerBytes parses an already captured snapshot. The caller owns safe
+// file opening; this path never reopens a pathname or creates a read lock.
+func ParseLedgerBytes(path string, raw []byte) (*Ledger, []Diagnostic) {
+	var out []Diagnostic
 	if !utf8Valid(raw) {
 		return nil, []Diagnostic{diag(nil, "DLG001",
 			"Cannot read ledger as UTF-8: invalid UTF-8",

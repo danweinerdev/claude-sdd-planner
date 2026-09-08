@@ -302,6 +302,7 @@ type ForkMetadata struct {
 	Version         SchemaVersion    `json:"version" yaml:"version"`
 	LedgerID        CollectionID     `json:"ledgerId" yaml:"ledgerId"`
 	RepositoryID    OwnerID          `json:"repositoryId" yaml:"repositoryId"`
+	Archives        []string         `json:"archives,omitempty" yaml:"archives,omitempty"`
 	ParentBindingID string           `json:"parentBindingId,omitempty" yaml:"parentBindingId,omitempty"`
 	Bindings        []Binding        `json:"bindings,omitempty" yaml:"bindings,omitempty"`
 	Events          []AuthorityEvent `json:"events,omitempty" yaml:"events,omitempty"`
@@ -318,6 +319,11 @@ func (v ForkMetadata) Validate() error {
 	}
 	if err := v.RepositoryID.Validate(); err != nil {
 		return err
+	}
+	for _, archive := range v.Archives {
+		if err := validateRelativeLocator(archive); err != nil {
+			return err
+		}
 	}
 	for _, b := range v.Bindings {
 		if err := b.Validate(); err != nil {

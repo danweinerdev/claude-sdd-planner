@@ -95,10 +95,24 @@ var bodySectionRe = regexp.MustCompile(`(?m)^ {0,3}##\s+(D-\d{4,9})\b`)
 // entries that parsed as mappings, which the collection phase then compares
 // across ledgers.
 func ValidateLedger(l *Ledger) ([]Diagnostic, []map[string]any) {
+	return validateLedgerRole(l, "")
+}
+
+// ValidateLedgerRole checks a securely captured member of an explicitly
+// selected collection. Only physical naming/discovery differs from legacy
+// validation; entry types, lifecycle and archive eligibility remain enforced.
+func ValidateLedgerRole(l *Ledger, role string) ([]Diagnostic, []map[string]any) {
+	if role != "canonical" && role != "archive" {
+		return []Diagnostic{diag(l, "DLG016", "Unknown explicit ledger role.", "Select canonical or archive membership explicitly.", 1, "", Error)}, nil
+	}
+	return validateLedgerRole(l, role)
+}
+
+func validateLedgerRole(l *Ledger, role string) ([]Diagnostic, []map[string]any) {
 	var out []Diagnostic
 	meta := l.Meta
 
-	if isSymlink(l.Path) {
+	if role == "" && isSymlink(l.Path) {
 		out = append(out, diag(l, "DLG019", "Ledger path is a symbolic link.",
 			"Store the canonical ledger and archives as regular files in their owning repository.", 1, "", Error))
 	}
@@ -144,8 +158,11 @@ func ValidateLedger(l *Ledger) ([]Diagnostic, []map[string]any) {
 	}
 
 	name := filepath.Base(l.Path)
-	archived := archiveNameRe.MatchString(name)
-	canonical := canonicalName(l.Path)
+	archived, canonical := role == "archive", role == "canonical"
+	if role == "" {
+		archived = archiveNameRe.MatchString(name)
+		canonical = canonicalName(l.Path)
+	}
 	if !archived && !canonical {
 		out = append(out, diag(l, "DLG016", "Noncanonical ledger filename `"+name+"`.",
 			"Use `Decisions/decisions.md`, repository-root `DECISIONS.md`, or `archive-YYYY.md`.", 1, "", Error))
@@ -158,7 +175,7 @@ func ValidateLedger(l *Ledger) ([]Diagnostic, []map[string]any) {
 		out = append(out, diag(l, "DLG018", "Canonical ledger does not have `status: active`.",
 			"Keep the canonical ledger active.", l.Line("status:"), "", Error))
 	}
-	if name == "DECISIONS.md" {
+	if role == "" && name == "DECISIONS.md" {
 		if repo := gitRoot(l.Path); repo != "" && !sameDir(filepath.Dir(l.Path), repo) {
 			out = append(out, diag(l, "DLG042", "External `DECISIONS.md` is not at the repository root.",
 				"Move it to the root of the repository it represents.", 1, "", Error))
