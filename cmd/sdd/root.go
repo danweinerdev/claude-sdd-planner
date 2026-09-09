@@ -486,6 +486,42 @@ is named by --supersedes or --compatible-with.`,
 	}
 	search.Flags().BoolVar(&searchJSON, "json", false, "emit JSON")
 
+	var capabilitiesJSON bool
+	capabilities := &cobra.Command{
+		Use: "capabilities", Short: "Report implemented decision-fork capabilities", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideCapabilities(capabilitiesJSON)
+		},
+	}
+	capabilities.Flags().BoolVar(&capabilitiesJSON, "json", false, "emit JSON")
+
+	var effectiveJSON bool
+	effective := &cobra.Command{
+		Use: "effective", Short: "Read effective decision authority", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideForkRead("effective", "", "", "", effectiveJSON)
+		},
+	}
+	effective.Flags().BoolVar(&effectiveJSON, "json", false, "emit JSON")
+
+	var historyJSON bool
+	history := &cobra.Command{
+		Use: "history", Short: "Read raw non-effective decision history", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideForkRead("history", "", "", "", historyJSON)
+		},
+	}
+	history.Flags().BoolVar(&historyJSON, "json", false, "emit JSON")
+
+	var lookupJSON bool
+	lookup := &cobra.Command{
+		Use: "lookup <qualified-id>", Short: "Look up a qualified decision identity", Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return cmdDecideForkRead("lookup", args[0], "", "", lookupJSON)
+		},
+	}
+	lookup.Flags().BoolVar(&lookupJSON, "json", false, "emit JSON")
+
 	var a decideAddOpts
 	add := &cobra.Command{
 		Use: "add", Short: "Append a decision (collision-checked)", Args: cobra.NoArgs,
@@ -526,7 +562,7 @@ is named by --supersedes or --compatible-with.`,
 	validate.Flags().BoolVar(&v.JSON, "json", false, "shorthand for --format json")
 	validate.Flags().BoolVar(&v.NoHistory, "no-history", false, "skip Git history checks; only for an explicitly unversioned audit")
 
-	c.AddCommand(list, search, add, validate)
+	c.AddCommand(capabilities, effective, history, lookup, list, search, add, validate)
 	return c
 }
 
