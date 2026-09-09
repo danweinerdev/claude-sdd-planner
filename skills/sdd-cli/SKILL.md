@@ -72,7 +72,7 @@ to report without repairing.
 | Scaffold a phase-gate review | `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` |
 | Record one review lane's observation | `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]` (or evidence on stdin) |
 | Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |
-| Ledger: add / list / search / audit | `sdd decide add --statement TEXT [--accept] …` · `sdd decide list\|search` · `sdd decide validate [<ledger>]` |
+| Ledger: add / list / search / audit | `sdd decide add --statement TEXT [--rejected CSV | --rejected-value TEXT]… [--accept] [--supersedes ID] [--compatible-with ID]…` · `sdd decide list\|search` · `sdd decide validate [<ledger>]` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment (and repair Claude Code hooks) | `sdd doctor [--check] [--json]` |
 
@@ -94,9 +94,16 @@ to report without repairing.
 - **Validate before claiming.** Any statement that artifacts are consistent,
   a plan is ready, or a phase can close is checkable: run `sdd validate`
   (scoped where possible) and report its verdict, not your impression.
-- **The ledger is append-through-the-tool.** `decide add` runs the collision
-  check; a collision with an accepted entry stops for the user. Never
+- **The ledger is append-through-the-tool.** `decide add` always runs the collision
+  check. Every candidate must be named by `--supersedes ID` or a repeatable
+  `--compatible-with ID`; compatibility only acknowledges an accepted actual
+  candidate and writes no metadata. Duplicate compatibility acknowledgements
+  are normalized. Unknown, non-accepted, stale/non-candidate, unresolved, or
+  same-ID supersedes-plus-compatible inputs are refused. Never
   append to `decisions.md` by hand and never auto-resolve a collision.
+  `--rejected-value TEXT` is repeatable and preserves each literal array
+  element, including commas; it is mutually exclusive with the legacy
+  comma-separated `--rejected` flag.
 - **Writes are not commits.** Every write above lands in the working tree;
   lifecycle state is committed once at phase open and once at phase close
   (`shared/autonomy.md` § SCM boundary cadence, D-0024). `task complete`

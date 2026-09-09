@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ type decisionEntry struct {
 	Supersedes    string   `json:"supersedes,omitempty"`
 	SupersededBy  string   `json:"superseded_by,omitempty"`
 	Reversibility string   `json:"reversibility,omitempty"`
+	quoteRejected bool
 }
 
 func entryFromItem(it fmItem) decisionEntry {
@@ -64,19 +66,19 @@ func ledgerPath() (string, error) {
 	return filepath.Join(root, "Decisions", "decisions.md"), nil
 }
 
-func loadLedger() (*artifact.Doc, string, error) {
+func loadLedger() (*artifact.Doc, string, string, error) {
 	path, err := ledgerPath()
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	art, err := store.Read(path)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if !art.Exists {
-		return nil, path, fmt.Errorf("decision ledger %s does not exist", path)
+		return nil, path, "", fmt.Errorf("decision ledger %s does not exist", path)
 	}
-	return artifact.Parse(art.Source), path, nil
+	return artifact.Parse(art.Source), path, art.Digest, nil
 }
 
 func loadEntries(doc *artifact.Doc) []decisionEntry {
@@ -88,7 +90,7 @@ func loadEntries(doc *artifact.Doc) []decisionEntry {
 }
 
 func cmdDecideList(status string, jsonOut bool) error {
-	doc, _, err := loadLedger()
+	doc, _, _, err := loadLedger()
 	if err != nil {
 		return fmt.Errorf("decide list: %w", err)
 	}
@@ -116,7 +118,7 @@ func cmdDecideList(status string, jsonOut bool) error {
 func cmdDecideSearch(term string, jsonOut bool) error {
 	term = strings.ToLower(term)
 
-	doc, _, err := loadLedger()
+	doc, _, _, err := loadLedger()
 	if err != nil {
 		return fmt.Errorf("decide search: %w", err)
 	}
@@ -150,62 +152,98 @@ func entryMatches(e decisionEntry, term string) bool {
 }
 
 type decideAddOpts struct {
-	Statement     string
-	Rationale     string
-	Rejected      string
-	Scope         string
-	Tags          string
-	Supersedes    string
-	Kind          string
-	Reversibility string
-	Accept        bool
-	DryRun        bool
-	JSON          bool
+	Statement      string
+	Rationale      string
+	Rejected       string
+	RejectedValues []string
+	Scope          string
+	Tags           string
+	Supersedes     string
+	CompatibleWith []string
+	Kind           string
+	Reversibility  string
+	Accept         bool
+	DryRun         bool
+	JSON           bool
 }
 
 func cmdDecideAdd(o decideAddOpts) error {
 	if strings.TrimSpace(o.Statement) == "" {
 		return fmt.Errorf("decide add: --statement is required")
 	}
+	if strings.TrimSpace(o.Rejected) != "" && len(o.RejectedValues) > 0 {
+		return fmt.Errorf("decide add: --rejected and --rejected-value are mutually exclusive")
+	}
 
-	doc, path, err := loadLedger()
+	doc, path, digest, err := loadLedger()
 	if err != nil {
 		return fmt.Errorf("decide add: %w", err)
 	}
 	entries := loadEntries(doc)
 
-	// D-0003: a new entry that collides with an accepted one always stops for
-	// the user unless --supersedes names the entry it resolves the collision
-	// with. Never auto-resolve, never settle by recency.
-	if o.Supersedes == "" {
-		candidates := findCollisionCandidates(o.Statement, splitCSV(o.Scope), entries)
-		if len(candidates) > 0 {
-			fmt.Fprintln(os.Stderr, "decide add: refused — candidate collision(s) with accepted entries:")
-			for _, c := range candidates {
-				// Truncated: a ledger's statements are often paragraphs, and
-				// printing several in full turned a refusal into tens of
-				// kilobytes of terminal. The id is what the caller acts on —
-				// `sdd decide list` or `search` shows the rest.
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", c.ID, ellipsize(c.Statement, 120))
+	// Candidate checks are never bypassed. Each candidate must be resolved by
+	// the named supersession target or explicitly acknowledged as compatible.
+	// Compatibility is command input only: it never changes ledger metadata.
+	candidates := findCollisionCandidates(o.Statement, splitCSV(o.Scope), entries)
+	candidateIDs := make(map[string]bool, len(candidates))
+	for _, c := range candidates {
+		candidateIDs[c.ID] = true
+	}
+	compatible := make(map[string]bool, len(o.CompatibleWith))
+	for _, id := range o.CompatibleWith {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return fmt.Errorf("decide add: --compatible-with requires a decision id")
+		}
+		if compatible[id] { // Normalize repeats: one acknowledgement per id.
+			continue
+		}
+		compatible[id] = true
+		if id == o.Supersedes {
+			return fmt.Errorf("decide add: %s cannot be both --supersedes and --compatible-with", id)
+		}
+		target, ok := findEntry(entries, id)
+		if !ok {
+			return fmt.Errorf("decide add: --compatible-with %s does not name an existing entry", id)
+		}
+		if target.Status != "accepted" {
+			return fmt.Errorf("decide add: --compatible-with %s must name an accepted entry (status: %s)", id, target.Status)
+		}
+		if !candidateIDs[id] {
+			return fmt.Errorf("decide add: --compatible-with %s is not an actual collision candidate", id)
+		}
+	}
+	if o.Supersedes != "" {
+		if target, ok := findEntry(entries, o.Supersedes); !ok {
+			return fmt.Errorf("decide add: --supersedes %s does not name an existing entry", o.Supersedes)
+		} else if target.Status == "superseded" {
+			// Superseding an already-superseded entry forks the chain: the target
+			// gains a second `superseded_by`, which is duplicate-key YAML and made
+			// the ledger unparseable for every later `decide add`. Supersession is
+			// one-step by design (shared/decision-log.md) — point at the live
+			// successor instead.
+			successor := target.SupersededBy
+			if successor == "" {
+				successor = "its recorded successor"
 			}
-			fmt.Fprintln(os.Stderr, "pass --supersedes D-NNNN to resolve one of them, or rephrase --statement to avoid the overlap")
-			return &refusedError{n: len(candidates)}
+			return fmt.Errorf("decide add: --supersedes %s is already superseded by %s; "+
+				"supersession is one-step — supersede the live entry (%s) instead",
+				o.Supersedes, successor, successor)
 		}
-	} else if target, ok := findEntry(entries, o.Supersedes); !ok {
-		return fmt.Errorf("decide add: --supersedes %s does not name an existing entry", o.Supersedes)
-	} else if target.Status == "superseded" {
-		// Superseding an already-superseded entry forks the chain: the target
-		// gains a second `superseded_by`, which is duplicate-key YAML and made
-		// the ledger unparseable for every later `decide add`. Supersession is
-		// one-step by design (shared/decision-log.md) — point at the live
-		// successor instead.
-		successor := target.SupersededBy
-		if successor == "" {
-			successor = "its recorded successor"
+	}
+	var unresolved []decisionEntry
+	for _, c := range candidates {
+		if c.ID != o.Supersedes && !compatible[c.ID] {
+			unresolved = append(unresolved, c)
 		}
-		return fmt.Errorf("decide add: --supersedes %s is already superseded by %s; "+
-			"supersession is one-step — supersede the live entry (%s) instead",
-			o.Supersedes, successor, successor)
+	}
+	if len(unresolved) > 0 {
+		fmt.Fprintln(os.Stderr, "decide add: refused — unresolved candidate collision(s) with accepted entries:")
+		for _, c := range unresolved {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", c.ID, ellipsize(c.Statement, 120))
+		}
+		fmt.Fprintln(os.Stderr, "name each candidate with --supersedes D-NNNN or --compatible-with D-NNNN")
+		return &refusedError{n: len(unresolved)}
 	}
 
 	s, err := schema.Load("decision-log")
@@ -235,9 +273,9 @@ func cmdDecideAdd(o decideAddOpts) error {
 
 	newLines := renderEntry(decisionEntry{
 		ID: newID, Kind: o.Kind, Status: status, Date: today, DecidedBy: decidedBy,
-		Statement: o.Statement, Rejected: splitCSV(o.Rejected), Rationale: o.Rationale,
+		Statement: o.Statement, Rejected: rejectedValues(o), Rationale: o.Rationale,
 		Scope: splitCSV(o.Scope), Tags: splitCSV(o.Tags), Supersedes: o.Supersedes,
-		Reversibility: o.Reversibility,
+		Reversibility: o.Reversibility, quoteRejected: len(o.RejectedValues) > 0,
 	})
 
 	out, err := applyLedgerEdits(doc, today, newLines, o.Supersedes, newID)
@@ -257,7 +295,7 @@ func cmdDecideAdd(o decideAddOpts) error {
 		if o.DryRun {
 			res.Output = out
 		} else {
-			if err := store.WriteAtomic(path, out); err != nil {
+			if err := store.WriteAtomicExpecting(path, out, digest); err != nil {
 				return fmt.Errorf("decide add: %w", err)
 			}
 			res.Wrote = true
@@ -269,11 +307,18 @@ func cmdDecideAdd(o decideAddOpts) error {
 		fmt.Print(out)
 		return nil
 	}
-	if err := store.WriteAtomic(path, out); err != nil {
+	if err := store.WriteAtomicExpecting(path, out, digest); err != nil {
 		return fmt.Errorf("decide add: %w", err)
 	}
 	fmt.Printf("added %s to %s (status: %s)\n", newID, relPath(path), status)
 	return nil
+}
+
+func rejectedValues(o decideAddOpts) []string {
+	if len(o.RejectedValues) > 0 {
+		return append([]string(nil), o.RejectedValues...)
+	}
+	return splitCSV(o.Rejected)
 }
 
 func findEntry(entries []decisionEntry, id string) (decisionEntry, bool) {
@@ -427,7 +472,11 @@ func renderEntry(e decisionEntry) []string {
 	if e.Question != "" {
 		l = append(l, fmt.Sprintf("    question: %s", quoteYAML(e.Question)))
 	}
-	l = append(l, fmt.Sprintf("    rejected: %s", flowList(e.Rejected)))
+	if e.quoteRejected {
+		l = append(l, fmt.Sprintf("    rejected: %s", quotedFlowList(e.Rejected)))
+	} else {
+		l = append(l, fmt.Sprintf("    rejected: %s", flowList(e.Rejected)))
+	}
 	l = append(l, fmt.Sprintf("    rationale: %s", quoteYAML(e.Rationale)))
 	l = append(l, fmt.Sprintf("    scope: %s", flowList(e.Scope)))
 	l = append(l, fmt.Sprintf("    tags: %s", flowList(e.Tags)))
@@ -436,8 +485,10 @@ func renderEntry(e decisionEntry) []string {
 }
 
 func quoteYAML(s string) string {
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return `"` + s + `"`
+	// Go and YAML double-quoted scalars share the escapes required here: quote,
+	// backslash, control characters, and \n. strconv.Quote therefore keeps the
+	// parsed scalar byte-for-byte equal while remaining one physical YAML line.
+	return strconv.Quote(s)
 }
 
 func flowList(items []string) string {
@@ -447,6 +498,14 @@ func flowList(items []string) string {
 	quoted := make([]string, 0, len(items))
 	for _, it := range items {
 		quoted = append(quoted, flowScalar(it))
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+func quotedFlowList(items []string) string {
+	quoted := make([]string, 0, len(items))
+	for _, item := range items {
+		quoted = append(quoted, quoteYAML(item))
 	}
 	return "[" + strings.Join(quoted, ", ") + "]"
 }

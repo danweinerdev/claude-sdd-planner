@@ -30,6 +30,281 @@ func writeLedger(t *testing.T, root, entriesYAML string) string {
 	return writeArtifact(t, root, "Decisions", "decisions.md", ledgerDoc(entriesYAML))
 }
 
+func collisionEntry(id, status, subject string) string {
+	return `  - id: ` + id + `
+    kind: decision
+    status: ` + status + `
+    date: 2026-07-01
+    decided_by: user
+    statement: "` + subject + ` storage uses the alpha approach for durable replicated persistence."
+    rejected: []
+    rationale: "Because."
+    scope: []
+    tags: []
+    reversibility: two-way`
+}
+
+func ledgerBytes(t *testing.T) []byte {
+	t.Helper()
+	path, err := ledgerPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestDecideAddCLI_CompatibleWithParsesAndPreservesTarget(t *testing.T) {
+	root := chdirTemp(t)
+	target := collisionEntry("D-0001", "accepted", "Widget")
+	writeLedger(t, root, target)
+	c := newRootCmd()
+	c.SetArgs([]string{"decide", "add", "--statement", "Widget storage uses the beta approach for durable replicated persistence.", "--compatible-with", "D-0001", "--compatible-with", "D-0001", "--accept"})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("CLI decide add: %v", err)
+	}
+	got := string(ledgerBytes(t))
+	if !strings.Contains(got, target) {
+		t.Fatalf("compatible target bytes changed:\n%s", got)
+	}
+	if strings.Contains(got, "compatible_with") || strings.Contains(got, "compatible-with") {
+		t.Fatalf("compatibility acknowledgement leaked into ledger metadata:\n%s", got)
+	}
+	if !strings.Contains(got, "id: D-0002") {
+		t.Fatalf("new entry missing:\n%s", got)
+	}
+}
+
+func TestDecideAddCLI_ExactScalarRoundTrip(t *testing.T) {
+	root := chdirTemp(t)
+	writeArtifact(t, root, "Decisions", "decisions.md", `---
+title: "Decision Ledger"
+type: decision-log
+status: active
+created: 2026-07-01
+updated: 2026-07-01
+tags: [decisions]
+related: []
+decisions: []
+---
+
+# Decision Ledger
+`)
+	statement := "First approved paragraph has a comma, a \\n literal, quoted \"text\", and Unicode café 東京.\nSecond approved paragraph remains distinct."
+	rationale := "Why \\paths stay literal.\nA second rationale paragraph with \"quotes\"."
+	c := newRootCmd()
+	c.SetArgs([]string{"decide", "add",
+		"--statement", statement,
+		"--rationale", rationale,
+		"--rejected", "Reject alpha,Reject beta",
+		"--scope", "Specs/Exact,Designs/Exact",
+		"--tags", "roundtrip,unicode",
+		"--accept"})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("CLI decide add: %v", err)
+	}
+	doc, _, _, err := loadLedger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := loadEntries(doc)
+	if len(entries) != 1 {
+		t.Fatalf("got %d parsed entries", len(entries))
+	}
+	got := entries[0]
+	if got.Statement != statement {
+		t.Errorf("statement round trip mismatch:\nwant: %q\n got: %q", statement, got.Statement)
+	}
+	if got.Rationale != rationale {
+		t.Errorf("rationale round trip mismatch:\nwant: %q\n got: %q", rationale, got.Rationale)
+	}
+	if strings.Join(got.Rejected, "|") != "Reject alpha|Reject beta" {
+		t.Errorf("rejected round trip mismatch: %#v", got.Rejected)
+	}
+	if strings.Join(got.Scope, "|") != "Specs/Exact|Designs/Exact" {
+		t.Errorf("scope round trip mismatch: %#v", got.Scope)
+	}
+	if strings.Join(got.Tags, "|") != "roundtrip|unicode" {
+		t.Errorf("tags round trip mismatch: %#v", got.Tags)
+	}
+}
+
+func TestDecideAddCLI_RejectedValuePreservesLiteralComma(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	want := []string{
+		"Reject every second edit instead of accumulating compatible edits.",
+		"Silently replace an edit with retirement, or retirement with an edit.",
+	}
+	c := newRootCmd()
+	c.SetArgs([]string{"decide", "add",
+		"--statement", "A separate approved statement about staged operation conflict handling.",
+		"--rejected-value", want[0],
+		"--rejected-value", want[1],
+		"--accept"})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("CLI decide add: %v", err)
+	}
+	doc, _, _, err := loadLedger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := loadEntries(doc)
+	got := entries[len(entries)-1].Rejected
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("literal rejected values changed:\nwant: %#v\n got: %#v", want, got)
+	}
+}
+
+func TestDecideAddCLI_RejectedValuePreservesYAMLLikeStrings(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	want := []string{"null", "TRUE", "123", "", "2026-09-09", "literal, comma"}
+	args := []string{"decide", "add", "--statement", "A separate approved truth about exact scalar values.", "--accept"}
+	for _, value := range want {
+		args = append(args, "--rejected-value", value)
+	}
+	c := newRootCmd()
+	c.SetArgs(args)
+	if err := c.Execute(); err != nil {
+		t.Fatalf("CLI decide add: %v", err)
+	}
+	doc, _, _, err := loadLedger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := loadEntries(doc)
+	got := entries[len(entries)-1].Rejected
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("YAML-like rejected values changed:\nwant: %#v\n got: %#v", want, got)
+	}
+}
+
+func TestDecideAddCLI_RejectsMixedRejectedFlagsWithoutWrite(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	before := string(ledgerBytes(t))
+	c := newRootCmd()
+	c.SetArgs([]string{"decide", "add", "--statement", "Unrelated approved statement.",
+		"--rejected", "old one,old two", "--rejected-value", "literal, comma", "--accept"})
+	err := c.Execute()
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually-exclusive refusal, got %v", err)
+	}
+	if string(ledgerBytes(t)) != before {
+		t.Fatal("mixed rejected flags changed ledger bytes")
+	}
+}
+
+func TestDecideAdd_CompatibleWithInvalidTargetsDoNotWrite(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"unknown", "D-9999"}, {"proposed", "D-0002"}, {"superseded", "D-0003"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := chdirTemp(t)
+			entries := collisionEntry("D-0001", "accepted", "Widget") + "\n" +
+				collisionEntry("D-0002", "proposed", "Proposed") + "\n" +
+				collisionEntry("D-0003", "superseded", "Retired")
+			writeLedger(t, root, entries)
+			before := string(ledgerBytes(t))
+			err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", CompatibleWith: []string{tc.id}, Accept: true})
+			if err == nil {
+				t.Fatal("expected invalid compatibility target refusal")
+			}
+			if got := string(ledgerBytes(t)); got != before {
+				t.Fatal("refusal changed ledger bytes")
+			}
+		})
+	}
+}
+
+func TestDecideAdd_CompatibleWithMustNameActualCandidate(t *testing.T) {
+	root := chdirTemp(t)
+	unrelated := `  - id: D-0002
+    kind: decision
+    status: accepted
+    date: 2026-07-01
+    decided_by: user
+    statement: "Telescopes track distant galaxies through calibrated optical mirrors."
+    rejected: []
+    rationale: "Because."
+    scope: []
+    tags: []
+    reversibility: two-way`
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget")+"\n"+unrelated)
+	before := string(ledgerBytes(t))
+	err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", CompatibleWith: []string{"D-0002"}, Accept: true})
+	if err == nil || !strings.Contains(err.Error(), "actual collision candidate") {
+		t.Fatalf("expected stale acknowledgement refusal, got %v", err)
+	}
+	if string(ledgerBytes(t)) != before {
+		t.Fatal("refusal changed ledger bytes")
+	}
+}
+
+func TestDecideAdd_ResolvedAndUnresolvedCandidatesRefuse(t *testing.T) {
+	for _, compatible := range [][]string{nil, {"D-0002"}} {
+		root := chdirTemp(t)
+		writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget")+"\n"+collisionEntry("D-0002", "accepted", "Widget")+"\n"+collisionEntry("D-0003", "accepted", "Widget"))
+		before := string(ledgerBytes(t))
+		err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", Supersedes: "D-0001", CompatibleWith: compatible, Accept: true})
+		if err == nil {
+			t.Fatal("named plus unnamed collision must refuse")
+		}
+		if string(ledgerBytes(t)) != before {
+			t.Fatal("refusal changed ledger bytes")
+		}
+	}
+}
+
+func TestDecideAdd_MixedDistinctResolutions(t *testing.T) {
+	root := chdirTemp(t)
+	two := collisionEntry("D-0002", "accepted", "Widget")
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget")+"\n"+two)
+	if err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", Supersedes: "D-0001", CompatibleWith: []string{"D-0002"}, Accept: true}); err != nil {
+		t.Fatalf("mixed resolutions: %v", err)
+	}
+	got := string(ledgerBytes(t))
+	if !strings.Contains(got, two) {
+		t.Fatal("compatible target was mutated")
+	}
+	if !strings.Contains(got, "superseded_by: D-0003") {
+		t.Fatal("superseded target was not linked")
+	}
+}
+
+func TestDecideAdd_SameIDResolutionConflictRefuses(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	before := string(ledgerBytes(t))
+	err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", Supersedes: "D-0001", CompatibleWith: []string{"D-0001"}, Accept: true})
+	if err == nil || !strings.Contains(err.Error(), "both") {
+		t.Fatalf("expected same-id conflict, got %v", err)
+	}
+	if string(ledgerBytes(t)) != before {
+		t.Fatal("refusal changed ledger bytes")
+	}
+}
+
+func TestDecideAdd_CompatibleDryRunDoesNotWrite(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	before := string(ledgerBytes(t))
+	if err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", CompatibleWith: []string{"D-0001"}, Accept: true, DryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	if string(ledgerBytes(t)) != before {
+		t.Fatal("dry run changed ledger bytes")
+	}
+}
+
 // TestDecideAdd_AllocatesAboveHighWaterMark: the next id must be one past the
 // highest existing number, never filling a gap left by a prior retirement.
 func TestDecideAdd_AllocatesAboveHighWaterMark(t *testing.T) {
@@ -376,5 +651,120 @@ func TestDecideAdd_SupersedesIgnoresFieldOrder(t *testing.T) {
 	}
 	if strings.Contains(content, "status: accepted\n    date: 2026-07-01") {
 		t.Errorf("old entry is still accepted — the ledger now holds two contradictory truths:\n%s", content)
+	}
+}
+
+// TestQuoteYAML_RoundTripsEscapes: quoteYAML must produce a scalar the ledger
+// parser reads back byte-for-byte. The old implementation escaped only the
+// double quote, so a backslash or a raw newline in --statement produced a
+// scalar that parsed to different bytes — or not at all. Every case here goes
+// through renderEntry → ledger file → loadEntries, not a string compare.
+func TestQuoteYAML_RoundTripsEscapes(t *testing.T) {
+	cases := map[string]string{
+		"backslash":       `C:\Users\path and a trailing \`,
+		"literal-n":       `not a newline: \n stays two characters`,
+		"raw-newline":     "first paragraph\n\nsecond paragraph",
+		"tab-and-cr":      "col1\tcol2\r\nrow2",
+		"control-char":    "bell\x07 and unit sep\x1f",
+		"del":             "before\x7fafter",
+		"quotes":          `she said "hi" and 'bye'`,
+		"unicode":         "café 東京 — emoji 🎯",
+		"yaml-indicators": "- not a list: {not: a map} # not a comment",
+		"empty":           "",
+	}
+	for name, want := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := chdirTemp(t)
+			lines := renderEntry(decisionEntry{
+				ID: "D-0001", Kind: "decision", Status: "accepted", Date: "2026-07-01",
+				DecidedBy: "user", Statement: want, Rationale: want, Reversibility: "two-way",
+			})
+			for _, l := range lines {
+				if strings.Contains(l, "\n") {
+					t.Fatalf("renderEntry emitted a multi-line YAML line: %q", l)
+				}
+			}
+			writeLedger(t, root, strings.Join(lines, "\n"))
+			doc, _, _, err := loadLedger()
+			if err != nil {
+				t.Fatal(err)
+			}
+			entries := loadEntries(doc)
+			if len(entries) != 1 {
+				t.Fatalf("got %d parsed entries from:\n%s", len(entries), strings.Join(lines, "\n"))
+			}
+			if entries[0].Statement != want {
+				t.Errorf("statement:\nwant %q\n got %q", want, entries[0].Statement)
+			}
+			if entries[0].Rationale != want {
+				t.Errorf("rationale:\nwant %q\n got %q", want, entries[0].Rationale)
+			}
+		})
+	}
+}
+
+// TestDecideAdd_LegacyRejectedRendersPlainScalars: the comma-separated
+// --rejected path keeps its plain flow rendering; only --rejected-value opts
+// into quoting every element. Both must parse back to the same values.
+func TestDecideAdd_LegacyRejectedRendersPlainScalars(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	if err := cmdDecideAdd(decideAddOpts{Statement: "Unrelated approved statement about rendering.", Rejected: "alpha,beta gamma", Accept: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(ledgerBytes(t)); !strings.Contains(got, "    rejected: [alpha, beta gamma]\n") {
+		t.Fatalf("legacy --rejected rendering changed:\n%s", got)
+	}
+
+	root = chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	if err := cmdDecideAdd(decideAddOpts{Statement: "Unrelated approved statement about rendering.", RejectedValues: []string{"alpha", "beta gamma"}, Accept: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(ledgerBytes(t)); !strings.Contains(got, `    rejected: ["alpha", "beta gamma"]`+"\n") {
+		t.Fatalf("--rejected-value rendering not quoted:\n%s", got)
+	}
+	doc, _, _, err := loadLedger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := loadEntries(doc)
+	if got := strings.Join(entries[len(entries)-1].Rejected, "|"); got != "alpha|beta gamma" {
+		t.Fatalf("quoted rejected values parsed as %q", got)
+	}
+}
+
+// TestDecideAdd_CompatibleWithBlankIDRefuses: a blank acknowledgement (e.g.
+// `--compatible-with ""` or a trailing comma) is an input error, never a
+// silently-normalized no-op, and never writes.
+func TestDecideAdd_CompatibleWithBlankIDRefuses(t *testing.T) {
+	for _, ids := range [][]string{{""}, {"  "}, {"D-0001", ""}} {
+		root := chdirTemp(t)
+		writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+		before := string(ledgerBytes(t))
+		err := cmdDecideAdd(decideAddOpts{Statement: "Widget storage uses the beta approach for durable replicated persistence.", CompatibleWith: ids, Accept: true})
+		if err == nil || !strings.Contains(err.Error(), "requires a decision id") {
+			t.Fatalf("ids %q: expected blank-id refusal, got %v", ids, err)
+		}
+		if string(ledgerBytes(t)) != before {
+			t.Fatalf("ids %q: refusal changed ledger bytes", ids)
+		}
+	}
+}
+
+// TestDecideAdd_CompatibleWithNoCandidatesIsNotAFreePass: naming an accepted
+// entry that the collision check did not flag is refused even when nothing
+// else collides — an acknowledgement must correspond to a detected candidate
+// so a stale flag copied from an earlier invocation cannot linger unnoticed.
+func TestDecideAdd_CompatibleWithNoCandidatesIsNotAFreePass(t *testing.T) {
+	root := chdirTemp(t)
+	writeLedger(t, root, collisionEntry("D-0001", "accepted", "Widget"))
+	before := string(ledgerBytes(t))
+	err := cmdDecideAdd(decideAddOpts{Statement: "Telescopes track distant galaxies through calibrated optical mirrors.", CompatibleWith: []string{"D-0001"}, Accept: true})
+	if err == nil || !strings.Contains(err.Error(), "actual collision candidate") {
+		t.Fatalf("expected non-candidate refusal, got %v", err)
+	}
+	if string(ledgerBytes(t)) != before {
+		t.Fatal("refusal changed ledger bytes")
 	}
 }

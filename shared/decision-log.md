@@ -185,6 +185,15 @@ Run this check before appending any new entry E. Cheapest layer first; later lay
    - **One-step supersession for fresh instructions:** when E comes from an explicit user statement made moments ago (an escalation answer, a direct instruction), don't reopen the decision — present the collision as a single confirmation: "This supersedes D-NNNN (*old statement*) — confirm?" One yes resolves it; anything less than yes falls back to the full menu above.
 5. **Supersession cascade:** after a supersession, grep artifacts (`Specs/`, `Designs/`, `Plans/`) for the superseded entry's id — this is why the citation convention above is load-bearing — plus the entry's `scope` artifacts regardless of citation. Report any hits to the user as possibly-stale artifacts (a `/decide check` concern thereafter) — don't rewrite them unasked.
 
+The bounded CLI acknowledgement for a judgment already made is
+`sdd decide add --compatible-with D-NNNN` (repeatable). Candidate detection
+still always runs, and every detected candidate must be named either by the
+single `--supersedes` target or by `--compatible-with`. A compatibility id must
+name an accepted entry that is an actual candidate; unknown, non-accepted,
+stale/non-candidate, unresolved, and same-id supersedes-plus-compatible inputs
+are refused. Repeated compatibility ids are normalized. Compatibility is pure
+acknowledgement for this invocation and adds no field to either ledger entry.
+
 ## Consultation — how the ledger is read
 
 - **The researcher agent is the universal read path.** It scans `Decisions/` alongside the other artifact directories and returns a **Recorded Decisions** section: `accepted` entries relevant to the topic (matched by tags/scope/terms), plus any tension between the ledger and other artifacts it noticed. Skills that dispatch the researcher get ledger awareness for free.

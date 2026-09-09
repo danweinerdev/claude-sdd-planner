@@ -462,8 +462,8 @@ func decideCmd() *cobra.Command {
 		Use:   "decide",
 		Short: "Read and write the decision ledger",
 		Long: `The decision ledger is the persistent record of decided truths. Accepted
-entries are standing constraints; 'add' refuses on a candidate collision with
-an accepted entry unless --supersedes names it.`,
+entries are standing constraints; 'add' refuses unless every candidate collision
+is named by --supersedes or --compatible-with.`,
 	}
 
 	var listJSON bool
@@ -497,9 +497,11 @@ an accepted entry unless --supersedes names it.`,
 	af.StringVar(&a.Statement, "statement", "", "the decided statement (required)")
 	af.StringVar(&a.Rationale, "rationale", "", "why this over the alternatives")
 	af.StringVar(&a.Rejected, "rejected", "", "comma-separated anti-choices")
+	af.StringArrayVar(&a.RejectedValues, "rejected-value", nil, "literal anti-choice array element (repeatable; preserves commas)")
 	af.StringVar(&a.Scope, "scope", "", "comma-separated governed artifacts")
 	af.StringVar(&a.Tags, "tags", "", "comma-separated tags")
 	af.StringVar(&a.Supersedes, "supersedes", "", "D-NNNN this entry supersedes")
+	af.StringSliceVar(&a.CompatibleWith, "compatible-with", nil, "accepted candidate D-NNNN judged compatible (repeatable)")
 	af.StringVar(&a.Kind, "kind", "decision", "decision|assumption|definition|answered-question")
 	af.StringVar(&a.Reversibility, "reversibility", "two-way", "one-way|two-way")
 	af.BoolVar(&a.Accept, "accept", false, "record as accepted rather than proposed")
