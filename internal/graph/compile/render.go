@@ -21,11 +21,11 @@ package compile
 // The plan README is treated differently from phase docs: its prose sections
 // (Overview, Non-Goals, ...) and frontmatter are plan identity the graph
 // does not hold, so the renderer performs exactly two surgical edits —
-// replacing an empty `phases: []` with the rendered phase entries, and
+// initializing empty phases[] or refreshing statuses of proven graph-owned
+// entries, and
 // upserting one marker-delimited `## Graph View` section — and otherwise
-// preserves the file byte-for-byte. A README whose phases[] already lists
-// non-rendered (v1) entries is left untouched entirely; merging mixed plans
-// is conversion's job (2.5), recorded as a deliberate boundary in the plan.
+// preserves the file byte-for-byte. Non-rendered (v1) phase entries retain
+// their ownership and bytes; merging their membership is conversion's job.
 
 import (
 	"fmt"
@@ -33,13 +33,16 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"gopkg.in/yaml.v3"
 )
 
 // frozenViewMarker marks a generated view rendered while every node in it
@@ -387,7 +390,8 @@ func preflightViews(root, plan string, g *model.Graph, st map[string]states.Node
 			return err
 		}
 	}
-	return nil
+	_, _, err := planReadmeUpdate(planDir, plan, groupPhases(g, plan), closed)
+	return err
 }
 
 // renderViews writes the phase views and updates the README projection.
@@ -395,6 +399,16 @@ func renderViews(root, plan string, g *model.Graph, st map[string]states.NodeSta
 	planDir := filepath.Join(root, "Plans", plan)
 	groups := groupPhases(g, plan)
 	if err := preflightViews(root, plan, g, st, closed); err != nil {
+		return nil, err
+	}
+	// Determine ownership before writing phase files: a just-created marker
+	// must not retroactively authorize taking over an existing manual entry.
+	readmeBefore, err := os.ReadFile(filepath.Join(planDir, "README.md"))
+	if err != nil {
+		return nil, err
+	}
+	readme, readmeChanged, err := planReadmeUpdate(planDir, plan, groups, closed)
+	if err != nil {
 		return nil, err
 	}
 
@@ -413,42 +427,47 @@ func renderViews(root, plan string, g *model.Graph, st map[string]states.NodeSta
 		}
 	}
 
-	changed, err := updateReadme(planDir, plan, groups, closed)
-	if err != nil {
-		return nil, err
-	}
-	if changed {
+	if readmeChanged {
+		if err := istore.WriteAtomicExpecting(filepath.Join(planDir, "README.md"), readme, istore.Digest(string(readmeBefore))); err != nil {
+			return nil, err
+		}
 		written = append(written, filepath.Join(planDir, "README.md"))
 	}
 	return written, nil
 }
 
-// updateReadme performs the two surgical README edits: rendered phases[]
-// (only when the existing value is the empty list — mixed v1 plans are
-// conversion's job) and the marker-delimited Graph View section.
+// updateReadme applies the preflightable, surgical README projection.
 func updateReadme(planDir, plan string, groups []phaseGroup, closed map[string]bool) (bool, error) {
+	before, err := os.ReadFile(filepath.Join(planDir, "README.md"))
+	if err != nil {
+		return false, err
+	}
+	out, changed, err := planReadmeUpdate(planDir, plan, groups, closed)
+	if err != nil || !changed {
+		return false, err
+	}
+	return true, istore.WriteAtomicExpecting(filepath.Join(planDir, "README.md"), out, istore.Digest(string(before)))
+}
+
+func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[string]bool) (string, bool, error) {
 	path := filepath.Join(planDir, "README.md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return false, fmt.Errorf("compile: reading plan README: %w", err)
+		return "", false, fmt.Errorf("compile: reading plan README: %w", err)
 	}
 	src := string(raw)
 	out := src
 
-	if strings.Contains(out, "\nphases: []\n") && len(groups) > 0 {
-		var b strings.Builder
-		b.WriteString("\nphases:\n")
-		for _, ph := range groups {
-			fmt.Fprintf(&b, "  - id: %d\n    title: \"%s\"\n    status: %s\n    doc: \"%s\"\n", ph.Ordinal, ph.Title, phaseStatus(ph.Nodes, closed), ph.Doc)
-		}
-		out = strings.Replace(out, "\nphases: []\n", b.String(), 1)
+	out, err = refreshReadmePhaseStatuses(planDir, plan, out, groups, closed)
+	if err != nil {
+		return "", false, err
 	}
 
 	section := renderGraphViewSection(plan, groups)
 	if begin := strings.Index(out, graphViewBegin); begin >= 0 {
 		end := strings.Index(out, graphViewEnd)
 		if end < begin {
-			return false, fmt.Errorf("compile: %s has a malformed graph-view section (begin without end)", path)
+			return "", false, fmt.Errorf("compile: %s has a malformed graph-view section (begin without end)", path)
 		}
 		out = out[:begin] + section + out[end+len(graphViewEnd):]
 	} else if i := planEvidenceHeadingRe.FindStringIndex(out); i != nil {
@@ -468,12 +487,202 @@ func updateReadme(planDir, plan string, groups []phaseGroup, closed map[string]b
 	}
 
 	if out == src {
-		return false, nil
+		return "", false, nil
 	}
 	// A real change restamps the README's updated date; an unchanged README
 	// is never touched, so idempotent re-renders stay byte-stable.
-	out = updatedLineRe.ReplaceAllString(out, "updated: "+time.Now().Format("2006-01-02"))
-	return true, istore.WriteAtomic(path, out)
+	end, err := readmeFrontmatterEnd(out)
+	if err != nil {
+		return "", false, err
+	}
+	out = updatedLineRe.ReplaceAllString(out[:end], "updated: "+time.Now().Format("2006-01-02")) + out[end:]
+	return out, true, nil
+}
+
+func readmeFrontmatterEnd(src string) (int, error) {
+	if !strings.HasPrefix(src, "---\n") {
+		return 0, fmt.Errorf("compile: README requires YAML frontmatter")
+	}
+	at := strings.Index(src[4:], "\n---\n")
+	if at < 0 {
+		return 0, fmt.Errorf("compile: README frontmatter is not closed")
+	}
+	return 4 + at + 1, nil // beginning of the closing delimiter
+}
+
+// refreshReadmePhaseStatuses changes only the owned scalar tokens. YAML node
+// positions keep comments, quoting, extra fields, flow style and identity prose
+// intact instead of serializing the entire frontmatter through a flat model.
+func refreshReadmePhaseStatuses(planDir, plan, src string, groups []phaseGroup, closed map[string]bool) (string, error) {
+	end, err := readmeFrontmatterEnd(src)
+	if err != nil {
+		return "", err
+	}
+	fm := src[4:end]
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(fm), &doc); err != nil {
+		return "", fmt.Errorf("compile: invalid README YAML: %w", err)
+	}
+	if len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return "", fmt.Errorf("compile: README frontmatter must be a mapping")
+	}
+	var phases, key *yaml.Node
+	for i := 0; i < len(doc.Content[0].Content); i += 2 {
+		if doc.Content[0].Content[i].Value == "phases" {
+			if phases != nil {
+				return "", fmt.Errorf("compile: duplicate README phases field")
+			}
+			key, phases = doc.Content[0].Content[i], doc.Content[0].Content[i+1]
+		}
+	}
+	if phases == nil {
+		return src, nil
+	}
+	if phases.Kind != yaml.SequenceNode {
+		return "", fmt.Errorf("compile: README phases must be a sequence")
+	}
+	offset := func(n *yaml.Node) (int, error) {
+		at := 4
+		for line := 1; line < n.Line; line++ {
+			next := strings.IndexByte(src[at:end], '\n')
+			if next < 0 {
+				return 0, fmt.Errorf("compile: invalid phase source position")
+			}
+			at += next + 1
+		}
+		// YAML columns count Unicode code points, not bytes.
+		for column := 1; column < n.Column; column++ {
+			if at >= end {
+				return 0, fmt.Errorf("compile: invalid phase source column")
+			}
+			_, size := utf8.DecodeRuneInString(src[at:end])
+			at += size
+		}
+		return at, nil
+	}
+	if len(phases.Content) == 0 && len(groups) > 0 {
+		start, err := offset(key)
+		if err != nil {
+			return "", err
+		}
+		value, err := offset(phases)
+		if err != nil {
+			return "", err
+		}
+		lineEnd := strings.IndexByte(src[value:end], '\n')
+		if lineEnd < 0 {
+			return "", fmt.Errorf("compile: unsupported empty phases layout")
+		}
+		lineEnd += value
+		close := strings.IndexByte(src[value:lineEnd], ']')
+		if close < 0 || src[value] != '[' || strings.TrimSpace(src[value+1:value+close]) != "" {
+			return "", fmt.Errorf("compile: empty phases must use [] on one line")
+		}
+		close += value
+		var b strings.Builder
+		b.WriteString(strings.TrimRight(src[start:value], " \t"))
+		b.WriteString(src[close+1 : lineEnd])
+		b.WriteByte('\n')
+		for _, ph := range groups {
+			fmt.Fprintf(&b, "  - id: %d\n    title: %s\n    status: %s\n    doc: %s\n", ph.Ordinal, strconv.Quote(ph.Title), phaseStatus(ph.Nodes, closed), strconv.Quote(ph.Doc))
+		}
+		return src[:start] + b.String() + src[lineEnd+1:], nil
+	}
+	type edit struct {
+		start, end int
+		text       string
+	}
+	var edits []edit
+	for _, entry := range phases.Content {
+		if entry.Kind != yaml.MappingNode {
+			continue
+		}
+		fields := map[string]*yaml.Node{}
+		for i := 0; i < len(entry.Content); i += 2 {
+			k := entry.Content[i].Value
+			if fields[k] != nil {
+				return "", fmt.Errorf("compile: duplicate phase field %q", k)
+			}
+			fields[k] = entry.Content[i+1]
+		}
+		if fields["id"] == nil || fields["doc"] == nil {
+			continue
+		}
+		for _, ph := range groups {
+			if fields["doc"].Value != ph.Doc {
+				continue
+			}
+			old, err := os.ReadFile(filepath.Join(planDir, ph.Doc))
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return "", err
+			}
+			if !strings.Contains(string(old), viewMarker(plan)) {
+				continue
+			}
+			if fields["id"].Value != strconv.Itoa(ph.Ordinal) {
+				return "", fmt.Errorf("compile: generated phase %s has README id %q, expected %d; reconcile the identity instead of silently leaving a stale status", ph.Doc, fields["id"].Value, ph.Ordinal)
+			}
+			status := fields["status"]
+			want := phaseStatus(ph.Nodes, closed)
+			if status != nil && status.Kind == yaml.ScalarNode && status.Tag == "!!str" && status.Value == want {
+				continue
+			}
+			if status == nil || status.Kind != yaml.ScalarNode || status.Tag != "!!str" || status.Anchor != "" || status.Style&(yaml.LiteralStyle|yaml.FoldedStyle|yaml.TaggedStyle) != 0 {
+				return "", fmt.Errorf("compile: generated phase %s requires a plain or quoted scalar status", ph.Doc)
+			}
+			start, err := offset(status)
+			if err != nil {
+				return "", err
+			}
+			finish := start
+			replacement := want
+			switch status.Style {
+			case yaml.DoubleQuotedStyle, yaml.SingleQuotedStyle:
+				quote := src[start]
+				if quote != '"' && quote != '\'' {
+					return "", fmt.Errorf("compile: quoted phase status source span does not start at a quote")
+				}
+				finish++
+				for finish < end {
+					if quote == '"' && src[finish] == '\\' {
+						finish += 2
+						continue
+					}
+					if src[finish] == quote {
+						if quote == '\'' && finish+1 < end && src[finish+1] == '\'' {
+							finish += 2
+							continue
+						}
+						finish++
+						break
+					}
+					finish++
+				}
+				if finish > end || src[finish-1] != quote {
+					return "", fmt.Errorf("compile: unterminated phase status")
+				}
+				if quote == '"' {
+					replacement = strconv.Quote(want)
+				} else {
+					replacement = "'" + want + "'"
+				}
+			default:
+				if !strings.HasPrefix(src[start:end], status.Value) || strings.ContainsAny(status.Value, "\r\n") {
+					return "", fmt.Errorf("compile: unsafe phase status source span")
+				}
+				finish = start + len(status.Value)
+			}
+			edits = append(edits, edit{start, finish, replacement})
+		}
+	}
+	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
+	for _, e := range edits {
+		src = src[:e.start] + e.text + src[e.end:]
+	}
+	return src, nil
 }
 
 func renderGraphViewSection(plan string, groups []phaseGroup) string {
