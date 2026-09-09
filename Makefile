@@ -36,6 +36,10 @@ GOARCH ?= $(shell go env GOARCH)
 
 BUILD_DIR := build
 HOST_TUPLE := $(GOOS)-$(GOARCH)
+EXE_SUFFIX :=
+ifeq ($(GOOS),windows)
+EXE_SUFFIX := .exe
+endif
 
 # Release strip flags: -s drops the symbol table, -w the DWARF sections, and
 # -trimpath rewrites embedded source paths to module-relative form.
@@ -44,8 +48,8 @@ RELEASE_FLAGS := -trimpath -ldflags="$(RELEASE_LDFLAGS)"
 
 # The host binaries, one per variant. SDD names the debug build: it is the one
 # day-to-day work uses, since a failure is something you then go and debug.
-SDD := $(BUILD_DIR)/$(HOST_TUPLE)-debug/sdd
-SDD_RELEASE := $(BUILD_DIR)/$(HOST_TUPLE)-release/sdd
+SDD := $(BUILD_DIR)/$(HOST_TUPLE)-debug/sdd$(EXE_SUFFIX)
+SDD_RELEASE := $(BUILD_DIR)/$(HOST_TUPLE)-release/sdd$(EXE_SUFFIX)
 
 PLATFORMS := \
 	linux-amd64 \
@@ -58,17 +62,10 @@ PLATFORMS := \
 build:
 	@mkdir -p $(dir $(SDD))
 	@go build -o $(SDD) ./cmd/sdd
-	@rm -f $(SDD).exe
 	@echo "built $(SDD)"
 
-# The rm -f above is a Windows footgun guard, not dead code: `go build -o
-# .../sdd` produces a file literally named `sdd`, but when make's shell later
-# executes `$(SDD)`, Windows PATHEXT resolution prefers a SIBLING `sdd.exe`
-# if one exists — so a stale .exe left by an older toolchain silently
-# shadows every freshly built binary in every make target that runs $(SDD),
-# including the template drift gate. That exact failure shipped: a v2.3.5
-# sdd.exe from before the graph-proposal pair check sat in build/ for a week
-# while `make test` reported the stale schema copy as clean.
+# The platform suffix makes the built and executed binary identical, preventing
+# stale sibling shadowing.
 
 # build-release compiles the host platform with the published flags. Useful for
 # reproducing a CI artifact locally without cross-compiling the whole set.
@@ -141,8 +138,11 @@ clean-build:
 # ordering check to be machine-enforced rather than trusted, so `make test`
 # runs the corpus: SDD154/155/156 fire against real git history built by each
 # fixture's SETUP script, and a regression there fails the build.
+# The authoritative gate always runs fresh. Windows Go result-cache processing
+# has been observed to stall after a passing package; this avoids cache reuse
+# without skipping coverage or claiming the upstream bug is fixed.
 test: check-templates
-	@go test ./...
+	@go test -count=1 ./...
 
 # --- Portable (OpenCode/Codex) tree --------------------------------------
 #
