@@ -22,12 +22,13 @@ var (
 // ForkJournal is private recovery state for one approved multi-file preview.
 // It is stored below the planning root and is never canonical decision data.
 type ForkJournal struct {
-	Version     SchemaVersion   `json:"version"`
-	OperationID string          `json:"operationId"`
-	OwnerID     OwnerID         `json:"ownerId"`
-	Collections []CollectionID  `json:"collections"`
-	Status      string          `json:"status"`
-	Preview     PreviewEnvelope `json:"preview"`
+	Version         SchemaVersion        `json:"version"`
+	OperationID     string               `json:"operationId"`
+	OwnerID         OwnerID              `json:"ownerId"`
+	Collections     []CollectionID       `json:"collections"`
+	Status          string               `json:"status"`
+	Preview         PreviewEnvelope      `json:"preview"`
+	SelectorCapture *ForkSelectorCapture `json:"selectorCapture,omitempty"`
 }
 
 // ForkBarrier makes a pending journal visible to every owner of a shared
@@ -307,6 +308,15 @@ func validateForkJournal(j *ForkJournal) error {
 	}
 	if err := VerifyPreviewEnvelope(&j.Preview, j.Preview.Digest); err != nil {
 		return err
+	}
+	// Legacy journals may omit selector capture. Once present, however, it is
+	// recovery authority and journal reads deliberately fail closed unless its
+	// exact bytes remain bound to the approved preview and pending marker.
+	if j.SelectorCapture != nil {
+		journalPath := forkJournalPath(j.Collections[0], j.OperationID)
+		if err := validateForkSelectorCapture(&j.Preview, j.SelectorCapture, journalPath); err != nil {
+			return err
+		}
 	}
 	for i, id := range j.Collections {
 		if id.Validate() != nil || (i > 0 && j.Collections[i-1] >= id) {

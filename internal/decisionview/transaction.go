@@ -152,6 +152,14 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 	}
 	t.journal = journal
 	t.journalPath = forkJournalPath(journal.Collections[0], journal.OperationID)
+	if t.configChange == nil {
+		return nil, errors.New("decisionview: selector capture requires a prepared config change")
+	}
+	capture, err := newForkSelectorCapture(&journal.Preview, *t.configChange, t.intermediate, t.journalPath)
+	if err != nil {
+		return nil, err
+	}
+	t.journal.SelectorCapture = capture
 	if err := t.writeJournal(false); err != nil {
 		return nil, err
 	}
