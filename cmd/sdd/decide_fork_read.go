@@ -40,7 +40,7 @@ func cmdDecideForkRead(view, lookup, status, term string, jsonOut bool) error {
 	out := decideForkReadOutput{
 		Version: 1, View: view, Effective: effective, Resolution: resolved.Resolution,
 		RepositoryID: resolved.OwnerID, LedgerID: resolved.LocalID,
-		Decisions: []decisionview.ResolvedDecision{},
+		Decisions:   []decisionview.ResolvedDecision{},
 		Diagnostics: append([]decisionview.Diagnostic(nil), resolved.Diagnostics...),
 	}
 	if view == "lookup" {
@@ -227,19 +227,30 @@ func decisionRepositoryRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return decisionRepositoryRootFrom(dir)
+}
+
+var errNoPlanningConfig = errors.New("no planning-config.json found")
+
+func decisionRepositoryRootFrom(dir string) (string, error) {
+	var err error
 	dir, err = filepath.Abs(dir)
 	if err != nil {
 		return "", err
 	}
 	for {
-		if info, statErr := os.Stat(filepath.Join(dir, "planning-config.json")); statErr == nil && info.Mode().IsRegular() {
+		configPath := filepath.Join(dir, "planning-config.json")
+		if info, statErr := os.Stat(configPath); statErr == nil {
+			if !info.Mode().IsRegular() {
+				return "", fmt.Errorf("%s is not a regular file", configPath)
+			}
 			return dir, nil
-		} else if statErr != nil && !os.IsNotExist(statErr) {
+		} else if !os.IsNotExist(statErr) {
 			return "", statErr
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("no planning-config.json found at or above %s", dir)
+			return "", fmt.Errorf("%w at or above %s", errNoPlanningConfig, dir)
 		}
 		dir = parent
 	}

@@ -5,12 +5,14 @@ package compile
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
@@ -18,6 +20,7 @@ import (
 // reported together rather than one at a time (FR-17).
 type Refusal struct {
 	Code       string
+	Severity   string
 	Line       int
 	Message    string
 	Correction string
@@ -47,9 +50,10 @@ type Result struct {
 	// content is substantive, or a field with no mechanical default. They are
 	// NOT refusals — the artifact is written and compliant in shape — but it is
 	// not finished, and reporting them is the point of the upgrade path.
-	Todos    []string
-	Notes    []string // informational, not refusals
-	Refusals []Refusal
+	Todos       []string
+	Notes       []string // informational, not refusals
+	Diagnostics []Refusal
+	Refusals    []Refusal
 }
 
 func (r *Result) OK() bool { return len(r.Refusals) == 0 }
@@ -98,6 +102,12 @@ type Options struct {
 	// with pre-existing non-compliant artifacts upgrades them explicitly rather
 	// than having the compiler quietly tolerate them forever.
 	Upgrade bool
+	// DecisionView is the immutable authority capture for the repository that
+	// owns the artifact. Nil preserves never-adopted repositories' compiler
+	// behavior. ArtifactPath selects any retained bare-citation context.
+	DecisionView *decisionview.ConsumerCapture
+	ArtifactPath string
+	ArtifactRoot decisionview.SourceRoot
 }
 
 var (
@@ -139,6 +149,7 @@ func Compile(s *schema.Schema, payload string, opts Options) *Result {
 	applyIdentifiers(s, matched, ordered, existingIDs, retiredIDs, opts, res)
 	currentIDs, currentRetired := collectFromMatched(s, matched, ordered)
 	checkCitations(s, matched, currentIDs, currentRetired, res)
+	checkDecisionAuthority(doc, opts, res)
 
 	if !res.OK() {
 		return res
@@ -163,6 +174,140 @@ func Compile(s *schema.Schema, payload string, opts Options) *Result {
 		res.Output = emit(s, fm, doc, ordered, canonical)
 	}
 	return res
+}
+
+func checkDecisionAuthority(doc *artifact.Doc, opts Options, res *Result) {
+	capture := opts.DecisionView
+	if capture == nil {
+		return
+	}
+	for _, d := range capture.Diagnostics {
+		severity := string(d.Severity)
+		finding := Refusal{Code: d.Code, Severity: severity, Line: d.Line, Message: d.Message, Correction: d.Correction}
+		res.Diagnostics = append(res.Diagnostics, finding)
+		if severity != "error" && severity != "operational" {
+			continue
+		}
+		res.refuse(d.Code, d.Line, d.Message, d.Correction)
+	}
+	if capture.View == nil {
+		return
+	}
+	legacy := decisionLegacyContext(capture, opts.ArtifactPath, opts.ArtifactRoot)
+	after := decisionReferences(doc)
+	var before []string
+	if opts.Existing != nil {
+		before = decisionReferences(opts.Existing)
+	}
+	if err := decisionview.ValidateReferenceChange(before, after, legacy); err != nil {
+		res.refuse("SPK040", 0, err.Error(), "Use a qualified ledger:<collection-id>:D-NNNN citation from the captured effective authority.")
+	}
+	for _, ref := range after {
+		lookup, err := decisionview.LookupReference(capture.View, ref, legacy)
+		if err != nil || lookup.Effective == nil {
+			message := "decision citation " + ref + " does not resolve to effective authority"
+			if err != nil {
+				message += ": " + err.Error()
+			}
+			res.refuse("SPK040", 0, message, "Use an unambiguous qualified identity whose current applicability is binding.")
+		}
+	}
+}
+
+// ValidateDecisionAuthority applies the compiler's fork citation and capture
+// checks without recompiling document structure. Section-scoped writers use it
+// on their fully assembled candidate bytes.
+func ValidateDecisionAuthority(source string, opts Options) *Result {
+	res := &Result{}
+	checkDecisionAuthority(artifact.Parse(source), opts, res)
+	return res
+}
+
+func decisionLegacyContext(capture *decisionview.ConsumerCapture, artifactPath string, artifactRoot decisionview.SourceRoot) *decisionview.LegacyContext {
+	artifactPath = strings.TrimPrefix(filepath.ToSlash(artifactPath), "./")
+	for i := range capture.LegacyContexts {
+		if capture.LegacyContexts[i].Root == artifactRoot &&
+			filepath.ToSlash(capture.LegacyContexts[i].Path) == artifactPath {
+			return &capture.LegacyContexts[i]
+		}
+	}
+	return nil
+}
+
+func decisionReferences(doc *artifact.Doc) []string {
+	var refs []string
+	lines := append([]string(nil), doc.Preamble...)
+	for _, section := range doc.Sections {
+		lines = append(lines, section.Body...)
+	}
+	lines = stripDecisionComments(lines)
+	for _, line := range artifact.VisibleLines(lines) {
+		text := artifact.StripCodeSpans(line.Text)
+		for _, token := range decisionTokenRanges(text) {
+			start, end := token[0], token[1]
+			if at := strings.LastIndex(text[:start], "ledger:"); at >= 0 {
+				candidate := text[at:end]
+				if _, _, ok := decisionview.ParseQualifiedID(candidate); ok {
+					refs = append(refs, candidate)
+					continue
+				}
+			}
+			refs = append(refs, text[start:end])
+		}
+	}
+	return refs
+}
+
+func decisionTokenRanges(text string) [][2]int {
+	var out [][2]int
+	for start := 0; start+2 < len(text); start++ {
+		if text[start] != 'D' || text[start+1] != '-' || (start > 0 && isDecisionWordChar(text[start-1])) {
+			continue
+		}
+		end := start + 2
+		for end < len(text) && text[end] >= '0' && text[end] <= '9' {
+			end++
+		}
+		if end-(start+2) >= 4 {
+			out = append(out, [2]int{start, end})
+		}
+		start = end - 1
+	}
+	return out
+}
+
+func isDecisionWordChar(c byte) bool {
+	return c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
+}
+
+func stripDecisionComments(lines []string) []string {
+	out := make([]string, len(lines))
+	inComment := false
+	for i, line := range lines {
+		var visible strings.Builder
+		for len(line) > 0 {
+			if inComment {
+				end := strings.Index(line, "-->")
+				if end < 0 {
+					line = ""
+					continue
+				}
+				line = line[end+3:]
+				inComment = false
+				continue
+			}
+			start := strings.Index(line, "<!--")
+			if start < 0 {
+				visible.WriteString(line)
+				break
+			}
+			visible.WriteString(line[:start])
+			line = line[start+4:]
+			inComment = true
+		}
+		out[i] = visible.String()
+	}
+	return out
 }
 
 // CheckFrozen exposes the FR-46 frozen/complete guard for callers that never

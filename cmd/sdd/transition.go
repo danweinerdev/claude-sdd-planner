@@ -99,7 +99,7 @@ func cmdComplete(kind, path string, o completeOpts) error {
 			fmt.Fprintf(&b, "  %s %s:%d: %s\n", d.Code, d.Path, d.Line, d.Message)
 			fmt.Fprintf(&b, "      fix: %s\n", d.Correction)
 		}
-		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+		return transitionBlockingError(strings.TrimRight(b.String(), "\n"), blocking)
 	}
 	res.OK = true
 
@@ -232,17 +232,22 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 			}
 		}
 	}
+	forkAuthority := false
 	run := func() ([]rules.Diagnostic, error) {
 		loaded, err := rules.LoadRootRepo(root, repoRoot)
 		if err != nil {
 			return nil, err
 		}
+		base := loaded
 		switch {
 		case planRel != "":
 			loaded = rules.ScopeToPlan(loaded, planRel)
 		case docRel != "":
 			loaded = rules.ScopeToDoc(loaded, docRel)
 		}
+		loaded.DecisionView = base.DecisionView
+		loaded.DecisionDiagnostics = base.DecisionDiagnostics
+		forkAuthority = loaded.DecisionView != nil
 		// RunWithWaivers, not Run: the gate's criterion must be the same one
 		// `sdd validate` applies by default, where an accepted exception
 		// re-tags its finding Waived (reported, not invalidating). Plain Run
@@ -287,10 +292,11 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		// reported by validate, but it does not make the root invalid, so it
 		// must not make a transition refuse either (the gate's contract is
 		// "the artifact validates", not "the artifact has no findings").
-		if d.Severity != rules.Error {
+		if !d.Severity.Invalidating() {
 			continue
 		}
-		if !existing[diagKey(d)] {
+		globalForkAuthority := forkAuthority && (strings.HasPrefix(d.Code, "FDL") || strings.HasPrefix(d.Code, "DLG"))
+		if globalForkAuthority || !existing[diagKey(d)] {
 			introduced = append(introduced, d)
 		}
 	}
@@ -334,14 +340,18 @@ func candidateArtifactErrors(path, candidate string) ([]rules.Diagnostic, error)
 	if err != nil {
 		return nil, err
 	}
+	base := loaded
 	if planRel := rules.PlanRelOf(rel); planRel != "" {
 		loaded = rules.ScopeToPlan(loaded, planRel)
 	} else if rel != "" {
 		loaded = rules.ScopeToDoc(loaded, rel)
 	}
+	loaded.DecisionView = base.DecisionView
+	loaded.DecisionDiagnostics = base.DecisionDiagnostics
 	var out []rules.Diagnostic
 	for _, d := range rules.RunWithWaivers(loaded) {
-		if d.Severity == rules.Error && d.Path == rel {
+		globalForkAuthority := loaded.DecisionView != nil && (strings.HasPrefix(d.Code, "FDL") || strings.HasPrefix(d.Code, "DLG"))
+		if d.Severity.Invalidating() && (d.Path == rel || globalForkAuthority) {
 			out = append(out, d)
 		}
 	}
@@ -416,7 +426,7 @@ func planLifecycle(verb, path string, dryRun, jsonOut bool) error {
 			for _, d := range blocking {
 				fmt.Fprintf(&b, "  %s %s:%d: %s\n", d.Code, d.Path, d.Line, d.Message)
 			}
-			return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+			return transitionBlockingError(strings.TrimRight(b.String(), "\n"), blocking)
 		}
 	}
 	res.OK = true
@@ -567,7 +577,7 @@ func docLifecycle(kind, verb, path, by string, dryRun, jsonOut bool) error {
 			fmt.Fprintf(&b, "  %s %s:%d: %s\n", d.Code, d.Path, d.Line, d.Message)
 			fmt.Fprintf(&b, "      fix: %s\n", d.Correction)
 		}
-		return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+		return transitionBlockingError(strings.TrimRight(b.String(), "\n"), blocking)
 	}
 	res.OK = true
 
@@ -654,6 +664,7 @@ type transitionResult struct {
 
 type gateFinding struct {
 	Code       string `json:"code"`
+	Severity   string `json:"severity,omitempty"`
 	Path       string `json:"path"`
 	Line       int    `json:"line,omitempty"`
 	Message    string `json:"message"`
@@ -664,11 +675,20 @@ func toGateFindings(diags []rules.Diagnostic) []gateFinding {
 	var out []gateFinding
 	for _, d := range diags {
 		out = append(out, gateFinding{
-			Code: d.Code, Path: d.Path, Line: d.Line,
+			Code: d.Code, Severity: string(d.Severity), Path: d.Path, Line: d.Line,
 			Message: d.Message, Correction: d.Correction,
 		})
 	}
 	return out
+}
+
+func transitionBlockingError(message string, diagnostics []rules.Diagnostic) error {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Severity == rules.Operational {
+			return fmt.Errorf("%s", message)
+		}
+	}
+	return &refusedError{n: len(diagnostics), msg: message}
 }
 
 // emitTransitionJSON writes the result and returns the refusal error when the
@@ -678,6 +698,11 @@ func emitTransitionJSON(res transitionResult) error {
 		return err
 	}
 	if !res.OK {
+		for _, finding := range res.Blocking {
+			if finding.Severity == string(rules.Operational) {
+				return fmt.Errorf("%s %s: decision authority could not be captured", res.Kind, res.Verb)
+			}
+		}
 		return &refusedError{n: len(res.Blocking)}
 	}
 	return nil

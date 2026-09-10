@@ -2,9 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/dlg"
 )
 
@@ -28,6 +33,14 @@ func cmdDecideValidate(ledgerArg string, o decideValidateOpts) error {
 		asJSON = true
 	default:
 		return fmt.Errorf("decide validate: --format must be text or json, got %q", o.Format)
+	}
+	if repository, err := decisionRepositoryRoot(); err == nil {
+		capture := decisionview.CaptureForRepository(repository)
+		if capture.Declared || len(capture.Diagnostics) > 0 {
+			return reportForkValidation(capture, asJSON)
+		}
+	} else if !errors.Is(err, errNoPlanningConfig) {
+		return fmt.Errorf("decide validate: resolving represented repository: %w", err)
 	}
 
 	path := ledgerArg
@@ -85,6 +98,68 @@ func cmdDecideValidate(ledgerArg string, o decideValidateOpts) error {
 		}
 	}
 	return nil
+}
+
+func reportForkValidation(capture *decisionview.ConsumerCapture, asJSON bool) error {
+	path := "planning-config.json"
+	if capture.Selection != nil && capture.Selection.Config != nil {
+		path = filepath.Join(capture.Selection.PlanningRoot, filepath.FromSlash(capture.Selection.Config.Path))
+	}
+	ids := []string{}
+	if capture.View != nil {
+		for _, record := range capture.View.Records {
+			if record.Applicability == "binding" || record.Applicability == "unresolved" {
+				ids = append(ids, string(record.ID))
+			}
+		}
+	}
+	sort.Strings(ids)
+	if asJSON {
+		if err := printJSON(map[string]any{
+			"path": path, "effective_decision_ids": ids, "diagnostics": capture.Diagnostics,
+			"valid": !forkCaptureInvalid(capture),
+		}); err != nil {
+			return err
+		}
+	} else {
+		for _, d := range capture.Diagnostics {
+			fmt.Printf("%s %s %s:%d: %s\n", strings.ToUpper(string(d.Severity)), d.Code, d.Path, d.Line, d.Message)
+			fmt.Printf("  fix: %s\n", d.Correction)
+		}
+		if !forkCaptureInvalid(capture) {
+			fmt.Printf("Valid: %s\n", path)
+		}
+	}
+	if forkCaptureOperational(capture) {
+		return fmt.Errorf("decide validate: decision authority could not be captured")
+	}
+	if forkCaptureInvalid(capture) {
+		return &refusedError{n: forkCaptureInvalidCount(capture)}
+	}
+	return nil
+}
+
+func forkCaptureInvalid(capture *decisionview.ConsumerCapture) bool {
+	return forkCaptureInvalidCount(capture) > 0
+}
+
+func forkCaptureInvalidCount(capture *decisionview.ConsumerCapture) int {
+	n := 0
+	for _, d := range capture.Diagnostics {
+		if d.Severity == decisionview.Error || d.Severity == decisionview.Operational {
+			n++
+		}
+	}
+	return n
+}
+
+func forkCaptureOperational(capture *decisionview.ConsumerCapture) bool {
+	for _, d := range capture.Diagnostics {
+		if d.Severity == decisionview.Operational {
+			return true
+		}
+	}
+	return false
 }
 
 func countInvalidating(diags []dlg.Diagnostic) int {
