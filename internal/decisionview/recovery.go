@@ -647,7 +647,7 @@ func (s *forkRecoverySession) publishFinishTargets() error {
 			return ErrForkRecoveryConflict
 		}
 		if !bytes.Equal(current.Bytes, []byte(s.capture.Intermediate)) {
-			if err := publishTransactionFile(s.repositoryRoot, config.change.Path, []byte(s.capture.Intermediate), true); err != nil {
+			if err := publishForkTransactionFile(SourceRootRepository, s.repositoryRoot, config.change.Path, []byte(s.capture.Intermediate), true); err != nil {
 				return err
 			}
 			if err := s.inject(forkRecoveryAfterIntermediateConfig); err != nil {
@@ -668,7 +668,7 @@ func (s *forkRecoverySession) publishFinishTargets() error {
 		return ErrForkRecoveryConflict
 	}
 	if !bytes.Equal(current.Bytes, config.after) {
-		if err := publishTransactionFile(s.repositoryRoot, config.change.Path, config.after, true); err != nil {
+		if err := publishForkTransactionFile(SourceRootRepository, s.repositoryRoot, config.change.Path, config.after, true); err != nil {
 			return err
 		}
 		if err := s.inject(forkRecoveryAfterFinalConfig); err != nil {
@@ -714,7 +714,7 @@ func (s *forkRecoverySession) publishOneTarget(target forkRecoveryTarget, after 
 		return ErrForkRecoveryConflict
 	}
 	if wantExists {
-		if err := publishTransactionFile(s.rootFor(target.change.Root), target.change.Path, want, current.Exists); err != nil {
+		if err := publishForkTransactionFile(target.change.Root, s.rootFor(target.change.Root), target.change.Path, want, current.Exists); err != nil {
 			return err
 		}
 	} else {

@@ -737,7 +737,17 @@ func (t *ForkTransaction) publishChange(change PreviewFileChange, content, expec
 	if current.Exists != expectedExists || !bytes.Equal(current.Bytes, expected) {
 		return ErrForkTransactionConflict
 	}
-	return publishTransactionFile(t.rootFor(change.Root), change.Path, content, current.Exists)
+	return publishForkTransactionFile(change.Root, t.rootFor(change.Root), change.Path, content, current.Exists)
+}
+
+func publishForkTransactionFile(rootKind SourceRoot, root *os.Root, relative string, content []byte, existing bool) error {
+	if rootKind == SourceRootRepository && relative == "planning-config.json" {
+		if !existing {
+			return errors.New("decisionview: represented planning config replacement requires an existing regular file")
+		}
+		return publishConfigTransactionFile(root, relative, content)
+	}
+	return publishTransactionFile(root, relative, content, existing)
 }
 
 func publishTransactionFile(root *os.Root, relative string, content []byte, existing bool) error {
@@ -862,7 +872,7 @@ func (t *ForkTransaction) fail(cause error) (*ForkTransactionResult, error) {
 			continue
 		}
 		if change.BeforeExists {
-			if err := publishTransactionFile(t.rootFor(change.Root), change.Path, []byte(change.Before), true); err != nil {
+			if err := publishForkTransactionFile(change.Root, t.rootFor(change.Root), change.Path, []byte(change.Before), true); err != nil {
 				clean = false
 			}
 		} else if err := removeTransactionFile(t.rootFor(change.Root), change.Path); err != nil {
