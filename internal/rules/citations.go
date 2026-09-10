@@ -1,6 +1,11 @@
 package rules
 
-import "regexp"
+import (
+	"path/filepath"
+	"regexp"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
+)
 
 // Family (h): Validator._citations — SDD120 through SDD122. Decision
 // citations (`D-NNNN`) resolve against the whole ledger; FR/NFR/AC citations
@@ -8,10 +13,11 @@ import "regexp"
 // review) to the citing artifact.
 
 var (
-	citeDRe   = regexp.MustCompile(`\bD-(\d{4,})\b`)
-	citeFRRe  = regexp.MustCompile(`\bFR-(\d{2,})\b`)
-	citeNFRRe = regexp.MustCompile(`\bNFR-(\d{2,})\b`)
-	citeACRe  = regexp.MustCompile(`\bAC-(\d{2,})\b`)
+	citeDRe     = regexp.MustCompile(`\bD-(\d{4,})\b`)
+	citeForkDRe = regexp.MustCompile(`ledger:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:D-[0-9]{4,}|\bD-[0-9]{4,}\b`)
+	citeFRRe    = regexp.MustCompile(`\bFR-(\d{2,})\b`)
+	citeNFRRe   = regexp.MustCompile(`\bNFR-(\d{2,})\b`)
+	citeACRe    = regexp.MustCompile(`\bAC-(\d{2,})\b`)
 	// Design Decisions are numbered from 1 without zero-padding (`DD-9`), so
 	// unlike the spec families this accepts a single digit, plus the `DD-6a`
 	// sub-decision suffix that appears in practice.
@@ -20,12 +26,27 @@ var (
 
 // decisionEntry is one decision-log entry with the fields citation checks need.
 type decisionEntry struct {
-	id     string
-	status string
+	id        string
+	qualified string
+	status    string
 }
 
 func allDecisions(r *Root) map[string]decisionEntry {
 	out := map[string]decisionEntry{}
+	if r.DecisionView != nil {
+		if r.DecisionView.View == nil {
+			return out
+		}
+		for _, resolved := range r.DecisionView.View.Records {
+			_, id, ok := decisionview.ParseQualifiedID(string(resolved.ID))
+			if !ok {
+				continue
+			}
+			qid := string(resolved.ID)
+			out[qid] = decisionEntry{id: id, qualified: qid, status: resolved.OriginalStatus}
+		}
+		return out
+	}
 	for _, a := range r.Artifacts {
 		if a.Meta == nil || a.Kind() != "decision-log" {
 			continue
@@ -42,8 +63,52 @@ func allDecisions(r *Root) map[string]decisionEntry {
 			if _, exists := out[id]; exists {
 				continue // SDD032 already flags the duplicate; first wins here.
 			}
-			out[id] = decisionEntry{id: id, status: metaStr(m, "status")}
+			out[id] = decisionEntry{id: id, qualified: id, status: metaStr(m, "status")}
 		}
+	}
+	return out
+}
+
+func resolveDecisionCitation(r *Root, a *Artifact, citation string, decisions map[string]decisionEntry) (decisionEntry, bool) {
+	if r.DecisionView == nil || r.DecisionView.View == nil {
+		d, ok := decisions[citation]
+		return d, ok
+	}
+	if _, _, qualified := decisionview.ParseQualifiedID(citation); qualified {
+		d, ok := decisions[citation]
+		return d, ok
+	}
+	for _, context := range r.DecisionView.LegacyContexts {
+		if filepath.ToSlash(context.Path) != a.Rel {
+			continue
+		}
+		for _, id := range context.LocalIDs {
+			if id == citation {
+				qid := "ledger:" + string(context.Namespace) + ":" + citation
+				d, ok := decisions[qid]
+				return d, ok
+			}
+		}
+	}
+	var found decisionEntry
+	count := 0
+	for _, d := range decisions {
+		if d.id == citation {
+			found = d
+			count++
+		}
+	}
+	return found, count == 1
+}
+
+func decisionCitations(r *Root, body string) []string {
+	if r.DecisionView != nil {
+		return citeForkDRe.FindAllString(body, -1)
+	}
+	matches := citeDRe.FindAllStringSubmatch(body, -1)
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		out = append(out, "D-"+match[1])
 	}
 	return out
 }
@@ -206,9 +271,8 @@ func init() {
 					continue
 				}
 				body := citationBody(a)
-				for _, m := range citeDRe.FindAllStringSubmatch(body, -1) {
-					id := "D-" + m[1]
-					if _, ok := decisions[id]; ok {
+				for _, id := range decisionCitations(r, body) {
+					if _, ok := resolveDecisionCitation(r, a, id, decisions); ok {
 						continue
 					}
 					emit(Diagnostic{
@@ -238,9 +302,8 @@ func init() {
 					continue
 				}
 				body := citationBody(a)
-				for _, m := range citeDRe.FindAllStringSubmatch(body, -1) {
-					id := "D-" + m[1]
-					d, ok := decisions[id]
+				for _, id := range decisionCitations(r, body) {
+					d, ok := resolveDecisionCitation(r, a, id, decisions)
 					if !ok || (d.status != "rejected" && d.status != "superseded") {
 						continue
 					}

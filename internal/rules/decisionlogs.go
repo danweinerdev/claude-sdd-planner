@@ -24,17 +24,27 @@ import (
 func FocusedDecisionLogs(r *Root, historical bool) []Diagnostic {
 	var candidates []string
 
-	internal := filepath.Join(r.Dir, "Decisions")
-	canonical := filepath.Join(internal, "decisions.md")
-	if isFile(canonical) {
-		candidates = append(candidates, canonical)
-	} else {
-		candidates = append(candidates, firstArchive(internal)...)
+	if r.DecisionView == nil {
+		internal := filepath.Join(r.Dir, "Decisions")
+		canonical := filepath.Join(internal, "decisions.md")
+		if isFile(canonical) {
+			candidates = append(candidates, canonical)
+		} else {
+			candidates = append(candidates, firstArchive(internal)...)
+		}
 	}
 
-	repos := map[string]bool{r.RepoRoot: true}
+	repos := map[string]bool{}
+	if r.DecisionView == nil {
+		repos[r.RepoRoot] = true
+	}
 	for _, p := range r.PlanRepos {
-		repos[p] = true
+		// A selected fork owns only the represented Root repository. Mapped
+		// plan repositories remain independent legacy decision surfaces and
+		// must not disappear from focused validation.
+		if r.DecisionView == nil || absPath(p) != absPath(r.RepoRoot) {
+			repos[p] = true
+		}
 	}
 	var repoList []string
 	for repo := range repos {

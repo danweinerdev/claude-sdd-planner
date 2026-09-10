@@ -216,9 +216,10 @@ func DefinitionPattern(family string) *regexp.Regexp {
 	return specDefinitionRe[family]
 }
 
-// DecisionStatuses returns every decision-ledger entry's id -> status across
-// the root, the same population the citation rules consult (first entry wins
-// a duplicate id, since SDD032 already flags the duplicate).
+// DecisionStatuses returns every decision-ledger entry's citation identity ->
+// status. Fork repositories expose only qualified identities; deliberately not
+// manufacturing a flattened D-NNNN key makes graph-intent consumers fail
+// closed until they support collection-aware decisions.
 func DecisionStatuses(r *Root) map[string]string {
 	out := map[string]string{}
 	for id, d := range allDecisions(r) {

@@ -29,6 +29,10 @@ type Severity string
 const (
 	Error     Severity = "error"
 	Candidate Severity = "candidate"
+	// Operational means declared authority could not be read or captured. It
+	// is distinct from invalid content but still blocks reliance.
+	Operational Severity = "operational"
+	Warning     Severity = "warning"
 	// Waived is an error a human explicitly excepted in the artifact's
 	// frontmatter. It is reported like any other finding and does not make a
 	// root invalid. It is a distinct severity rather than a dropped diagnostic
@@ -36,6 +40,11 @@ const (
 	// never look the same to a reader or to a consumer of the JSON.
 	Waived Severity = "waived"
 )
+
+// Invalidating reports whether a diagnostic blocks programmatic reliance.
+// Operational failures are not content errors, but incomplete authority is no
+// more safe to consume than invalid authority.
+func (s Severity) Invalidating() bool { return s == Error || s == Operational }
 
 // Diagnostic is one finding. Field names and JSON keys match the Python
 // validator's output shape so consumers need no change.
@@ -156,7 +165,7 @@ func Codes() []string {
 // violate?" wants this. Use RunWithWaivers for the reporting path, where a
 // human's declared exceptions apply.
 func Run(r *Root) []Diagnostic {
-	var out []Diagnostic
+	out := append([]Diagnostic(nil), r.DecisionDiagnostics...)
 	emit := func(d Diagnostic) { out = append(out, d) }
 	for _, rule := range All() {
 		if rule.CheckRoot != nil {
@@ -198,6 +207,7 @@ func RunWithWaivers(r *Root) []Diagnostic {
 	// the same bookkeeping internally, so using it here would report every
 	// waiver problem twice.
 	diags := runBare(r)
+	diags = append(diags, r.DecisionDiagnostics...)
 	diags = append(diags, applyWaivers(r, diags)...)
 	diags = demoteRetiredFindings(r, diags)
 	SortDiagnostics(diags)
