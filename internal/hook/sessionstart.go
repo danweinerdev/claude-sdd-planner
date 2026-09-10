@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 )
 
-// maxLedgerEntries bounds the injected context. A ledger grows without limit
-// and every entry costs session context, so the newest are carried and the
-// remainder summarized.
+// maxLedgerEntries bounds the number of effective entries injected. Entries
+// retain deterministic ordering; truncation is reported by a notice.
 const maxLedgerEntries = 30
 
 // SessionStartContext returns the additionalContext for a session, or "" when
@@ -24,9 +25,109 @@ const maxLedgerEntries = 30
 // validator does, so an entry the tool considers valid is the entry the
 // session is told about.
 //
-// Every failure is silent: a hook that errors would break session start, and
-// missing context is recoverable in a way a broken session is not.
+// The hook remains nonfatal. Legacy repositories with no ledger are silent,
+// while a repository that explicitly selected fork authority receives a
+// warning when that authority cannot be resolved safely.
 func SessionStartContext(projectDir string) string {
+	return sessionStartContext(projectDir, 16*1024)
+}
+
+const forkCriticalNotice = "> **Warning:** Configured decision authority is unavailable or truncated. Do not infer standing decisions; read the full resolved view with `sdd decide effective`."
+const legacyCriticalNotice = "> **Warning:** Legacy decision context is truncated. Read the ledger with `sdd decide list` or search it with `sdd decide search`."
+
+// sessionStartContext keeps the context budget injectable for focused tests.
+// Warnings and full-read guidance consume the budget before decision text.
+func sessionStartContext(projectDir string, byteBudget int) string {
+	repository := findRepositoryRoot(projectDir)
+	capture := decisionview.CaptureForRepository(repository)
+	if capture.Declared {
+		return forkSessionStartContext(capture, byteBudget)
+	}
+	return legacySessionStartContext(projectDir, byteBudget)
+}
+
+func forkSessionStartContext(capture *decisionview.ConsumerCapture, byteBudget int) string {
+	blocking := capture.View == nil || capture.View.Resolution != decisionview.ResolutionComplete
+	for _, diagnostic := range capture.Diagnostics {
+		if diagnostic.Severity == decisionview.Error || diagnostic.Severity == decisionview.Operational {
+			blocking = true
+		}
+	}
+	if blocking {
+		var warnings []string
+		for _, diagnostic := range capture.Diagnostics {
+			location := diagnostic.Path
+			if diagnostic.Line > 0 {
+				location += ":" + strconv.Itoa(diagnostic.Line)
+			}
+			if location != "" {
+				location = " (" + location + ")"
+			}
+			warnings = append(warnings, "- "+diagnostic.Code+" ["+string(diagnostic.Severity)+"]"+location+": "+diagnostic.Message)
+		}
+		if len(warnings) == 0 {
+			warnings = append(warnings, "- The configured decision view is not complete.")
+		}
+		context := "> **Warning:** Configured decision authority is not safe to use. Do not treat any partial or historical records as standing instructions.\n" +
+			"Read the full resolved view and reconciliation guidance with `sdd decide effective`.\n" + strings.Join(warnings, "\n")
+		if byteBudget <= 0 || len(context) > byteBudget {
+			return forkCriticalNotice
+		}
+		return context
+	}
+
+	type effectiveEntry struct {
+		id, source, statement string
+	}
+	var entries []effectiveEntry
+	for _, record := range capture.View.Records {
+		if record.Applicability != "binding" {
+			continue
+		}
+		statement, _ := record.Original["statement"].(string)
+		if statement == "" {
+			continue
+		}
+		entries = append(entries, effectiveEntry{
+			id:        record.ID.String(),
+			source:    string(record.Source.Root) + ":" + record.Source.Path,
+			statement: statement,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		lines = append(lines, "- "+entry.id+" [source "+entry.source+"]: "+entry.statement)
+	}
+	header := "## Effective Decision Authority\n" +
+		"Standing constraints on planning and implementation. A conflicting new decision requires user reconciliation:\n"
+	if len(capture.Diagnostics) > 0 {
+		var diagnostics []string
+		for _, diagnostic := range capture.Diagnostics {
+			diagnostics = append(diagnostics, "- "+diagnostic.Code+" ["+string(diagnostic.Severity)+"]: "+diagnostic.Message)
+		}
+		header = "> **Warning:** Decision authority has diagnostics. Read the full resolved view with `sdd decide effective`.\n" +
+			strings.Join(diagnostics, "\n") + "\n" + header
+	}
+	if len(entries) == 0 {
+		if len(capture.Diagnostics) == 0 {
+			return ""
+		}
+		context := header + "No binding decisions are available from the resolved view."
+		if !fitsBudget(byteBudget, context) {
+			return forkCriticalNotice
+		}
+		return context
+	}
+	if len(lines) <= maxLedgerEntries && fitsBudget(byteBudget, header+strings.Join(lines, "\n")) {
+		return header + strings.Join(lines, "\n")
+	}
+	return budgetedDecisionContext(header, lines, byteBudget,
+		"> **Warning:** Decision context is truncated. Read the full resolved view with `sdd decide effective`.\n",
+		forkCriticalNotice)
+}
+
+func legacySessionStartContext(projectDir string, byteBudget int) string {
 	ledger := findLedger(projectDir)
 	if ledger == "" {
 		return ""
@@ -48,18 +149,63 @@ func SessionStartContext(projectDir string) string {
 	var lines []string
 	for i, e := range entries {
 		if i >= maxLedgerEntries {
-			lines = append(lines, "- ... "+strconv.Itoa(len(entries)-maxLedgerEntries)+
-				" more accepted entries in the ledger")
 			break
 		}
 		lines = append(lines, "- "+e.id+": "+e.statement)
 	}
 
-	return "## Decision Ledger (" + ledger + ")\n" +
+	header := "## Decision Ledger (" + ledger + ")\n" +
 		"Accepted decisions — standing constraints on planning and implementation. " +
 		"A new decision that contradicts one must stop for user reconciliation " +
-		"(see shared/decision-log.md in the sdd-planner plugin):\n" +
-		strings.Join(lines, "\n")
+		"(see shared/decision-log.md in the sdd-planner plugin):\n"
+	if len(entries) <= maxLedgerEntries && fitsBudget(byteBudget, header+strings.Join(lines, "\n")) {
+		return header + strings.Join(lines, "\n")
+	}
+	return budgetedDecisionContext(header, lines, byteBudget,
+		"> **Warning:** Legacy decision context is truncated. Read the ledger with `sdd decide list` or search it with `sdd decide search`.\n",
+		legacyCriticalNotice)
+}
+
+func budgetedDecisionContext(header string, lines []string, byteBudget int, notice, criticalNotice string) string {
+	prefix := notice + header
+	if byteBudget <= 0 || len(prefix) > byteBudget {
+		return criticalNotice
+	}
+	var included []string
+	for _, line := range lines {
+		if len(included) >= maxLedgerEntries {
+			break
+		}
+		candidate := prefix + strings.Join(append(included, line), "\n")
+		if len(candidate) > byteBudget {
+			break
+		}
+		included = append(included, line)
+	}
+	return prefix + strings.Join(included, "\n")
+}
+
+func fitsBudget(byteBudget int, context string) bool {
+	return byteBudget > 0 && len(context) <= byteBudget
+}
+
+func findRepositoryRoot(projectDir string) string {
+	if projectDir == "" {
+		projectDir, _ = os.Getwd()
+	}
+	project, err := filepath.Abs(projectDir)
+	if err != nil {
+		return projectDir
+	}
+	for dir := project; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "planning-config.json")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return project
+		}
+	}
 }
 
 type ledgerEntry struct{ id, statement string }
