@@ -138,9 +138,11 @@ clean-build:
 # ordering check to be machine-enforced rather than trusted, so `make test`
 # runs the corpus: SDD154/155/156 fire against real git history built by each
 # fixture's SETUP script, and a regression there fails the build.
-# The authoritative gate always runs fresh. Windows Go result-cache processing
-# has been observed to stall after a passing package; this avoids cache reuse
-# without skipping coverage or claiming the upstream bug is fixed.
+# The authoritative gate always consumes fresh package-test inputs: -count=1
+# prevents a cached success from satisfying any package in the full ./... gate.
+# With Go 1.26 on Windows, cached `go test ./...` was observed to stall after a
+# package printed PASS. Fresh execution is the operational workaround; it keeps
+# full coverage and does not claim that the upstream behavior has been fixed.
 test: check-templates
 	@go test -count=1 ./...
 
