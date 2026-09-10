@@ -283,6 +283,12 @@ func handlerFlagSets() []struct {
 		{"sdd decide add", []string{
 			"statement", "rationale", "rejected", "rejected-value", "scope", "tags", "supersedes", "compatible-with",
 			"kind", "reversibility", "accept", "dry-run", "json"}},
+		{"sdd decide accept", []string{"json"}},
+		{"sdd decide supersede", []string{"json"}},
+		{"sdd decide fork preview", []string{"operation", "file", "json"}},
+		{"sdd decide fork apply", []string{"file", "approval-digest", "json"}},
+		{"sdd decide fork inspect", []string{"operation", "json"}},
+		{"sdd decide fork recover", []string{"operation", "action", "approval-digest", "json"}},
 		{"sdd decide validate", []string{"format", "json", "no-history"}},
 		{"sdd doctor", []string{"json", "check"}},
 		{"sdd provision", []string{"plugin-root", "json", "check"}},

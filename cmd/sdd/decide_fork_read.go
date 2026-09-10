@@ -98,17 +98,19 @@ func cmdDecideCapabilities(jsonOut bool) error {
 			Schema           int      `json:"schema"`
 			Canonicalization []string `json:"canonicalization"`
 			ReadViews        []string `json:"read_views"`
+			WriteOperations  []string `json:"write_operations"`
 			Partial          bool     `json:"partial"`
 		} `json:"decisionforks"`
 	}{Version: 1}
 	out.DecisionForks.Schema = 1
 	out.DecisionForks.Canonicalization = []string{decisionview.CanonicalVersion}
 	out.DecisionForks.ReadViews = []string{"effective", "history", "lookup", "list", "search"}
+	out.DecisionForks.WriteOperations = []string{"adopt", "rebind", "detach", "override", "reconcile", "restore"}
 	out.DecisionForks.Partial = true
 	if jsonOut {
 		return writeJSON(out)
 	}
-	fmt.Println("decisionforks: schema 1; effective/history/lookup/list/search; partial (transactions unavailable)")
+	fmt.Println("decisionforks: schema 1; effective/history/lookup/list/search and exact fork writes; partial (release consumers incomplete)")
 	return nil
 }
 
@@ -345,7 +347,7 @@ func refuseUnsafeForkWrite() error {
 		return err
 	}
 	if explicit {
-		return &refusedError{n: 1, msg: "decide add: explicit fork authority is selected; this legacy writer is not fork-safe"}
+		return &refusedError{n: 1, msg: "decide add: explicit fork authority is selected; this legacy writer is not fork-safe—use `sdd decide fork preview` and preserve inherited history"}
 	}
 	return nil
 }
