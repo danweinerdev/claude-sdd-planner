@@ -86,8 +86,8 @@ func TestForkWriteCLIRealEntryPoint(t *testing.T) {
 		stdout, stderr, err := runSdd(bin, f.root, "decide", "capabilities", "--json")
 		requireCLIExit(t, err, 0, stdout, stderr)
 		value := decodeCLIJSON(t, stdout)
-		forks, ok := value.(map[string]any)["decisionforks"].(map[string]any)
-		if !ok || forks["partial"] != true {
+		forks, ok := value.(map[string]any)["decision_forks"].(map[string]any)
+		if !ok || forks["schema"] != float64(1) || forks["transactions"] != float64(1) || forks["partial"] != true {
 			t.Fatalf("capabilities omit partial decision-fork status: %s", stdout)
 		}
 		want := []any{"adopt", "rebind", "detach", "override", "reconcile", "restore"}
@@ -99,6 +99,9 @@ func TestForkWriteCLIRealEntryPoint(t *testing.T) {
 		}
 		if jsonContainsString(value, "release-complete") || jsonContainsString(value, "releaseComplete") {
 			t.Errorf("write entry point advertises unimplemented release completeness: %s", stdout)
+		}
+		if !reflect.DeepEqual(forks["transaction_operations"], []any{"preview", "apply", "inspect", "recover"}) {
+			t.Errorf("supported transaction operations = %#v, want preview/apply/inspect/recover", forks["transaction_operations"])
 		}
 		for _, command := range []string{"accept", "supersede"} {
 			out, diagnostic, helpErr := runSdd(bin, f.root, "decide", command, "--help")

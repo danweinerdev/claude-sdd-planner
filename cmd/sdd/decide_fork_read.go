@@ -95,22 +95,26 @@ func cmdDecideCapabilities(jsonOut bool) error {
 	out := struct {
 		Version       int `json:"version"`
 		DecisionForks struct {
-			Schema           int      `json:"schema"`
-			Canonicalization []string `json:"canonicalization"`
-			ReadViews        []string `json:"read_views"`
-			WriteOperations  []string `json:"write_operations"`
-			Partial          bool     `json:"partial"`
-		} `json:"decisionforks"`
+			Schema                int      `json:"schema"`
+			Canonicalization      []string `json:"canonicalization"`
+			ReadViews             []string `json:"read_views"`
+			WriteOperations       []string `json:"write_operations"`
+			Transactions          int      `json:"transactions"`
+			TransactionOperations []string `json:"transaction_operations"`
+			Partial               bool     `json:"partial"`
+		} `json:"decision_forks"`
 	}{Version: 1}
 	out.DecisionForks.Schema = 1
 	out.DecisionForks.Canonicalization = []string{decisionview.CanonicalVersion}
 	out.DecisionForks.ReadViews = []string{"effective", "history", "lookup", "list", "search"}
 	out.DecisionForks.WriteOperations = []string{"adopt", "rebind", "detach", "override", "reconcile", "restore"}
+	out.DecisionForks.Transactions = 1
+	out.DecisionForks.TransactionOperations = []string{"preview", "apply", "inspect", "recover"}
 	out.DecisionForks.Partial = true
 	if jsonOut {
 		return writeJSON(out)
 	}
-	fmt.Println("decisionforks: schema 1; effective/history/lookup/list/search and exact fork writes; partial (release consumers incomplete)")
+	fmt.Println("decision_forks: schema 1; effective/history/lookup/list/search, exact fork writes, and transaction preview/apply/inspect/recover; partial (release consumers incomplete)")
 	return nil
 }
 

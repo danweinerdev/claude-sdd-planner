@@ -306,7 +306,7 @@ func captureForkWriteContext(operation string) (*forkWriteContext, error) {
 	if capture.Selection == nil || capture.Selection.Config == nil {
 		return nil, errors.New("selected fork authority is unavailable")
 	}
-	if operation != "reconcile" && (capture.View == nil || capture.View.Resolution != decisionview.ResolutionComplete || forkReadHasAuthorityFailure(capture.View)) {
+	if operation != "reconcile" && operation != "restore" && (capture.View == nil || capture.View.Resolution != decisionview.ResolutionComplete || forkReadHasAuthorityFailure(capture.View)) {
 		return nil, errors.New("selected fork authority is not complete; inspect/recover or reconcile it first")
 	}
 	ctx.planning = capture.PlanningRoot
@@ -371,10 +371,7 @@ func loadForkProposalSource(ctx *forkWriteContext, locator decisionview.SourceLo
 	if err := locator.Validate(); err != nil {
 		return nil, err
 	}
-	if locator.Root != decisionview.SourceRootPlanning {
-		return nil, errors.New("CLI adoption sources must be planning-root collections; repository/config files are never writable decision sources")
-	}
-	metadata, err := readForkMetadata(ctx.planning, locator.Path)
+	metadata, err := readForkMetadata(decisionview.Roots{Repository: ctx.repository, Planning: ctx.planning}, locator)
 	if err != nil {
 		return nil, err
 	}
@@ -409,13 +406,30 @@ func loadForkAncestry(ctx *forkWriteContext, collection *decisionview.Collection
 	return nil
 }
 
-func readForkMetadata(planning, relative string) (*decisionview.ForkMetadata, error) {
-	if filepath.IsAbs(relative) || strings.Contains(relative, "\\") || strings.Contains(relative, ":") || strings.Contains(relative, "..") {
-		return nil, errors.New("unsafe decision source path")
+func readForkMetadata(roots decisionview.Roots, locator decisionview.SourceLocator) (*decisionview.ForkMetadata, error) {
+	if err := locator.Validate(); err != nil {
+		return nil, err
 	}
-	raw, err := os.ReadFile(filepath.Join(planning, filepath.FromSlash(relative)))
+	base := roots.Planning
+	if locator.Root == decisionview.SourceRootRepository {
+		base = roots.Repository
+	}
+	root, err := os.OpenRoot(base)
 	if err != nil {
 		return nil, err
+	}
+	defer root.Close()
+	file, err := root.Open(locator.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, (64<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > 64<<20 {
+		return nil, errors.New("decision source exceeds 64 MiB")
 	}
 	doc := artifact.Parse(string(raw))
 	if !doc.HasFrontmatter {

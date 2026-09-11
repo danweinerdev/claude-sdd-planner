@@ -133,20 +133,20 @@ func PreviewForkOverride(snapshot ForkOverrideSnapshot, proposal json.RawMessage
 	if err != nil {
 		return nil, err
 	}
-	max := 0
+	var max uint64
 	for id := range local.Entries {
-		if len(id) != 6 || !strings.HasPrefix(id, "D-") {
+		if !localDecisionIDRe.MatchString(id) {
 			return nil, fmt.Errorf("decisionview: malformed local decision identity")
 		}
-		n, err := strconv.Atoi(id[2:])
+		n, err := strconv.ParseUint(id[2:], 10, 64)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decisionview: local decision identity space exhausted: %w", err)
 		}
 		if n > max {
 			max = n
 		}
 	}
-	if max >= 9999 {
+	if max == ^uint64(0) {
 		return nil, fmt.Errorf("decisionview: local decision identity space exhausted")
 	}
 	id := fmt.Sprintf("D-%04d", max+1)

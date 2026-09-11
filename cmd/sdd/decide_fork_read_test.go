@@ -60,15 +60,16 @@ func TestForkReadCLIRealEntryPoint(t *testing.T) {
 	stdout, stderr, err := runSdd(bin, root, "decide", "capabilities", "--json")
 	requireCLIExit(t, err, 0, stdout, stderr)
 	capabilities := decodeCLIJSON(t, stdout)
-	forks, ok := capabilities.(map[string]any)["decisionforks"].(map[string]any)
+	forks, ok := capabilities.(map[string]any)["decision_forks"].(map[string]any)
 	if !ok {
-		t.Fatalf("capabilities omit partial decisionforks support: %s", stdout)
+		t.Fatalf("capabilities omit partial decision_forks support: %s", stdout)
 	}
-	if forks["schema"] != float64(1) || !jsonContainsString(forks["canonicalization"], "entry-v1") {
+	if forks["schema"] != float64(1) || forks["transactions"] != float64(1) || !jsonContainsString(forks["canonicalization"], "entry-v1") || forks["partial"] != true {
 		t.Errorf("capabilities do not advertise the implemented read schema/canonicalization: %s", stdout)
 	}
-	if _, advertised := forks["transactions"]; advertised {
-		t.Errorf("read-only node advertises unsupported transaction completeness: %s", stdout)
+	transactionOperations := forks["transaction_operations"]
+	if !jsonContainsString(transactionOperations, "preview") || !jsonContainsString(transactionOperations, "apply") || !jsonContainsString(transactionOperations, "inspect") || !jsonContainsString(transactionOperations, "recover") {
+		t.Errorf("capabilities omit implemented versioned transaction operations: %s", stdout)
 	}
 	stdout, stderr, err = runSdd(bin, root, "decide", "lookup", qualified(forkReadParent, "D-0001"))
 	requireCLIExit(t, err, 0, stdout, stderr)
