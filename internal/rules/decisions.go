@@ -50,7 +50,7 @@ func repoDecisions(r *Root) map[decisionKey]decisionRecord {
 			if _, exists := out[key]; exists {
 				continue
 			}
-			out[key] = decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source.Path), Entry: resolved.Original}
+			out[key] = decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source), Entry: resolved.Original}
 		}
 		return out
 	}
@@ -78,11 +78,55 @@ func repoDecisions(r *Root) map[decisionKey]decisionRecord {
 	return out
 }
 
-func decisionRecordArtifact(r *Root, source string) *Artifact {
-	if a := resolveRef(r, filepath.ToSlash(source)); a != nil {
-		return a
+func decisionSourcePath(r *Root, source decisionview.SourceLocator) (string, string, bool) {
+	base := ""
+	switch source.Root {
+	case decisionview.SourceRootPlanning:
+		base = r.Dir
+	case decisionview.SourceRootRepository:
+		base = r.RepoRoot
+	default:
+		return "", filepath.ToSlash(source.Path), false
 	}
-	return &Artifact{Rel: filepath.ToSlash(source), Meta: map[string]any{"type": "decision-log"}}
+	abs := filepath.Clean(filepath.Join(base, filepath.FromSlash(source.Path)))
+	rel, err := filepath.Rel(r.Dir, abs)
+	if err != nil {
+		return abs, filepath.ToSlash(source.Path), true
+	}
+	return abs, filepath.ToSlash(rel), true
+}
+
+func decisionCollectionFileArtifact(r *Root, collection *decisionview.Collection, file decisionview.CollectionFile) *Artifact {
+	if collection == nil {
+		return nil
+	}
+	source := collection.Locator
+	source.Path = file.Path
+	abs, rel, ok := decisionSourcePath(r, source)
+	if !ok {
+		return nil
+	}
+	return parseArtifactBytes(file.Source, rel, abs)
+}
+
+func decisionRecordArtifact(r *Root, source decisionview.SourceLocator) *Artifact {
+	abs, rel, ok := decisionSourcePath(r, source)
+	if !ok {
+		return &Artifact{Rel: rel, Meta: map[string]any{"type": "decision-log"}}
+	}
+	if r.DecisionView != nil {
+		for _, collection := range r.DecisionView.Collections {
+			if collection == nil || collection.Locator.Root != source.Root {
+				continue
+			}
+			for _, file := range collection.Files {
+				if filepath.ToSlash(file.Path) == filepath.ToSlash(source.Path) {
+					return parseArtifactBytes(file.Source, rel, abs)
+				}
+			}
+		}
+	}
+	return parseArtifact(abs, rel)
 }
 
 func init() {
@@ -540,7 +584,7 @@ func orderedDecisions(r *Root) []struct {
 				Record decisionRecord
 			}{
 				Key:    decisionKey{repo: string(resolved.CollectionID), id: id},
-				Record: decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source.Path), Entry: resolved.Original},
+				Record: decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source), Entry: resolved.Original},
 			})
 		}
 		return out

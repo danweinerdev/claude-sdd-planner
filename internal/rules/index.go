@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"path/filepath"
 	"regexp"
 	"sort"
 )
@@ -238,8 +237,8 @@ None.
 				for _, collection := range r.DecisionView.Collections {
 					seen := map[string]bool{}
 					for _, file := range collection.Files {
-						a := r.ByPath[filepath.ToSlash(file.Path)]
-						if a == nil {
+						a := decisionCollectionFileArtifact(r, collection, file)
+						if a == nil || a.Meta == nil {
 							continue
 						}
 						for _, value := range asAnyList(a.Meta["decisions"]) {
