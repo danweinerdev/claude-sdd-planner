@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "seq_counter": 158,
+  "seq_counter": 283,
   "nodes": [
     {
       "id": "fork-model",
@@ -50,16 +50,16 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 127,
+        "seq": 246,
         "artifact_digests": {
-          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/model.go": "sha256:416c880b05fdfd54616c878f210edeca844466ebd6c306ea135fb8295c177397",
           "internal/decisionview/model_test.go": "sha256:972418a2f3bfad5a7d1c32b271fff25012c31907d26e46e4e9b06f1276f97373"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -127,17 +127,17 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 128,
+        "seq": 247,
         "artifact_digests": {
           "internal/decisionview/selection.go": "sha256:0f23b796c1c27c4e4a44e8d6b69b583be33f678e27b3be1d197868061195a949",
           "internal/decisionview/selection_test.go": "sha256:d72495e563d624343ff6b1770b660aceb5c7aaeb855985fd0ddd03321ceb3716",
-          "internal/store/store.go": "sha256:982ca301138cade92a6a2b3567c7a107a14fe31d283177231b32d4c5a873b0c3"
+          "internal/store/store.go": "sha256:3aca09317f37ea88fa821d3122ad02d7a906e1bfa6e60cd12582bc01eff20015"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -202,16 +202,16 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 126,
+        "seq": 245,
         "artifact_digests": {
           "internal/decisionview/canonical.go": "sha256:634edeba5445808bcbae92ac1c082b0cc7b64b4072a63ec367491dc9a90d9cc1",
           "internal/decisionview/canonical_test.go": "sha256:650ba8fd239f640963ba2ad59a3599877dfaaeb1f3813e76e0b35241d60a0502"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -286,11 +286,11 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 129,
+        "seq": 248,
         "artifact_digests": {
-          "internal/decisionview/collections.go": "sha256:4d13588d853ebb7e0f4692c338c68b34a2d125cd927d2a30342c709d8f00303d",
+          "internal/decisionview/collections.go": "sha256:d9d61b9c1f3a82771d5d0db66dc8fee8dd9ef723334277645cb309005e164166",
           "internal/decisionview/collections_test.go": "sha256:b20561cf829453365f6d1b50df7e08a18811755c9027055382dd5acdad4a7107",
-          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/model.go": "sha256:416c880b05fdfd54616c878f210edeca844466ebd6c306ea135fb8295c177397",
           "internal/decisionview/paths_posix.go": "sha256:01b83cd618376abe662e13ade22b119cd8b35a21e2fc04eea4b58b23d9b2fb5a",
           "internal/decisionview/paths_windows.go": "sha256:da75ed6b6be7b623dc8f3f42974cdca1e5302ae5a15a4217919a9ca1e73f42dd",
           "internal/dlg/collection.go": "sha256:da440d7788e3be392bc5d97938da414eea65343ee6d95bb8669ce99d408c973e",
@@ -298,11 +298,11 @@
           "internal/dlg/validate.go": "sha256:6a114679a23de16d711b3ab1ee316894f69d47eeadfa62dbdc59b07386eaaa5e",
           "internal/schema/decision-log.json": "sha256:89d9344d8f8f2e723e8755decdca26f966ea063e2877bc82e19191a7afeb3da1"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -371,16 +371,16 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 130,
+        "seq": 249,
         "artifact_digests": {
           "internal/decisionview/continuity.go": "sha256:145f4ce23e33e6a26f5e698e830d3d52bf52fffd0681c1347e1684a144c37c00",
           "internal/decisionview/continuity_test.go": "sha256:c7c3540e4626eb0c14c74e2992f0757d03cb7c9187908ca971575b3f9ce7f0ba"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -464,21 +464,21 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 131,
+        "seq": 250,
         "artifact_digests": {
           "internal/decisionview/canonical.go": "sha256:634edeba5445808bcbae92ac1c082b0cc7b64b4072a63ec367491dc9a90d9cc1",
-          "internal/decisionview/collections.go": "sha256:4d13588d853ebb7e0f4692c338c68b34a2d125cd927d2a30342c709d8f00303d",
+          "internal/decisionview/collections.go": "sha256:d9d61b9c1f3a82771d5d0db66dc8fee8dd9ef723334277645cb309005e164166",
           "internal/decisionview/collisions.go": "sha256:7759ae9b87f57d9a4a7145ad7268c15bf75ef98bb7e04681f7e389463e4215ff",
           "internal/decisionview/continuity.go": "sha256:145f4ce23e33e6a26f5e698e830d3d52bf52fffd0681c1347e1684a144c37c00",
-          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/model.go": "sha256:416c880b05fdfd54616c878f210edeca844466ebd6c306ea135fb8295c177397",
           "internal/decisionview/resolve.go": "sha256:f8bcb020cdfcc5ed9520fa63819376dfa56a47f71df508344b6b7cb83bbf606b",
           "internal/decisionview/resolve_test.go": "sha256:151c6f8e8143174ffdf07a3491fa5062e70a524e8f39585d4c662bd4e9344554"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -549,17 +549,17 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 132,
+        "seq": 251,
         "artifact_digests": {
           "internal/decisionview/citations.go": "sha256:e04d6350b883f642b30c31ad356bf72529e2f6225932d2c20d1f9fe9db5411cd",
           "internal/decisionview/citations_test.go": "sha256:4c1eef0919ad74737cb944cf1fdbfd714fd582c4ed67384a71a30c30ad470155",
           "internal/decisionview/scopes.go": "sha256:2c23805bbf5a36d68585e6cbef55eed9772590a8486a3bc8e31ea3f08ecfa688"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -630,18 +630,18 @@
       "phase": "01-foundations",
       "verification": {
         "result": "pass",
-        "seq": 125,
+        "seq": 244,
         "artifact_digests": {
           "internal/decisionview/store.go": "sha256:161126921616be57df437b2c8a4c5b8b8e3acc2136db972205bbcfe825926afc",
           "internal/decisionview/store_posix.go": "sha256:9664c85098588c8f78501d5abfca6f9055f873a3c5e690ea838f2f5c523e119c",
           "internal/decisionview/store_test.go": "sha256:4edba531ee8563f16ac06eec231324785ba7e9854483ac6545f9cc57f24b0520",
           "internal/decisionview/store_windows.go": "sha256:9410ad880fae37472f0d326d2c5c2a633ddd202a9f842d9679f050cd9694afeb"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -705,16 +705,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 142,
+        "seq": 262,
         "artifact_digests": {
           "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
           "internal/decisionview/journal_test.go": "sha256:7036ec4759e443f58ee255bf15939ca3b545f61d4bd7a15c66a650e2c2b3f59f"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -788,7 +788,7 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 133,
+        "seq": 252,
         "artifact_digests": {
           "cmd/sdd/decide.go": "sha256:ddad9bb7d65b19ea8e43f4977542d9a4e93da56f1fac9f63d2786f0c664920b2",
           "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
@@ -797,11 +797,11 @@
           "cmd/sdd/root_test.go": "sha256:d5066a3fd40703c03606c331cf8b3ced679925435d7ebc93749f777e4d4ece01",
           "internal/hook/guard.go": "sha256:5740a3ee183dca05bb39003b2133766c9059785638c2f3ed3baa0dc44c319c6e"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -871,7 +871,7 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 153,
+        "seq": 273,
         "artifact_digests": {
           "cmd/sdd/graph_fork_intent_test.go": "sha256:6b033258c0b33e0745578d322bfd1df96623b2e6102ae637369209b967215a01",
           "internal/graph/compile/anchor.go": "sha256:698cb59e441420281f26b738b32dcea1934a94ae860dcea09697c8b87d0168c1",
@@ -879,11 +879,11 @@
           "internal/graph/compile/fork_intent.go": "sha256:b5219c2a146641f4146fc95a788ab0ea63b4a7d0fb8d1e914697fd0e0356c440",
           "internal/graph/compile/fork_intent_test.go": "sha256:0791a079212b73c4bba801ce6f0342eb06e1e0c25b7987f535f2472e9d759c09"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -952,17 +952,17 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 154,
+        "seq": 274,
         "artifact_digests": {
           "cmd/sdd/hook_fork_test.go": "sha256:5db808eeab9367bb197c5aa82e4e0e31e192b92265fb1e29bb129c70a283548c",
           "internal/hook/sessionstart.go": "sha256:76531c29b55187b07987d634f616dd85eba8b032e1f398f32445623a822ae067",
           "internal/hook/sessionstart_fork_test.go": "sha256:fcbeb5a667a049a3e7bcc9edc1d28babd09e5c82cb81e6bdbf0cde0113bbfe9f"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1040,7 +1040,7 @@
       "phase": "04-integration",
       "verification": {
         "result": "pass",
-        "seq": 158,
+        "seq": 280,
         "artifact_digests": {
           ".claude-plugin/plugin.json": "sha256:fefaa138696677e1c669876324d6ace84c3f597c1a04f1784cf7c085c98382cc",
           ".codex-plugin/": "sha256:6091dc3d887440966364bfb15b20d9d443a0014cd5b2ddc759d81a7f741426dd",
@@ -1057,11 +1057,11 @@
           "shared/": "sha256:7098099553dfe838d7f97cc3d27a1f71e733a2d9a3aec3267ef28b86240ad0dc",
           "skills/": "sha256:deaeb31595a1d784821dc6ee066b266ea1475fbac9c7e865d198c96577ab03c0"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1155,10 +1155,11 @@
         "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
       },
       "deps": [
-        "authority-core-final-review",
+        "authority-core-closure-review",
         "core-cli-review-fixes",
         "core-context-review-fixes",
         "core-storage-review-fixes",
+        "hostile-authority-decoding",
         "legacy-adoption-recovery",
         "legacy-root-resolution-compatibility",
         "root-qualified-consumer-diagnostics",
@@ -1222,30 +1223,17 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "04-integration"
-    },
-    {
-      "id": "full-feature-review",
-      "contract": "The complete integrated feature has a frozen Aligned full four-lane review whose aggregate diff digest still matches all covered implementation nodes.",
-      "justifies": [
-        "D-0022",
-        "NFR-05",
-        "AC-15"
-      ],
-      "intent_hashes": {
-        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
-        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
-      },
-      "deps": [
-        "full-repository-gate"
-      ],
-      "gate": {
-        "type": "review",
-        "lanes": "full"
-      },
-      "hazards": [],
-      "estimate": 1,
-      "phase": "04-integration"
+      "phase": "04-integration",
+      "verification": {
+        "result": "pass",
+        "seq": 281,
+        "report_digest": "sha256:0780c741e628a02bc2ea6b44a41127231520ea8166568640333ce20dcc9538c8",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
+        }
+      }
     },
     {
       "id": "preview-envelope",
@@ -1305,16 +1293,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 134,
+        "seq": 253,
         "artifact_digests": {
           "internal/decisionview/preview.go": "sha256:64bbb9e8f8cba869c0f8a4f6b3179724cfd5ed72a0327658c660cb168cd5b24d",
           "internal/decisionview/preview_test.go": "sha256:7cf35ea897787de7b3b745a7c45786ec153221086f70b5cf1de1d3060c52d01c"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1384,16 +1372,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 135,
+        "seq": 254,
         "artifact_digests": {
           "internal/decisionview/lifecycle.go": "sha256:be164251b7f71256e2ab44b9f91d484f2a6c3bf12e5529f3095c0835a92a344f",
           "internal/decisionview/lifecycle_test.go": "sha256:0eeb262c235e2330fb3e4394d0d701e465f881604464a651bb61066379e7903f"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1458,16 +1446,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 136,
+        "seq": 255,
         "artifact_digests": {
           "internal/decisionview/restoration.go": "sha256:41148084d02adce3d7ecdbbd0a522e5debd25a3e50d9a4f0571834511719360b",
           "internal/decisionview/restoration_test.go": "sha256:7f958edaffef78148c1868c2bb54c7cf24088bd84209dbb3bdc3fae568001fec"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1522,16 +1510,16 @@
       "history": "User-approved dogfooding repair: compile regenerated in-progress phase documents but left README phases planned, producing SDD058. This is a prerequisite to continuing reliable graph authoring, not a manual view correction.",
       "verification": {
         "result": "pass",
-        "seq": 137,
+        "seq": 256,
         "artifact_digests": {
           "internal/graph/compile/render.go": "sha256:c263fa045e793f0fecbbc50d7d47b17d0b28f62e5c49ec7daaf581a70753e1ee",
           "internal/graph/compile/render_status_test.go": "sha256:3e453d69a68c7b5ae2f59f9ca0a2d91db2ec306641be25ef1ba8de0244337214"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1577,16 +1565,16 @@
       "history": "User approved focused timeout investigation as a prerequisite. Cache-enabled rules execution prints PASS then go test remains stuck; the full uncached suite passed all 29 test-bearing packages. Force fresh execution in the authoritative gate and use the host executable suffix; do not claim an upstream Go cache fix.",
       "verification": {
         "result": "pass",
-        "seq": 139,
+        "seq": 258,
         "artifact_digests": {
           "Makefile": "sha256:86f5476fb84b25a16d3c579e9f6fced8eff8bc797a9ffab35676d24ab372f275",
           "tools/testgate/makefile_test.go": "sha256:75694685d9c6e3734f83705d755520e6ec925f95d61b5bc16887e2374b931606"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1659,16 +1647,16 @@
       "history": "Resume the preserved adoption candidate after the user-approved gate prerequisite. The expired original workspace remains untouched; this child retains the same contract and named tests and must obtain its own red/green observations.",
       "verification": {
         "result": "pass",
-        "seq": 140,
+        "seq": 259,
         "artifact_digests": {
           "internal/decisionview/adoption.go": "sha256:4b73c12d906ca434bc00c97a0948e0bee0cc3fe7c3b168f3e08132d00db27af0",
           "internal/decisionview/adoption_test.go": "sha256:65bd9e51bb7027f277db57e8467d87a889f814036e20e34c25eefe45ea34f7a0"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1699,13 +1687,12 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 64,
-        "report_digest": "sha256:6ff252bbdc22b782e3442e8414a25927f83d845c50f9284b13cf829a89bb7e80",
+        "seq": 260,
+        "report_digest": "sha256:0780c741e628a02bc2ea6b44a41127231520ea8166568640333ce20dcc9538c8",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "ab734699ad0dc54ed0ca5c4ed34222913f3e978e",
-          "worktree": ".plans/Plans/ForkAwareDecisionLedgers/.graph/ws-preview-adoption-gate-check"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       }
     },
@@ -1782,16 +1769,16 @@
       "history": "Split after implementation exposed two distinct DD-10 protocols. The original adoption-only candidate is preserved for reference, not treated as completion of the full publication contract. Recovery execution remains the existing downstream node.",
       "verification": {
         "result": "pass",
-        "seq": 143,
+        "seq": 263,
         "artifact_digests": {
           "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492",
           "internal/decisionview/transaction_test.go": "sha256:6decd44a6f4adec0c0424724d073c66ff5a0557b5f87ea932933e799ba432dab"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1860,16 +1847,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 144,
+        "seq": 264,
         "artifact_digests": {
           "internal/decisionview/authority_write.go": "sha256:d90da0f1c340eefcb742d9c4786d151a7f710023a6389d1a8f62975606c75c8b",
           "internal/decisionview/authority_write_test.go": "sha256:56fac09bb39ae822ca8673d33f1daac1fdb5af04679e4decfbfbe97c7382b5be"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -1933,18 +1920,18 @@
       "history": "User approved journal/publication scope expansion and clarified there must be no delete-first config update. Atomic replacement is retained. The capture repairs the crash window after a pending config replacement, especially rebind where the original envelope contains only a selector digest.",
       "verification": {
         "result": "pass",
-        "seq": 145,
+        "seq": 265,
         "artifact_digests": {
           "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
           "internal/decisionview/selector_capture.go": "sha256:629e5020cc6ec2da5eea641ee5bc994859c7d0edd33e1084c944f7a4270946d2",
           "internal/decisionview/selector_capture_test.go": "sha256:5c93b05ee8c68b1948c8381b152fdaea75405a20dff43c1f34f75f9d68ca4a92",
           "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2012,16 +1999,16 @@
       "phase": "02-authority",
       "verification": {
         "result": "pass",
-        "seq": 146,
+        "seq": 266,
         "artifact_digests": {
           "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
           "internal/decisionview/recovery_test.go": "sha256:827d277ec881a25ae0552a461cde9d1da13604a824d4ee1c85d9f65f16058ef2"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2073,16 +2060,16 @@
       "history": "Review test-gate-repair.md F-01/F-02/F-03; spec and blind-spots lanes required a CRLF Windows fix despite other lanes classifying the same defect as minor. Preserve all tests and frozen expectations.",
       "verification": {
         "result": "pass",
-        "seq": 141,
+        "seq": 261,
         "artifact_digests": {
           "Makefile": "sha256:86f5476fb84b25a16d3c579e9f6fced8eff8bc797a9ffab35676d24ab372f275",
           "tools/testgate/makefile_test.go": "sha256:75694685d9c6e3734f83705d755520e6ec925f95d61b5bc16887e2374b931606"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2190,9 +2177,9 @@
       "history": "Split after review showed a CLI-only adapter did not migrate rules/compile/lifecycle consumers or preserve legacy citation semantics. The rejected candidate remains in a preserved workspace; do not inherit its diagnostic filtering workaround.",
       "verification": {
         "result": "pass",
-        "seq": 138,
+        "seq": 257,
         "artifact_digests": {
-          "internal/decisionview/consumer.go": "sha256:01ef0ca58719851f229cca449428ad1d483b40dfe9b7a7942a5c40a6252e6540",
+          "internal/decisionview/consumer.go": "sha256:8d69e1304c2d8ec837508148e3ddf21f0749fab63c9aa846541e98c130e6d5e6",
           "internal/dlg/gitutil.go": "sha256:fb4f1a01ed16da910e2a50dc749b1d453ff599243375dfa4b9f0c0b132a9fe65",
           "internal/dlg/history.go": "sha256:c48d9ff1cd21218050b68903cfaae714fff7253818be3de035428c8696f22f0f",
           "internal/dlg/validate_all.go": "sha256:095e949ccd1bdce7809948ea059d48889a26a9012f7b38cd4348dbd6b56f98f2",
@@ -2202,15 +2189,15 @@
           "internal/rules/fork_decisions_test.go": "sha256:430533e4ad813e8f27ac07328f95bcb1e58204a7c4b782f003e62e62cacc5f47",
           "internal/rules/graphapi.go": "sha256:2fee9a9438b9ab83575d7dd90a822bd06a3c87afb9157b742471cf9e37086f2f",
           "internal/rules/index.go": "sha256:8cb9a4fe3eedcafa058099b8542eda0162829d47bb6f73e5e326893d3a20674e",
-          "internal/rules/root.go": "sha256:c4931a93655b06642c2c0690ebd9661e606bc123955cde12db5c9e917f73a496",
+          "internal/rules/root.go": "sha256:2c5a504a06f80419bae36204bff7dab74640fc3dcbb06aebe81f4c08ccaed0af",
           "internal/rules/rules.go": "sha256:2dce1c65864993d519040a570a0fa0a2032ddf0d0d2c1664afbc4776f729c70f",
           "tools/regression/fixtures/": "sha256:61a72dc2c128322c1ccffee141b3f755c4ae9d50e6f4141a534710055244063a"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2300,26 +2287,26 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 151,
+        "seq": 271,
         "artifact_digests": {
           "cmd/sdd/apply.go": "sha256:b423c80dc97d660c2c9a1aeb244370c629f97c5b6176ab160f6b6eaff0062f3c",
           "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
           "cmd/sdd/decide_fork_validate_test.go": "sha256:d69e75e0a8b2fcb265b4d64019c8aefdf949595ea02a77874b47cdad8cb05bdf",
           "cmd/sdd/decide_validate.go": "sha256:9b9a5429d0d240db0e61ac59a6550af1391198c0c77c41ae3fa7b90374f82525",
-          "cmd/sdd/migrate.go": "sha256:628b8ee9c2346de08490864cff3bb59a2a4fdc12c384a2aa275a4bf53c587d1d",
+          "cmd/sdd/migrate.go": "sha256:991e96c9e41e1685e13a6b1496c2ef5c8ee3248ad908583c46276d73131d3be2",
           "cmd/sdd/root.go": "sha256:3d047d62807da5e3d508ac4fc5f372ca88f1a931e54ae616ada5b30a7d5bd176",
           "cmd/sdd/section.go": "sha256:edbe75085b5a2a30ac80d3734ac4b2838ebdb0e02dd97c48c903bd1c83c88717",
           "cmd/sdd/transition.go": "sha256:dcab3749c7c1e52fedfc591f28462f97f77c2dd72dc3707dad48f208738fc55f",
-          "cmd/sdd/validate.go": "sha256:dbe11a9722cb948207b806bebd6adc2129e4d14f615b8058c58eec1e4d4609ed",
+          "cmd/sdd/validate.go": "sha256:98fe885ccf9107a75c3a60f7535352a3333ff8fc8ec6294144a5f9993e3f3180",
           "internal/compile/compile.go": "sha256:6f07e4b4b2c37ac5c6faa7b50bf308830cd938c26f969c2fe4dc9ecd9c57c61d",
           "internal/compile/fork_citations_test.go": "sha256:ee34c0bf520c66cedfa2105e9972e33646df59fb37270503fed7097f1dc2c2c1",
           "tools/regression/corpus.go": "sha256:27e75320e115c11c43e24e96240e8490dfc42bf99b0cecd29a64c4c60e17808e"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2374,18 +2361,18 @@
       "history": "User explicitly accepted create-new/remove-old/rename for planning-config.json because it is expected to change rarely, superseding the earlier continuous-path requirement for that file only. Do not expand recovery machinery or weaken ordinary ledger writes.",
       "verification": {
         "result": "pass",
-        "seq": 147,
+        "seq": 267,
         "artifact_digests": {
           "internal/decisionview/config_replace.go": "sha256:61f4084fe3580ce662ccb57e85e9dbf174540b5f6238e9072e42941a092a9a55",
           "internal/decisionview/config_replace_test.go": "sha256:16af741c964d0784cf33b50c671d2df3cc198cce64ccc7716846b2de561ee12f",
           "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
           "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2469,7 +2456,7 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 148,
+        "seq": 268,
         "artifact_digests": {
           "cmd/sdd/decide.go": "sha256:ddad9bb7d65b19ea8e43f4977542d9a4e93da56f1fac9f63d2786f0c664920b2",
           "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
@@ -2479,11 +2466,11 @@
           "cmd/sdd/root_test.go": "sha256:d5066a3fd40703c03606c331cf8b3ced679925435d7ebc93749f777e4d4ece01",
           "internal/hook/guard.go": "sha256:5740a3ee183dca05bb39003b2133766c9059785638c2f3ed3baa0dc44c319c6e"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2552,23 +2539,23 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 152,
+        "seq": 272,
         "artifact_digests": {
           "cmd/sdd/decide_fork_validate_test.go": "sha256:d69e75e0a8b2fcb265b4d64019c8aefdf949595ea02a77874b47cdad8cb05bdf",
-          "internal/decisionview/consumer.go": "sha256:01ef0ca58719851f229cca449428ad1d483b40dfe9b7a7942a5c40a6252e6540",
+          "internal/decisionview/consumer.go": "sha256:8d69e1304c2d8ec837508148e3ddf21f0749fab63c9aa846541e98c130e6d5e6",
           "internal/decisionview/consumer_review_test.go": "sha256:b62290d58962d5919c2711763a782e47195a8f96e2b53df965dbb2be7f947017",
           "internal/decisionview/selection.go": "sha256:0f23b796c1c27c4e4a44e8d6b69b583be33f678e27b3be1d197868061195a949",
           "internal/rules/citations.go": "sha256:99b01ee3bd4622ac8bcd85d37ca6852a14ec8d62550b192b2312202570c9eb3a",
           "internal/rules/decisions.go": "sha256:0ccd63cb19dc61acb6ca2202dd9941922c60199856e1fcc9e1f89bf70f03a634",
           "internal/rules/fork_review_test.go": "sha256:3284bfae7ba80deab1e0e6a3a4ebdf4258ddbf1278c1171763d9934a4b590140",
-          "internal/rules/root.go": "sha256:c4931a93655b06642c2c0690ebd9661e606bc123955cde12db5c9e917f73a496",
+          "internal/rules/root.go": "sha256:2c5a504a06f80419bae36204bff7dab74640fc3dcbb06aebe81f4c08ccaed0af",
           "internal/rules/scope.go": "sha256:a3c2f23a7b31460d05d446e1fe0108059545cbb88fac91d0bca208f8638dbd81"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2629,7 +2616,7 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 150,
+        "seq": 270,
         "artifact_digests": {
           "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
           "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
@@ -2638,11 +2625,11 @@
           "internal/decisionview/store_windows.go": "sha256:9410ad880fae37472f0d326d2c5c2a633ddd202a9f842d9679f050cd9694afeb",
           "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2705,7 +2692,7 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 149,
+        "seq": 269,
         "artifact_digests": {
           "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
           "cmd/sdd/decide_fork_read_test.go": "sha256:52607a38906335fc59c58bdc9a725371bdb9e618f0eb29ef721cdf0d2498ecef",
@@ -2715,11 +2702,11 @@
           "internal/decisionview/lifecycle.go": "sha256:be164251b7f71256e2ab44b9f91d484f2a6c3bf12e5529f3095c0835a92a344f",
           "internal/decisionview/lifecycle_review_test.go": "sha256:faeca4cd66567722761fc70c5825c57469478fc10b1a9d9fc765ca10e5d69e12"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2770,16 +2757,16 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 155,
+        "seq": 275,
         "artifact_digests": {
           "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
           "internal/decisionview/recovery_legacy_test.go": "sha256:0bb3b8ab54f5a22bf285843921fb43c9233516d1af09ddb7c78b1fc03d57ea13"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2832,17 +2819,17 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 157,
+        "seq": 277,
         "artifact_digests": {
           "internal/rules/decisions.go": "sha256:0ccd63cb19dc61acb6ca2202dd9941922c60199856e1fcc9e1f89bf70f03a634",
           "internal/rules/fork_locator_test.go": "sha256:1f8882ff3874abaa7ae17f7fb6bfe3c23b01ad618f627eefdf9afbd6b8e9aa04",
           "internal/rules/index.go": "sha256:8cb9a4fe3eedcafa058099b8542eda0162829d47bb6f73e5e326893d3a20674e"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2895,16 +2882,16 @@
       "phase": "03-consumers",
       "verification": {
         "result": "pass",
-        "seq": 156,
+        "seq": 276,
         "artifact_digests": {
           "cmd/sdd/fork_root_compat_test.go": "sha256:7d83078a61b0bfc245d4dcbcef458671b9a3f7aa8056ebca62fc70db59644bad",
-          "cmd/sdd/validate.go": "sha256:dbe11a9722cb948207b806bebd6adc2129e4d14f615b8058c58eec1e4d4609ed"
+          "cmd/sdd/validate.go": "sha256:98fe885ccf9107a75c3a60f7535352a3333ff8fc8ec6294144a5f9993e3f3180"
         },
-        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
         }
       },
       "red_seqs": {
@@ -2913,17 +2900,21 @@
       }
     },
     {
-      "id": "authority-core-final-review",
-      "contract": "The integrated authority core and all confirmed review remediations have a fresh frozen Aligned independent full four-lane review over the final aggregate implementation.",
+      "id": "hostile-authority-decoding",
+      "contract": "Malformed selector JSON, including escaped declaration keys, never silently falls back to legacy authority; YAML alias expansion is bounded with explicit errors while ordinary aliases, depth/cycle guards and deterministic valid decoding remain supported.",
       "justifies": [
-        "AC-03",
-        "AC-12",
-        "AC-13"
+        "FR-01",
+        "FR-12",
+        "NFR-01",
+        "AC-10",
+        "AC-14"
       ],
       "intent_hashes": {
-        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
-        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
-        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55"
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "NFR-01": "sha256:3fac551023be5b48d262ee1bdfb082b662c2503c90175d4c2268160c47cf4a73"
       },
       "deps": [
         "legacy-adoption-recovery",
@@ -2931,21 +2922,315 @@
         "legacy-root-resolution-compatibility"
       ],
       "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkEscapedMalformedDeclaration",
+            "file": "cmd/sdd/fork_decoder_guard_test.go",
+            "satisfies": [
+              "external-format",
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkBoundedYAMLAliasExpansion",
+            "file": "internal/decisionview/decoder_guard_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "external-format",
+        "user-entrypoint"
+      ],
+      "artifacts": [
+        "internal/decisionview/consumer.go",
+        "internal/decisionview/model.go",
+        "internal/decisionview/collections.go",
+        "internal/decisionview/decoder_guard.go",
+        "internal/decisionview/decoder_guard_test.go",
+        "cmd/sdd/validate.go",
+        "cmd/sdd/fork_decoder_guard_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 278,
+        "artifact_digests": {
+          "cmd/sdd/fork_decoder_guard_test.go": "sha256:e82a6600874ce5d40c35f115f3444d0aad93dff798fb19c4efc6e87e700cf62d",
+          "cmd/sdd/validate.go": "sha256:98fe885ccf9107a75c3a60f7535352a3333ff8fc8ec6294144a5f9993e3f3180",
+          "internal/decisionview/collections.go": "sha256:d9d61b9c1f3a82771d5d0db66dc8fee8dd9ef723334277645cb309005e164166",
+          "internal/decisionview/consumer.go": "sha256:8d69e1304c2d8ec837508148e3ddf21f0749fab63c9aa846541e98c130e6d5e6",
+          "internal/decisionview/decoder_guard.go": "sha256:f667be1d571bb7736e879b7ec9abd158dbf88bcc1a008bd8fdf53ceee2bb4284",
+          "internal/decisionview/decoder_guard_test.go": "sha256:e1aeed3978d979eae4ee875d9ca6e91488274c9063cd7a2cbc96092dfd231eb0",
+          "internal/decisionview/model.go": "sha256:416c880b05fdfd54616c878f210edeca844466ebd6c306ea135fb8295c177397"
+        },
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
+        }
+      },
+      "red_seqs": {
+        "TestForkBoundedYAMLAliasExpansion": 196,
+        "TestForkEscapedMalformedDeclaration": 196
+      }
+    },
+    {
+      "id": "authority-core-closure-review",
+      "contract": "All integrated authority core and decoder remediations have a fresh frozen Aligned full four-lane review with concrete finding dispositions.",
+      "justifies": [
+        "AC-10",
+        "AC-12",
+        "AC-13",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102"
+      },
+      "deps": [
+        "hostile-authority-decoding"
+      ],
+      "gate": {
         "type": "review",
         "lanes": "full"
       },
       "hazards": [],
       "estimate": 2,
-      "phase": "03-consumers"
+      "phase": "03-consumers",
+      "claim": {
+        "by": "fork-ledgers-finish",
+        "lease_expires": "2026-09-11T20:55:25Z",
+        "workspace": ".plans/Plans/ForkAwareDecisionLedgers/.graph/ws-authority-core-closure-review"
+      }
+    },
+    {
+      "id": "windows-graph-store-replacement",
+      "contract": "Windows graph/artifact publication tolerates transient rename sharing failures within a bounded deadline while preserving the exclusive lock, staged bytes and conditional-write digest checks; persistent or unrelated errors remain explicit, the prior destination is never removed first, and concurrent graph claims/readers/GC retain their unchanged stress invariants. This targeted platform repair was explicitly authorized after recurrent full-suite failures.",
+      "justifies": [
+        "NFR-03",
+        "NFR-05",
+        "AC-13",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestAtomicReplaceTransientSharing",
+            "file": "internal/store/replace_windows_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestAtomicReplaceFailurePreservesState",
+            "file": "internal/store/replace_windows_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestGraphConcurrentClaimStress",
+            "file": "cmd/sdd/graph_stress_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "concurrent-access",
+        "persists-state"
+      ],
+      "artifacts": [
+        "internal/store/store.go",
+        "internal/store/replace_windows.go",
+        "internal/store/replace_other.go",
+        "internal/store/replace_windows_test.go",
+        "internal/store/lock_test.go"
+      ],
+      "estimate": 8,
+      "phase": "04-integration",
+      "verification": {
+        "result": "pass",
+        "seq": 279,
+        "artifact_digests": {
+          "internal/store/lock_test.go": "sha256:669c4d29d4725fb6dc844f2da00bd2be85ed6ebd941ad7aa14376721d4f6f76e",
+          "internal/store/replace_other.go": "sha256:0b78eda43be1577e49c3ba8fc929e56e32cc4f01a7e0834da20d441ec7eb0fc4",
+          "internal/store/replace_windows.go": "sha256:12cc210b2ec3db2a6be7a418ae310ecefb969b6a140c1d8c98ee7ffd196d2c72",
+          "internal/store/replace_windows_test.go": "sha256:f61176dc6e98054c083a5209ec1666cb6ef8ba457e49fdc2859a82dea533bce1",
+          "internal/store/store.go": "sha256:3aca09317f37ea88fa821d3122ad02d7a906e1bfa6e60cd12582bc01eff20015"
+        },
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
+        }
+      },
+      "red_seqs": {
+        "TestAtomicReplaceFailurePreservesState": 201,
+        "TestAtomicReplaceTransientSharing": 201
+      }
+    },
+    {
+      "id": "windows-graph-store-review",
+      "contract": "The targeted Windows graph-store replacement repair has a frozen Aligned full four-lane review confirming bounded retry safety, unchanged graph stress assertions and preserved atomic/CAS guarantees.",
+      "justifies": [
+        "NFR-03",
+        "NFR-05",
+        "AC-13",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "windows-graph-store-replacement"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 3,
+      "phase": "04-integration",
+      "verification": {
+        "result": "pass",
+        "seq": 283,
+        "artifact_digests": {
+          "internal/store/lock_test.go": "sha256:669c4d29d4725fb6dc844f2da00bd2be85ed6ebd941ad7aa14376721d4f6f76e",
+          "internal/store/replace_other.go": "sha256:0b78eda43be1577e49c3ba8fc929e56e32cc4f01a7e0834da20d441ec7eb0fc4",
+          "internal/store/replace_windows.go": "sha256:12cc210b2ec3db2a6be7a418ae310ecefb969b6a140c1d8c98ee7ffd196d2c72",
+          "internal/store/replace_windows_test.go": "sha256:f61176dc6e98054c083a5209ec1666cb6ef8ba457e49fdc2859a82dea533bce1",
+          "internal/store/store.go": "sha256:3aca09317f37ea88fa821d3122ad02d7a906e1bfa6e60cd12582bc01eff20015"
+        },
+        "report_digest": "sha256:b6adf61f8b76923f32b15fe64774d7fcb18dbdd6ec091d763986babb197c072e",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
+        }
+      }
+    },
+    {
+      "id": "graph-runtime-artifact-boundary",
+      "contract": "Planning artifact discovery and bulk migration exclude reserved Plans/<Plan>/.graph runtime workspaces before loading or editing their contents, while ordinary artifacts, reviews, unrelated dot directories and similarly named files remain discoverable. Preserved evidence/worktrees remain byte-identical.",
+      "justifies": [
+        "NFR-02",
+        "NFR-05",
+        "AC-13",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "full-repository-gate"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGraphRuntimeArtifactBoundary",
+            "file": "cmd/sdd/graph_runtime_artifacts_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestGraphRuntimeMigrationPreservesEvidence",
+            "file": "cmd/sdd/graph_runtime_artifacts_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "persists-state"
+      ],
+      "artifacts": [
+        "internal/rules/root.go",
+        "internal/store/discovery.go",
+        "cmd/sdd/migrate.go",
+        "cmd/sdd/graph_runtime_artifacts_test.go"
+      ],
+      "estimate": 3,
+      "phase": "04-integration",
+      "verification": {
+        "result": "pass",
+        "seq": 282,
+        "artifact_digests": {
+          "cmd/sdd/graph_runtime_artifacts_test.go": "sha256:6180d2f226a4e7ae125c9b7ef96e64ef80ac58acdd4ed4f26fa3e8671dc3beb5",
+          "cmd/sdd/migrate.go": "sha256:991e96c9e41e1685e13a6b1496c2ef5c8ee3248ad908583c46276d73131d3be2",
+          "internal/rules/root.go": "sha256:2c5a504a06f80419bae36204bff7dab74640fc3dcbb06aebe81f4c08ccaed0af",
+          "internal/store/discovery.go": "sha256:2c97222b286b13a70fb457b57bbc6566268ff1ba6d96ca042708fff8989bb1b0"
+        },
+        "report_digest": "sha256:bcaa3393a856066d26dd61d28481ec98cb0a2f160c2b7db46d3b3dd69aa75f72",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "28f6e921fbc009f79953e72fbef51a05cd548c1b"
+        }
+      },
+      "red_seqs": {
+        "TestGraphRuntimeArtifactBoundary": 242,
+        "TestGraphRuntimeMigrationPreservesEvidence": 242
+      }
+    },
+    {
+      "id": "full-feature-closure-review",
+      "contract": "The complete integrated feature and artifact-discovery remediation have a frozen Aligned full four-lane review whose aggregate digest matches all covered nodes; no incomplete end-to-end or runtime evidence is asserted complete.",
+      "justifies": [
+        "AC-13",
+        "AC-14",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c"
+      },
+      "deps": [
+        "graph-runtime-artifact-boundary"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "04-integration"
     }
   ],
   "retired": [
     "approved-change-preview",
+    "authority-core-final-review",
     "authority-core-review",
     "authority-core-review-completion",
     "cross-store-publication",
     "decision-write-cli",
     "explicit-recovery",
+    "full-feature-review",
     "preview-adoption",
     "preview-adoption-binding",
     "test-gate-review",

@@ -72,10 +72,10 @@ Approved related spec/design and accepted D-0025. Existing Go toolchain, local G
 |---|---|---|
 | 1: 01-foundations | 6 | `01-foundations.md` |
 | 2: 02-authority | 14 | `02-authority.md` |
-| 3: 03-consumers | 14 | `03-consumers.md` |
-| 4: 04-integration | 6 | `04-integration.md` |
+| 3: 03-consumers | 15 | `03-consumers.md` |
+| 4: 04-integration | 9 | `04-integration.md` |
 
-40 node(s) total. The committed graph (`ForkAwareDecisionLedgers-Graph.json`) is the source of
+44 node(s) total. The committed graph (`ForkAwareDecisionLedgers-Graph.json`) is the source of
 truth; these documents are projections.
 
 <!-- graph-view:end -->

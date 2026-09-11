@@ -1,14 +1,13 @@
 ---
 title: "Test-gate repair review"
 type: review
-status: open
+status: resolved
 created: 2026-09-10
 updated: 2026-09-11
 tags: [review]
-related: ["Plans/ForkAwareDecisionLedgers/04-integration.md"]
+related: ["Plans/ForkAwareDecisionLedgers/04-integration.md", "Specs/ForkAwareDecisionLedgers/README.md"]
 review_of: "Plans/ForkAwareDecisionLedgers/04-integration.md"
 rev: "17e0f127fc60114b7719614622940bd0eab395bc..7a6c7b866b4f1b23aaea518a738b74147f5d8f50"
-review_scope: phase
 frozen: false
 verdict: Needs changes
 reviewed_planning_revision: "ad82c0c41d6f04f56783594adacff4f079552a30"
@@ -50,6 +49,8 @@ followups: []
 
 Scope is the frozen test-gate repair only, not completion of the entire integration phase.
 
+The original failed phase-review observations are retained below as ordinary historical finding records, not completion evidence. Only fresh frozen `Aligned` artifacts govern closure.
+
 ## Findings
 ### F-01: Gate tripwire fails on CRLF Windows checkouts
 
@@ -67,3 +68,12 @@ Blind-spot-only observations include non-GNU make handling, dry-run scope safety
 - 2026-09-10: Four independent lanes completed the frozen repair review. Verdict remains Needs changes; the lane severity disagreement is retained above. A dedicated portability task and a fresh four-lane review are required before this gate closes. No Aligned graph observation was recorded.
 - 2026-09-11: F-01, F-02, and F-03 fixed by `ab73469` (`fix(test): make gate tripwires checkout-portable`), which includes the CRLF regression, explicit GNU-make skip behavior, and precise fresh-execution/dry-run rationale.
 - 2026-09-11: This review retains its historical verdict, lanes, and open/unfrozen state. A fresh review supersedes this historical review's closure evidence; no closure assertion is recorded here.
+
+### F-01 — fixed (2026-09-11)
+The CRLF Windows checkout tripwire finding was fixed by `ab73469` (`fix(test): make gate tripwires checkout-portable`), including the recorded NFR-05 and AC-15 CRLF regression.
+
+### F-02 — fixed (2026-09-11)
+The dynamic make availability finding was fixed by `ab73469` (`fix(test): make gate tripwires checkout-portable`) with the recorded explicit GNU-make skip behavior.
+
+### F-03 — fixed (2026-09-11)
+The tooling and rationale caveats finding was fixed by `ab73469` (`fix(test): make gate tripwires checkout-portable`) with the recorded fresh-execution and dry-run rationale.

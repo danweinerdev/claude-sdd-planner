@@ -16,7 +16,7 @@ tasks: []
 
 ## Overview
 
-Rendered view of 6 node(s) from the plan graph (schema v1, seq 158).
+Rendered view of 6 node(s) from the plan graph (schema v1, seq 283).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -31,7 +31,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: external-format
 - Artifacts: internal/decisionview/model.go, internal/decisionview/model_test.go
 - Estimate: 3
-- Observation: **pass** at seq 127 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 246 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### config-selection
@@ -43,7 +43,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: external-format
 - Artifacts: internal/decisionview/selection.go, internal/decisionview/selection_test.go, internal/store/store.go
 - Estimate: 3
-- Observation: **pass** at seq 128 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 247 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### canonical-bases
@@ -55,7 +55,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: external-format, deterministic-replay
 - Artifacts: internal/decisionview/canonical.go, internal/decisionview/canonical_test.go
 - Estimate: 3
-- Observation: **pass** at seq 126 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 245 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### collection-loading
@@ -67,7 +67,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: external-format
 - Artifacts: internal/decisionview/collections.go, internal/decisionview/collections_test.go, internal/decisionview/paths_windows.go, internal/decisionview/paths_posix.go, internal/decisionview/model.go, internal/dlg/ledger.go, internal/dlg/validate.go, internal/dlg/collection.go, internal/schema/decision-log.json
 - Estimate: 5
-- Observation: **pass** at seq 129 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 248 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### source-continuity
@@ -79,7 +79,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, deterministic-replay
 - Artifacts: internal/decisionview/continuity.go, internal/decisionview/continuity_test.go
 - Estimate: 4
-- Observation: **pass** at seq 130 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 249 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### atomic-local-store
@@ -91,7 +91,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: persists-state, concurrent-access
 - Artifacts: internal/decisionview/store.go, internal/decisionview/store_test.go, internal/decisionview/store_windows.go, internal/decisionview/store_posix.go
 - Estimate: 4
-- Observation: **pass** at seq 125 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 244 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ## Acceptance Criteria

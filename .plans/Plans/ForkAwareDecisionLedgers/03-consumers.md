@@ -6,7 +6,7 @@ phase: 3
 status: in-progress
 created: 2026-09-08
 updated: 2026-09-11
-deliverable: "Graph view: 14 node(s) under phase label 03-consumers"
+deliverable: "Graph view: 15 node(s) under phase label 03-consumers"
 tasks: []
 ---
 
@@ -16,7 +16,7 @@ tasks: []
 
 ## Overview
 
-Rendered view of 14 node(s) from the plan graph (schema v1, seq 158).
+Rendered view of 15 node(s) from the plan graph (schema v1, seq 283).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -31,7 +31,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint, external-format
 - Artifacts: cmd/sdd/decide.go, cmd/sdd/decide_fork_read.go, cmd/sdd/decide_fork_read_test.go, cmd/sdd/root.go, cmd/sdd/root_test.go, internal/hook/guard.go
 - Estimate: 3
-- Observation: **pass** at seq 133 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 252 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### graph-intent-consumer
@@ -43,7 +43,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint, derives-state
 - Artifacts: internal/graph/compile/anchor.go, internal/graph/compile/compile.go, internal/graph/compile/fork_intent.go, internal/graph/compile/fork_intent_test.go, cmd/sdd/graph_fork_intent_test.go
 - Estimate: 3
-- Observation: **pass** at seq 153 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 273 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### hook-context-consumer
@@ -55,7 +55,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint, external-format
 - Artifacts: internal/hook/sessionstart.go, internal/hook/sessionstart_fork_test.go, cmd/sdd/hook_fork_test.go
 - Estimate: 3
-- Observation: **pass** at seq 154 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 274 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### shared-fork-validation-context
@@ -68,7 +68,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/decisionview/consumer.go, internal/rules/decisionlogs.go, internal/rules/decisions.go, internal/rules/root.go, internal/rules/rules.go, internal/rules/citations.go, internal/rules/index.go, internal/rules/graphapi.go, internal/rules/fork_decisions_test.go, internal/dlg/validate_all.go, internal/dlg/history.go, internal/dlg/gitutil.go, tools/regression/fixtures/
 - Estimate: 4
 - History: Split after review showed a CLI-only adapter did not migrate rules/compile/lifecycle consumers or preserve legacy citation semantics. The rejected candidate remains in a preserved workspace; do not inherit its diagnostic filtering workaround.
-- Observation: **pass** at seq 138 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 257 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### validation-entrypoint-integration
@@ -80,7 +80,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint, derives-state
 - Artifacts: cmd/sdd/decide_validate.go, cmd/sdd/decide_fork_validate_test.go, cmd/sdd/decide_fork_read.go, cmd/sdd/validate.go, cmd/sdd/root.go, cmd/sdd/apply.go, cmd/sdd/transition.go, cmd/sdd/section.go, cmd/sdd/migrate.go, internal/compile/compile.go, internal/compile/fork_citations_test.go, tools/regression/corpus.go
 - Estimate: 3
-- Observation: **pass** at seq 151 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 271 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### simple-config-replacement
@@ -93,7 +93,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/decisionview/config_replace.go, internal/decisionview/config_replace_test.go, internal/decisionview/transaction.go, internal/decisionview/recovery.go
 - Estimate: 2
 - History: User explicitly accepted create-new/remove-old/rename for planning-config.json because it is expected to change rarely, superseding the earlier continuous-path requirement for that file only. Do not expand recovery machinery or weaken ordinary ledger writes.
-- Observation: **pass** at seq 147 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 267 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### decision-write-cli-completion
@@ -105,7 +105,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint, persists-state
 - Artifacts: cmd/sdd/decide.go, cmd/sdd/decide_fork_read.go, cmd/sdd/decide_fork_write.go, cmd/sdd/decide_fork_write_test.go, cmd/sdd/root.go, cmd/sdd/root_test.go, internal/hook/guard.go
 - Estimate: 4
-- Observation: **pass** at seq 148 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 268 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### core-context-review-fixes
@@ -117,7 +117,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state
 - Artifacts: internal/rules/scope.go, internal/rules/decisions.go, internal/rules/citations.go, internal/rules/root.go, internal/rules/fork_review_test.go, internal/decisionview/consumer.go, internal/decisionview/selection.go, internal/decisionview/consumer_review_test.go, cmd/sdd/decide_fork_validate_test.go
 - Estimate: 3
-- Observation: **pass** at seq 152 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 272 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### core-storage-review-fixes
@@ -129,7 +129,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: concurrent-access, persists-state
 - Artifacts: internal/decisionview/transaction.go, internal/decisionview/journal.go, internal/decisionview/recovery.go, internal/decisionview/store_windows.go, internal/decisionview/store_posix.go, internal/decisionview/storage_review_test.go
 - Estimate: 3
-- Observation: **pass** at seq 150 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 270 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### core-cli-review-fixes
@@ -141,7 +141,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint
 - Artifacts: cmd/sdd/decide_fork_read.go, cmd/sdd/decide_fork_write.go, cmd/sdd/decide_fork_read_test.go, cmd/sdd/decide_fork_write_test.go, cmd/sdd/decide_fork_review_test.go, internal/decisionview/lifecycle.go, internal/decisionview/lifecycle_review_test.go
 - Estimate: 2
-- Observation: **pass** at seq 149 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 269 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### legacy-adoption-recovery
@@ -153,7 +153,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: persists-state
 - Artifacts: internal/decisionview/recovery.go, internal/decisionview/recovery_legacy_test.go
 - Estimate: 2
-- Observation: **pass** at seq 155 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 275 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### root-qualified-consumer-diagnostics
@@ -165,7 +165,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state
 - Artifacts: internal/rules/index.go, internal/rules/decisions.go, internal/rules/fork_locator_test.go
 - Estimate: 2
-- Observation: **pass** at seq 157 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 277 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### legacy-root-resolution-compatibility
@@ -177,19 +177,32 @@ full review gates and is never stored or hand-edited here.
 - Hazards: user-entrypoint
 - Artifacts: cmd/sdd/validate.go, cmd/sdd/fork_root_compat_test.go
 - Estimate: 2
-- Observation: **pass** at seq 156 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 276 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
-### authority-core-final-review
+### hostile-authority-decoding
 
-- Contract: The integrated authority core and all confirmed review remediations have a fresh frozen Aligned independent full four-lane review over the final aggregate implementation.
-- Justifies: `AC-03`, `AC-12`, `AC-13`
+- Contract: Malformed selector JSON, including escaped declaration keys, never silently falls back to legacy authority; YAML alias expansion is bounded with explicit errors while ordinary aliases, depth/cycle guards and deterministic valid decoding remain supported.
+- Justifies: `FR-01`, `FR-12`, `NFR-01`, `AC-10`, `AC-14`
 - Depends on: `legacy-adoption-recovery`, `root-qualified-consumer-diagnostics`, `legacy-root-resolution-compatibility`
+- Gate: tests — `TestForkEscapedMalformedDeclaration` in cmd/sdd/fork_decoder_guard_test.go (satisfies external-format, user-entrypoint); `TestForkBoundedYAMLAliasExpansion` in internal/decisionview/decoder_guard_test.go (satisfies external-format)
+- Hazards: external-format, user-entrypoint
+- Artifacts: internal/decisionview/consumer.go, internal/decisionview/model.go, internal/decisionview/collections.go, internal/decisionview/decoder_guard.go, internal/decisionview/decoder_guard_test.go, cmd/sdd/validate.go, cmd/sdd/fork_decoder_guard_test.go
+- Estimate: 3
+- Observation: **pass** at seq 278 — isolation clean, provenance git 28f6e921fbc0
+- Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
+
+### authority-core-closure-review
+
+- Contract: All integrated authority core and decoder remediations have a fresh frozen Aligned full four-lane review with concrete finding dispositions.
+- Justifies: `AC-10`, `AC-12`, `AC-13`, `AC-14`
+- Depends on: `hostile-authority-decoding`
 - Gate: review — full (carries completion-grade closure)
 - Hazards: none (explicit claim)
 - Estimate: 2
 - Observation: none yet
 - Closure: open — state READY
+- Claim: fork-ledgers-finish (lease expires 2026-09-11T20:55:25Z)
 
 ## Acceptance Criteria
 

@@ -16,7 +16,7 @@ tasks: []
 
 ## Overview
 
-Rendered view of 14 node(s) from the plan graph (schema v1, seq 158).
+Rendered view of 14 node(s) from the plan graph (schema v1, seq 283).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -31,7 +31,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, order-sensitive
 - Artifacts: internal/decisionview/resolve.go, internal/decisionview/resolve_test.go, internal/decisionview/collisions.go, internal/decisionview/model.go, internal/decisionview/canonical.go, internal/decisionview/collections.go, internal/decisionview/continuity.go
 - Estimate: 5
-- Observation: **pass** at seq 131 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 250 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### citations-and-scopes
@@ -43,7 +43,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, external-format
 - Artifacts: internal/decisionview/citations.go, internal/decisionview/citations_test.go, internal/decisionview/scopes.go
 - Estimate: 4
-- Observation: **pass** at seq 132 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 251 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### transaction-journal
@@ -55,7 +55,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: persists-state, concurrent-access
 - Artifacts: internal/decisionview/journal.go, internal/decisionview/journal_test.go
 - Estimate: 4
-- Observation: **pass** at seq 142 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 262 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### preview-envelope
@@ -67,7 +67,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, external-format
 - Artifacts: internal/decisionview/preview.go, internal/decisionview/preview_test.go
 - Estimate: 2
-- Observation: **pass** at seq 134 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 253 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### preview-override-reconciliation
@@ -79,7 +79,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, external-format
 - Artifacts: internal/decisionview/lifecycle.go, internal/decisionview/lifecycle_test.go
 - Estimate: 3
-- Observation: **pass** at seq 135 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 254 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### preview-restoration-detachment
@@ -91,7 +91,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: derives-state, external-format
 - Artifacts: internal/decisionview/restoration.go, internal/decisionview/restoration_test.go
 - Estimate: 3
-- Observation: **pass** at seq 136 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 255 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### renderer-phase-refresh
@@ -104,7 +104,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/graph/compile/render.go, internal/graph/compile/render_status_test.go
 - Estimate: 2
 - History: User-approved dogfooding repair: compile regenerated in-progress phase documents but left README phases planned, producing SDD058. This is a prerequisite to continuing reliable graph authoring, not a manual view correction.
-- Observation: **pass** at seq 137 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 256 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### test-gate-fresh-execution
@@ -117,7 +117,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: Makefile, tools/testgate/makefile_test.go
 - Estimate: 4
 - History: User approved focused timeout investigation as a prerequisite. Cache-enabled rules execution prints PASS then go test remains stuck; the full uncached suite passed all 29 test-bearing packages. Force fresh execution in the authoritative gate and use the host executable suffix; do not claim an upstream Go cache fix.
-- Observation: **pass** at seq 139 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 258 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### preview-adoption-completion
@@ -130,7 +130,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/decisionview/adoption.go, internal/decisionview/adoption_test.go
 - Estimate: 3
 - History: Resume the preserved adoption candidate after the user-approved gate prerequisite. The expired original workspace remains untouched; this child retains the same contract and named tests and must obtain its own red/green observations.
-- Observation: **pass** at seq 140 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 259 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### preview-adoption-gate-check
@@ -141,8 +141,8 @@ full review gates and is never stored or hand-edited here.
 - Gate: command — `make test`
 - Hazards: none (explicit claim)
 - Estimate: 1
-- Observation: **pass** at seq 64 — isolation clean, provenance git ab734699ad0d
-- Closure: open — state STALE
+- Observation: **pass** at seq 260 — isolation clean, provenance git 28f6e921fbc0
+- Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### cross-store-selection-publication
 
@@ -154,7 +154,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/decisionview/transaction.go, internal/decisionview/transaction_test.go
 - Estimate: 4
 - History: Split after implementation exposed two distinct DD-10 protocols. The original adoption-only candidate is preserved for reference, not treated as completion of the full publication contract. Recovery execution remains the existing downstream node.
-- Observation: **pass** at seq 143 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 263 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### single-file-authority-publication
@@ -166,7 +166,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: persists-state, concurrent-access
 - Artifacts: internal/decisionview/authority_write.go, internal/decisionview/authority_write_test.go
 - Estimate: 3
-- Observation: **pass** at seq 144 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 264 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### selector-recovery-capture
@@ -179,7 +179,7 @@ full review gates and is never stored or hand-edited here.
 - Artifacts: internal/decisionview/journal.go, internal/decisionview/transaction.go, internal/decisionview/selector_capture.go, internal/decisionview/selector_capture_test.go
 - Estimate: 3
 - History: User approved journal/publication scope expansion and clarified there must be no delete-first config update. Atomic replacement is retained. The capture repairs the crash window after a pending config replacement, especially rebind where the original envelope contains only a selector digest.
-- Observation: **pass** at seq 145 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 265 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### explicit-recovery-completion
@@ -191,7 +191,7 @@ full review gates and is never stored or hand-edited here.
 - Hazards: persists-state, concurrent-access
 - Artifacts: internal/decisionview/recovery.go, internal/decisionview/recovery_test.go
 - Estimate: 4
-- Observation: **pass** at seq 146 — isolation clean, provenance git 8dd1b797d09a
+- Observation: **pass** at seq 266 — isolation clean, provenance git 28f6e921fbc0
 - Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ## Acceptance Criteria

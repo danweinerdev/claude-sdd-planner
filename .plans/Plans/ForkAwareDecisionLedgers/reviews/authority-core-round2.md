@@ -1,14 +1,13 @@
 ---
 title: "Authority core review, round 2"
 type: review
-status: open
+status: resolved
 created: 2026-09-11
 updated: 2026-09-11
 tags: [review]
-related: ["Plans/ForkAwareDecisionLedgers/03-consumers.md"]
+related: ["Plans/ForkAwareDecisionLedgers/03-consumers.md", "Specs/ForkAwareDecisionLedgers/README.md"]
 review_of: "Plans/ForkAwareDecisionLedgers/03-consumers.md"
 rev: "0549e6ce48e4dd032d57cf915f0f1cfafd79e354..24c7c6253f16466ec633325d831f938b4f1d38ea"
-review_scope: phase
 frozen: false
 verdict: Needs changes
 reviewed_planning_revision: "8dd1b797d09ad34768960a784fb0e0add9f9b131"
@@ -54,6 +53,8 @@ followups: []
 
 This is an open, historical four-lane review of `Plans/ForkAwareDecisionLedgers/03-consumers.md` at frozen identity `0549e6ce48e4dd032d57cf915f0f1cfafd79e354..24c7c6253f16466ec633325d831f938b4f1d38ea`.
 
+The original failed phase-review observations are retained below as ordinary historical finding records, not completion evidence. Only fresh frozen `Aligned` artifacts govern closure.
+
 ## Findings
 ### F-01: Initial unowned adoption recovery is not compliant
 
@@ -79,3 +80,15 @@ The request for automatic repair of the missing-config interval is rejected. The
 - 2026-09-11: Four independent lanes completed at `0549e6ce48e4dd032d57cf915f0f1cfafd79e354..24c7c6253f16466ec633325d831f938b4f1d38ea`. Plan drift was Aligned and quality approved with minor comments; spec compliance and blind spots required changes. Verdict: Needs changes.
 - 2026-09-11: F-01 fixed by `77fbfd5`; F-02 fixed by `44c0be4`; F-03 fixed by `2c014f3`. The latest aggregate `8dd1b797d09ad34768960a784fb0e0add9f9b131` passed `go test -json -count=1 -timeout=300s ./...` (`core-final-suite.json`).
 - 2026-09-11: A fresh independent four-lane review is required. This historical round is not Aligned and records no frozen resolution or completion assertion.
+
+### F-01 — fixed (2026-09-11)
+The initial unowned adoption recovery finding was fixed by `77fbfd5` (`fix(recovery): admit unowned legacy adoption selectors safely`).
+
+### F-02 — fixed (2026-09-11)
+The repository/planning locator alias finding was fixed by `44c0be4` (`fix(rules): retain source roots in fork diagnostics`).
+
+### F-03 — fixed (2026-09-11)
+The legacy root compatibility finding was fixed by `2c014f3` (`fix(validate): preserve legacy roots without borrowing fork authority`).
+
+### F-04 — rejected (2026-09-11)
+The automatic missing-config repair request remains rejected under the accepted config-only manual-staging risk; this historical review did not authorize automatic repair machinery.

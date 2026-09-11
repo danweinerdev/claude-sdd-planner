@@ -1,14 +1,13 @@
 ---
 title: "Authority core review"
 type: review
-status: open
+status: resolved
 created: 2026-09-10
 updated: 2026-09-11
 tags: [review]
-related: ["Plans/ForkAwareDecisionLedgers/03-consumers.md"]
+related: ["Plans/ForkAwareDecisionLedgers/03-consumers.md", "Specs/ForkAwareDecisionLedgers/README.md"]
 review_of: "Plans/ForkAwareDecisionLedgers/03-consumers.md"
 rev: "0549e6ce48e4dd032d57cf915f0f1cfafd79e354..84bed37805399dac1162c6c1f1e4047b62ce469e"
-review_scope: phase
 frozen: false
 verdict: Needs changes
 reviewed_planning_revision: "84bed37805399dac1162c6c1f1e4047b62ce469e"
@@ -52,6 +51,8 @@ followups: []
 
 # Authority core review
 
+The original failed phase-review observations are retained below as ordinary historical finding records, not completion evidence. Only fresh frozen `Aligned` artifacts govern closure.
+
 ## Findings
 ### F-01: Authority context and scope/citation checks are not preserved consistently
 
@@ -74,3 +75,15 @@ Quality and blind spots requested automatic recovery for the remove-old/rename i
 - 2026-09-11: F-01 fixed by `76b0832` (`fix(rules): retain scoped authority and explicit citation ownership`).
 - 2026-09-11: F-02 fixed by `77c584d` (`fix(decisionview): harden publication roots barriers and journal bounds`).
 - 2026-09-11: F-03 fixed by `f7ff600` (`fix(decide): complete source restore capability and ID contracts`). F-04 remains rejected.
+
+### F-01 — fixed (2026-09-11)
+The authority context, scope, and citation finding was fixed by `76b0832` (`fix(rules): retain scoped authority and explicit citation ownership`), addressing the recorded FR-05, FR-12, and FR-15 concerns.
+
+### F-02 — fixed (2026-09-11)
+The publication, recovery, barrier, and journal-bounds finding was fixed by `77c584d` (`fix(decisionview): harden publication roots barriers and journal bounds`) against the recorded FR-16, NFR-03, and AC-13 concerns.
+
+### F-03 — fixed (2026-09-11)
+The supported source, restore, capability, and decision-ID contract finding was fixed by `f7ff600` (`fix(decide): complete source restore capability and ID contracts`).
+
+### F-04 — rejected (2026-09-11)
+The automatic missing-config repair request remains rejected because the user explicitly accepted the config-only manual-staging risk retained in this review; no automatic recovery machinery was authorized.
