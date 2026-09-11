@@ -181,12 +181,21 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 			return fmt.Errorf("migrate --all: %w", err)
 		}
 	}
+	// A caller may narrow the sweep to Plans or one plan; runtime identity is
+	// still relative to the configured planning root, not the walk root.
+	planningRoot, findErr := store.FindPlanningRoot(root)
+	if findErr != nil {
+		planningRoot, findErr = store.FindPlanningRoot(".")
+		if findErr != nil {
+			planningRoot = root
+		}
+	}
 	var files []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && store.IsGraphRuntimeDir(root, p) {
+		if d.IsDir() && store.IsGraphRuntimeDir(planningRoot, p) {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() && strings.HasSuffix(p, ".md") {

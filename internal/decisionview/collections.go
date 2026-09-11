@@ -39,6 +39,37 @@ type Collection struct {
 	Metadata    *ForkMetadata
 	Diagnostics []dlg.Diagnostic
 	Digests     map[string]string
+	History     string
+}
+
+// ReadCollectionMetadata bootstraps the identity of an already declared source
+// using the same bounded, regular-file-only read as collection loading.
+func ReadCollectionMetadata(roots Roots, locator SourceLocator) (*ForkMetadata, error) {
+	if err := locator.Validate(); err != nil {
+		return nil, err
+	}
+	base := roots.Planning
+	if locator.Root == SourceRootRepository {
+		base = roots.Repository
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	raw, _, err := readCollectionFile(root, locator.Path)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := collectionFrontmatter(raw)
+	if err != nil || nodes["fork"] == nil {
+		return nil, err
+	}
+	var metadata ForkMetadata
+	if err := metadata.UnmarshalYAML(nodes["fork"]); err != nil {
+		return nil, err
+	}
+	return &metadata, nil
 }
 
 func LoadCollection(roots Roots, id CollectionID, locator SourceLocator) (*Collection, error) {
@@ -128,6 +159,9 @@ func LoadCollection(roots Roots, id CollectionID, locator SourceLocator) (*Colle
 	}
 	more, _ := dlg.ValidateExplicitCollection(ledgers[0], ledgers[1:])
 	c.Diagnostics = append(c.Diagnostics, more...)
+	if err := checkCollectionHistory(base, c); err != nil {
+		return c, err
+	}
 	for _, d := range c.Diagnostics {
 		if d.Severity.Invalidating() {
 			return c, ErrInvalidCollection

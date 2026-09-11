@@ -262,6 +262,15 @@ func TestForkWriteCLIOutcomeErrorsPreserveOperationAndEncodingFailures(t *testin
 	if message := err.Error(); !strings.Contains(message, out.OperationID) || !strings.Contains(message, out.Outcome) {
 		t.Errorf("joined error omits operation identity/outcome: %v", err)
 	}
+	out.Outcome = string(decisionview.ForkTransactionRolledBack)
+	err = joinForkOutcomeErrors("decide fork apply", out, decisionview.ErrForkTransactionConflict, nil)
+	if exitCode(err) != 1 || !errors.Is(err, decisionview.ErrForkTransactionConflict) {
+		t.Fatalf("clean precondition rollback must retain its cause and exit 1: %v", err)
+	}
+	err = joinForkOutcomeErrors("decide fork apply", out, decisionview.ErrForkTransactionConflict, encodingErr)
+	if exitCode(err) != 2 || !errors.Is(err, encodingErr) {
+		t.Fatalf("outcome encoding failure must remain operational: %v", err)
+	}
 }
 
 func newForkWriteFixture(t *testing.T) forkWriteFixture {

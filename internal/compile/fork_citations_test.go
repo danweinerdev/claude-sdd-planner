@@ -42,7 +42,7 @@ func TestForkCompileCitationsFailClosed(t *testing.T) {
 	capture.LegacyContexts = []decisionview.LegacyContext{{
 		Root: decisionview.SourceRootRepository, Path: "Specs/Thing/README.md", Namespace: collection, LocalIDs: []string{"D-0001"},
 	}}
-	legacyPayload := payload(map[string]string{"## Overview": "Uses D-0001."})
+	legacyPayload := payload(map[string]string{"## Overview": "Uses D-0001 and D-0001."})
 	legacyExisting := artifact.Parse(legacyPayload)
 	wrongRoot := Compile(load(t), legacyPayload, Options{
 		Today: "2026-09-10", Existing: legacyExisting, DecisionView: capture, ArtifactPath: "Specs/Thing/README.md", ArtifactRoot: decisionview.SourceRootPlanning,
@@ -60,6 +60,25 @@ func TestForkCompileCitationsFailClosed(t *testing.T) {
 	for _, refusal := range commented.Refusals {
 		if refusal.Code == "SPK040" && strings.Contains(refusal.Message, "decision citation") {
 			t.Fatalf("comment citation became authoritative prose: %+v", commented.Refusals)
+		}
+	}
+}
+
+func TestForkHistoricalCitationWrites(t *testing.T) {
+	const id = decisionview.QualifiedID("ledger:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:D-0001")
+	for _, status := range []string{"accepted", "proposed", "rejected", "superseded"} {
+		for _, kind := range []string{"research", "debrief"} {
+			for _, artifactStatus := range []string{"draft", "archived", "superseded", `"archived"`, `'superseded'`} {
+				t.Run(status+"/"+kind+"/"+artifactStatus, func(t *testing.T) {
+					capture := &decisionview.ConsumerCapture{View: &decisionview.ResolvedView{Resolution: decisionview.ResolutionComplete, Records: []decisionview.ResolvedDecision{{ID: id, OriginalStatus: status, Applicability: "historical", Original: map[string]any{"status": status}}}}}
+					source := "---\ntype: \"" + kind + "\"\nstatus: " + artifactStatus + "\n---\n\n## Context\n\nHistorical reference " + string(id) + ".\n"
+					got := ValidateDecisionAuthority(source, Options{DecisionView: capture})
+					want := kind == "debrief" || artifactStatus != "draft" || (status != "rejected" && status != "superseded")
+					if got.OK() != want {
+						t.Fatalf("writable = %v, want %v: %+v", got.OK(), want, got.Refusals)
+					}
+				})
+			}
 		}
 	}
 }

@@ -98,7 +98,7 @@ func CaptureForRepository(repositoryRoot string) *ConsumerCapture {
 			c.collectionDiagnostics(local)
 		}
 		severity := Error
-		if consumerOperational(err) {
+		if consumerOperational(err) && !errors.Is(err, os.ErrNotExist) {
 			severity = Operational
 		}
 		c.issue("FDL020", severity, "Decision authority owner or selected source is invalid: "+err.Error())
@@ -144,7 +144,7 @@ func CaptureForRepository(repositoryRoot string) *ConsumerCapture {
 				c.collectionDiagnostics(next)
 			}
 			severity := Error
-			if consumerOperational(loadErr) {
+			if consumerOperational(loadErr) && !errors.Is(loadErr, os.ErrNotExist) {
 				severity = Operational
 			}
 			c.issue("FDL020", severity, "Cannot read declared decision source: "+loadErr.Error())
@@ -262,7 +262,7 @@ func repositoryForkEvidence(repositoryRoot string) bool {
 
 func consumerOperational(err error) bool {
 	var pathErr *os.PathError
-	return errors.As(err, &pathErr) || errors.Is(err, ErrSourceChanged)
+	return errors.As(err, &pathErr) || errors.Is(err, ErrSourceChanged) || errors.Is(err, errCollectionHistory)
 }
 
 func (c *ConsumerCapture) issue(code string, severity Severity, message string) {

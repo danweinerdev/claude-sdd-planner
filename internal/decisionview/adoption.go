@@ -30,17 +30,19 @@ type ForkAdoptionPreview struct {
 }
 
 type forkAdoptionRequest struct {
-	Version         SchemaVersion `json:"version"`
-	Operation       string        `json:"operation"`
-	OperationID     string        `json:"operationId"`
-	Date            string        `json:"date"`
-	RepositoryID    OwnerID       `json:"repositoryId"`
-	LedgerID        CollectionID  `json:"ledgerId"`
-	Path            string        `json:"path"`
-	BindingID       string        `json:"bindingId"`
-	ParentBindingID string        `json:"parentBindingId"`
-	SourceOwnerID   OwnerID       `json:"sourceOwnerId"`
-	Source          SourceLocator `json:"source"`
+	Version         SchemaVersion   `json:"version"`
+	Operation       string          `json:"operation"`
+	OperationID     string          `json:"operationId"`
+	Date            string          `json:"date"`
+	RepositoryID    OwnerID         `json:"repositoryId"`
+	LedgerID        CollectionID    `json:"ledgerId"`
+	Path            string          `json:"path"`
+	BindingID       string          `json:"bindingId"`
+	ParentBindingID string          `json:"parentBindingId"`
+	SourceOwnerID   OwnerID         `json:"sourceOwnerId"`
+	Source          SourceLocator   `json:"source"`
+	SourceLedgerID  CollectionID    `json:"sourceLedgerId,omitempty"`
+	LegacyContexts  []LegacyContext `json:"legacyContexts,omitempty"`
 }
 
 // PreviewForkAdoption derives all prospective bytes from an immutable snapshot.
@@ -134,6 +136,29 @@ func validateForkAdoptionRequest(request forkAdoptionRequest, snapshot ForkAdopt
 	if snapshot.Source == nil {
 		return fmt.Errorf("%w: no captured source collection", ErrInvalidCollection)
 	}
+	if request.SourceLedgerID != "" && request.SourceLedgerID != snapshot.Source.ID {
+		return fmt.Errorf("%w: proposed sourceLedgerId differs from captured source", ErrInvalidCollection)
+	}
+	if request.Operation == "rebind" && len(request.LegacyContexts) != 0 {
+		return fmt.Errorf("decisionview: rebinding must preserve the original legacy citation contexts")
+	}
+	contexts := map[string]bool{}
+	for _, legacy := range request.LegacyContexts {
+		key := string(legacy.Root) + "\x00" + legacy.Path
+		if contexts[key] {
+			return fmt.Errorf("decisionview: duplicate legacy citation context for %s", legacy.Path)
+		}
+		contexts[key] = true
+		collection := adoptionCollectionSet(snapshot, nil, true)[legacy.Namespace]
+		if collection == nil {
+			return fmt.Errorf("decisionview: legacy citation namespace is not a captured source")
+		}
+		for _, id := range legacy.LocalIDs {
+			if _, ok := collection.Entries[id]; !ok {
+				return fmt.Errorf("decisionview: legacy citation %s is absent from its source namespace", id)
+			}
+		}
+	}
 	if snapshot.Source.ID == request.LedgerID {
 		return fmt.Errorf("%w: local and source collection identities must differ", ErrInvalidCollection)
 	}
@@ -198,7 +223,7 @@ func adoptionMetadataAndBefore(request forkAdoptionRequest, snapshot ForkAdoptio
 		return ForkMetadata{}, nil, nil, err
 	}
 	if request.Operation == "adopt" {
-		metadata := ForkMetadata{Version: Version1, LedgerID: request.LedgerID, RepositoryID: request.RepositoryID, ParentBindingID: binding.ID, Bindings: []Binding{binding}, Events: []AuthorityEvent{event}, OperationIDs: []string{request.OperationID}}
+		metadata := ForkMetadata{Version: Version1, LedgerID: request.LedgerID, RepositoryID: request.RepositoryID, ParentBindingID: binding.ID, Bindings: []Binding{binding}, Events: []AuthorityEvent{event}, OperationIDs: []string{request.OperationID}, LegacyContexts: request.LegacyContexts}
 		before, err := adoptionCurrentSourceView(snapshot, request.SourceOwnerID)
 		return metadata, before, nil, err
 	}

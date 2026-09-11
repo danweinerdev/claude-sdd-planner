@@ -45,10 +45,16 @@ func TestGraphRuntimeArtifactBoundary(t *testing.T) {
 }
 
 func TestGraphRuntimeMigrationPreservesEvidence(t *testing.T) {
+	for _, scope := range []string{"", "Plans", "Plans/P"} {
+		t.Run(scope, func(t *testing.T) { testGraphRuntimeMigrationScope(t, scope) })
+	}
+}
+
+func testGraphRuntimeMigrationScope(t *testing.T, scope string) {
 	root := t.TempDir()
 	writeConfig(t, root)
 
-	ordinaryRel := "Research/ordinary.md"
+	ordinaryRel := "Plans/P/ordinary.md"
 	runtimeRel := "Plans/P/.graph/ws-X/Research/evidence.md"
 	source := []byte(validResearchDoc)
 	ordinaryPath := writeRuntimeBoundaryFile(t, root, ordinaryRel, source)
@@ -58,7 +64,11 @@ func TestGraphRuntimeMigrationPreservesEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, runErr := runSdd(stressBinary(t), root, "migrate", "--all", "--json")
+	args := []string{"migrate", "--all", "--json"}
+	if scope != "" {
+		args = append(args, filepath.Join(root, filepath.FromSlash(scope)))
+	}
+	stdout, stderr, runErr := runSdd(stressBinary(t), root, args...)
 	if runErr != nil {
 		t.Fatalf("migrate --all: %v\nstdout: %s\nstderr: %s", runErr, stdout, stderr)
 	}

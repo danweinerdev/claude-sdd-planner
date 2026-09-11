@@ -33,6 +33,43 @@ Show the preview's **full exact JSON bytes** to the user and obtain explicit app
 
 Initial selection and later selector changes own only `planning-config.json` plus planning-root fork state. At config level, `repositoryId` is a sibling of `decisionLog`; `decisionLog` contains `version`, `mode`, `path`, and `ledgerId` (plus a transient `transaction` only while publishing). The accepted config-only remove/rename replacement can require removing the old config and renaming its retained staged sibling. A rare interruption in that gap can leave config absent. After inspecting the retained staging bytes and obtaining explicit user confirmation of those exact bytes, manual restoration by renaming that staging file into place is permitted; do not generate replacement config or claim automatic/no-gap recovery. Once config is readable, use `fork inspect` and separately approved `fork recover` if transaction state still requires it. No persistent selector, lock, journal, or policy file belongs at the repository root.
 
+For adoption of an unchanged legacy source, the proposal supplies its explicit
+`sourceLedgerId`; no identity metadata is inserted into inherited files. When
+the source already declares an identity, an optional `sourceLedgerId` must match
+it. `sourceOwnerId` binds the logical source owner, and `source` declares the
+root, relative canonical path, and any archive membership. Initial adoption may
+also supply `legacyContexts` for existing artifacts: each item names `root`,
+`path`, `namespace`, and `localIds`. For example:
+
+```json
+{
+  "version": 1,
+  "operation": "adopt",
+  "operationId": "adopt-project-authority",
+  "date": "2026-09-11",
+  "repositoryId": "10000000-0000-4000-8000-000000000001",
+  "ledgerId": "20000000-0000-4000-8000-000000000002",
+  "path": "Decisions/fork.md",
+  "bindingId": "upstream-baseline",
+  "sourceOwnerId": "30000000-0000-4000-8000-000000000003",
+  "sourceLedgerId": "40000000-0000-4000-8000-000000000004",
+  "source": {"root": "planning", "path": "Decisions/decisions.md", "archives": ["Decisions/archive-*.md"]},
+  "legacyContexts": [{"root": "planning", "path": "Research/existing.md", "namespace": "40000000-0000-4000-8000-000000000004", "localIds": ["D-0001"]}]
+}
+```
+
+These are generic example identities, not authority to adopt a real repository.
+Inventory only existing citations, inspect the complete generated envelope, and
+obtain exact-byte approval. Rebinding preserves this original citation inventory;
+new citations must be qualified, including additional occurrences of an old bare
+ID. Effective/history records report whether their collection has available
+`git-head-and-index` history, `git-index-only` staged history, an `unborn` Git
+history, or `unavailable` history. `untracked` means the store has Git history
+but this collection has no recorded baseline yet.
+Available history is checked in the collection's actual store without combining
+neighboring collections or fetching remote objects. Retained approved baselines
+still apply when Git history is unavailable.
+
 Throughout this document, "the ledger" means the effective authority resolved by these rules, not necessarily one file. `Decisions/decisions.md` names only the conventional legacy ledger.
 
 ### Entry Schema

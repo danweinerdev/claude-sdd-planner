@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
@@ -80,11 +79,16 @@ func cmdDecideForkRead(view, lookup, status, term string, jsonOut bool) error {
 			fmt.Fprintf(os.Stderr, "%s %s: %s\n", diagnostic.Severity, diagnostic.Code, diagnostic.Message)
 		}
 	}
-	if view == "list" && status != "" && status != "accepted" {
-		return &refusedError{n: 1, msg: "decide list: --status " + status + " is non-effective history; use `sdd decide history`"}
+	for _, diagnostic := range resolved.Diagnostics {
+		if diagnostic.Severity == decisionview.Operational {
+			return fmt.Errorf("decide %s: decision authority could not be captured", view)
+		}
 	}
 	if forkReadHasAuthorityFailure(resolved) {
 		return &refusedError{n: forkReadFailureCount(resolved)}
+	}
+	if view == "list" && status != "" && status != "accepted" {
+		return &refusedError{n: 1, msg: "decide list: --status " + status + " is non-effective history; use `sdd decide history`"}
 	}
 	return nil
 }
@@ -114,7 +118,7 @@ func cmdDecideCapabilities(jsonOut bool) error {
 	if jsonOut {
 		return writeJSON(out)
 	}
-	fmt.Println("decision_forks: schema 1; effective/history/lookup/list/search, exact fork writes, and transaction preview/apply/inspect/recover; partial (release consumers incomplete)")
+	fmt.Println("decision_forks: schema 1; effective/history/lookup/list/search, exact fork writes, and transaction preview/apply/inspect/recover; partial (add/accept/supersede/archive refuse unless expressed by a supported fork operation)")
 	return nil
 }
 
@@ -137,94 +141,21 @@ func loadDecideForkView() (*decisionview.ResolvedView, bool, error) {
 		return nil, false, nil
 	}
 
-	store, err := decisionview.OpenLocalStore(selection.RepositoryRoot, selection.PlanningRoot, selection.Config.LedgerID.String())
-	if err != nil {
-		return nil, true, err
+	// Use the same stable, rechecked capture as validation and hooks rather than
+	// maintaining a second resolver without publication-window protection.
+	capture := decisionview.CaptureForRepository(repository)
+	resolved := capture.View
+	if resolved == nil {
+		resolved = &decisionview.ResolvedView{Version: 1, OwnerID: selection.RepositoryID, LocalID: selection.Config.LedgerID, Resolution: decisionview.ResolutionInvalid, Records: []decisionview.ResolvedDecision{}}
 	}
-	defer store.Close()
-	roots := decisionview.Roots{Repository: selection.RepositoryRoot, Planning: selection.PlanningRoot}
-	collections := map[decisionview.CollectionID]*decisionview.Collection{}
-	visiting := map[decisionview.CollectionID]bool{}
-	var extra []decisionview.Diagnostic
-	var recovery bool
-	var load func(decisionview.CollectionID, decisionview.SourceLocator) error
-	load = func(id decisionview.CollectionID, locator decisionview.SourceLocator) error {
-		if _, loaded := collections[id]; loaded || visiting[id] {
-			return nil
-		}
-		barrier, barrierErr := store.InspectForkBarrier(id)
-		if barrierErr != nil {
-			extra = append(extra, forkReadDiagnostic("FDL022", locator.Path, "Shared transaction barrier cannot be validated: "+barrierErr.Error()))
-			recovery = true
-			return nil
-		}
-		if barrier != nil && barrier.Status != "committed" && barrier.Status != "rolled-back" {
-			extra = append(extra, forkReadDiagnostic("FDL022", locator.Path, "Shared transaction barrier is "+barrier.Status+" for collection "+id.String()))
-			recovery = true
-			return nil
-		}
-		var collection *decisionview.Collection
-		var loadErr error
-		if id == selection.Config.LedgerID && locator.Path == selection.Config.Path {
-			collection, loadErr = decisionview.LoadSelectedCollection(selection)
-		} else {
-			collection, loadErr = decisionview.LoadCollection(roots, id, locator)
-		}
-		if loadErr != nil {
-			if os.IsNotExist(loadErr) || errors.Is(loadErr, decisionview.ErrInvalidCollection) || errors.Is(loadErr, decisionview.ErrSourceChanged) {
-				diagnostic := forkReadDiagnostic("FDL020", locator.Path, "Declared decision collection is unavailable or invalid: "+loadErr.Error())
-				if errors.Is(loadErr, decisionview.ErrSourceChanged) {
-					diagnostic.Correction = "Retry the read from a stable source snapshot; if changes persist, inspect and reconcile the declared authority."
-				}
-				extra = append(extra, diagnostic)
-				return nil
-			}
-			return loadErr
-		}
-		collections[id] = collection
-		visiting[id] = true
-		if collection.Metadata != nil {
-			for _, binding := range collection.Metadata.Bindings {
-				if err := load(binding.CollectionID, binding.Source); err != nil {
-					return err
-				}
-			}
-		}
-		delete(visiting, id)
-		return nil
-	}
-	localLocator := decisionview.SourceLocator{Root: decisionview.SourceRootPlanning, Path: selection.Config.Path}
-	if err := load(selection.Config.LedgerID, localLocator); err != nil {
-		return nil, true, err
-	}
-	if local := collections[selection.Config.LedgerID]; local != nil {
-		if err := selection.ValidateOwner(local.Metadata); err != nil {
-			extra = append(extra, forkReadDiagnostic("FDL020", selection.Config.Path, err.Error()))
-			delete(collections, selection.Config.LedgerID)
-		}
-	}
-	resolved, err := decisionview.Compose(selection.Config.LedgerID, selection.Config.Mode, collections)
-	if err != nil {
-		return nil, true, err
-	}
-	resolved.OwnerID = selection.RepositoryID
-	resolved.Diagnostics = append(resolved.Diagnostics, extra...)
-	if len(extra) > 0 {
-		resolved.Resolution = decisionview.ResolutionInvalid
-		if recovery {
+	resolved.Diagnostics = append([]decisionview.Diagnostic(nil), capture.Diagnostics...)
+	for _, diagnostic := range resolved.Diagnostics {
+		if diagnostic.Code == "FDL022" {
 			resolved.Resolution = decisionview.ResolutionRecoveryNeeded
+		} else if (diagnostic.Severity == decisionview.Error || diagnostic.Severity == decisionview.Operational) && resolved.Resolution == decisionview.ResolutionComplete {
+			resolved.Resolution = decisionview.ResolutionInvalid
 		}
 	}
-	sort.SliceStable(resolved.Diagnostics, func(i, j int) bool {
-		a, b := resolved.Diagnostics[i], resolved.Diagnostics[j]
-		if a.Path != b.Path {
-			return a.Path < b.Path
-		}
-		if a.Code != b.Code {
-			return a.Code < b.Code
-		}
-		return a.Message < b.Message
-	})
 	return resolved, true, nil
 }
 

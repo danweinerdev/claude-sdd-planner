@@ -21,6 +21,7 @@ type ResolvedDecision struct {
 	Override       *OverrideDeclaration `json:"override,omitempty"`
 	Lineage        []string             `json:"lineage,omitempty"`
 	Source         SourceLocator        `json:"source"`
+	History        string               `json:"history,omitempty"`
 }
 type ResolvedView struct {
 	Version     int                `json:"version"`
@@ -181,7 +182,7 @@ func Compose(localID CollectionID, mode string, sources map[CollectionID]*Collec
 			}
 			status, _ := entry["status"].(string)
 			qid := QualifiedID("ledger:" + string(id) + ":" + local)
-			r := ResolvedDecision{ID: qid, CollectionID: id, Original: entry, OriginalStatus: status, Applicability: "historical", Source: c.Locator}
+			r := ResolvedDecision{ID: qid, CollectionID: id, Original: entry, OriginalStatus: status, Applicability: "historical", Source: c.Locator, History: c.History}
 			if actual := c.EntryPaths[local]; actual != "" {
 				r.Source = SourceLocator{Root: c.Locator.Root, Path: actual}
 			}

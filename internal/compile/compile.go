@@ -14,6 +14,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
+	"gopkg.in/yaml.v3"
 )
 
 // Refusal is a reason the payload cannot be committed. All refusals are
@@ -202,14 +203,25 @@ func checkDecisionAuthority(doc *artifact.Doc, opts Options, res *Result) {
 	if err := decisionview.ValidateReferenceChange(before, after, legacy); err != nil {
 		res.refuse("SPK040", 0, err.Error(), "Use a qualified ledger:<collection-id>:D-NNNN citation from the captured effective authority.")
 	}
+	// Citations preserve historical identity; they are not assertions that the
+	// cited decision currently binds. Match SDD121's live-artifact status rule.
+	statusDoc := doc
+	if opts.Existing != nil {
+		statusDoc = opts.Existing
+	}
+	kind, _ := statusDoc.FM("type")
+	status, _ := statusDoc.FM("status")
+	_ = yaml.Unmarshal([]byte(kind), &kind)
+	_ = yaml.Unmarshal([]byte(status), &status)
+	live := kind != "debrief" && status != "archived" && status != "superseded"
 	for _, ref := range after {
 		lookup, err := decisionview.LookupReference(capture.View, ref, legacy)
-		if err != nil || lookup.Effective == nil {
-			message := "decision citation " + ref + " does not resolve to effective authority"
+		if err != nil || (live && (lookup.Original.OriginalStatus == "rejected" || lookup.Original.OriginalStatus == "superseded")) {
+			message := "decision citation " + ref + " is unresolved or cites rejected/superseded history from a live artifact"
 			if err != nil {
 				message += ": " + err.Error()
 			}
-			res.refuse("SPK040", 0, message, "Use an unambiguous qualified identity whose current applicability is binding.")
+			res.refuse("SPK040", 0, message, "Use an unambiguous qualified identity; live artifacts must not cite rejected or superseded decisions.")
 		}
 	}
 }

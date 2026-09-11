@@ -79,7 +79,7 @@ func ValidateReferenceChange(before, after []string, legacy *LegacyContext) erro
 			return err
 		}
 		seen[ref]++
-		if seen[ref] > old[ref] || seen[ref] > allowed[ref] {
+		if seen[ref] > old[ref] || allowed[ref] == 0 {
 			return fmt.Errorf("decisionview: newly introduced bare citation %s must be qualified", ref)
 		}
 	}

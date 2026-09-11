@@ -8,13 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
-	"gopkg.in/yaml.v3"
 )
 
 type decideForkPreviewOpts struct {
@@ -42,14 +41,15 @@ type decideForkRecoverOpts struct {
 }
 
 type forkWriteRequest struct {
-	Version       decisionview.SchemaVersion `json:"version"`
-	Operation     string                     `json:"operation"`
-	OperationID   string                     `json:"operationId"`
-	RepositoryID  decisionview.OwnerID       `json:"repositoryId"`
-	LedgerID      decisionview.CollectionID  `json:"ledgerId"`
-	Path          string                     `json:"path"`
-	Source        decisionview.SourceLocator `json:"source"`
-	SourceOwnerID decisionview.OwnerID       `json:"sourceOwnerId"`
+	Version        decisionview.SchemaVersion `json:"version"`
+	Operation      string                     `json:"operation"`
+	OperationID    string                     `json:"operationId"`
+	RepositoryID   decisionview.OwnerID       `json:"repositoryId"`
+	LedgerID       decisionview.CollectionID  `json:"ledgerId"`
+	Path           string                     `json:"path"`
+	Source         decisionview.SourceLocator `json:"source"`
+	SourceOwnerID  decisionview.OwnerID       `json:"sourceOwnerId"`
+	SourceLedgerID decisionview.CollectionID  `json:"sourceLedgerId,omitempty"`
 }
 
 type forkWriteContext struct {
@@ -90,7 +90,7 @@ func cmdDecideForkPreview(o decideForkPreviewOpts) error {
 	var envelope *decisionview.PreviewEnvelope
 	switch request.Operation {
 	case "adopt", "rebind":
-		source, err := loadForkProposalSource(ctx, request.Source)
+		source, err := loadForkProposalSource(ctx, request.Source, request.SourceLedgerID)
 		if err != nil {
 			return forkWriteRefusal("decide fork preview: " + err.Error())
 		}
@@ -210,16 +210,25 @@ func cmdDecideForkInspect(o decideForkInspectOpts) error {
 		return fmt.Errorf("decide fork inspect: %w", err)
 	}
 	out := struct {
-		Version     int                                 `json:"version"`
-		OperationID string                              `json:"operationId"`
-		Outcome     decisionview.ForkTransactionOutcome `json:"outcome"`
-		Authority   decisionview.Resolution             `json:"authority"`
-		Journal     string                              `json:"journal,omitempty"`
-	}{1, inspection.OperationID, inspection.Outcome, inspection.Authority, inspection.Journal}
+		Version     int                                  `json:"version"`
+		OperationID string                               `json:"operationId"`
+		Outcome     decisionview.ForkTransactionOutcome  `json:"outcome"`
+		Authority   decisionview.Resolution              `json:"authority"`
+		Journal     string                               `json:"journal,omitempty"`
+		Barriers    map[decisionview.CollectionID]string `json:"barriers"`
+	}{1, inspection.OperationID, inspection.Outcome, inspection.Authority, inspection.Journal, inspection.Barriers}
 	if o.JSON {
 		return writeJSON(out)
 	}
 	fmt.Printf("%s: %s (%s)\n", out.OperationID, out.Outcome, out.Authority)
+	ids := make([]decisionview.CollectionID, 0, len(out.Barriers))
+	for id := range out.Barriers {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		fmt.Printf("barrier: %s %s\n", id, out.Barriers[id])
+	}
 	return nil
 }
 
@@ -268,6 +277,10 @@ func emitForkOutcome(command string, out *forkApplyOutput, operationErr error, j
 }
 
 func joinForkOutcomeErrors(command string, out *forkApplyOutput, operationErr, outputErr error) error {
+	if outputErr == nil && out != nil && out.Outcome == string(decisionview.ForkTransactionRolledBack) &&
+		(errors.Is(operationErr, decisionview.ErrForkTransactionConflict) || errors.Is(operationErr, decisionview.ErrStoreConflict)) {
+		operationErr = errors.Join(operationErr, &refusedError{n: 1, msg: "approved preconditions changed; all operation-owned changes were rolled back"})
+	}
 	if operationErr != nil && out != nil {
 		operationErr = fmt.Errorf("%s: %s: %w", command, out.Outcome, operationErr)
 	}
@@ -291,11 +304,13 @@ func captureForkWriteContext(operation string) (*forkWriteContext, error) {
 		return nil, err
 	}
 	ctx := &forkWriteContext{repository: repository, planning: planning, config: config, collections: map[decisionview.CollectionID]*decisionview.Collection{}}
-	selection, selectionErr := decisionview.ReadSelection(repository)
-	ctx.selection = selection
-	if errors.Is(selectionErr, decisionview.ErrSelectionPending) && (operation == "inspect" || operation == "recover") {
+	// Recovery inspects its own journal and exact file ownership. Requiring
+	// complete authority here would make a pending barrier impossible to repair.
+	if operation == "inspect" || operation == "recover" {
 		return ctx, nil
 	}
+	selection, selectionErr := decisionview.ReadSelection(repository)
+	ctx.selection = selection
 	if selectionErr != nil {
 		return nil, selectionErr
 	}
@@ -348,7 +363,7 @@ func forkTransactionCollections(ctx *forkWriteContext, envelope *decisionview.Pr
 		}
 	}
 	if envelope.Operation == "rebind" {
-		source, err := loadForkProposalSource(ctx, request.Source)
+		source, err := loadForkProposalSource(ctx, request.Source, request.SourceLedgerID)
 		if err != nil {
 			return nil, err
 		}
@@ -367,20 +382,29 @@ func forkTransactionCollections(ctx *forkWriteContext, envelope *decisionview.Pr
 	return ids, nil
 }
 
-func loadForkProposalSource(ctx *forkWriteContext, locator decisionview.SourceLocator) (*decisionview.Collection, error) {
+func loadForkProposalSource(ctx *forkWriteContext, locator decisionview.SourceLocator, id decisionview.CollectionID) (*decisionview.Collection, error) {
 	if err := locator.Validate(); err != nil {
 		return nil, err
 	}
-	metadata, err := readForkMetadata(decisionview.Roots{Repository: ctx.repository, Planning: ctx.planning}, locator)
+	metadata, err := decisionview.ReadCollectionMetadata(decisionview.Roots{Repository: ctx.repository, Planning: ctx.planning}, locator)
 	if err != nil {
 		return nil, err
 	}
-	if metadata == nil {
-		return nil, errors.New("CLI adoption source lacks explicit collection identity metadata")
+	if metadata != nil {
+		if id != "" && id != metadata.LedgerID {
+			return nil, errors.New("proposed sourceLedgerId differs from source metadata")
+		}
+		id = metadata.LedgerID
 	}
-	collection, err := decisionview.LoadCollection(decisionview.Roots{Repository: ctx.repository, Planning: ctx.planning}, metadata.LedgerID, locator)
+	if err := id.Validate(); err != nil {
+		return nil, errors.New("a legacy source requires an explicit valid sourceLedgerId; inherited bytes are never edited")
+	}
+	collection, err := decisionview.LoadCollection(decisionview.Roots{Repository: ctx.repository, Planning: ctx.planning}, id, locator)
 	if err != nil {
 		return nil, err
+	}
+	if old := ctx.collections[id]; old != nil && !reflect.DeepEqual(old.Locator, locator) {
+		return nil, errors.New("collection identity has multiple source locators in this transaction")
 	}
 	ctx.collections[collection.ID] = collection
 	return collection, nil
@@ -404,49 +428,6 @@ func loadForkAncestry(ctx *forkWriteContext, collection *decisionview.Collection
 		}
 	}
 	return nil
-}
-
-func readForkMetadata(roots decisionview.Roots, locator decisionview.SourceLocator) (*decisionview.ForkMetadata, error) {
-	if err := locator.Validate(); err != nil {
-		return nil, err
-	}
-	base := roots.Planning
-	if locator.Root == decisionview.SourceRootRepository {
-		base = roots.Repository
-	}
-	root, err := os.OpenRoot(base)
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-	file, err := root.Open(locator.Path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	raw, err := io.ReadAll(io.LimitReader(file, (64<<20)+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) > 64<<20 {
-		return nil, errors.New("decision source exceeds 64 MiB")
-	}
-	doc := artifact.Parse(string(raw))
-	if !doc.HasFrontmatter {
-		return nil, errors.New("decision source lacks frontmatter")
-	}
-	var frontmatter struct {
-		Fork *decisionview.ForkMetadata `yaml:"fork"`
-	}
-	if err := yaml.Unmarshal([]byte(strings.Join(doc.FrontmatterRaw, "\n")), &frontmatter); err != nil {
-		return nil, err
-	}
-	if frontmatter.Fork != nil {
-		if err := frontmatter.Fork.Validate(); err != nil {
-			return nil, err
-		}
-	}
-	return frontmatter.Fork, nil
 }
 
 func readForkJSONFile(name string) ([]byte, error) {
