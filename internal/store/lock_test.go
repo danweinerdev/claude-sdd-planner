@@ -213,6 +213,7 @@ func TestReadsSeeCompleteVersionsUnderConcurrentWrites(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
+	writerErr := make(chan error, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -224,7 +225,10 @@ func TestReadsSeeCompleteVersionsUnderConcurrentWrites(t *testing.T) {
 			default:
 			}
 			// Unchecked writes, to model a writer that always wins.
-			_ = WriteAtomic(path, full)
+			if err := WriteAtomic(path, full); err != nil {
+				writerErr <- err
+				return
+			}
 		}
 	}()
 
@@ -243,6 +247,11 @@ func TestReadsSeeCompleteVersionsUnderConcurrentWrites(t *testing.T) {
 	}
 	close(stop)
 	wg.Wait()
+	select {
+	case err := <-writerErr:
+		t.Fatalf("concurrent writer failed: %v", err)
+	default:
+	}
 }
 
 func asConcurrentWrite(err error, target **ErrConcurrentWrite) bool {
