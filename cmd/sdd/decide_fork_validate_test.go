@@ -191,7 +191,7 @@ func TestForkValidationIndependentSets(t *testing.T) {
 		root := forkValidationFixture(t, false)
 		planning := filepath.Join(root, ".plans")
 		forkValidationWriteResearch(t, planning, "Research/accepted.md",
-			"uses "+qualified(forkReadParent, "D-0001")+" and legacy-context D-0100", "draft", nil)
+			"uses "+qualified(forkReadParent, "D-0001")+" and "+qualified(forkReadLocal, "D-0100"), "draft", nil)
 		forkValidationWriteResearch(t, planning, "Research/comment.md",
 			"<!-- ledger:99999999-9999-9999-9999-999999999999:D-9999 -->", "draft",
 			[]string{"ledger:99999999-9999-9999-9999-999999999999:D-9998"})
@@ -422,7 +422,7 @@ func forkValidationWriteQualifiedCitation(t *testing.T, planning string) {
 	t.Helper()
 	doc := strings.Replace(validResearchDoc, "## Context\n\nText.",
 		"## Context\n\nInherited authority "+qualified(forkReadParent, "D-0001")+
-			" and local authority D-0100 apply.", 1)
+			" and local authority "+qualified(forkReadLocal, "D-0100")+" apply.", 1)
 	forkReadWrite(t, planning, "Research/in-scope.md", []byte(doc))
 }
 

@@ -3,6 +3,7 @@ package rules
 import (
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 )
@@ -79,7 +80,7 @@ func resolveDecisionCitation(r *Root, a *Artifact, citation string, decisions ma
 		return d, ok
 	}
 	for _, context := range r.DecisionView.LegacyContexts {
-		if filepath.ToSlash(context.Path) != a.Rel {
+		if !legacyContextMatchesArtifact(r, a, context) {
 			continue
 		}
 		for _, id := range context.LocalIDs {
@@ -90,15 +91,27 @@ func resolveDecisionCitation(r *Root, a *Artifact, citation string, decisions ma
 			}
 		}
 	}
-	var found decisionEntry
-	count := 0
-	for _, d := range decisions {
-		if d.id == citation {
-			found = d
-			count++
-		}
+	return decisionEntry{}, false
+}
+
+func legacyContextMatchesArtifact(r *Root, a *Artifact, context decisionview.LegacyContext) bool {
+	base := ""
+	switch context.Root {
+	case decisionview.SourceRootPlanning:
+		base = r.Dir
+	case decisionview.SourceRootRepository:
+		base = r.RepoRoot
+	default:
+		return false
 	}
-	return found, count == 1
+	if a.AbsPath == "" {
+		return false
+	}
+	rel, err := filepath.Rel(base, a.AbsPath)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return filepath.ToSlash(rel) == filepath.ToSlash(context.Path)
 }
 
 func decisionCitations(r *Root, body string) []string {

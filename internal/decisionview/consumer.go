@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // ConsumerCapture is one immutable, repository-root-bound authority read for
@@ -56,9 +58,9 @@ func CaptureForRepository(repositoryRoot string) *ConsumerCapture {
 		return c
 	}
 	if selection == nil || !selection.Explicit {
-		if selection != nil && selection.RepositoryID != "" {
+		if c.Declared || (selection != nil && selection.RepositoryID != "") {
 			c.Declared = true
-			c.issue("FDL020", Error, "Decision authority selector was removed while repository identity history remains")
+			c.issue("FDL020", Error, "Decision authority selector was removed or is missing while repository staging or identity history proves prior fork authority")
 		}
 		return c
 	}
@@ -224,16 +226,20 @@ func CaptureForRepository(repositoryRoot string) *ConsumerCapture {
 func consumerDeclaration(repositoryRoot string) (bool, error) {
 	raw, err := os.ReadFile(filepath.Join(repositoryRoot, "planning-config.json"))
 	if os.IsNotExist(err) {
-		return false, nil
+		return repositoryForkEvidence(repositoryRoot), nil
 	}
 	if err != nil {
 		return false, err
 	}
+	return configDeclaresFork(raw), nil
+}
+
+func configDeclaresFork(raw []byte) bool {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		// A malformed declaration must not silently become legacy merely because
 		// the enclosing JSON could not be decoded.
-		return bytes.Contains(bytes.ToLower(raw), []byte(`"decisionlog"`)), nil
+		return bytes.Contains(bytes.ToLower(raw), []byte(`"decisionlog"`))
 	}
 	_, declared := fields["decisionLog"]
 	if !declared {
@@ -244,7 +250,34 @@ func consumerDeclaration(repositoryRoot string) (bool, error) {
 			}
 		}
 	}
-	return declared, nil
+	return declared
+}
+
+func repositoryForkEvidence(repositoryRoot string) bool {
+	dir, err := os.Open(repositoryRoot)
+	if err == nil {
+		entries, readErr := dir.ReadDir(-1)
+		_ = dir.Close()
+		if readErr == nil {
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name(), ".planning-config.json.config-") && entry.Type().IsRegular() {
+					return true
+				}
+			}
+		}
+	}
+	// History is consulted only when the represented root advertises local Git
+	// metadata. Do not turn a history-free legacy read into network VCS probing.
+	if _, err := os.Lstat(filepath.Join(repositoryRoot, ".git")); err != nil {
+		return false
+	}
+	repo := vcs.Detect(repositoryRoot)
+	head, err := repo.Head()
+	if err != nil {
+		return false
+	}
+	raw, err := repo.FileAt(head, "planning-config.json")
+	return err == nil && configDeclaresFork(raw)
 }
 
 func consumerOperational(err error) bool {

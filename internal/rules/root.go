@@ -269,7 +269,43 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 			r.ByPath[rel] = a
 		}
 	}
+	r.addDecisionScopeDiagnostics()
 	return r, nil
+}
+
+func (r *Root) addDecisionScopeDiagnostics() {
+	if r.DecisionView == nil || r.DecisionView.View == nil || r.DecisionView.Selection == nil {
+		return
+	}
+	owner := r.DecisionView.Selection.RepositoryID
+	if owner.Validate() != nil {
+		return
+	}
+	owners := map[string]decisionview.OwnerID{}
+	for rel := range r.ByPath {
+		repository := r.RepoForArtifact(rel)
+		artifactOwner := decisionview.OwnerID("")
+		if vcs.CanonPath(repository) == vcs.CanonPath(r.RepoRoot) {
+			artifactOwner = owner
+		} else if selection, err := decisionview.ReadSelection(repository); err == nil && selection != nil && selection.RepositoryID.Validate() == nil {
+			artifactOwner = selection.RepositoryID
+		}
+		if artifactOwner != "" {
+			// Record only discovered artifacts. In particular, do not infer a
+			// global owner for prefixes in an external shared planning store.
+			owners[rel] = artifactOwner
+		}
+	}
+	context := decisionview.ScopeContext{
+		Roots: decisionview.Roots{Repository: r.RepoRoot, Planning: r.Dir},
+		Owner: owner, ArtifactOwners: owners,
+	}
+	for _, d := range decisionview.CheckScopes(r.DecisionView.View, context) {
+		r.DecisionDiagnostics = append(r.DecisionDiagnostics, Diagnostic{
+			Code: d.Code, Severity: Severity(d.Severity), Path: filepath.ToSlash(d.Path),
+			Line: d.Line, Message: d.Message, Correction: d.Correction,
+		})
+	}
 }
 
 func parseArtifact(path, rel string) *Artifact {
