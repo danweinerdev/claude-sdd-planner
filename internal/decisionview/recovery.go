@@ -401,7 +401,7 @@ func (s *forkRecoverySession) preview(action ForkRecoveryAction) (*ForkRecoveryP
 	if s.journal.Status == "committed" && action != ForkRecoveryFinish {
 		return nil, errors.New("decisionview: committed recovery history cannot be rolled back or discarded")
 	}
-	if action == ForkRecoveryFinish {
+	if action == ForkRecoveryFinish && s.journal.Status != "committed" {
 		if err := s.checkFinishSources(); err != nil {
 			return nil, err
 		}

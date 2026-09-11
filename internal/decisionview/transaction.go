@@ -62,18 +62,19 @@ type ForkTransactionInspection struct {
 }
 
 type ForkTransaction struct {
-	request           ForkTransactionRequest
-	afterInitialCheck func()
-	recheckSources    func() error
-	failpoint         func(ForkTransactionPoint) error
-	store             *LocalStore
-	repositoryRoot    *os.Root
-	held              []*os.File
-	journal           *ForkJournal
-	journalPath       string
-	intermediate      []byte
-	configChange      *PreviewFileChange
-	planningChanges   []PreviewFileChange
+	request            ForkTransactionRequest
+	afterInitialCheck  func()
+	recheckSources     func() error
+	failpoint          func(ForkTransactionPoint) error
+	store              *LocalStore
+	repositoryRoot     *os.Root
+	held               []*os.File
+	journal            *ForkJournal
+	journalPath        string
+	intermediate       []byte
+	configChange       *PreviewFileChange
+	planningChanges    []PreviewFileChange
+	barrierCollections []CollectionID
 }
 
 func NewForkTransaction(request ForkTransactionRequest) (*ForkTransaction, error) {
@@ -122,6 +123,12 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 		return nil, err
 	}
 	defer t.close()
+	// Discover the complete semantic source graph before selecting the lock set.
+	// Nothing is published from this first pass; the graph is captured again
+	// under all target, source and ancestor locks below.
+	if err := t.revalidateSemanticPreview(); err != nil {
+		return nil, err
+	}
 	if err := t.acquireLocks(ctx); err != nil {
 		return nil, err
 	}
@@ -134,6 +141,9 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 	if err := t.revalidateSemanticPreview(); err != nil {
 		return nil, err
 	}
+	if err := t.checkBarriers(); err != nil {
+		return nil, err
+	}
 	if err := t.checkAllPreconditions(); err != nil {
 		return nil, err
 	}
@@ -143,7 +153,7 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 	if t.afterInitialCheck != nil {
 		t.afterInitialCheck()
 	}
-	if err := t.recheckSources(); err != nil {
+	if err := t.recheckPublicationInputs(); err != nil {
 		return &ForkTransactionResult{OperationID: t.request.Preview.OperationID, Outcome: ForkTransactionRolledBack}, err
 	}
 	journal, err := NewForkJournal(t.request.OwnerID, t.request.Collections, t.request.Preview)
@@ -173,7 +183,7 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 		return t.fail(err)
 	}
 	if t.configChange != nil {
-		if err := t.recheckSources(); err != nil {
+		if err := t.recheckPublicationInputs(); err != nil {
 			return t.fail(err)
 		}
 		if err := t.publishChange(*t.configChange, t.intermediate, []byte(t.configChange.Before), t.configChange.BeforeExists); err != nil {
@@ -187,7 +197,7 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 		if err := t.inject(ForkTransactionBeforePlanningPublish); err != nil {
 			return t.fail(err)
 		}
-		if err := t.recheckSources(); err != nil {
+		if err := t.recheckPublicationInputs(); err != nil {
 			return t.fail(err)
 		}
 		if err := t.publishChange(change, []byte(change.After), []byte(change.Before), change.BeforeExists); err != nil {
@@ -198,7 +208,7 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 		}
 	}
 	if t.configChange != nil {
-		if err := t.recheckSources(); err != nil {
+		if err := t.recheckPublicationInputs(); err != nil {
 			return t.fail(err)
 		}
 		if err := t.publishChange(*t.configChange, []byte(t.configChange.After), t.intermediate, true); err != nil {
@@ -207,6 +217,9 @@ func (t *ForkTransaction) Apply(ctx context.Context) (*ForkTransactionResult, er
 		if err := t.inject(ForkTransactionAfterFinalConfig); err != nil {
 			return t.fail(err)
 		}
+	}
+	if err := t.checkBarriers(); err != nil {
+		return t.fail(err)
 	}
 	if err := t.checkSources(); err != nil {
 		return t.fail(err)
@@ -271,18 +284,6 @@ func canonicalTransactionRoot(name string) (string, error) {
 		return "", err
 	}
 	abs = filepath.Clean(abs)
-	for current := abs; ; current = filepath.Dir(current) {
-		info, err := os.Lstat(current)
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", errors.New("root aliases are not accepted for authority publication")
-		}
-		if filepath.Dir(current) == current {
-			break
-		}
-	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return "", err
@@ -318,9 +319,21 @@ func (t *ForkTransaction) close() {
 }
 
 func (t *ForkTransaction) acquireLocks(ctx context.Context) error {
-	keys := make([]string, 0, len(t.request.Collections)+1)
+	keys := make([]string, 0, len(t.request.Collections)+len(t.barrierCollections)+1)
+	seen := map[string]bool{}
 	for _, id := range t.request.Collections {
-		keys = append(keys, string(id))
+		key := string(id)
+		if !seen[key] {
+			keys = append(keys, key)
+			seen[key] = true
+		}
+	}
+	for _, id := range t.barrierCollections {
+		key := string(id)
+		if !seen[key] {
+			keys = append(keys, key)
+			seen[key] = true
+		}
 	}
 	keys = append(keys, "config:"+string(t.request.OwnerID))
 	sort.Strings(keys)
@@ -357,7 +370,14 @@ func (t *ForkTransaction) acquireLocks(ctx context.Context) error {
 }
 
 func (t *ForkTransaction) checkBarriers() error {
-	for _, id := range t.request.Collections {
+	ids := append([]CollectionID(nil), t.request.Collections...)
+	ids = append(ids, t.barrierCollections...)
+	seen := map[CollectionID]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
 		barrier, err := t.store.InspectForkBarrier(id)
 		if err != nil {
 			return err
@@ -370,6 +390,10 @@ func (t *ForkTransaction) checkBarriers() error {
 }
 
 func (t *ForkTransaction) revalidateSemanticPreview() error {
+	t.configChange = nil
+	t.planningChanges = nil
+	t.intermediate = nil
+	t.barrierCollections = nil
 	config, _, err := readCollectionFile(t.repositoryRoot, "planning-config.json")
 	if err != nil {
 		return err
@@ -447,6 +471,10 @@ func (t *ForkTransaction) revalidateSemanticPreview() error {
 	if !reflect.DeepEqual(regenerated, t.request.Preview) {
 		return errors.New("decisionview: approved envelope does not match the current semantic preview")
 	}
+	for id := range collections {
+		t.barrierCollections = append(t.barrierCollections, id)
+	}
+	sort.Slice(t.barrierCollections, func(i, j int) bool { return t.barrierCollections[i] < t.barrierCollections[j] })
 	if err := t.validateCollectionExclusion(local, collections); err != nil {
 		return err
 	}
@@ -694,6 +722,13 @@ func (t *ForkTransaction) checkSources() error {
 		}
 	}
 	return nil
+}
+
+func (t *ForkTransaction) recheckPublicationInputs() error {
+	if err := t.checkBarriers(); err != nil {
+		return err
+	}
+	return t.recheckSources()
 }
 
 func (t *ForkTransaction) checkAfterBytes() error {

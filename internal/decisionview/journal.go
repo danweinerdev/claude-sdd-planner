@@ -329,6 +329,9 @@ func validateForkJournal(j *ForkJournal) error {
 // The cooperative journal guard is already held. Avoid reacquiring the same
 // lock through WriteExpected, and publish sensitive before/after bytes at 0600.
 func (s *LocalStore) writePrivateJournalFile(relative string, raw []byte, existing bool) error {
+	if len(raw) > maxCollectionFileBytes {
+		return fmt.Errorf("decisionview: private journal content exceeds read/write limit")
+	}
 	if err := validateRelativeLocator(relative); err != nil {
 		return err
 	}
