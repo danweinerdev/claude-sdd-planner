@@ -278,7 +278,7 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 		if err != nil {
 			return "", "", err
 		}
-		return filepath.Clean(resolved), repositoryForExplicitRoot(cwd, filepath.Clean(resolved), vcsRoot), nil
+		return filepath.Clean(resolved), repositoryForExplicitRoot(cwd, filepath.Clean(resolved), repo, vcsRoot), nil
 	}
 	current := cwd
 	for {
@@ -306,7 +306,14 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 			if err != nil {
 				return "", "", err
 			}
-			return filepath.Clean(resolvedRoot), current, nil
+			repoForConfig := current
+			if vcsRoot != "" {
+				repoForConfig = vcsRoot
+			}
+			if configDeclaresDecisionLog(raw) {
+				repoForConfig = current
+			}
+			return filepath.Clean(resolvedRoot), repoForConfig, nil
 		}
 		if (vcsRoot != "" && current == vcsRoot) || filepath.Dir(current) == current {
 			return repo, repo, nil
@@ -315,25 +322,27 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 	}
 }
 
-func repositoryForExplicitRoot(cwd, planningRoot, vcsRoot string) string {
+// repositoryForExplicitRoot preserves validate's legacy explicit-root rule:
+// absent an explicit decision authority declaration, repository scope is the
+// VCS root (or cwd outside VCS), independently of the selected planning root.
+// A decisionLog declaration is different because its config directory is the
+// represented owner. Retain that owner even when the declaration is malformed
+// so LoadRootRepo captures the selector diagnostics instead of silently
+// treating the planning root as unrelated legacy authority.
+func repositoryForExplicitRoot(cwd, planningRoot, legacyRepo, vcsRoot string) string {
 	current := cwd
 	for {
 		cfgPath := filepath.Join(current, "planning-config.json")
 		if raw, readErr := os.ReadFile(cfgPath); readErr == nil {
-			var cfg struct {
-				PlanningRoot *string `json:"planningRoot"`
-			}
-			if json.Unmarshal(raw, &cfg) == nil {
-				value := "."
-				if cfg.PlanningRoot != nil {
-					value = *cfg.PlanningRoot
-				}
-				if !filepath.IsAbs(value) {
-					value = filepath.Join(current, value)
-				}
-				if absolute, absErr := filepath.Abs(value); absErr == nil && vcs.CanonPath(absolute) == vcs.CanonPath(planningRoot) {
+			if configDeclaresDecisionLog(raw) {
+				configured, known := configuredPlanningRoot(raw, current)
+				if !known || vcs.CanonPath(configured) == vcs.CanonPath(planningRoot) {
 					return current
 				}
+				// An explicit selector for another planning root is authority,
+				// but not authority this invocation may borrow. Isolate the
+				// config-less explicit root from that unrelated repository.
+				return planningRoot
 			}
 		}
 		parent := filepath.Dir(current)
@@ -342,7 +351,74 @@ func repositoryForExplicitRoot(cwd, planningRoot, vcsRoot string) string {
 		}
 		current = parent
 	}
-	return planningRoot
+	return legacyRepo
+}
+
+// configuredPlanningRoot extracts planningRoot even when a later decisionLog
+// value makes the enclosing JSON incomplete. That is enough to associate a
+// malformed selector with its owner without letting a valid selector for a
+// different planning root capture an unrelated explicit --root invocation.
+func configuredPlanningRoot(raw []byte, owner string) (string, bool) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) == nil {
+		var value string
+		if json.Unmarshal(fields["planningRoot"], &value) != nil {
+			return "", false
+		}
+		return absoluteConfiguredRoot(owner, value)
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	first, err := decoder.Token()
+	if err != nil || first != json.Delim('{') {
+		return "", false
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return "", false
+		}
+		name, ok := key.(string)
+		if !ok {
+			return "", false
+		}
+		if name == "planningRoot" {
+			var value string
+			if decoder.Decode(&value) != nil {
+				return "", false
+			}
+			return absoluteConfiguredRoot(owner, value)
+		}
+		var ignored json.RawMessage
+		if decoder.Decode(&ignored) != nil {
+			return "", false
+		}
+	}
+	return "", false
+}
+
+func absoluteConfiguredRoot(owner, value string) (string, bool) {
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(owner, value)
+	}
+	absolute, err := filepath.Abs(value)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Clean(absolute), true
+}
+
+func configDeclaresDecisionLog(raw []byte) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return bytes.Contains(bytes.ToLower(raw), []byte(`"decisionlog"`))
+	}
+	for key := range fields {
+		if strings.EqualFold(key, "decisionLog") {
+			return true
+		}
+	}
+	return false
 }
 
 // gitRoot walks up from start looking for a `.git` entry (file or directory,
