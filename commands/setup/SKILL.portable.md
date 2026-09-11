@@ -24,9 +24,15 @@ Before opening `shared/...`, follow symlinks in this loaded file's path, then de
    go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
    ```
 
+   Run `sdd decide capabilities --json` too. If the target's existing config
+   selects a fork, require canonical `decision_forks` with schema 1,
+   `entry-v1` canonicalization, and transaction support. Missing/old support
+   stops with the install guidance; never fall back to a conventional ledger.
+
 1. Determine the target directory. Use the user-provided path verbatim where possible; otherwise use the current directory. Stop for a bare git repository.
 2. Determine `planningRoot`: explicit user value, existing `planning-config.json`, inherited worktree value, then `"."`. Preserve the chosen value exactly in config; resolve relative paths only for filesystem operations.
-3. Write or preserve `<target>/planning-config.json`. Include optional `title`, and `description` only when requested.
+3. Write or preserve `<target>/planning-config.json`. Include optional `title`, and `description` only when requested. Preserve every existing `repositoryId`, `decisionLog`, and unrelated key: the represented repository's config owns decision selection and its configured planning root stores the selected collection. Setup never adopts, retargets, detaches, repairs, or creates a second repo-root selector.
+   Existing-config replacement may use the accepted staged remove-and-rename path. Warn that a rare interruption can leave config absent. Manual restoration is permitted: inspect retained staging bytes and, only after explicit user confirmation of those exact bytes, rename that stage into place. Never synthesize config or promise automatic/no-gap recovery; use fork inspect/recover after config is readable if needed.
 4. Create missing planning directories: `Plans/`, `Research/`, `Brainstorm/`, `Specs/`, `Designs/`, and `Decisions/`.
 5. Repository mappings and paths belong in `planning-config.json`; do not create a local companion config.
 6. Offer, but do not unprompted create, `AGENTS.md` guidance. Use the full template for a dedicated planning repository; append the snippet for an existing project. Preserve existing user instructions.

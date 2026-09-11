@@ -47,7 +47,7 @@ The `shared/` documents are normative — read them before changing behavior the
 |---|---|
 | Artifact frontmatter + statuses + sensitive-data rules | `shared/frontmatter-schema.md` |
 | Evidence-gated completion (task/phase/plan) | `shared/completion-evidence.md` |
-| Decision ledger: schema, admission test, collisions | `shared/decision-log.md` |
+| Decision authority: fork capability/effective view, schema, approval, admission, collisions | `shared/decision-log.md` |
 | Decision discipline for every skill/agent | `shared/decision-framework.md` |
 | Planning-root / plugin-dir / target-repo resolution | `shared/path-resolution.md` |
 | VCS detection + git/p4/plain operations table | `shared/vcs-detection.md` |
@@ -56,6 +56,8 @@ The `shared/` documents are normative — read them before changing behavior the
 | Portable runtime resolution + delegation contract | `shared/agent-runtime.md` |
 
 Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions, with lifecycle bookkeeping committed only at phase boundaries (D-0024); `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
+
+Decision consumers inspect `decisionLog`: no selector uses `sdd decide list --status accepted --json` and conventional reads; explicit `fork`/`detached` admits canonical `decision_forks` and uses `sdd decide effective --json`. Full exact preview bytes require approval before a digest. Never edit inherited authority or leak it into isolated lanes.
 
 ## Versioning
 

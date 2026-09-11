@@ -27,7 +27,7 @@ You are invoked with the path to the document under review (a plan README plus i
 ## Process
 1. Read the document in full, frontmatter first.
 2. Read the artifacts named in its `related` frontmatter.
-3. Read the decision ledger's frontmatter, if one exists (`Decisions/decisions.md` under the planning root, or the target repo's `DECISIONS.md` for external planning roots — `shared/decision-log.md` § Ledger location). Cross-check the spec against `accepted` entries per `shared/decision-log.md` — both directions: a requirement **contradicting** an accepted decision is a **Major** finding (Critical when the entry is `reversibility: one-way`); a spec that **ignores** an accepted entry scoped to it (or global) is also a Major finding — the entry must be honored with an inline id citation, explicitly superseded, or explicitly scoped away. `definition`-kind entries get special attention: a spec using a defined term differently is an Ambiguity finding. Where an entry carries a `confirmation` field, apply it. Cite entry ids in every such finding.
+3. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then run `sdd decide effective --json`. With no `decisionLog`, run `sdd decide list --status accepted --json` and use conventional reads/search. Preserve diagnostics and cross-check applicable records; never use fork commands as legacy aliases. A contradiction or ignored applicable entry is Major (Critical when one-way); apply confirmations and cite the correct identity.
 4. Evaluate against the review lenses below.
 5. Emit findings in the output format, then the verdict.
 

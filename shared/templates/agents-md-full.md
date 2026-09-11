@@ -16,7 +16,7 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
 ├── Plans/<PlanName>/README.md
 ├── Plans/<PlanName>/<NN>-<Phase>.md
 ├── Plans/<PlanName>/notes/<phase>.md
-└── Decisions/decisions.md
+└── Decisions/decisions.md        # conventional legacy default; a selected fork may differ
 ```
 
 ## Conventions
@@ -41,6 +41,11 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
   roots record once at the same boundary (D-0024). Dirty or no-SCM work
   remains non-complete until a durable native checkpoint exists.
 - Use `planning-config.json` to resolve the planning root and any externally targeted repository paths. There is no local companion config.
+- Decision authority branches on this repository's `decisionLog`. Explicit
+  `fork`/`detached` selection requires canonical `decision_forks` capability
+  and `sdd decide effective --json`; no selector uses
+  `sdd decide list --status accepted --json` and the conventional legacy ledger. Never edit inherited
+  authority directly.
 - Consult the plugin's frontmatter schema, templates, and language-verification references when creating or changing artifacts.
 
 ## Lifecycle

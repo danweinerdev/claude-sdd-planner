@@ -72,7 +72,10 @@ to report without repairing.
 | Scaffold a phase-gate review | `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` |
 | Record one review lane's observation | `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]` (or evidence on stdin) |
 | Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |
-| Ledger: add / list / search / audit | `sdd decide add --statement TEXT [--rejected CSV | --rejected-value TEXT]… [--accept] [--supersedes ID] [--compatible-with ID]…` · `sdd decide list\|search` · `sdd decide validate [<ledger>]` |
+| Legacy ledger reads | `sdd decide list --status accepted --json` · `sdd decide search <term> --json` · `sdd decide validate <resolved-ledger> --format json` |
+| Legacy ledger writes | `sdd decide add --statement TEXT [--rejected CSV \| --rejected-value TEXT]… [--accept] [--supersedes ID] [--compatible-with ID]…` |
+| Explicit fork/detached reads only | `sdd decide capabilities --json` · `sdd decide effective --json` · `sdd decide history --json` · `sdd decide lookup <qualified-id> --json` · `sdd decide validate --format json` |
+| Fork writes / recovery | `sdd decide fork preview --operation OP --file PROPOSAL --json` · `sdd decide fork apply --file ENVELOPE --approval-digest DIGEST --json` · `sdd decide fork inspect --operation ID --json` · `sdd decide fork recover --operation ID --action ACTION --json` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment (and repair Claude Code hooks) | `sdd doctor [--check] [--json]` |
 
@@ -94,7 +97,7 @@ to report without repairing.
 - **Validate before claiming.** Any statement that artifacts are consistent,
   a plan is ready, or a phase can close is checkable: run `sdd validate`
   (scoped where possible) and report its verdict, not your impression.
-- **The ledger is append-through-the-tool.** `decide add` always runs the collision
+- **Legacy ledgers are append-through-the-tool.** `decide add` always runs the collision
   check. Every candidate must be named by `--supersedes ID` or a repeatable
   `--compatible-with ID`; compatibility only acknowledges an accepted actual
   candidate and writes no metadata. Duplicate compatibility acknowledgements
@@ -104,6 +107,16 @@ to report without repairing.
   `--rejected-value TEXT` is repeatable and preserves each literal array
   element, including commas; it is mutually exclusive with the legacy
   comma-separated `--rejected` flag.
+- **Decision authority branches on `decisionLog`.** Only explicit
+  `fork`/`detached` selection uses capability/effective/history/lookup. No
+  selector uses legacy list/search and conventional live/archive reads. Legacy
+  `decide add` remains collision-checked. Fork add/accept/supersede/archive/
+  hygiene are unsupported and refuse; never substitute a direct local or
+  inherited-file edit.
+- **A digest is not approval.** Show the preview's full exact JSON bytes and
+  obtain explicit user approval before passing `--approval-digest`. Apply the
+  unchanged envelope. Inspect is read-only. Recovery preview omits a digest;
+  after approval, repeat recover with `--approval-digest <digest>` to apply.
 - **Writes are not commits.** Every write above lands in the working tree;
   lifecycle state is committed once at phase open and once at phase close
   (`shared/autonomy.md` § SCM boundary cadence, D-0024). `task complete`

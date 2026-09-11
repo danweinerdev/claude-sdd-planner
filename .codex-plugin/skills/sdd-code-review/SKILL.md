@@ -44,6 +44,11 @@ name or description field; do not request an agent or model.
 1. Identify the active plan, phase, target repository, and concrete diff range.
    A phase-completion gate requires a frozen durable native SCM revision/range;
    dirty or no-SCM work is not eligible.
+   If synthesis or resolution relies on a decision, inspect `decisionLog`.
+   Explicit `fork`/`detached` mode uses capability admission and
+   `sdd decide effective --json`; no selector uses
+   `sdd decide list --status accepted --json` and conventional reads. Do not pass that context to any of the four
+   intent-isolated lanes. Unsupported fork writes refuse (`shared/decision-log.md`).
 2. Check completion evidence. Missing, pending, vague, failing, or
    source-identity-mismatched evidence is a plan-drift finding, not proof.
 3. Render and run all four lanes, preserving their input isolation. Consolidate

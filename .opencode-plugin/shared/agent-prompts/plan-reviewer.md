@@ -23,7 +23,7 @@ If the document path is missing or does not exist, report that as your finding �
 ## Process
 1. Read the document in full, frontmatter first.
 2. Read the artifacts named in its `related` frontmatter.
-3. Read the decision ledger's frontmatter, if one exists (`Decisions/decisions.md` under the planning root, or the target repo's `DECISIONS.md` for external planning roots — `shared/decision-log.md` § Ledger location; include `archive-*.md` siblings when checking rejected alternatives). Cross-check the document against `accepted` entries two ways, per `shared/decision-log.md`:
+3. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then run `sdd decide effective --json` and fork history. With no `decisionLog`, run `sdd decide list --status accepted --json` and read conventional live/archive history. Preserve diagnostics and cross-check applicable records; never use fork commands as legacy aliases. Cross-check two ways per `shared/decision-log.md`:
    - **Contradiction** — a plan or design that contradicts an accepted entry is a **Major** finding (Critical when the entry is `reversibility: one-way`); the fix is an explicit supersession via the ledger, not silent drift.
    - **Coverage** — an accepted entry scoped to this document (or global, per the scope-overlap definition in `shared/decision-log.md`) must be honored with an inline id citation (e.g., "(D-0010)"), explicitly superseded, or explicitly scoped away; a document that simply ignores one is a **Major** finding. Where an entry carries a `confirmation` field, apply it.
    Cite entry ids in every such finding.

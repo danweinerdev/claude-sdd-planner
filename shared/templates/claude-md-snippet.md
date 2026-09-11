@@ -2,6 +2,8 @@
 
 Planning artifacts live at the planning root defined by `planning-config.json` (`planningRoot`, here `{{PLANNING_ROOT}}/`) — managed by the `sdd-planner` Claude Code plugin. Artifact directories: `Research/`, `Brainstorm/`, `Specs/<feature>/`, `Designs/<component>/`, `Plans/<PlanName>/`, `Decisions/`.
 
+Decision authority branches on this repository's `decisionLog`. Explicit `fork`/`detached` selection requires `sdd decide capabilities --json`, canonical `decision_forks`, and `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional legacy reads. `Decisions/decisions.md` is only the legacy default. Never edit inherited ledgers directly.
+
 ### Planning Skills
 | Skill | Purpose |
 |-------|---------|

@@ -115,7 +115,7 @@ Stop and ask the user when:
 4. **Destructive action** — anything deleting data, touching production config, or affecting shared systems.
 5. **Plan-vs-reality mismatch** — the plan names files, APIs, or prerequisites the codebase contradicts. Planning bug; don't patch around it in dispatch.
 
-Everything else is autonomous. Record escalation resolutions that constrain future work in the decision ledger per `shared/decision-log.md` (admission test, collision check, one-step supersession offer); pure one-off dispositions are events, not decisions.
+Everything else is autonomous. For escalation resolutions, follow `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, and apply admission/collision/write gates. Fork add/accept/supersede refuse rather than directing local or inherited-file edits; use a supported exact-preview operation only when it expresses the requested change. Pure one-off dispositions are events, not decisions.
 
 ## Output
 

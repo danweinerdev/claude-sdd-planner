@@ -2,6 +2,8 @@
 
 {{DESCRIPTION}}
 
+Decision authority branches on this repository's `decisionLog`. Explicit `fork`/`detached` selection requires `sdd decide capabilities --json`, canonical `decision_forks`, and `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional legacy reads. Never edit inherited ledgers directly.
+
 This repository holds planning artifacts managed by the `sdd-planner` Claude Code plugin. All commands below are provided by the plugin and are namespaced as `/sdd-planner:*`.
 
 ## Directory Structure
@@ -23,8 +25,8 @@ This repository holds planning artifacts managed by the `sdd-planner` Claude Cod
 │       ├── 01-Phase-Name.md      # Frontmatter with tasks[], details
 │       └── notes/                # After-action notes
 │           └── 01-Phase-Name.md  # Debrief for Phase 1
-├── Decisions/                    # Decision ledger (single canonical file)
-│   └── decisions.md              # decisions[] frontmatter array of decided truths
+├── Decisions/                    # Decision authority storage
+│   └── decisions.md              # conventional legacy default; a selected fork may differ
 ```
 
 ## Conventions
@@ -62,7 +64,7 @@ Planning artifacts are written in flow and committed at boundaries only (D-0024)
 - Plans: `Plans/<PlanName>/README.md`, `01-Phase-Name.md`
 - Phases numbered with zero-padded prefixes: `01-`, `02-`, etc.
 - Specs/Designs: `<Name>/README.md`
-- Decisions: `Decisions/decisions.md` (single canonical ledger)
+- Decisions: `Decisions/decisions.md` is the conventional legacy default; explicit `decisionLog` may select a different planning-root file
 
 ## Skills
 

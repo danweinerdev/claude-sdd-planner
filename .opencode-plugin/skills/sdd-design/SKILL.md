@@ -48,7 +48,7 @@ When you need to define the technical architecture for a component or system bef
 ```
 Designs/<ComponentName>/README.md
 ```
-Plus decision-ledger entries in `Decisions/decisions.md` for user-made design choices and resolved questions. Write in flow; commit once at the end of the session, never per artifact or per amendment (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+Plus qualifying user-made decisions through `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, and use only supported exact-approved writes (fork add refuses; never directly edit inherited files). Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Document Structure
 See `shared/templates/design.md`:

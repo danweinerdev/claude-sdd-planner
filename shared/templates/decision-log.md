@@ -16,7 +16,7 @@ decisions: []
 
 # Decision Ledger
 
-Machine-readable record of decided truths that outlive the document they were made in — design choices, concept definitions, and answered design questions that constrain work elsewhere. Choices a spec, design, or plan already states in full stay in that artifact. The frontmatter `decisions[]` array is canonical; see `shared/decision-log.md` in the plugin for the admission test, entry schema, lifecycle rules, and collision procedure.
+Machine-readable conventional legacy record of decided truths that outlive the document they were made in. A repository with explicit fork selection uses its `planning-config.json` and planning-root collection instead; do not turn this template into or directly edit an inherited source. See `shared/decision-log.md` for capability admission, effective reads, exact-approved writes, entry schema, and collision procedure.
 
 Entries are append-only: an accepted entry is never edited except to mark it superseded. A change of mind is a new entry that supersedes the old one.
 

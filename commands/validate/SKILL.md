@@ -25,7 +25,7 @@ Pass `--scope <planning-root-relative-path-or-artifact-name>` when the user name
 
 If `sdd` is unavailable, report the error and stop rather than silently replacing deterministic checks with model judgment. Exit `0` means scripted checks passed, exit `1` means the JSON diagnostics are authoritative findings, and exit `2` means validation could not run. Never execute artifact-recorded evidence commands as part of validation.
 
-For a direct decision-ledger write or focused ledger audit, `sdd decide validate <resolved-ledger> --format json` provides the stricter standalone format, archive, supersession, structural-candidate, and Git-backed immutability checks required by `shared/decision-log.md`. The full validator remains authoritative for cross-artifact scope resolution, citations, and related-graph checks.
+For a focused decision audit, inspect `decisionLog`. Explicit `fork`/`detached` mode runs `sdd decide capabilities --json`, requires canonical `decision_forks`, then runs `sdd decide effective --json` and `sdd decide validate --format json`. With no selector, use `sdd decide list --status accepted --json` and `sdd decide validate <resolved-ledger> --format json`. Fork commands are not legacy aliases. The full validator remains authoritative for cross-artifact checks.
 
 Identity mode defaults to `auto`, which performs current target-worktree and governing lifecycle-content checks for every populated evidence section. Use the equivalent explicit `--identity-mode current` immediately before a completion transition. Use `--identity-mode historical` only for a confirmed historical audit where later legitimate work makes current-source comparison inappropriate.
 

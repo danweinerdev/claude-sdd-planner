@@ -13,6 +13,17 @@ Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`, `Decision
    - Relative path (e.g., `"Planning"`) → resolved against the directory containing `planning-config.json`
    - Absolute path (e.g., `"/home/user/planning-repo"`) → used as-is (an external planning directory shared by multiple repos)
 
+The represented repository's own `planning-config.json` also owns decision
+selection. Config-level `repositoryId` is a sibling of the optional
+`decisionLog` object; `decisionLog` contains `version`, `mode` (`fork` or
+`detached`), `ledgerId`, and a safe `path` relative to that repository's
+configured planning root. Never consult a shared planning repository's config
+to select authority for a target repository, and never infer ownership from a
+directory name or VCS remote. Before relying on the declaration, require
+`sdd decide capabilities --json` to advertise canonical `decision_forks`
+schema/canonicalization/transaction support. Unknown, malformed, pending, or
+known-removed selection stops; it never falls back to filename discovery.
+
 <!-- claude-only -->
 ## Plugin Directory (templates, schema, shared conventions)
 

@@ -93,7 +93,7 @@ Structure is measurable — read it back before calling the plan done:
 ### 7. Approve and Record Decisions
 
 - Set the plan README `status: approved` once the user accepts the read-back (graph plans keep the README lifecycle; `sdd plan approve` runs the same gate).
-- Take each user-resolved interview question and each decision the user actually made, run it through the **admission test** in `shared/decision-log.md` § Capture, and record the ones that pass with `sdd decide add`, scoped to `Plans/<Name>` (or the governing spec/design). Collision check before each append; a collision stops for the user. Cite each recorded id inline in the plan README's Key Decisions section.
+- Take each user-resolved question through `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, then apply admission and collision checks. Legacy mode may use `sdd decide add` after exact approval. Fork add is unsupported and refuses without direct local/inherited-file edits; use an exact-preview supported operation only if it faithfully expresses the change. Cite each recorded qualified identity inline.
 
 ## Output
 

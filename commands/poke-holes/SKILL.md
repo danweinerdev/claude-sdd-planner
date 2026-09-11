@@ -96,7 +96,7 @@ Think of it as the planning-artifact counterpart to `sdd-planner:blind-spot-find
    Show findings grouped by severity, referencing the review file. Each finding includes: the concrete scenario, why it matters, and a concrete mitigation or question to resolve.
 
 8. **Offer to Resolve**
-   Ask the user if they want to act on findings now. If yes, follow `shared/review-artifacts.md`: classify each finding (mechanical fix → apply directly citing the governing fact; design decision → present options, discuss, record the outcome in the decision ledger); append Resolution Log entries; run the reconciliation sweep for every changed numbered element; track deferred work as plan tasks or `FU-NN` entries. Other options: create a research document for unknowns (the `/research` workflow), or proceed as-is with the review left `open`.
+   Ask the user if they want to act on findings now. If yes, follow `shared/review-artifacts.md`; for a design decision also follow `shared/decision-log.md` to admit fork capability, consult effective authority/diagnostics, and use only supported exact-approved writes. Fork add/hygiene refuse without direct local or inherited-file edits. Append Resolution Log entries and run the reconciliation sweep. Other options: create research or leave the review `open`.
 
 ## Output
 ```
