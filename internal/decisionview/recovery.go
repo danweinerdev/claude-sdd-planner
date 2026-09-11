@@ -313,14 +313,42 @@ func validateRecoveryOwner(owner OwnerID, capture *ForkSelectorCapture) error {
 	if err := owner.Validate(); err != nil {
 		return err
 	}
-	for _, raw := range []string{capture.Original, capture.Intermediate, capture.Final} {
+	selectorFields := func(raw string) (map[string]json.RawMessage, error) {
+		if err := selectionUniqueRootKeys([]byte(raw)); err != nil {
+			return nil, ErrForkRecoveryConflict
+		}
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(raw), &fields); err != nil {
-			return ErrForkRecoveryConflict
+			return nil, ErrForkRecoveryConflict
 		}
+		return fields, nil
+	}
+	validateOwned := func(fields map[string]json.RawMessage) error {
 		var found OwnerID
 		if err := json.Unmarshal(fields["repositoryId"], &found); err != nil || found != owner {
 			return errors.New("decisionview: recovery selector owner does not match its journal")
+		}
+		return nil
+	}
+
+	original, err := selectorFields(capture.Original)
+	if err != nil {
+		return err
+	}
+	if _, hasOwner := original["repositoryId"]; hasOwner {
+		if err := validateOwned(original); err != nil {
+			return err
+		}
+	} else if _, selected := original["decisionLog"]; selected {
+		return errors.New("decisionview: recovery selector owner does not match its journal")
+	}
+	for _, raw := range []string{capture.Intermediate, capture.Final} {
+		fields, err := selectorFields(raw)
+		if err != nil {
+			return err
+		}
+		if err := validateOwned(fields); err != nil {
+			return err
 		}
 	}
 	return nil
