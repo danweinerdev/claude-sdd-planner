@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -81,6 +82,25 @@ func loadLedger() (*artifact.Doc, string, string, error) {
 	return artifact.Parse(art.Source), path, art.Digest, nil
 }
 
+// loadLedgerReadOnly deliberately avoids store.Read's advisory-lock sidecar.
+// Decision reads must not create support state; fork reads perform their own
+// contained snapshot/recheck, while legacy reads consume one immutable byte
+// snapshot just as they did before locking was introduced.
+func loadLedgerReadOnly() (*artifact.Doc, string, error) {
+	path, err := ledgerPath()
+	if err != nil {
+		return nil, "", err
+	}
+	source, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, path, fmt.Errorf("decision ledger %s does not exist", path)
+	}
+	if err != nil {
+		return nil, path, err
+	}
+	return artifact.Parse(string(source)), path, nil
+}
+
 func loadEntries(doc *artifact.Doc) []decisionEntry {
 	var out []decisionEntry
 	for _, it := range fmSequence(doc.FrontmatterRaw, "decisions") {
@@ -90,7 +110,10 @@ func loadEntries(doc *artifact.Doc) []decisionEntry {
 }
 
 func cmdDecideList(status string, jsonOut bool) error {
-	doc, _, _, err := loadLedger()
+	if err := cmdDecideForkRead("list", "", status, "", jsonOut); !errors.Is(err, errLegacyDecisionRead) {
+		return err
+	}
+	doc, _, err := loadLedgerReadOnly()
 	if err != nil {
 		return fmt.Errorf("decide list: %w", err)
 	}
@@ -116,9 +139,12 @@ func cmdDecideList(status string, jsonOut bool) error {
 }
 
 func cmdDecideSearch(term string, jsonOut bool) error {
+	if err := cmdDecideForkRead("search", "", "", term, jsonOut); !errors.Is(err, errLegacyDecisionRead) {
+		return err
+	}
 	term = strings.ToLower(term)
 
-	doc, _, _, err := loadLedger()
+	doc, _, err := loadLedgerReadOnly()
 	if err != nil {
 		return fmt.Errorf("decide search: %w", err)
 	}
@@ -168,6 +194,9 @@ type decideAddOpts struct {
 }
 
 func cmdDecideAdd(o decideAddOpts) error {
+	if err := refuseUnsafeForkWrite(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(o.Statement) == "" {
 		return fmt.Errorf("decide add: --statement is required")
 	}

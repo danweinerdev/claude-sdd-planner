@@ -15,9 +15,62 @@ A decision ledger is a single canonical file of type `decision-log`. The frontma
 - **Planning root inside the repo** (relative `planningRoot`, e.g. `"."` or `".plans"`): the ledger is `<planning-root>/Decisions/decisions.md`. This is the common case.
 - **External planning root** (absolute `planningRoot` outside the repo, possibly shared by multiple repos): a decision is stored **in the repo it represents**, at `<repo-root>/DECISIONS.md` (same format, type `decision-log`). Resolve the repo per `shared/path-resolution.md` (`planMapping` → repo key → local path). Decisions about the planning artifacts themselves, with no target repo, fall back to `<planning-root>/Decisions/decisions.md`.
 
-There is deliberately **no cross-repo global ledger**: each repo's truths are versioned with its code, and one repo's decisions never bleed into another. Collision checks, lookups, and onboarding operate on the resolved ledger for the repo at hand (plus its `archive-*.md` siblings). If the resolved ledger doesn't exist when a decision needs recording, create it from `shared/templates/decision-log.md` first.
+There is deliberately **no cross-repo global ledger**: each repo's truths are owned by the repository they represent, and one repo's decisions never bleed into another. Never infer that ownership from a planning directory name or Git remote. If `planning-config.json` has no `decisionLog`, the conventional locations above remain authoritative. If it has an explicit `decisionLog`, that declaration selects one repository-owned collection under the configured planning root; its `path` is planning-root-relative and its stable `repositoryId` and `ledgerId` must match the selected fork metadata. An external planning ledger has its own planning-history commit boundary: the source repository's config commit does not version those ledger bytes.
 
-Throughout this document, "`Decisions/decisions.md`" means the ledger resolved by these rules.
+Inspect the represented repository's config before choosing commands. If `decisionLog.mode` is explicitly `fork` or `detached`, run `sdd decide capabilities --json`; its JSON must contain `decision_forks` with `schema: 1`, `canonicalization: ["entry-v1"]`, and `transactions: 1`. Missing/unknown support stops with user-install guidance for a fork-capable binary (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); never use a legacy fallback. Only in that explicit mode use `sdd decide effective --json`, `sdd decide history --json`, and `sdd decide lookup <qualified-id> --json`, preserving every diagnostic. With no `decisionLog`, retain legacy behavior: use `sdd decide list --status accepted --json` and `sdd decide search <term> --json`, and read the conventional ledger plus its `archive-*.md` siblings for history or a bare-id lookup. The fork commands are not legacy aliases.
+
+Inherited source files are read-only. Never edit, add to, accept in, supersede in, repair, or archive an inherited/default file directly just because a fork workflow is unavailable. Fork writes use only the exact-approved mutation surface:
+
+```text
+sdd decide fork preview --operation <adopt|override|reconcile|restore|rebind|detach> --file <proposal> --json
+sdd decide fork apply --file <unchanged-envelope.json> --approval-digest <digest> --json
+sdd decide fork inspect --operation <operation-id> --json
+sdd decide fork recover --operation <operation-id> --action <finish|rollback|discard-staging> --json
+sdd decide fork recover --operation <operation-id> --action <finish|rollback|discard-staging> --approval-digest <digest> --json
+```
+
+Show the preview's **full exact JSON bytes** to the user and obtain explicit approval before passing `--approval-digest`; a matching hash proves byte identity, not human consent. Save and apply the unchanged envelope—never regenerate approved values. Recovery likewise requires previewing its full exact JSON and separate explicit approval before supplying its digest. Fork-mode `add`, `accept`, `supersede`, `archive`, and hygiene repairs are unsupported unless represented by the supported operations above: refuse them, preserve all files, and offer `override`, `reconcile`, `restore`, `rebind`, or `detach` only when one actually expresses the requested authority change.
+
+Initial selection and later selector changes own only `planning-config.json` plus planning-root fork state. At config level, `repositoryId` is a sibling of `decisionLog`; `decisionLog` contains `version`, `mode`, `path`, and `ledgerId` (plus a transient `transaction` only while publishing). The accepted config-only remove/rename replacement can require removing the old config and renaming its retained staged sibling. A rare interruption in that gap can leave config absent. After inspecting the retained staging bytes and obtaining explicit user confirmation of those exact bytes, manual restoration by renaming that staging file into place is permitted; do not generate replacement config or claim automatic/no-gap recovery. Once config is readable, use `fork inspect` and separately approved `fork recover` if transaction state still requires it. No persistent selector, lock, journal, or policy file belongs at the repository root.
+
+For adoption of an unchanged legacy source, the proposal supplies its explicit
+`sourceLedgerId`; no identity metadata is inserted into inherited files. When
+the source already declares an identity, an optional `sourceLedgerId` must match
+it. `sourceOwnerId` binds the logical source owner, and `source` declares the
+root, relative canonical path, and any archive membership. Initial adoption may
+also supply `legacyContexts` for existing artifacts: each item names `root`,
+`path`, `namespace`, and `localIds`. For example:
+
+```json
+{
+  "version": 1,
+  "operation": "adopt",
+  "operationId": "adopt-project-authority",
+  "date": "2026-09-11",
+  "repositoryId": "10000000-0000-4000-8000-000000000001",
+  "ledgerId": "20000000-0000-4000-8000-000000000002",
+  "path": "Decisions/fork.md",
+  "bindingId": "upstream-baseline",
+  "sourceOwnerId": "30000000-0000-4000-8000-000000000003",
+  "sourceLedgerId": "40000000-0000-4000-8000-000000000004",
+  "source": {"root": "planning", "path": "Decisions/decisions.md", "archives": ["Decisions/archive-*.md"]},
+  "legacyContexts": [{"root": "planning", "path": "Research/existing.md", "namespace": "40000000-0000-4000-8000-000000000004", "localIds": ["D-0001"]}]
+}
+```
+
+These are generic example identities, not authority to adopt a real repository.
+Inventory only existing citations, inspect the complete generated envelope, and
+obtain exact-byte approval. Rebinding preserves this original citation inventory;
+new citations must be qualified, including additional occurrences of an old bare
+ID. Effective/history records report whether their collection has available
+`git-head-and-index` history, `git-index-only` staged history, an `unborn` Git
+history, or `unavailable` history. `untracked` means the store has Git history
+but this collection has no recorded baseline yet.
+Available history is checked in the collection's actual store without combining
+neighboring collections or fetching remote objects. Retained approved baselines
+still apply when Git history is unavailable.
+
+Throughout this document, "the ledger" means the effective authority resolved by these rules, not necessarily one file. `Decisions/decisions.md` names only the conventional legacy ledger.
 
 ### Entry Schema
 
@@ -59,12 +112,16 @@ decisions:
 
 ## Deterministic Validation
 
-Before trusting or mutating a resolved ledger, and again after every mutation,
-run the bundled read-only validator:
+Before trusting or mutating conventional legacy authority, and again after every
+legacy mutation, run the bundled read-only validator:
 
 ```bash
 sdd decide validate <resolved-ledger> --format json
 ```
+
+For configured fork authority, `sdd decide validate --format json` resolves and
+validates the complete selected collection; do not pass one inherited file as a
+substitute for the effective view.
 
 The validator discovers `archive-*.md` siblings and checks UTF-8/LF and YAML
 frontmatter, canonical filenames and lifecycle status, common and entry field
@@ -159,7 +216,7 @@ A qualifying decision is recorded **after the user makes it**, at these moments:
 
 Rules of capture:
 
-- **Making the decision is the user's — and so is approving the write.** Every ledger mutation, for any reason — appending an entry (`accepted` *or* `proposed`), accepting a proposal, a supersession status flip, a hygiene repair — requires the user's **explicit approval of the exact, unmodified text** being written, shown in full before anything touches the file. Draft the entry, present it verbatim, and append only after the user approves that exact form; any change after approval means re-approving. Never write on an assumption or an inference — silence or non-objection is not approval. `decided_by: user` requires the user actually stated the choice; an agent inference the user merely didn't object to is `proposed` at most, and even a `proposed` entry needs the same explicit approval to be written.
+- **Making the decision is the user's — and so is approving the write.** Every ledger mutation, for any reason — appending an entry (`accepted` *or* `proposed`), accepting a proposal, a supersession status flip, a hygiene repair — requires the user's **explicit approval of the exact, unmodified text** being written, shown in full before anything touches the file. In fork mode, approval covers the preview's full exact JSON bytes and must occur before `--approval-digest` is passed; the digest alone is not proof of consent. Never write on an assumption or an inference — silence or non-objection is not approval. `decided_by: user` requires the user actually stated the choice; an agent inference the user merely didn't object to is `proposed` at most, and even a `proposed` entry needs the same explicit approval to be written.
 - **Apply the admission test to each candidate individually.** A gate that resolved six questions does not produce six entries by default — it produces entries for the ones that outlive the document. Skipping a candidate is a normal outcome, not a capture failure; say so in one line rather than logging defensively.
 - **Don't double-log.** Prose sections (Key Decisions, Design Decisions, Decisions Made) are where document-local choices live and stay. When a decision does qualify, the ledger entry is the machine-readable pointer of record: cross-reference the artifact in `scope` and cite the id back in the prose, rather than duplicating the deliberation.
 - **Cite ids in governed artifacts (bidirectional linking).** When an artifact section is governed by a ledger entry, cite the id inline — e.g., `## Key Decisions` … `Use JWT for session tokens (D-0010)`. The entry points at the artifact via `scope`; the artifact points back via the citation. The supersession cascade and `sdd-decide check`'s stale-citation pass grep for these ids — without citations they are blind.
@@ -196,9 +253,9 @@ acknowledgement for this invocation and adds no field to either ledger entry.
 
 ## Consultation — how the ledger is read
 
-- **The researcher agent is the universal read path.** It scans `Decisions/` alongside the other artifact directories and returns a **Recorded Decisions** section: `accepted` entries relevant to the topic (matched by tags/scope/terms), plus any tension between the ledger and other artifacts it noticed. Skills that dispatch the researcher get ledger awareness for free.
+- **The researcher agent is the universal read path.** It inspects `decisionLog` first. Explicit `fork`/`detached` mode admits capability and reads `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json`, topic `sdd decide search`, and conventional history. It returns a **Recorded Decisions** section with applicable identity/provenance, diagnostics, and tensions.
 - **Accepted entries are constraints.** When drafting a spec/design/plan (or implementing) would contradict an `accepted` entry, that is a collision: surface it per the procedure above — do not silently comply with the ledger against the user's current ask, and do not silently override the ledger either. The user's fresh instruction plus an explicit supersession is the resolution.
-- **Session onboarding and post-compaction:** the ledger frontmatter is on both read lists in `shared/orchestration.md` — statuses and statements only; bodies on demand.
+- **Session onboarding and post-compaction:** both read lists in `shared/orchestration.md` branch on explicit `decisionLog`; qualified fork diagnostics or conventional legacy identities survive summaries.
 - **Reviewers check coverage, not just contradiction.** `plan-reviewer` and `spec-reviewer` cross-check documents under review against `accepted` entries two ways: a document that **contradicts** an entry is Major (Critical when the entry is `reversibility: one-way`), and a document that simply **ignores** an accepted entry scoped to it (or global) is also a finding — the entry must be honored (cite the id), explicitly superseded, or explicitly scoped away. Where an entry carries a `confirmation` field, the reviewer applies it.
 
 ### Distribution — who may see the ledger
@@ -211,6 +268,6 @@ Sequential ids and a single ledger file assume **one writer at a time**. Two con
 
 ## Hygiene
 
-`sdd-decide check` audits: collisions among `accepted` entries using the scope-overlap definition above (the append-time check can miss pairs that predate it), superseded entries still cited by live artifacts (grep for ids), `scope` references to artifacts that no longer exist, prose decision sections holding a choice that **passes the admission test** and was never promoted (a prose decision that fails the test is correctly placed — don't report it), `proposed` entries older than 30 days, `assumption` entries whose `refresh_when` triggers have fired (an invalidated assumption is reconciled like a collision), duplicate-id repair (above), and malformed entries (missing required fields, broken supersession links).
+`sdd-decide check` first inspects `decisionLog`. Explicit `fork`/`detached` mode runs capability admission, `sdd decide effective --json`, `sdd decide history --json`, and `sdd decide validate --format json`. With no selector it runs `sdd decide list --status accepted --json`, reads conventional live/archive history, and validates the resolved legacy ledger path. It audits collisions, stale citations, scope, missed decisions, proposals, assumptions, duplicate identities, and malformed records. Fork-mode repair, hygiene mutation, and archive rotation explicitly refuse—never direct file edits.
 
-**Rotation:** when the ledger grows past ~100 entries, `sdd-decide check` offers to move `superseded` and `rejected` entries to `Decisions/archive-<YYYY>.md` (type `decision-log`, status `archived`). Ids stay unique across live ledger and archives. `accepted` and `proposed` entries never rotate. The collision candidate filter greps `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths; only session onboarding is limited to the live ledger.
+**Legacy rotation:** when a conventional ledger grows past ~100 entries, `sdd-decide check` may offer to move `superseded` and `rejected` entries to `Decisions/archive-<YYYY>.md` (type `decision-log`, status `archived`). Fork archive writes are currently unsupported and refuse without editing either local or inherited files. Ids stay unique across live ledger and archives. `accepted` and `proposed` entries never rotate.

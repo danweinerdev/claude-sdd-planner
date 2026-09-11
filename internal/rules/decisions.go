@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 )
 
 // Family (j): Validator._decision_links — SDD145 (a decision's `scope` entry
@@ -31,6 +33,27 @@ type decisionKey struct {
 // entry wins a collision, since SDD032 already flags the duplicate.
 func repoDecisions(r *Root) map[decisionKey]decisionRecord {
 	out := map[decisionKey]decisionRecord{}
+	if r.DecisionView != nil {
+		if r.DecisionView.View == nil {
+			return out
+		}
+		for _, resolved := range r.DecisionView.View.Records {
+			status, _ := resolved.Original["status"].(string)
+			if status == "accepted" && resolved.Applicability != "binding" {
+				continue
+			}
+			_, id, ok := decisionview.ParseQualifiedID(string(resolved.ID))
+			if !ok {
+				continue
+			}
+			key := decisionKey{repo: string(resolved.CollectionID), id: id}
+			if _, exists := out[key]; exists {
+				continue
+			}
+			out[key] = decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source), Entry: resolved.Original}
+		}
+		return out
+	}
 	for _, a := range r.Artifacts {
 		if a.Meta == nil || a.Kind() != "decision-log" {
 			continue
@@ -53,6 +76,57 @@ func repoDecisions(r *Root) map[decisionKey]decisionRecord {
 		}
 	}
 	return out
+}
+
+func decisionSourcePath(r *Root, source decisionview.SourceLocator) (string, string, bool) {
+	base := ""
+	switch source.Root {
+	case decisionview.SourceRootPlanning:
+		base = r.Dir
+	case decisionview.SourceRootRepository:
+		base = r.RepoRoot
+	default:
+		return "", filepath.ToSlash(source.Path), false
+	}
+	abs := filepath.Clean(filepath.Join(base, filepath.FromSlash(source.Path)))
+	rel, err := filepath.Rel(r.Dir, abs)
+	if err != nil {
+		return abs, filepath.ToSlash(source.Path), true
+	}
+	return abs, filepath.ToSlash(rel), true
+}
+
+func decisionCollectionFileArtifact(r *Root, collection *decisionview.Collection, file decisionview.CollectionFile) *Artifact {
+	if collection == nil {
+		return nil
+	}
+	source := collection.Locator
+	source.Path = file.Path
+	abs, rel, ok := decisionSourcePath(r, source)
+	if !ok {
+		return nil
+	}
+	return parseArtifactBytes(file.Source, rel, abs)
+}
+
+func decisionRecordArtifact(r *Root, source decisionview.SourceLocator) *Artifact {
+	abs, rel, ok := decisionSourcePath(r, source)
+	if !ok {
+		return &Artifact{Rel: rel, Meta: map[string]any{"type": "decision-log"}}
+	}
+	if r.DecisionView != nil {
+		for _, collection := range r.DecisionView.Collections {
+			if collection == nil || collection.Locator.Root != source.Root {
+				continue
+			}
+			for _, file := range collection.Files {
+				if filepath.ToSlash(file.Path) == filepath.ToSlash(source.Path) {
+					return parseArtifactBytes(file.Source, rel, abs)
+				}
+			}
+		}
+	}
+	return parseArtifact(abs, rel)
 }
 
 func init() {
@@ -82,7 +156,14 @@ func init() {
 					if resolveRelated(r, reference) != nil {
 						continue
 					}
-					filesystemPath := filepath.Clean(filepath.Join(key.repo, reference))
+					scopeRoot := key.repo
+					if r.DecisionView != nil {
+						// Collection identity scopes supersession/link lookup only.
+						// Filesystem applicability is always interpreted in the
+						// repository represented by this validation Root.
+						scopeRoot = r.RepoRoot
+					}
+					filesystemPath := filepath.Clean(filepath.Join(scopeRoot, reference))
 					if _, err := os.Stat(filesystemPath); err == nil {
 						continue
 					}
@@ -484,6 +565,29 @@ func orderedDecisions(r *Root) []struct {
 	var out []struct {
 		Key    decisionKey
 		Record decisionRecord
+	}
+	if r.DecisionView != nil {
+		if r.DecisionView.View == nil {
+			return out
+		}
+		for _, resolved := range r.DecisionView.View.Records {
+			status, _ := resolved.Original["status"].(string)
+			if status == "accepted" && resolved.Applicability != "binding" {
+				continue
+			}
+			_, id, ok := decisionview.ParseQualifiedID(string(resolved.ID))
+			if !ok {
+				continue
+			}
+			out = append(out, struct {
+				Key    decisionKey
+				Record decisionRecord
+			}{
+				Key:    decisionKey{repo: string(resolved.CollectionID), id: id},
+				Record: decisionRecord{Artifact: decisionRecordArtifact(r, resolved.Source), Entry: resolved.Original},
+			})
+		}
+		return out
 	}
 	seen := map[decisionKey]bool{}
 	for _, a := range r.Artifacts {

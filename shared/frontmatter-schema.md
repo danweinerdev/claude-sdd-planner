@@ -183,6 +183,46 @@ The decision ledger (`Decisions/decisions.md`, type `decision-log`) carries a `d
 
 Per-entry statuses (these are entry-level fields inside `decisions[]`, **not** artifact `type` statuses — the ledger artifact itself is only ever `active` or `archived`): `proposed`, `accepted`, `rejected`, `superseded`. `rejected` entries are kept as negative truths, never deleted. Consumers rendering entries map their statuses: `accepted` → green, `proposed` → gray, `rejected`/`superseded` → muted.
 
+### Fork ledger metadata
+
+An explicitly selected fork remains a `decision-log` artifact and adds the
+following top-level frontmatter object. These names and nesting match the
+`internal/decisionview` YAML codecs; workflows must not hand-author or edit this
+metadata—`sdd decide fork preview/apply` owns it.
+
+```yaml
+fork:
+  version: 1
+  ledgerId: <lowercase-uuid>
+  repositoryId: <lowercase-uuid>
+  archives: [Decisions/fork-archive-2026.md]   # optional safe relative paths
+  parentBindingId: <binding-id>                # optional
+  bindings: []
+  events: []
+  legacyContexts: []
+  operationIds: []
+```
+
+`bindings[]` uses `version`, optional `id`, `ownerId`, `collectionId`,
+`source`, optional `parentBindingId`, `description`, `canonicalHash`,
+`canonicalContent`, `forkSource`, `forkBindings`, `forkEvents`, and
+`forkEventOrder`. `source` has `root: planning|repository`, a safe relative
+`path`, and optional relative `archives[]`.
+
+`events[]` uses `version`, `id`, `kind:
+adopt|override|reconcile|restore|rebind|detach`, `date`, `decidedBy`, and
+optional `target`, `basis`, `statement`, `rationale`, `confirmation`, `scope`,
+and `operationId`. A basis uses `version`, `targetId`, and optional `bindingId`,
+`canonicalization` (`entry-v1`), `canonicalHash`, `canonicalContent`, and
+`lineage`. `legacyContexts[]` uses `root`, `path`, `namespace`, and `localIds`.
+Qualified identities use `ledger:<lowercase-uuid>:D-NNNN`.
+
+Selection is JSON configuration, not ledger frontmatter. At the
+`planning-config.json` top level, `repositoryId` is a sibling of `decisionLog`.
+The `decisionLog` object contains `version`, `mode: fork|detached`, `path`, and
+`ledgerId`; a publisher may temporarily add `transaction: {id, journal}`.
+`path` and `journal` are safe paths relative to the configured planning root.
+
 ## Debrief Schema
 
 Debriefs live at `Plans/<PlanName>/notes/<NN>-Phase-Name.md` and add three fields to the common set:

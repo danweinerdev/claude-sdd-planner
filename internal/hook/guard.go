@@ -116,7 +116,8 @@ var SddVerbReadOnly = map[string]bool{
 
 // sddDecideReadOnly are the `sdd decide` subcommands that only read.
 var sddDecideReadOnly = map[string]bool{
-	"list": true, "search": true, "validate": true,
+	"capabilities": true, "effective": true, "history": true, "lookup": true,
+	"list": true, "search": true, "validate": true, "fork": false,
 }
 
 // SddGraphVerbReadOnly classifies every `sdd graph` subcommand, current and
@@ -143,6 +144,10 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"repair-intent": false,
 	// mutating: replaces a node's declared read-only inputs
 	"set-inputs": false,
+	// mutating: replaces a node's declared artifact write-set
+	"set-artifacts": false,
+	// mutating: re-embeds cited intent fingerprints (cosmetic-drift ack)
+	"rehash": false,
 }
 
 var (

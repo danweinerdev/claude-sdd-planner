@@ -11,6 +11,7 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -64,12 +65,19 @@ func cmdMigrate(target string, o migrateOpts) error {
 		return err
 	}
 
+	capture, artifactPath, contextErr := decisionContextForArtifact(art.Path)
+	if contextErr != nil {
+		return fmt.Errorf("migrate: resolving decision authority: %w", contextErr)
+	}
 	res := compile.Compile(s, art.Source, compile.Options{
 		Today:        time.Now().Format("2006-01-02"),
 		Existing:     doc,
 		Upgrade:      true,
 		AllowFrozen:  o.AllowFrozen,
 		StubSections: !o.NoStubs,
+		DecisionView: capture,
+		ArtifactPath: artifactPath,
+		ArtifactRoot: decisionview.SourceRootPlanning,
 	})
 
 	rel := relPath(target)
@@ -86,7 +94,7 @@ func cmdMigrate(target string, o migrateOpts) error {
 			}
 			wrote = true
 		}
-		return writeJSON(struct {
+		if err := writeJSON(struct {
 			Path        string   `json:"path"`
 			Type        string   `json:"type"`
 			OK          bool     `json:"ok"`
@@ -96,7 +104,16 @@ func cmdMigrate(target string, o migrateOpts) error {
 			Refusals    []string `json:"refusals,omitempty"`
 			Wrote       bool     `json:"wrote"`
 		}{rel, resolvedType, res.OK(), res.Added, res.Corrections, res.Todos,
-			refusalStrings(res), wrote})
+			refusalStrings(res), wrote}); err != nil {
+			return err
+		}
+		if capture != nil && forkCaptureOperational(capture) {
+			return fmt.Errorf("migrate: decision authority could not be captured")
+		}
+		if !res.OK() {
+			return &refusedError{n: len(res.Refusals)}
+		}
+		return nil
 	}
 
 	fmt.Printf("%s (%s)\n", rel, resolvedType)
@@ -110,6 +127,9 @@ func cmdMigrate(target string, o migrateOpts) error {
 		fmt.Printf("  TODO %s\n", td)
 	}
 
+	if capture != nil && forkCaptureOperational(capture) {
+		return fmt.Errorf("migrate: decision authority could not be captured")
+	}
 	if !res.OK() {
 		fmt.Fprintf(os.Stderr, "  cannot migrate: %d unresolved violation(s)\n", len(res.Refusals))
 		for _, r := range res.Refusals {
@@ -161,10 +181,22 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 			return fmt.Errorf("migrate --all: %w", err)
 		}
 	}
+	// A caller may narrow the sweep to Plans or one plan; runtime identity is
+	// still relative to the configured planning root, not the walk root.
+	planningRoot, findErr := store.FindPlanningRoot(root)
+	if findErr != nil {
+		planningRoot, findErr = store.FindPlanningRoot(".")
+		if findErr != nil {
+			planningRoot = root
+		}
+	}
 	var files []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && store.IsGraphRuntimeDir(planningRoot, p) {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() && strings.HasSuffix(p, ".md") {
 			files = append(files, p)
@@ -188,6 +220,8 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 	counts := map[string]int{}
 	todoTally := map[string]int{}
 	today := time.Now().Format("2006-01-02")
+	authorityBlocked := false
+	operational := false
 
 	for _, f := range files {
 		art, err := store.Read(f)
@@ -211,10 +245,19 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 			items = append(items, it)
 			continue
 		}
+		capture, artifactPath, contextErr := decisionContextForArtifact(art.Path)
+		if contextErr != nil {
+			return fmt.Errorf("migrate --all: resolving decision authority for %s: %w", f, contextErr)
+		}
 		res := compile.Compile(sc, art.Source, compile.Options{
 			Today: today, Existing: doc, Upgrade: true,
 			AllowFrozen: allowFrozen, StubSections: stubSections,
+			DecisionView: capture, ArtifactPath: artifactPath, ArtifactRoot: decisionview.SourceRootPlanning,
 		})
+		if capture != nil && forkCaptureInvalid(capture) {
+			authorityBlocked = true
+			operational = operational || forkCaptureOperational(capture)
+		}
 		it.Added, it.Todos = res.Added, res.Todos
 		it.Refusals = refusalStrings(res)
 		switch {
@@ -238,13 +281,22 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 	}
 
 	if jsonOut {
-		return writeJSON(struct {
+		if err := writeJSON(struct {
 			Root   string         `json:"root"`
 			DryRun bool           `json:"dry_run"`
 			Counts map[string]int `json:"counts"`
 			Todos  map[string]int `json:"todo_tally"`
 			Items  []item         `json:"items"`
-		}{relPath(root), dryRun, counts, todoTally, items})
+		}{relPath(root), dryRun, counts, todoTally, items}); err != nil {
+			return err
+		}
+		if operational {
+			return fmt.Errorf("migrate --all: decision authority could not be captured")
+		}
+		if authorityBlocked {
+			return &refusedError{n: counts["blocked"]}
+		}
+		return nil
 	}
 
 	fmt.Printf("%s — %d files\n\n", relPath(root), len(files))
@@ -272,6 +324,12 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 	}
 	if blocked > 0 {
 		fmt.Printf("\n%d artifact(s) blocked — run `sdd migrate <path>` for detail\n", blocked)
+	}
+	if operational {
+		return fmt.Errorf("migrate --all: decision authority could not be captured")
+	}
+	if authorityBlocked {
+		return &refusedError{n: blocked}
 	}
 	return nil
 }

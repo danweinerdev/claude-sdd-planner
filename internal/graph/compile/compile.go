@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
@@ -235,6 +236,7 @@ type sourceSet struct {
 	items     map[string]map[string]intent.Item
 	acPairs   []acPair          // direct specs x defined ACs, sorted
 	decisions map[string]string // D-NNNN -> status
+	fork      *forkDecisionIntent
 }
 
 // resolveItem resolves one citation spelling to its defining source's
@@ -261,9 +263,25 @@ func (s *sourceSet) intentSnapshot() IntentSnapshot {
 			snap.Items[key] = item
 		}
 	}
-	for id, status := range s.decisions {
-		if status == "accepted" {
-			snap.Exemptions[id] = true
+	if s.fork != nil {
+		for _, record := range s.fork.capture.View.Records {
+			id := string(record.ID)
+			if s.fork.accepted(id) {
+				snap.Exemptions[id] = true
+			}
+		}
+		if s.fork.legacy != nil {
+			for _, id := range s.fork.legacy.LocalIDs {
+				if s.fork.accepted(id) {
+					snap.Exemptions[id] = true
+				}
+			}
+		}
+	} else {
+		for id, status := range s.decisions {
+			if status == "accepted" {
+				snap.Exemptions[id] = true
+			}
 		}
 	}
 	return snap
@@ -287,6 +305,10 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
 	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
 	out.planDir = filepath.Dir(planArt.AbsPath)
+	out.fork, err = newForkDecisionIntent(loaded, planRel)
+	if err != nil {
+		return nil, fmt.Errorf("compile: %w", err)
+	}
 	out.index = rules.BuildCitationIndex(loaded, planArt)
 	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
@@ -470,7 +492,31 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				add(id, "cites %q, which is defined by more than one related source; qualify it (%s)", cited, strings.Join(suggestions, ", "))
 				continue
 			}
-			if status, ok := sources.decisions[cited]; ok {
+			if sources.fork != nil {
+				if _, _, qualified := decisionview.ParseQualifiedID(cited); !stored[id] && !qualified && strings.HasPrefix(cited, "D-") {
+					suggestions := sources.fork.ambiguous(cited)
+					detail := ""
+					if len(suggestions) > 0 {
+						detail = " (" + strings.Join(suggestions, ", ") + ")"
+					}
+					add(id, "new graph citation %q must be qualified%s; captured legacy context preserves existing committed references only", cited, detail)
+					continue
+				}
+				if status, effective, found := sources.fork.disposition(cited); found {
+					if status == "accepted" && !effective {
+						add(id, "cites decision %s, which has no current binding effective decision; restored or inactive overrides cannot justify graph reliance", cited)
+						continue
+					}
+					if status != "accepted" {
+						add(id, "cites decision %s with status %q; live work cites accepted decisions", cited, status)
+					}
+					continue
+				}
+				if suggestions := sources.fork.ambiguous(cited); len(suggestions) > 0 {
+					add(id, "cites %q, which is ambiguous across decision collections; qualify it (%s)", cited, strings.Join(suggestions, ", "))
+					continue
+				}
+			} else if status, ok := sources.decisions[cited]; ok {
 				if status != "accepted" {
 					add(id, "cites decision %s with status %q; live work cites accepted decisions", cited, status)
 				}

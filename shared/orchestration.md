@@ -47,8 +47,8 @@ Dispatch rules: substitute every `{{PLACEHOLDER}}` before dispatch; reviewer dis
 
 Orientation read order at the start of a planning session — frontmatter answers most orientation questions; read bodies only when the decision at hand needs them:
 
-1. `planning-config.json` — planning root, repository mappings
-2. The decision ledger's **frontmatter**, if it exists (`Decisions/decisions.md` under the planning root, or `<repo-root>/DECISIONS.md` for external planning roots — `shared/decision-log.md` § Ledger location) — `accepted` entries are standing constraints on all planning work
+1. `planning-config.json` — planning root, repository mappings, and any repository-owned decision selection
+2. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks` or stop with user-install guidance for a fork-capable binary, then run `sdd decide effective --json` and retain provenance and every diagnostic. With no selector, run `sdd decide list --status accepted --json` and use conventional legacy history. Never invoke fork reads as legacy aliases
 3. The active plan's README **frontmatter** — status, `phases[]`, `related` (not the body)
 4. The current phase doc — task list, statuses, verification fields, traps
 5. The latest debrief in `Plans/<PlanName>/notes/` — constraints and gotchas discovered last time
@@ -59,7 +59,7 @@ Summaries drop operational detail and misremember statuses. Before resuming work
 
 - The current phase doc's `tasks[]` statuses — the frontmatter is the source of truth for what's done; never trust the summary's recollection of it
 - The plan README frontmatter
-- The decision ledger frontmatter (`Decisions/decisions.md`) — summaries misremember which decision won; the ledger's `accepted` entries are the truth
+- Reinspect `decisionLog`: explicit `fork`/`detached` mode re-runs capability admission and `sdd decide effective --json`; no selector re-runs `sdd decide list --status accepted --json` and conventional reads. Summaries never choose the branch
 - Any escalation or question that was presented to the user and not yet answered
 
 Do **not** re-read spec/design bodies wholesale after compaction — delegate that to agents, same as always.

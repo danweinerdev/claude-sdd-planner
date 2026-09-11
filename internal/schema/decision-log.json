@@ -53,6 +53,12 @@
       "doc": "Accepted exceptions: entries of {code, reason, accepted}. Only DLG064/DLG065 (id-sequence gaps and ordering inherited from before sequencing was enforced) may be waived — append-only rules forbid the renumbering their fix would require. A waived finding is still reported, as WAIVED with its reason. An unexplained waiver is refused (DLG078); one matching nothing is reported as stale (DLG079)."
     },
     {
+      "key": "fork",
+      "ownership": "author",
+      "required": false,
+      "doc": "Explicitly selected fork metadata: stable owner/ledger identities, declared archive membership, bindings, bases and append-only authority events. Presence alone does not select authority; the represented repository's planning-config.json must opt in. Fork consumers validate the versioned metadata and exact-approval write contract."
+    },
+    {
       "key": "decisions",
       "ownership": "author",
       "required": false,

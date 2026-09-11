@@ -81,6 +81,12 @@ func WriteAtomicExpecting(path, content, expectDigest string) error {
 }
 
 func writeAtomicChecked(path, content, expectDigest string, check bool) error {
+	return writeAtomicCheckedWith(path, content, expectDigest, check, replaceFile)
+}
+
+type replaceFunc func(oldpath, newpath string, beforeRetry func() error) error
+
+func writeAtomicCheckedWith(path, content, expectDigest string, check bool, replace replaceFunc) error {
 	// The exclusive lock spans the digest re-check, the temp write, and the
 	// rename, so no reader observes a torn state and no second writer can
 	// interleave between the check and the swap. That span is what makes the
@@ -91,7 +97,7 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 	}
 	defer lock.Release()
 
-	if check {
+	checkExpected := func() error {
 		current := ""
 		if b, readErr := os.ReadFile(path); readErr == nil {
 			current = Digest(string(b))
@@ -100,6 +106,12 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 		}
 		if current != expectDigest {
 			return &ErrConcurrentWrite{Path: path, Expected: expectDigest, Found: current}
+		}
+		return nil
+	}
+	if check {
+		if err := checkExpected(); err != nil {
+			return err
 		}
 	}
 
@@ -131,7 +143,11 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 	} else {
 		_ = os.Chmod(tmpName, 0o644)
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	beforeRetry := func() error { return nil }
+	if check {
+		beforeRetry = checkExpected
+	}
+	if err := replace(tmpName, path, beforeRetry); err != nil {
 		cleanup()
 		return fmt.Errorf("replacing %s: %w", path, err)
 	}
@@ -141,6 +157,11 @@ func writeAtomicChecked(path, content, expectDigest string, check bool) error {
 // Config is the subset of planning-config.json this tool needs.
 type Config struct {
 	PlanningRoot string `json:"planningRoot"`
+	// Fork selection is interpreted by decisionview, not by legacy root
+	// discovery. Raw values preserve absence versus explicit null and avoid
+	// changing old config behavior before the repository explicitly opts in.
+	RepositoryID json.RawMessage `json:"repositoryId,omitempty"`
+	DecisionLog  json.RawMessage `json:"decisionLog,omitempty"`
 	// GraphLeaseTtlMinutes bounds a claimed graph node's lease
 	// (Designs/SddGraph DD-10). Zero means the 30-minute default; any value
 	// satisfies correctness — leases are liveness bookkeeping, double-claim

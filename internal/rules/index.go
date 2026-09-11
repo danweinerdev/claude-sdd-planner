@@ -233,6 +233,31 @@ None.
 		Code: "SDD032", Severity: Error, PyFunc: "_index",
 		What: "the same decision id is declared more than once in the ledger",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			if r.DecisionView != nil {
+				for _, collection := range r.DecisionView.Collections {
+					seen := map[string]bool{}
+					for _, file := range collection.Files {
+						a := decisionCollectionFileArtifact(r, collection, file)
+						if a == nil || a.Meta == nil {
+							continue
+						}
+						for _, value := range asAnyList(a.Meta["decisions"]) {
+							entry := planEntry(value)
+							id, _ := entry["id"].(string)
+							if id == "" {
+								continue
+							}
+							if seen[id] {
+								emit(Diagnostic{Code: "SDD032", Severity: Error, Path: a.Rel, Line: 1,
+									Message: "Duplicate decision id `" + id + "`.", Correction: "Renumber the later entry and update all links."})
+							} else {
+								seen[id] = true
+							}
+						}
+					}
+				}
+				return
+			}
 			seen := map[string]bool{}
 			for _, a := range r.Artifacts {
 				if a.Meta == nil || a.Kind() != "decision-log" {

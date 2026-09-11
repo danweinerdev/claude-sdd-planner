@@ -157,7 +157,7 @@ Three contracts make the hierarchy trustworthy:
 
 - **Evidence-gated completion** — nothing flips to `complete` without retrospective evidence: exact commands, native-SCM revision identity, a focused diff review, observable results (`shared/completion-evidence.md`). Each plan task lands as one clean, independently bisectable commit; phase completion requires a persisted, frozen, four-lane `Aligned` review.
 - **Sourced necessity** — every task carries a `justifies` field naming the requirement, decision, or concrete failure that demands it, or it is cut. Plans and designs carry `## Non-Goals`.
-- **Decision ledger** — durable decisions live in `Decisions/decisions.md` (`decisions[]` frontmatter). Every ledger write requires the user's explicit approval of the exact entry text, shown in full first — no agent edits the ledger on an assumption. A new decision that contradicts an accepted entry stops for reconciliation — never auto-resolved.
+- **Decision authority** — inspect `decisionLog`: no selector uses legacy `sdd decide list --status accepted --json`, search, and conventional ledger reads; explicit `fork`/`detached` selection requires canonical `decision_forks` and uses `sdd decide effective --json`. Every fork write requires approval of full exact preview bytes before its digest. Intent-isolated quality/blind lanes receive no ledger context.
 
 `sdd validate` enforces the mechanically checkable parts of all three.
 

@@ -23,7 +23,7 @@ You are invoked by planning skills (`/research`, `/brainstorm`, `/specify`, `/de
    - `Specs/` — existing specifications
    - `Designs/` — existing architecture documents
    - `Plans/` — related or dependent plans (filter by each plan's frontmatter `status`; skip plans with status `complete` or `archived` unless explicitly asked); `notes/` debriefs carry lessons learned that may apply
-   - The decision ledger — `Decisions/decisions.md` under the planning root, or `<repo-root>/DECISIONS.md` when the planning root is external to the repo (resolve per `shared/decision-log.md` § Ledger location in the plugin directory). Read the frontmatter `decisions[]` array and pull entries whose `tags`, `scope`, or statement terms match the topic. `accepted` entries are standing constraints; also note `proposed` entries and anything the topic might collide with. When checking rejected alternatives, grep `Decisions/archive-*.md` too — archived `rejected` entries are still negative truths
+   - Decision authority — inspect `decisionLog` first. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then use `sdd decide effective --json`, `history`, and qualified `lookup`, preserving every diagnostic and provenance. With no `decisionLog`, use `sdd decide list --status accepted --json`, `sdd decide search <term> --json`, and conventional live/archive reads. Fork commands are not legacy aliases
 
 2. **Search the codebase** for relevant code:
    - Use Grep to find implementations related to the topic

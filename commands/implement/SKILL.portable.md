@@ -55,7 +55,7 @@ Node work may be dispatched through collaboration when available. When the runti
 
 v1 markdown plans keep this protocol until converted.
 
-**Preconditions.** Read the active plan and phase frontmatter. Read the decision ledger's frontmatter, if one exists (resolve per `shared/decision-log.md` § Ledger location), and note `accepted` entries scoped to this plan or its related specs/designs — pass the relevant statements to implementation dispatches as constraints, but never to intent-isolated review lanes. Confirm the target repository, task dependencies, acceptance criteria, and verification commands. If the plan contradicts the codebase, has an unresolved external dependency, or lacks required clarification, stop and surface the mismatch rather than silently changing scope.
+**Preconditions.** Read the active plan and phase frontmatter. Inspect `decisionLog`: explicit `fork`/`detached` mode runs `sdd decide capabilities --json`, requires canonical `decision_forks`, then uses `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional reads. Preserve diagnostics and pass applicable constraints—but never to intent-isolated review lanes. Confirm the target repository, dependencies, criteria, and commands; stop on mismatches.
 
 1. Select unfinished tasks whose dependencies are complete. Group independent tasks only when their expected file ownership does not overlap.
 2. For each task, confirm it defines one clean, complete, independently
@@ -154,7 +154,7 @@ When a v1 plan keeps generating drift the evidence rules exist to catch, offer c
 
 Ask the user before destructive or production-impacting operations, when requirements are ambiguous, when implementation reveals unplanned scope (for graph plans the remedy is a new proposal payload, never silent extra work inside a claim), when a graph node hits its third consecutive failure, or after two failed attempts to resolve a blocking verification failure.
 
-**Record escalation resolutions.** When the user answers an escalation with a choice that constrains future work — an ambiguity resolved, scope accepted or cut, an approach picked for a blocked task — record it in the decision ledger per `shared/decision-log.md` (apply its admission test — the binding has to reach past the task that raised the escalation; collision check before appending; a collision is itself a stop). If the fresh answer collides with an accepted entry, use the ledger's **one-step supersession**: "this supersedes D-NNNN — confirm?" — don't make the user relitigate what they just decided. Scope the entry to the plan. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions — don't log them.
+**Record escalation resolutions.** When the user answers an escalation with a choice that constrains future work, follow `shared/decision-log.md` and the admission/collision rules. Fork add/accept/supersede are currently unsupported and refuse without direct edits; use an exact-preview `override` or `reconcile` only when it faithfully represents the change. The user must see and explicitly approve the full exact JSON before any approval digest is passed. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions—don't log them.
 
 ## Output
 

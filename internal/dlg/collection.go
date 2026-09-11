@@ -3,9 +3,43 @@ package dlg
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
+
+// ValidateExplicitCollection never discovers adjacent ledgers or rereads their
+// bytes. Each caller-provided member has one declared role and one namespace.
+func ValidateExplicitCollection(canonical *Ledger, archives []*Ledger) ([]Diagnostic, map[string][]map[string]any) {
+	ledgers := append([]*Ledger{canonical}, archives...)
+	entries := map[string][]map[string]any{}
+	var out []Diagnostic
+	for i, l := range ledgers {
+		role := "archive"
+		if i == 0 {
+			role = "canonical"
+		}
+		diags, parsed := ValidateLedgerRole(l, role)
+		out = append(out, diags...)
+		entries[l.Path] = parsed
+	}
+	out = append(out, ValidateCollection(ledgers, entries)...)
+	out = applyWaivers(ledgers, out)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Path != b.Path {
+			return a.Path < b.Path
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		if a.Code != b.Code {
+			return a.Code < b.Code
+		}
+		return a.Message < b.Message
+	})
+	return out, entries
+}
 
 // ValidateCollection ports validate_collection: the checks that need every
 // ledger at once — id uniqueness and sequencing across files, supersession

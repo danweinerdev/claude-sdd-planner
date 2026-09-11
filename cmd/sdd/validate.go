@@ -19,7 +19,9 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // outDiagnostic's field order matches sdd_validate.py's `json.dumps(...,
@@ -43,11 +45,12 @@ type outDiagnostic struct {
 // outDoc mirrors main()'s successful-run JSON dict, field order alphabetical
 // for the same reason as outDiagnostic.
 type outDoc struct {
-	ArtifactsInScope   []string        `json:"artifacts_in_scope"`
-	ArtifactsInspected int             `json:"artifacts_inspected"`
-	Diagnostics        []outDiagnostic `json:"diagnostics"`
-	PlanningRoot       string          `json:"planning_root"`
-	Valid              bool            `json:"valid"`
+	ArtifactsInScope     []string        `json:"artifacts_in_scope"`
+	ArtifactsInspected   int             `json:"artifacts_inspected"`
+	Diagnostics          []outDiagnostic `json:"diagnostics"`
+	EffectiveDecisionIDs []string        `json:"effective_decision_ids,omitempty"`
+	PlanningRoot         string          `json:"planning_root"`
+	Valid                bool            `json:"valid"`
 	// Waived counts findings excused by accepted exceptions. It is reported
 	// separately from Valid so a green run that rests on waivers is
 	// distinguishable, in one field, from a green run that does not.
@@ -122,10 +125,14 @@ func cmdValidate(o validateOpts) error {
 	sort.Strings(artifactsInScope)
 
 	valid := true
+	operational := false
 	waived := 0
 	for _, d := range diags {
-		if d.Severity == rules.Error {
+		if d.Severity.Invalidating() {
 			valid = false
+		}
+		if d.Severity == rules.Operational {
+			operational = true
 		}
 		if d.Severity == rules.Waived {
 			waived++
@@ -146,13 +153,15 @@ func cmdValidate(o validateOpts) error {
 	}
 
 	if format == "json" {
+		effectiveIDs := effectiveDecisionIDs(r)
 		doc := outDoc{
-			ArtifactsInScope:   artifactsInScope,
-			ArtifactsInspected: len(r.Artifacts),
-			Diagnostics:        out,
-			PlanningRoot:       resolved,
-			Valid:              valid,
-			Waived:             waived,
+			ArtifactsInScope:     artifactsInScope,
+			ArtifactsInspected:   len(r.Artifacts),
+			Diagnostics:          out,
+			EffectiveDecisionIDs: effectiveIDs,
+			PlanningRoot:         resolved,
+			Valid:                valid,
+			Waived:               waived,
 		}
 		if err := printJSON(doc); err != nil {
 			return err
@@ -161,6 +170,9 @@ func cmdValidate(o validateOpts) error {
 		printValidateReport(resolved, o.Scope, len(r.Artifacts), len(artifactsInScope), out, valid, waived)
 	}
 
+	if operational {
+		return fmt.Errorf("validate: decision authority could not be captured")
+	}
 	if !valid {
 		return &refusedError{n: countErrorsOut(out)}
 	}
@@ -185,11 +197,24 @@ func printJSON(v any) error {
 func countErrorsOut(ds []outDiagnostic) int {
 	n := 0
 	for _, d := range ds {
-		if d.Severity == "error" {
+		if rules.Severity(d.Severity).Invalidating() {
 			n++
 		}
 	}
 	return n
+}
+
+func effectiveDecisionIDs(r *rules.Root) []string {
+	ids := []string{}
+	if r.DecisionView != nil && r.DecisionView.View != nil {
+		for _, record := range r.DecisionView.View.Records {
+			if record.Applicability == "binding" || record.Applicability == "unresolved" {
+				ids = append(ids, string(record.ID))
+			}
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // printValidateReport mirrors main()'s text-format branch exactly: a one-line
@@ -254,7 +279,7 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 		if err != nil {
 			return "", "", err
 		}
-		return filepath.Clean(resolved), repo, nil
+		return filepath.Clean(resolved), repositoryForExplicitRoot(cwd, filepath.Clean(resolved), repo, vcsRoot), nil
 	}
 	current := cwd
 	for {
@@ -286,6 +311,9 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 			if vcsRoot != "" {
 				repoForConfig = vcsRoot
 			}
+			if configDeclaresDecisionLog(raw) {
+				repoForConfig = current
+			}
 			return filepath.Clean(resolvedRoot), repoForConfig, nil
 		}
 		if (vcsRoot != "" && current == vcsRoot) || filepath.Dir(current) == current {
@@ -293,6 +321,96 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 		}
 		current = filepath.Dir(current)
 	}
+}
+
+// repositoryForExplicitRoot preserves validate's legacy explicit-root rule:
+// absent an explicit decision authority declaration, repository scope is the
+// VCS root (or cwd outside VCS), independently of the selected planning root.
+// A decisionLog declaration is different because its config directory is the
+// represented owner. Retain that owner even when the declaration is malformed
+// so LoadRootRepo captures the selector diagnostics instead of silently
+// treating the planning root as unrelated legacy authority.
+func repositoryForExplicitRoot(cwd, planningRoot, legacyRepo, vcsRoot string) string {
+	current := cwd
+	for {
+		cfgPath := filepath.Join(current, "planning-config.json")
+		if raw, readErr := os.ReadFile(cfgPath); readErr == nil {
+			if configDeclaresDecisionLog(raw) {
+				configured, known := configuredPlanningRoot(raw, current)
+				if !known || vcs.CanonPath(configured) == vcs.CanonPath(planningRoot) {
+					return current
+				}
+				// An explicit selector for another planning root is authority,
+				// but not authority this invocation may borrow. Isolate the
+				// config-less explicit root from that unrelated repository.
+				return planningRoot
+			}
+		}
+		parent := filepath.Dir(current)
+		if parent == current || (vcsRoot != "" && current == vcsRoot) {
+			break
+		}
+		current = parent
+	}
+	return legacyRepo
+}
+
+// configuredPlanningRoot extracts planningRoot even when a later decisionLog
+// value makes the enclosing JSON incomplete. That is enough to associate a
+// malformed selector with its owner without letting a valid selector for a
+// different planning root capture an unrelated explicit --root invocation.
+func configuredPlanningRoot(raw []byte, owner string) (string, bool) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) == nil {
+		var value string
+		if json.Unmarshal(fields["planningRoot"], &value) != nil {
+			return "", false
+		}
+		return absoluteConfiguredRoot(owner, value)
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	first, err := decoder.Token()
+	if err != nil || first != json.Delim('{') {
+		return "", false
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return "", false
+		}
+		name, ok := key.(string)
+		if !ok {
+			return "", false
+		}
+		if name == "planningRoot" {
+			var value string
+			if decoder.Decode(&value) != nil {
+				return "", false
+			}
+			return absoluteConfiguredRoot(owner, value)
+		}
+		var ignored json.RawMessage
+		if decoder.Decode(&ignored) != nil {
+			return "", false
+		}
+	}
+	return "", false
+}
+
+func absoluteConfiguredRoot(owner, value string) (string, bool) {
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(owner, value)
+	}
+	absolute, err := filepath.Abs(value)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Clean(absolute), true
+}
+
+func configDeclaresDecisionLog(raw []byte) bool {
+	return decisionview.ConfigDeclaresDecisionLog(raw)
 }
 
 // gitRoot walks up from start looking for a `.git` entry (file or directory,
@@ -370,6 +488,10 @@ func selectInScope(diags []rules.Diagnostic, scope string, inScope []string, gov
 	}
 	var out []rules.Diagnostic
 	for _, d := range diags {
+		if strings.HasPrefix(d.Code, "FDL") && d.Severity.Invalidating() {
+			out = append(out, d)
+			continue
+		}
 		if allowed[d.Path] || d.Path == scope || strings.HasPrefix(d.Path, scope+"/") {
 			out = append(out, d)
 			continue

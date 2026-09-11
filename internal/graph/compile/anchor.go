@@ -9,10 +9,9 @@ package compile
 //   - Anchor is the single resolver/embedder. It keys every embedded hash by
 //     the citation AS WRITTEN — qualified spellings included — so states'
 //     staleness lookups match what IntentSnapshot serves under the same keys.
-//   - The D-NNNN exemption is not a name-prefix heuristic: decisions resolve
-//     to no fingerprintable item, so the resolver reports ok=false and Anchor
-//     skips them. There is deliberately no `strings.HasPrefix(cited, "D-")`
-//     anywhere in this package.
+//   - Decision exemptions are resolution-based: a citation is exempt only
+//     when the loaded authority snapshot resolves it to an effective accepted
+//     decision. Decisions have no fingerprintable item, so Anchor skips them.
 //   - Sources is one plan's citation-resolution snapshot. Split builds it once
 //     and shares it across the anchor and validate paths, so a spec edit
 //     landing mid-split cannot re-anchor children against text the gate did
@@ -131,6 +130,15 @@ func (s *Sources) ClassifyCitation(cited string) CitationDisposition {
 	}
 	if sugg := s.set.index.Ambiguous(cited); len(sugg) > 0 {
 		return CitationDisposition{Kind: CitationAmbiguous, Suggestions: sugg}
+	}
+	if s.set.fork != nil {
+		if _, _, found := s.set.fork.disposition(cited); found {
+			return CitationDisposition{Kind: CitationDecision}
+		}
+		if suggestions := s.set.fork.ambiguous(cited); len(suggestions) > 0 {
+			return CitationDisposition{Kind: CitationAmbiguous, Suggestions: suggestions}
+		}
+		return CitationDisposition{Kind: CitationUnresolved}
 	}
 	if _, ok := s.set.decisions[cited]; ok {
 		return CitationDisposition{Kind: CitationDecision}

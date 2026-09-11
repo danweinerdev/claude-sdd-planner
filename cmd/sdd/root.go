@@ -486,6 +486,42 @@ is named by --supersedes or --compatible-with.`,
 	}
 	search.Flags().BoolVar(&searchJSON, "json", false, "emit JSON")
 
+	var capabilitiesJSON bool
+	capabilities := &cobra.Command{
+		Use: "capabilities", Short: "Report implemented decision-fork capabilities", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideCapabilities(capabilitiesJSON)
+		},
+	}
+	capabilities.Flags().BoolVar(&capabilitiesJSON, "json", false, "emit JSON")
+
+	var effectiveJSON bool
+	effective := &cobra.Command{
+		Use: "effective", Short: "Read effective decision authority", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideForkRead("effective", "", "", "", effectiveJSON)
+		},
+	}
+	effective.Flags().BoolVar(&effectiveJSON, "json", false, "emit JSON")
+
+	var historyJSON bool
+	history := &cobra.Command{
+		Use: "history", Short: "Read raw non-effective decision history", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cmdDecideForkRead("history", "", "", "", historyJSON)
+		},
+	}
+	history.Flags().BoolVar(&historyJSON, "json", false, "emit JSON")
+
+	var lookupJSON bool
+	lookup := &cobra.Command{
+		Use: "lookup <qualified-id>", Short: "Look up a qualified decision identity", Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return cmdDecideForkRead("lookup", args[0], "", "", lookupJSON)
+		},
+	}
+	lookup.Flags().BoolVar(&lookupJSON, "json", false, "emit JSON")
+
 	var a decideAddOpts
 	add := &cobra.Command{
 		Use: "add", Short: "Append a decision (collision-checked)", Args: cobra.NoArgs,
@@ -509,6 +545,44 @@ is named by --supersedes or --compatible-with.`,
 	af.BoolVar(&a.JSON, "json", false, "emit JSON")
 	_ = add.MarkFlagRequired("statement")
 
+	var forkPreview decideForkPreviewOpts
+	preview := &cobra.Command{Use: "preview", Short: "Preview exact fork authority bytes without writing", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error { return cmdDecideForkPreview(forkPreview) }}
+	preview.Flags().StringVar(&forkPreview.Operation, "operation", "", "adopt|override|reconcile|restore|rebind|detach|archive")
+	preview.Flags().StringVar(&forkPreview.File, "file", "", "JSON operation proposal")
+	preview.Flags().BoolVar(&forkPreview.JSON, "json", false, "emit the exact preview envelope as JSON")
+	_ = preview.MarkFlagRequired("operation")
+	_ = preview.MarkFlagRequired("file")
+
+	var forkApply decideForkApplyOpts
+	applyFork := &cobra.Command{Use: "apply", Short: "Apply one saved exact-approved fork envelope", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error { return cmdDecideForkApply(forkApply) }}
+	applyFork.Flags().StringVar(&forkApply.File, "file", "", "saved JSON preview envelope")
+	applyFork.Flags().StringVar(&forkApply.ApprovalDigest, "approval-digest", "", "exact digest separately approved by the user")
+	applyFork.Flags().BoolVar(&forkApply.JSON, "json", false, "emit the publication outcome as JSON")
+	_ = applyFork.MarkFlagRequired("file")
+
+	var forkInspect decideForkInspectOpts
+	inspect := &cobra.Command{Use: "inspect", Short: "Inspect a persisted fork transaction without recovery", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error { return cmdDecideForkInspect(forkInspect) }}
+	inspect.Flags().StringVar(&forkInspect.Operation, "operation", "", "persisted operation identity")
+	inspect.Flags().BoolVar(&forkInspect.JSON, "json", false, "emit transaction inspection as JSON")
+	_ = inspect.MarkFlagRequired("operation")
+
+	var forkRecover decideForkRecoverOpts
+	recoverFork := &cobra.Command{Use: "recover", Short: "Preview or apply exact current-state-bound recovery", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error { return cmdDecideForkRecover(forkRecover) }}
+	recoverFork.Flags().StringVar(&forkRecover.Operation, "operation", "", "persisted operation identity")
+	recoverFork.Flags().StringVar(&forkRecover.Action, "action", "", "finish|rollback|discard-staging")
+	recoverFork.Flags().StringVar(&forkRecover.ApprovalDigest, "approval-digest", "", "exact separately approved recovery preview digest; omit to preview")
+	recoverFork.Flags().BoolVar(&forkRecover.JSON, "json", false, "emit recovery preview or outcome as JSON")
+	_ = recoverFork.MarkFlagRequired("operation")
+	_ = recoverFork.MarkFlagRequired("action")
+	fork := &cobra.Command{Use: "fork", Short: "Exact-approved fork authority writes and recovery"}
+	fork.AddCommand(preview, applyFork, inspect, recoverFork)
+
+	var acceptJSON, supersedeJSON bool
+	accept := &cobra.Command{Use: "accept [id]", Short: "Refuse until decision acceptance is migrated to exact fork writes", Args: cobra.MaximumNArgs(1), RunE: func(_ *cobra.Command, _ []string) error { return refuseUnmigratedForkMutation("accept") }}
+	accept.Flags().BoolVar(&acceptJSON, "json", false, "reserved; this route refuses until migrated")
+	supersede := &cobra.Command{Use: "supersede [id]", Short: "Refuse until decision supersession is migrated to exact fork writes", Args: cobra.MaximumNArgs(1), RunE: func(_ *cobra.Command, _ []string) error { return refuseUnmigratedForkMutation("supersede") }}
+	supersede.Flags().BoolVar(&supersedeJSON, "json", false, "reserved; this route refuses until migrated")
+
 	var v decideValidateOpts
 	validate := &cobra.Command{
 		Use:   "validate [ledger-path]",
@@ -526,7 +600,7 @@ is named by --supersedes or --compatible-with.`,
 	validate.Flags().BoolVar(&v.JSON, "json", false, "shorthand for --format json")
 	validate.Flags().BoolVar(&v.NoHistory, "no-history", false, "skip Git history checks; only for an explicitly unversioned audit")
 
-	c.AddCommand(list, search, add, validate)
+	c.AddCommand(capabilities, effective, history, lookup, list, search, add, accept, supersede, fork, validate)
 	return c
 }
 
