@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "seq_counter": 0,
+  "seq_counter": 158,
   "nodes": [
     {
       "id": "fork-model",
@@ -47,7 +47,24 @@
         "internal/decisionview/model_test.go"
       ],
       "estimate": 3,
-      "phase": "01-foundations"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 127,
+        "artifact_digests": {
+          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/model_test.go": "sha256:972418a2f3bfad5a7d1c32b271fff25012c31907d26e46e4e9b06f1276f97373"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkModelHostileRoundTrip": 1
+      }
     },
     {
       "id": "config-selection",
@@ -104,11 +121,30 @@
       "artifacts": [
         "internal/decisionview/selection.go",
         "internal/decisionview/selection_test.go",
-        "internal/store/store.go",
-        "internal/rules/repo.go"
+        "internal/store/store.go"
       ],
       "estimate": 3,
-      "phase": "01-foundations"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 128,
+        "artifact_digests": {
+          "internal/decisionview/selection.go": "sha256:0f23b796c1c27c4e4a44e8d6b69b583be33f678e27b3be1d197868061195a949",
+          "internal/decisionview/selection_test.go": "sha256:d72495e563d624343ff6b1770b660aceb5c7aaeb855985fd0ddd03321ceb3716",
+          "internal/store/store.go": "sha256:982ca301138cade92a6a2b3567c7a107a14fe31d283177231b32d4c5a873b0c3"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkSelectionHostileConfig": 3,
+        "TestForkSelectionInternalExternalOwners": 3,
+        "TestForkSelectionLegacyAndMalformed": 3
+      }
     },
     {
       "id": "canonical-bases",
@@ -163,7 +199,26 @@
         "internal/decisionview/canonical_test.go"
       ],
       "estimate": 3,
-      "phase": "01-foundations"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 126,
+        "artifact_digests": {
+          "internal/decisionview/canonical.go": "sha256:634edeba5445808bcbae92ac1c082b0cc7b64b4072a63ec367491dc9a90d9cc1",
+          "internal/decisionview/canonical_test.go": "sha256:650ba8fd239f640963ba2ad59a3599877dfaaeb1f3813e76e0b35241d60a0502"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkCanonicalFieldMatrix": 10,
+        "TestForkCanonicalHostileRoundTrip": 10,
+        "TestForkCanonicalSeedReplay": 10
+      }
     },
     {
       "id": "collection-loading",
@@ -219,16 +274,42 @@
       "artifacts": [
         "internal/decisionview/collections.go",
         "internal/decisionview/collections_test.go",
-        "internal/decisionview/paths.go",
         "internal/decisionview/paths_windows.go",
         "internal/decisionview/paths_posix.go",
+        "internal/decisionview/model.go",
         "internal/dlg/ledger.go",
         "internal/dlg/validate.go",
         "internal/dlg/collection.go",
         "internal/schema/decision-log.json"
       ],
       "estimate": 5,
-      "phase": "01-foundations"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 129,
+        "artifact_digests": {
+          "internal/decisionview/collections.go": "sha256:4d13588d853ebb7e0f4692c338c68b34a2d125cd927d2a30342c709d8f00303d",
+          "internal/decisionview/collections_test.go": "sha256:b20561cf829453365f6d1b50df7e08a18811755c9027055382dd5acdad4a7107",
+          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/paths_posix.go": "sha256:01b83cd618376abe662e13ade22b119cd8b35a21e2fc04eea4b58b23d9b2fb5a",
+          "internal/decisionview/paths_windows.go": "sha256:da75ed6b6be7b623dc8f3f42974cdca1e5302ae5a15a4217919a9ca1e73f42dd",
+          "internal/dlg/collection.go": "sha256:da440d7788e3be392bc5d97938da414eea65343ee6d95bb8669ce99d408c973e",
+          "internal/dlg/ledger.go": "sha256:7927b8f299c0f799184e5fcc98c9549ed714e3a56ee834e9e5102bf67c90151f",
+          "internal/dlg/validate.go": "sha256:6a114679a23de16d711b3ab1ee316894f69d47eeadfa62dbdc59b07386eaaa5e",
+          "internal/schema/decision-log.json": "sha256:89d9344d8f8f2e723e8755decdca26f966ea063e2877bc82e19191a7afeb3da1"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkCollectionsContainedReadOnly": 5,
+        "TestForkCollectionsHostileSources": 5,
+        "TestForkCollectionsOwnArchivesAndIDs": 5
+      }
     },
     {
       "id": "source-continuity",
@@ -287,7 +368,25 @@
         "internal/decisionview/continuity_test.go"
       ],
       "estimate": 4,
-      "phase": "01-foundations"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 130,
+        "artifact_digests": {
+          "internal/decisionview/continuity.go": "sha256:145f4ce23e33e6a26f5e698e830d3d52bf52fffd0681c1347e1684a144c37c00",
+          "internal/decisionview/continuity_test.go": "sha256:c7c3540e4626eb0c14c74e2992f0757d03cb7c9187908ca971575b3f9ce7f0ba"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkContinuityIndependentMatrix": 12,
+        "TestForkContinuitySeedReplay": 12
+      }
     },
     {
       "id": "effective-authority",
@@ -355,10 +454,38 @@
       "artifacts": [
         "internal/decisionview/resolve.go",
         "internal/decisionview/resolve_test.go",
-        "internal/decisionview/collisions.go"
+        "internal/decisionview/collisions.go",
+        "internal/decisionview/model.go",
+        "internal/decisionview/canonical.go",
+        "internal/decisionview/collections.go",
+        "internal/decisionview/continuity.go"
       ],
       "estimate": 5,
-      "phase": "02-authority"
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 131,
+        "artifact_digests": {
+          "internal/decisionview/canonical.go": "sha256:634edeba5445808bcbae92ac1c082b0cc7b64b4072a63ec367491dc9a90d9cc1",
+          "internal/decisionview/collections.go": "sha256:4d13588d853ebb7e0f4692c338c68b34a2d125cd927d2a30342c709d8f00303d",
+          "internal/decisionview/collisions.go": "sha256:7759ae9b87f57d9a4a7145ad7268c15bf75ef98bb7e04681f7e389463e4215ff",
+          "internal/decisionview/continuity.go": "sha256:145f4ce23e33e6a26f5e698e830d3d52bf52fffd0681c1347e1684a144c37c00",
+          "internal/decisionview/model.go": "sha256:fdc8b851a9b20a42519f2ac9ac05b1fd64ac2fe3eb62982edd9af360a3d4401c",
+          "internal/decisionview/resolve.go": "sha256:f8bcb020cdfcc5ed9520fa63819376dfa56a47f71df508344b6b7cb83bbf606b",
+          "internal/decisionview/resolve_test.go": "sha256:151c6f8e8143174ffdf07a3491fa5062e70a524e8f39585d4c662bd4e9344554"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkEffectiveIndependentSets": 14,
+        "TestForkEffectiveReverseNaturalOrder": 14,
+        "TestForkEffectiveStaleAncestorAndDuplicates": 14
+      }
     },
     {
       "id": "citations-and-scopes",
@@ -419,7 +546,27 @@
         "internal/decisionview/scopes.go"
       ],
       "estimate": 4,
-      "phase": "02-authority"
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 132,
+        "artifact_digests": {
+          "internal/decisionview/citations.go": "sha256:e04d6350b883f642b30c31ad356bf72529e2f6225932d2c20d1f9fe9db5411cd",
+          "internal/decisionview/citations_test.go": "sha256:4c1eef0919ad74737cb944cf1fdbfd714fd582c4ed67384a71a30c30ad470155",
+          "internal/decisionview/scopes.go": "sha256:2c23805bbf5a36d68585e6cbef55eed9772590a8486a3bc8e31ea3f08ecfa688"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkCitationHostileRoundTrip": 22,
+        "TestForkCitationScopeIndependentSets": 22,
+        "TestForkLegacyContextAndExternalOwners": 22
+      }
     },
     {
       "id": "atomic-local-store",
@@ -480,73 +627,28 @@
         "internal/decisionview/store_posix.go"
       ],
       "estimate": 4,
-      "phase": "01-foundations"
-    },
-    {
-      "id": "approved-change-preview",
-      "contract": "Preview computes complete exact-byte local/config changes and independent authority deltas for adoption, whole overrides, reconciliation, restoration, rebinding and detachment without writing or claiming human approval.",
-      "justifies": [
-        "FR-07",
-        "FR-08",
-        "FR-09",
-        "FR-16",
-        "DD-6",
-        "DD-9",
-        "DD-12",
-        "AC-04",
-        "AC-06",
-        "AC-09"
-      ],
-      "intent_hashes": {
-        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
-        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
-        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
-        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
-        "DD-6": "sha256:8917828a9897e5c61e1927d09f44ecfdf223df84e8b06d1793452eac25b561ea",
-        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
-        "FR-07": "sha256:7da0bd10eeeb2ca37fafbb29d06114f2fcaed6219ab2e7a5b09f16b39f5e3a5e",
-        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
-        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
-        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      "phase": "01-foundations",
+      "verification": {
+        "result": "pass",
+        "seq": 125,
+        "artifact_digests": {
+          "internal/decisionview/store.go": "sha256:161126921616be57df437b2c8a4c5b8b8e3acc2136db972205bbcfe825926afc",
+          "internal/decisionview/store_posix.go": "sha256:9664c85098588c8f78501d5abfca6f9055f873a3c5e690ea838f2f5c523e119c",
+          "internal/decisionview/store_test.go": "sha256:4edba531ee8563f16ac06eec231324785ba7e9854483ac6545f9cc57f24b0520",
+          "internal/decisionview/store_windows.go": "sha256:9410ad880fae37472f0d326d2c5c2a633ddd202a9f842d9679f050cd9694afeb"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
       },
-      "deps": [
-        "citations-and-scopes",
-        "canonical-bases"
-      ],
-      "gate": {
-        "type": "tests",
-        "tests": [
-          {
-            "id": "TestForkPreviewIndependentAuthorityDelta",
-            "file": "internal/decisionview/preview_test.go",
-            "satisfies": [
-              "derives-state"
-            ]
-          },
-          {
-            "id": "TestForkPreviewExactHostileEnvelope",
-            "file": "internal/decisionview/preview_test.go",
-            "satisfies": [
-              "external-format"
-            ]
-          },
-          {
-            "id": "TestForkPreviewNoWriteAndNoImplicitAuthority",
-            "file": "internal/decisionview/preview_test.go"
-          }
-        ]
-      },
-      "hazards": [
-        "derives-state",
-        "external-format"
-      ],
-      "artifacts": [
-        "internal/decisionview/preview.go",
-        "internal/decisionview/preview_test.go",
-        "internal/decisionview/lifecycle.go"
-      ],
-      "estimate": 5,
-      "phase": "02-authority"
+      "red_seqs": {
+        "TestForkStoreCASNoOpGuard": 24,
+        "TestForkStorePreservesRootFootprint": 24,
+        "TestForkStorePublicRoundTrip": 24
+      }
     },
     {
       "id": "transaction-journal",
@@ -600,127 +702,26 @@
         "internal/decisionview/journal_test.go"
       ],
       "estimate": 4,
-      "phase": "02-authority"
-    },
-    {
-      "id": "cross-store-publication",
-      "contract": "Applying an approved multi-file envelope across source/planning stores exposes only old/new complete or recovery-required authority, refuses stale inputs and never overwrites external divergence or claims cross-volume rename atomicity.",
-      "justifies": [
-        "FR-08",
-        "FR-16",
-        "NFR-02",
-        "DD-10",
-        "AC-02",
-        "AC-06",
-        "AC-09",
-        "AC-13"
-      ],
-      "intent_hashes": {
-        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
-        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
-        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
-        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
-        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
-        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
-        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
-        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 142,
+        "artifact_digests": {
+          "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
+          "internal/decisionview/journal_test.go": "sha256:7036ec4759e443f58ee255bf15939ca3b545f61d4bd7a15c66a650e2c2b3f59f"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
       },
-      "deps": [
-        "transaction-journal",
-        "approved-change-preview",
-        "config-selection"
-      ],
-      "gate": {
-        "type": "tests",
-        "tests": [
-          {
-            "id": "TestForkTransactionPublicRoundTrip",
-            "file": "internal/decisionview/transaction_test.go",
-            "satisfies": [
-              "persists-state"
-            ]
-          },
-          {
-            "id": "TestForkTransactionSourceRaceNoOpGuard",
-            "file": "internal/decisionview/transaction_test.go",
-            "satisfies": [
-              "concurrent-access"
-            ]
-          },
-          {
-            "id": "TestForkTransactionCrossStoreFailpoints",
-            "file": "internal/decisionview/transaction_test.go"
-          }
-        ]
-      },
-      "hazards": [
-        "persists-state",
-        "concurrent-access"
-      ],
-      "artifacts": [
-        "internal/decisionview/transaction.go",
-        "internal/decisionview/transaction_test.go"
-      ],
-      "estimate": 5,
-      "phase": "02-authority"
-    },
-    {
-      "id": "explicit-recovery",
-      "contract": "Inspection is side-effect-free and approved recovery handles every interrupted publication/reply state without activating staged intent, erasing committed history or overwriting divergent files.",
-      "justifies": [
-        "FR-09",
-        "FR-16",
-        "NFR-02",
-        "DD-10",
-        "DD-12",
-        "AC-06",
-        "AC-13"
-      ],
-      "intent_hashes": {
-        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
-        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
-        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
-        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
-        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
-        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
-        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
-      },
-      "deps": [
-        "cross-store-publication"
-      ],
-      "gate": {
-        "type": "tests",
-        "tests": [
-          {
-            "id": "TestForkRecoveryPublicRoundTrip",
-            "file": "internal/decisionview/recovery_test.go",
-            "satisfies": [
-              "persists-state"
-            ]
-          },
-          {
-            "id": "TestForkRecoveryDivergenceNoOpGuard",
-            "file": "internal/decisionview/recovery_test.go",
-            "satisfies": [
-              "concurrent-access"
-            ]
-          },
-          {
-            "id": "TestForkRecoveryCrashAndLostReply",
-            "file": "internal/decisionview/recovery_test.go"
-          }
-        ]
-      },
-      "hazards": [
-        "persists-state",
-        "concurrent-access"
-      ],
-      "artifacts": [
-        "internal/decisionview/recovery.go",
-        "internal/decisionview/recovery_test.go"
-      ],
-      "estimate": 4,
-      "phase": "02-authority"
+      "red_seqs": {
+        "TestForkJournalPublicRoundTrip": 30,
+        "TestForkJournalReadOnlyAndPrivate": 30,
+        "TestForkJournalSharedBarrierNoOpGuard": 30
+      }
     },
     {
       "id": "decision-read-cli",
@@ -784,186 +785,30 @@
         "internal/hook/guard.go"
       ],
       "estimate": 3,
-      "phase": "03-consumers"
-    },
-    {
-      "id": "decision-write-cli",
-      "contract": "Real fork CLI preview/apply/inspect/recover and existing local add paths preserve exact approval, local-only mutation and truthful transaction outcomes through a public create-save-load lifecycle.",
-      "justifies": [
-        "FR-08",
-        "FR-09",
-        "FR-13",
-        "FR-16",
-        "DD-9",
-        "DD-10",
-        "DD-12",
-        "AC-02",
-        "AC-04",
-        "AC-06",
-        "AC-09",
-        "AC-13",
-        "AC-14"
-      ],
-      "intent_hashes": {
-        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
-        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
-        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
-        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
-        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
-        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
-        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
-        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
-        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
-        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
-        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
-        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
-        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 133,
+        "artifact_digests": {
+          "cmd/sdd/decide.go": "sha256:ddad9bb7d65b19ea8e43f4977542d9a4e93da56f1fac9f63d2786f0c664920b2",
+          "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
+          "cmd/sdd/decide_fork_read_test.go": "sha256:52607a38906335fc59c58bdc9a725371bdb9e618f0eb29ef721cdf0d2498ecef",
+          "cmd/sdd/root.go": "sha256:3d047d62807da5e3d508ac4fc5f372ca88f1a931e54ae616ada5b30a7d5bd176",
+          "cmd/sdd/root_test.go": "sha256:d5066a3fd40703c03606c331cf8b3ced679925435d7ebc93749f777e4d4ece01",
+          "internal/hook/guard.go": "sha256:5740a3ee183dca05bb39003b2133766c9059785638c2f3ed3baa0dc44c319c6e"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
       },
-      "deps": [
-        "explicit-recovery",
-        "decision-read-cli"
-      ],
-      "gate": {
-        "type": "tests",
-        "tests": [
-          {
-            "id": "TestForkWriteCLIRealEntryPoint",
-            "file": "cmd/sdd/decide_fork_write_test.go",
-            "satisfies": [
-              "user-entrypoint"
-            ]
-          },
-          {
-            "id": "TestForkWriteCLIPublicRoundTrip",
-            "file": "cmd/sdd/decide_fork_write_test.go",
-            "satisfies": [
-              "persists-state"
-            ]
-          },
-          {
-            "id": "TestForkWriteCLIApprovalAndRecovery",
-            "file": "cmd/sdd/decide_fork_write_test.go"
-          }
-        ]
-      },
-      "hazards": [
-        "user-entrypoint",
-        "persists-state"
-      ],
-      "artifacts": [
-        "cmd/sdd/decide.go",
-        "cmd/sdd/decide_fork_write.go",
-        "cmd/sdd/decide_fork_write_test.go",
-        "cmd/sdd/root.go",
-        "cmd/sdd/root_test.go",
-        "internal/hook/guard.go"
-      ],
-      "estimate": 4,
-      "phase": "03-consumers"
-    },
-    {
-      "id": "authority-core-review",
-      "contract": "The integrated authority, approval and transaction core has a frozen Aligned full four-lane review covering its aggregate implementation diff.",
-      "justifies": [
-        "D-0022",
-        "AC-06",
-        "AC-13"
-      ],
-      "intent_hashes": {
-        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
-        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55"
-      },
-      "deps": [
-        "decision-write-cli"
-      ],
-      "gate": {
-        "type": "review",
-        "lanes": "full"
-      },
-      "hazards": [],
-      "estimate": 1,
-      "phase": "03-consumers"
-    },
-    {
-      "id": "validation-consumers",
-      "contract": "Focused and root validation consume the same independent effective/diagnostic sets as the CLI, preserve legacy verdicts and propagate structural/stale versus could-not-run failures with the required exits.",
-      "justifies": [
-        "FR-12",
-        "FR-13",
-        "FR-14",
-        "FR-15",
-        "FR-17",
-        "NFR-05",
-        "AC-01",
-        "AC-03",
-        "AC-10",
-        "AC-11",
-        "AC-12",
-        "AC-14",
-        "AC-15"
-      ],
-      "intent_hashes": {
-        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
-        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
-        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
-        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
-        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
-        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
-        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
-        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
-        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
-        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
-        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
-        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
-        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
-      },
-      "deps": [
-        "decision-read-cli"
-      ],
-      "gate": {
-        "type": "tests",
-        "tests": [
-          {
-            "id": "TestForkValidationRealEntryPoint",
-            "file": "cmd/sdd/decide_fork_validate_test.go",
-            "satisfies": [
-              "user-entrypoint"
-            ]
-          },
-          {
-            "id": "TestForkValidationIndependentSets",
-            "file": "cmd/sdd/decide_fork_validate_test.go",
-            "satisfies": [
-              "derives-state"
-            ]
-          },
-          {
-            "id": "TestForkValidationLegacyCorpus",
-            "file": "cmd/sdd/decide_fork_validate_test.go"
-          }
-        ]
-      },
-      "hazards": [
-        "user-entrypoint",
-        "derives-state"
-      ],
-      "artifacts": [
-        "cmd/sdd/decide_validate.go",
-        "cmd/sdd/decide_fork_validate_test.go",
-        "cmd/sdd/root.go",
-        "internal/dlg/validate_all.go",
-        "internal/dlg/history.go",
-        "internal/dlg/gitutil.go",
-        "internal/rules/decisionlogs.go",
-        "internal/rules/decisions.go",
-        "internal/rules/root.go",
-        "internal/rules/fork_decisions_test.go",
-        "internal/compile/compile.go",
-        "internal/compile/fork_citations_test.go",
-        "tools/regression/fixtures/"
-      ],
-      "estimate": 5,
-      "phase": "03-consumers"
+      "red_seqs": {
+        "TestForkReadCLIHostileJSON": 43,
+        "TestForkReadCLILegacyAndFilteredFailures": 43,
+        "TestForkReadCLIRealEntryPoint": 43
+      }
     },
     {
       "id": "graph-intent-consumer",
@@ -989,7 +834,8 @@
         "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578"
       },
       "deps": [
-        "validation-consumers"
+        "shared-fork-validation-context",
+        "validation-entrypoint-integration"
       ],
       "gate": {
         "type": "tests",
@@ -1022,7 +868,28 @@
         "cmd/sdd/graph_fork_intent_test.go"
       ],
       "estimate": 3,
-      "phase": "03-consumers"
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 153,
+        "artifact_digests": {
+          "cmd/sdd/graph_fork_intent_test.go": "sha256:6b033258c0b33e0745578d322bfd1df96623b2e6102ae637369209b967215a01",
+          "internal/graph/compile/anchor.go": "sha256:698cb59e441420281f26b738b32dcea1934a94ae860dcea09697c8b87d0168c1",
+          "internal/graph/compile/compile.go": "sha256:3b02007e2d0e8857abf50ef993326871ff761a5a3710d05eccf887b48cabce37",
+          "internal/graph/compile/fork_intent.go": "sha256:b5219c2a146641f4146fc95a788ab0ea63b4a7d0fb8d1e914697fd0e0356c440",
+          "internal/graph/compile/fork_intent_test.go": "sha256:0791a079212b73c4bba801ce6f0342eb06e1e0c25b7987f535f2472e9d759c09"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkGraphIntentIndependentSets": 73,
+        "TestForkGraphIntentRealEntryPoint": 73
+      }
     },
     {
       "id": "hook-context-consumer",
@@ -1046,7 +913,8 @@
         "NFR-04": "sha256:22c005f1ab18099f63380cad571dc89445ac37b1a24698bdae82d4ccc5bc70e8"
       },
       "deps": [
-        "validation-consumers"
+        "shared-fork-validation-context",
+        "validation-entrypoint-integration"
       ],
       "gate": {
         "type": "tests",
@@ -1081,7 +949,27 @@
         "cmd/sdd/hook_fork_test.go"
       ],
       "estimate": 3,
-      "phase": "03-consumers"
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 154,
+        "artifact_digests": {
+          "cmd/sdd/hook_fork_test.go": "sha256:5db808eeab9367bb197c5aa82e4e0e31e192b92265fb1e29bb129c70a283548c",
+          "internal/hook/sessionstart.go": "sha256:76531c29b55187b07987d634f616dd85eba8b032e1f398f32445623a822ae067",
+          "internal/hook/sessionstart_fork_test.go": "sha256:fcbeb5a667a049a3e7bcc9edc1d28babd09e5c82cb81e6bdbf0cde0113bbfe9f"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkSessionStartHostileJSON": 92,
+        "TestForkSessionStartRealEntryPoint": 92,
+        "TestForkSessionStartWarningsAndBudget": 92
+      }
     },
     {
       "id": "workflows-and-portable",
@@ -1108,9 +996,10 @@
         "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
       },
       "deps": [
-        "decision-write-cli",
+        "decision-write-cli-completion",
         "graph-intent-consumer",
-        "hook-context-consumer"
+        "hook-context-consumer",
+        "simple-config-replacement"
       ],
       "gate": {
         "type": "tests",
@@ -1148,7 +1037,37 @@
         ".opencode-plugin/"
       ],
       "estimate": 4,
-      "phase": "04-integration"
+      "phase": "04-integration",
+      "verification": {
+        "result": "pass",
+        "seq": 158,
+        "artifact_digests": {
+          ".claude-plugin/plugin.json": "sha256:fefaa138696677e1c669876324d6ace84c3f597c1a04f1784cf7c085c98382cc",
+          ".codex-plugin/": "sha256:6091dc3d887440966364bfb15b20d9d443a0014cd5b2ddc759d81a7f741426dd",
+          ".opencode-plugin/": "sha256:6091dc3d887440966364bfb15b20d9d443a0014cd5b2ddc759d81a7f741426dd",
+          "AGENTS.md": "sha256:2718c6cb653127179d0a81573afa293057f6266759482b61a4f0f68c25101674",
+          "CLAUDE.md": "sha256:ca81c30bfdc2e558b45545de71067d30daf339484e9e4842b43994a7c89d8833",
+          "README.md": "sha256:b7466155133cbbc039049a0f569aff8fea9e1ada6e09d0fe9f57e8be1a0f5939",
+          "agents/": "sha256:c471652fadf88e63aa22bf4f515ec819efb1763164be8b66844614b744aee770",
+          "cmd/sdd/fork_workflows_test.go": "sha256:74ce262dd1e218c8db74121afca9c9b140ffd454f18f21fea4fb958f29fb553f",
+          "commands/": "sha256:964561cc375ba9d976da8f8d973698541d6f26bc60602243785b0af6232b425b",
+          "internal/portable/fork_workflows_test.go": "sha256:fd0b8df60e2c489f55833838012281b52c16e79ee2878057fe86ad03a89c1ae5",
+          "internal/provision/provision.go": "sha256:99a994a7e3b08df0be9a695e7beff536529bec1838be7563f80375b3ed3e9077",
+          "internal/version/version.go": "sha256:aecc3b6b1bac7d36b8001abad3139b2b7684faa6f366ce9d4e44e4d9720cfbc3",
+          "shared/": "sha256:7098099553dfe838d7f97cc3d27a1f71e733a2d9a3aec3267ef28b86240ad0dc",
+          "skills/": "sha256:deaeb31595a1d784821dc6ee066b266ea1475fbac9c7e865d198c96577ab03c0"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkWorkflowCommandsAndReferences": 96,
+        "TestForkWorkflowIntentIsolation": 96
+      }
     },
     {
       "id": "end-to-end-contract",
@@ -1236,8 +1155,14 @@
         "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
       },
       "deps": [
-        "workflows-and-portable",
-        "authority-core-review"
+        "authority-core-final-review",
+        "core-cli-review-fixes",
+        "core-context-review-fixes",
+        "core-storage-review-fixes",
+        "legacy-adoption-recovery",
+        "legacy-root-resolution-compatibility",
+        "root-qualified-consumer-diagnostics",
+        "workflows-and-portable"
       ],
       "gate": {
         "type": "tests",
@@ -1321,6 +1246,1709 @@
       "hazards": [],
       "estimate": 1,
       "phase": "04-integration"
+    },
+    {
+      "id": "preview-envelope",
+      "contract": "Exact-byte preview envelopes retain original/proposed local and config bytes, source preconditions and independent authority sets; their versioned digest rejects any alteration and never asserts human approval.",
+      "justifies": [
+        "FR-08",
+        "FR-16",
+        "DD-9",
+        "AC-06",
+        "AC-09",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "citations-and-scopes",
+        "canonical-bases"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkPreviewIndependentAuthorityDelta",
+            "file": "internal/decisionview/preview_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkPreviewExactHostileEnvelope",
+            "file": "internal/decisionview/preview_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          },
+          {
+            "id": "TestForkPreviewNoWriteAndNoImplicitAuthority",
+            "file": "internal/decisionview/preview_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/preview.go",
+        "internal/decisionview/preview_test.go"
+      ],
+      "estimate": 2,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 134,
+        "artifact_digests": {
+          "internal/decisionview/preview.go": "sha256:64bbb9e8f8cba869c0f8a4f6b3179724cfd5ed72a0327658c660cb168cd5b24d",
+          "internal/decisionview/preview_test.go": "sha256:7cf35ea897787de7b3b745a7c45786ec153221086f70b5cf1de1d3060c52d01c"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkPreviewExactHostileEnvelope": 26,
+        "TestForkPreviewIndependentAuthorityDelta": 26,
+        "TestForkPreviewNoWriteAndNoImplicitAuthority": 26
+      }
+    },
+    {
+      "id": "preview-override-reconciliation",
+      "contract": "Whole-decision override and reconciliation previews allocate only local IDs, restate complete scope/confirmation and target basis, preserve accepted history and reject implicit or duplicate override authority.",
+      "justifies": [
+        "FR-07",
+        "FR-08",
+        "FR-09",
+        "FR-16",
+        "DD-6",
+        "DD-9",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-09"
+      ],
+      "intent_hashes": {
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-05": "sha256:32b8e9b905449e1ddbd3c4424674f04c0d267e1316f49ae2396d408815cc7cad",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "DD-6": "sha256:8917828a9897e5c61e1927d09f44ecfdf223df84e8b06d1793452eac25b561ea",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-07": "sha256:7da0bd10eeeb2ca37fafbb29d06114f2fcaed6219ab2e7a5b09f16b39f5e3a5e",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "preview-envelope"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkOverrideIndependentAuthority",
+            "file": "internal/decisionview/lifecycle_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkOverrideHostileEnvelope",
+            "file": "internal/decisionview/lifecycle_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/lifecycle.go",
+        "internal/decisionview/lifecycle_test.go"
+      ],
+      "estimate": 3,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 135,
+        "artifact_digests": {
+          "internal/decisionview/lifecycle.go": "sha256:be164251b7f71256e2ab44b9f91d484f2a6c3bf12e5529f3095c0835a92a344f",
+          "internal/decisionview/lifecycle_test.go": "sha256:0eeb262c235e2330fb3e4394d0d701e465f881604464a651bb61066379e7903f"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkOverrideHostileEnvelope": 37,
+        "TestForkOverrideIndependentAuthority": 37
+      }
+    },
+    {
+      "id": "preview-restoration-detachment",
+      "contract": "Restoration and detachment previews append explicit authority events, retain historical records, expose the current parent/removed constraints, and never erase committed history or infer reactivation from deleted metadata.",
+      "justifies": [
+        "FR-08",
+        "FR-09",
+        "FR-16",
+        "DD-6",
+        "DD-12",
+        "AC-06",
+        "AC-09",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "DD-6": "sha256:8917828a9897e5c61e1927d09f44ecfdf223df84e8b06d1793452eac25b561ea",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "preview-envelope"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkRestoreIndependentAuthority",
+            "file": "internal/decisionview/restoration_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkRestoreHostileEnvelope",
+            "file": "internal/decisionview/restoration_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/restoration.go",
+        "internal/decisionview/restoration_test.go"
+      ],
+      "estimate": 3,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 136,
+        "artifact_digests": {
+          "internal/decisionview/restoration.go": "sha256:41148084d02adce3d7ecdbbd0a522e5debd25a3e50d9a4f0571834511719360b",
+          "internal/decisionview/restoration_test.go": "sha256:7f958edaffef78148c1868c2bb54c7cf24088bd84209dbb3bdc3fae568001fec"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkRestoreHostileEnvelope": 40,
+        "TestForkRestoreIndependentAuthority": 40
+      }
+    },
+    {
+      "id": "renderer-phase-refresh",
+      "contract": "Regenerating graph-owned views refreshes the matching README phase statuses from the same derived state, preserves legacy/mixed-plan entries and unrelated bytes, and remains idempotent and frozen-view safe.",
+      "justifies": [
+        "D-0022",
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "preview-envelope"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestGraphReadmeStatusesTrackDerivedPhaseState",
+            "file": "internal/graph/compile/render_status_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestGraphReadmePreservesMixedPhaseOwnership",
+            "file": "internal/graph/compile/render_status_test.go"
+          },
+          {
+            "id": "TestGraphReadmeStatusPreflight",
+            "file": "internal/graph/compile/render_status_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/graph/compile/render.go",
+        "internal/graph/compile/render_status_test.go"
+      ],
+      "estimate": 2,
+      "phase": "02-authority",
+      "history": "User-approved dogfooding repair: compile regenerated in-progress phase documents but left README phases planned, producing SDD058. This is a prerequisite to continuing reliable graph authoring, not a manual view correction.",
+      "verification": {
+        "result": "pass",
+        "seq": 137,
+        "artifact_digests": {
+          "internal/graph/compile/render.go": "sha256:c263fa045e793f0fecbbc50d7d47b17d0b28f62e5c49ec7daaf581a70753e1ee",
+          "internal/graph/compile/render_status_test.go": "sha256:3e453d69a68c7b5ae2f59f9ca0a2d91db2ec306641be25ef1ba8de0244337214"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestGraphReadmePreservesMixedPhaseOwnership": 28,
+        "TestGraphReadmeStatusPreflight": 28,
+        "TestGraphReadmeStatusesTrackDerivedPhaseState": 28
+      }
+    },
+    {
+      "id": "test-gate-fresh-execution",
+      "contract": "The authoritative Make test gate runs every Go package without result-cache reuse, and host build/check targets execute the platform-suffixed binary just built. Preserve template, corpus and portable gates; never skip assertions or change frozen expectations.",
+      "justifies": [
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "renderer-phase-refresh"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestMakeGateRunsFreshTests",
+            "file": "tools/testgate/makefile_test.go"
+          },
+          {
+            "id": "TestMakeHostExecutableMatchesPlatform",
+            "file": "tools/testgate/makefile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "Makefile",
+        "tools/testgate/makefile_test.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority",
+      "history": "User approved focused timeout investigation as a prerequisite. Cache-enabled rules execution prints PASS then go test remains stuck; the full uncached suite passed all 29 test-bearing packages. Force fresh execution in the authoritative gate and use the host executable suffix; do not claim an upstream Go cache fix.",
+      "verification": {
+        "result": "pass",
+        "seq": 139,
+        "artifact_digests": {
+          "Makefile": "sha256:86f5476fb84b25a16d3c579e9f6fced8eff8bc797a9ffab35676d24ab372f275",
+          "tools/testgate/makefile_test.go": "sha256:75694685d9c6e3734f83705d755520e6ec925f95d61b5bc16887e2374b931606"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestMakeGateRunsFreshTests": 33,
+        "TestMakeHostExecutableMatchesPlatform": 33
+      }
+    },
+    {
+      "id": "preview-adoption-completion",
+      "contract": "Adoption and rebinding previews preserve inherited bytes and unrelated config values, explicitly bind owner/source identities and baselines, and enumerate all local/config changes without writing.",
+      "justifies": [
+        "FR-01",
+        "FR-02",
+        "FR-08",
+        "FR-16",
+        "FR-18",
+        "D-0025",
+        "DD-1",
+        "DD-5",
+        "DD-9",
+        "AC-02",
+        "AC-09",
+        "AC-16"
+      ],
+      "intent_hashes": {
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-16": "sha256:03062660c2be3dfa4e51bd79ca80bbc88e5c5817f5e2f07339b1a5c330231bb7",
+        "DD-1": "sha256:d9ee469c32b66fea97ef0a917ac7f7188ae82d924cd50247fc9f32a63a8f408d",
+        "DD-5": "sha256:efc02c1cf3eead243254c443d8e5e4fee878ffafe1936289e82fe1f7e1a5d339",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-02": "sha256:3d97d48cf73c6e4b6fa6cd791db5dbbcee126cc63b613894d5c97091d195e45a",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "FR-18": "sha256:42aef9d48b8c827eaf80ce84127fc01fae2097aed97e04e4f8cbb71c15bc1d52"
+      },
+      "deps": [
+        "test-gate-fresh-execution"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkAdoptionIndependentAuthority",
+            "file": "internal/decisionview/adoption_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkAdoptionHostileEnvelope",
+            "file": "internal/decisionview/adoption_test.go",
+            "satisfies": [
+              "external-format"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state",
+        "external-format"
+      ],
+      "artifacts": [
+        "internal/decisionview/adoption.go",
+        "internal/decisionview/adoption_test.go"
+      ],
+      "estimate": 3,
+      "phase": "02-authority",
+      "history": "Resume the preserved adoption candidate after the user-approved gate prerequisite. The expired original workspace remains untouched; this child retains the same contract and named tests and must obtain its own red/green observations.",
+      "verification": {
+        "result": "pass",
+        "seq": 140,
+        "artifact_digests": {
+          "internal/decisionview/adoption.go": "sha256:4b73c12d906ca434bc00c97a0948e0bee0cc3fe7c3b168f3e08132d00db27af0",
+          "internal/decisionview/adoption_test.go": "sha256:65bd9e51bb7027f277db57e8467d87a889f814036e20e34c25eefe45ea34f7a0"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkAdoptionHostileEnvelope": 35,
+        "TestForkAdoptionIndependentAuthority": 35
+      }
+    },
+    {
+      "id": "preview-adoption-gate-check",
+      "contract": "The integrated adoption/rebinding candidate passes the complete repaired repository gate, rather than relying only on its previously passing focused tests.",
+      "justifies": [
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "preview-adoption-completion"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "make test"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 64,
+        "report_digest": "sha256:6ff252bbdc22b782e3442e8414a25927f83d845c50f9284b13cf829a89bb7e80",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "ab734699ad0dc54ed0ca5c4ed34222913f3e978e",
+          "worktree": ".plans/Plans/ForkAwareDecisionLedgers/.graph/ws-preview-adoption-gate-check"
+        }
+      }
+    },
+    {
+      "id": "cross-store-selection-publication",
+      "contract": "Approved adopt, rebind and detach envelopes use exact semantic revalidation, collection UUID exclusion and journal/barrier publication across source/planning stores, exposing only old/new complete or recovery-required authority without overwriting external divergence or claiming cross-volume atomic rename.",
+      "justifies": [
+        "FR-08",
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "AC-02",
+        "AC-06",
+        "AC-09",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "config-selection",
+        "preview-adoption-completion",
+        "preview-adoption-gate-check",
+        "preview-envelope",
+        "preview-override-reconciliation",
+        "preview-restoration-detachment",
+        "renderer-phase-refresh",
+        "transaction-journal"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkTransactionPublicRoundTrip",
+            "file": "internal/decisionview/transaction_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkTransactionSourceRaceNoOpGuard",
+            "file": "internal/decisionview/transaction_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkTransactionCrossStoreFailpoints",
+            "file": "internal/decisionview/transaction_test.go"
+          },
+          {
+            "id": "TestForkSelectionPublicationOperations",
+            "file": "internal/decisionview/transaction_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/transaction.go",
+        "internal/decisionview/transaction_test.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority",
+      "history": "Split after implementation exposed two distinct DD-10 protocols. The original adoption-only candidate is preserved for reference, not treated as completion of the full publication contract. Recovery execution remains the existing downstream node.",
+      "verification": {
+        "result": "pass",
+        "seq": 143,
+        "artifact_digests": {
+          "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492",
+          "internal/decisionview/transaction_test.go": "sha256:6decd44a6f4adec0c0424724d073c66ff5a0557b5f87ea932933e799ba432dab"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkSelectionPublicationOperations": 45,
+        "TestForkTransactionCrossStoreFailpoints": 45,
+        "TestForkTransactionPublicRoundTrip": 45,
+        "TestForkTransactionSourceRaceNoOpGuard": 45
+      }
+    },
+    {
+      "id": "single-file-authority-publication",
+      "contract": "Approved override, reconcile and restore envelopes use the single-file DD-10 path: semantic regeneration, UUID lock and pending-barrier check, exact-byte CAS publication without a permanent multi-file journal, operation-ID replay disambiguation and no inherited writes.",
+      "justifies": [
+        "FR-08",
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "AC-06",
+        "AC-09",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "cross-store-selection-publication"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkSinglePublicationRoundTrip",
+            "file": "internal/decisionview/authority_write_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkSinglePublicationBarrierNoOpGuard",
+            "file": "internal/decisionview/authority_write_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkSinglePublicationDivergenceAndReplay",
+            "file": "internal/decisionview/authority_write_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/authority_write.go",
+        "internal/decisionview/authority_write_test.go"
+      ],
+      "estimate": 3,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 144,
+        "artifact_digests": {
+          "internal/decisionview/authority_write.go": "sha256:d90da0f1c340eefcb742d9c4786d151a7f710023a6389d1a8f62975606c75c8b",
+          "internal/decisionview/authority_write_test.go": "sha256:56fac09bb39ae822ca8673d33f1daac1fdb5af04679e4decfbfbe97c7382b5be"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkSinglePublicationBarrierNoOpGuard": 47,
+        "TestForkSinglePublicationDivergenceAndReplay": 47,
+        "TestForkSinglePublicationRoundTrip": 47
+      }
+    },
+    {
+      "id": "selector-recovery-capture",
+      "contract": "Before the first config replacement, persist versioned exact original, intermediate and final selector bytes in the private journal, validating their binding to the approved envelope. Retain the stable writer lock and flushed same-directory temp plus atomic replace protocol; never delete the config first. Missing or corrupt capture cannot authorize guessed recovery bytes.",
+      "justifies": [
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "AC-06",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "cross-store-selection-publication",
+        "single-file-authority-publication"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkSelectorCapturePublicRoundTrip",
+            "file": "internal/decisionview/selector_capture_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkSelectorCaptureCrashBoundaries",
+            "file": "internal/decisionview/selector_capture_test.go"
+          },
+          {
+            "id": "TestForkSelectorCaptureRejectsUnboundBytes",
+            "file": "internal/decisionview/selector_capture_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state"
+      ],
+      "artifacts": [
+        "internal/decisionview/journal.go",
+        "internal/decisionview/transaction.go",
+        "internal/decisionview/selector_capture.go",
+        "internal/decisionview/selector_capture_test.go"
+      ],
+      "estimate": 3,
+      "phase": "02-authority",
+      "history": "User approved journal/publication scope expansion and clarified there must be no delete-first config update. Atomic replacement is retained. The capture repairs the crash window after a pending config replacement, especially rebind where the original envelope contains only a selector digest.",
+      "verification": {
+        "result": "pass",
+        "seq": 145,
+        "artifact_digests": {
+          "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
+          "internal/decisionview/selector_capture.go": "sha256:629e5020cc6ec2da5eea641ee5bc994859c7d0edd33e1084c944f7a4270946d2",
+          "internal/decisionview/selector_capture_test.go": "sha256:5c93b05ee8c68b1948c8381b152fdaea75405a20dff43c1f34f75f9d68ca4a92",
+          "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkSelectorCaptureCrashBoundaries": 50,
+        "TestForkSelectorCapturePublicRoundTrip": 50,
+        "TestForkSelectorCaptureRejectsUnboundBytes": 50
+      }
+    },
+    {
+      "id": "explicit-recovery-completion",
+      "contract": "Inspection is side-effect-free and approved recovery handles every interrupted publication/reply state without activating staged intent, erasing committed history or overwriting divergent files.",
+      "justifies": [
+        "FR-09",
+        "FR-16",
+        "NFR-02",
+        "DD-10",
+        "DD-12",
+        "AC-06",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-02": "sha256:0070fedd86e39b2fcf449a90d9fce09cdde736ad6a06841ee8d109ccc8595493"
+      },
+      "deps": [
+        "selector-recovery-capture"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkRecoveryPublicRoundTrip",
+            "file": "internal/decisionview/recovery_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkRecoveryDivergenceNoOpGuard",
+            "file": "internal/decisionview/recovery_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkRecoveryCrashAndLostReply",
+            "file": "internal/decisionview/recovery_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state",
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/decisionview/recovery.go",
+        "internal/decisionview/recovery_test.go"
+      ],
+      "estimate": 4,
+      "phase": "02-authority",
+      "verification": {
+        "result": "pass",
+        "seq": 146,
+        "artifact_digests": {
+          "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
+          "internal/decisionview/recovery_test.go": "sha256:827d277ec881a25ae0552a461cde9d1da13604a824d4ee1c85d9f65f16058ef2"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkRecoveryCrashAndLostReply": 54,
+        "TestForkRecoveryDivergenceNoOpGuard": 54,
+        "TestForkRecoveryPublicRoundTrip": 54
+      }
+    },
+    {
+      "id": "test-gate-checkout-portability",
+      "contract": "The fresh test gate's tripwires handle LF and CRLF checkouts identically, make unavailable or incompatible dynamic checks visible, and document dry-run limits without removing full-suite checks.",
+      "justifies": [
+        "NFR-03",
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "test-gate-fresh-execution"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestMakeGateHandlesCheckoutLineEndings",
+            "file": "tools/testgate/makefile_test.go"
+          },
+          {
+            "id": "TestMakeGateRunsFreshTests",
+            "file": "tools/testgate/makefile_test.go"
+          },
+          {
+            "id": "TestMakeHostExecutableMatchesPlatform",
+            "file": "tools/testgate/makefile_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "Makefile",
+        "tools/testgate/makefile_test.go"
+      ],
+      "estimate": 1,
+      "phase": "04-integration",
+      "history": "Review test-gate-repair.md F-01/F-02/F-03; spec and blind-spots lanes required a CRLF Windows fix despite other lanes classifying the same defect as minor. Preserve all tests and frozen expectations.",
+      "verification": {
+        "result": "pass",
+        "seq": 141,
+        "artifact_digests": {
+          "Makefile": "sha256:86f5476fb84b25a16d3c579e9f6fced8eff8bc797a9ffab35676d24ab372f275",
+          "tools/testgate/makefile_test.go": "sha256:75694685d9c6e3734f83705d755520e6ec925f95d61b5bc16887e2374b931606"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestMakeGateHandlesCheckoutLineEndings": 59
+      }
+    },
+    {
+      "id": "test-gate-review-completion",
+      "contract": "The focused test-gate repair and checkout-portability follow-up have a frozen Aligned full four-lane review, including confirmation that all tests, corpus and portable checks remain enabled.",
+      "justifies": [
+        "NFR-05",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "test-gate-checkout-portability"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "04-integration"
+    },
+    {
+      "id": "shared-fork-validation-context",
+      "contract": "A repository-root-bound shared decisionview capture supplies immutable qualified authority and diagnostics to rules.Root. Programmatic validation preserves citation comment/frontmatter/liveness semantics and collection-aware identity; source/scoping failures and operational severity cannot be hidden by CLI-only filtering.",
+      "justifies": [
+        "FR-12",
+        "FR-13",
+        "FR-14",
+        "FR-15",
+        "FR-17",
+        "NFR-05",
+        "AC-01",
+        "AC-03",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-14",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "decision-read-cli"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkRulesAuthoritySets",
+            "file": "internal/rules/fork_decisions_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkRulesCitationCompatibility",
+            "file": "internal/rules/fork_decisions_test.go"
+          },
+          {
+            "id": "TestForkRulesOperationalAndOwnerIsolation",
+            "file": "internal/rules/fork_decisions_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/decisionview/consumer.go",
+        "internal/rules/decisionlogs.go",
+        "internal/rules/decisions.go",
+        "internal/rules/root.go",
+        "internal/rules/rules.go",
+        "internal/rules/citations.go",
+        "internal/rules/index.go",
+        "internal/rules/graphapi.go",
+        "internal/rules/fork_decisions_test.go",
+        "internal/dlg/validate_all.go",
+        "internal/dlg/history.go",
+        "internal/dlg/gitutil.go",
+        "tools/regression/fixtures/"
+      ],
+      "estimate": 4,
+      "phase": "03-consumers",
+      "history": "Split after review showed a CLI-only adapter did not migrate rules/compile/lifecycle consumers or preserve legacy citation semantics. The rejected candidate remains in a preserved workspace; do not inherit its diagnostic filtering workaround.",
+      "verification": {
+        "result": "pass",
+        "seq": 138,
+        "artifact_digests": {
+          "internal/decisionview/consumer.go": "sha256:01ef0ca58719851f229cca449428ad1d483b40dfe9b7a7942a5c40a6252e6540",
+          "internal/dlg/gitutil.go": "sha256:fb4f1a01ed16da910e2a50dc749b1d453ff599243375dfa4b9f0c0b132a9fe65",
+          "internal/dlg/history.go": "sha256:c48d9ff1cd21218050b68903cfaae714fff7253818be3de035428c8696f22f0f",
+          "internal/dlg/validate_all.go": "sha256:095e949ccd1bdce7809948ea059d48889a26a9012f7b38cd4348dbd6b56f98f2",
+          "internal/rules/citations.go": "sha256:99b01ee3bd4622ac8bcd85d37ca6852a14ec8d62550b192b2312202570c9eb3a",
+          "internal/rules/decisionlogs.go": "sha256:1a080d8b93bbb2c8db92bf33c1644932aa55e38eef4f8affbbd286d2959f572e",
+          "internal/rules/decisions.go": "sha256:0ccd63cb19dc61acb6ca2202dd9941922c60199856e1fcc9e1f89bf70f03a634",
+          "internal/rules/fork_decisions_test.go": "sha256:430533e4ad813e8f27ac07328f95bcb1e58204a7c4b782f003e62e62cacc5f47",
+          "internal/rules/graphapi.go": "sha256:2fee9a9438b9ab83575d7dd90a822bd06a3c87afb9157b742471cf9e37086f2f",
+          "internal/rules/index.go": "sha256:8cb9a4fe3eedcafa058099b8542eda0162829d47bb6f73e5e326893d3a20674e",
+          "internal/rules/root.go": "sha256:c4931a93655b06642c2c0690ebd9661e606bc123955cde12db5c9e917f73a496",
+          "internal/rules/rules.go": "sha256:2dce1c65864993d519040a570a0fa0a2032ddf0d0d2c1664afbc4776f729c70f",
+          "tools/regression/fixtures/": "sha256:61a72dc2c128322c1ccffee141b3f755c4ae9d50e6f4141a534710055244063a"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkRulesAuthoritySets": 62,
+        "TestForkRulesCitationCompatibility": 62,
+        "TestForkRulesOperationalAndOwnerIsolation": 62
+      }
+    },
+    {
+      "id": "validation-entrypoint-integration",
+      "contract": "Focused/root CLI validation, compiler/apply and lifecycle gates consume the shared qualified authority context consistently, preserving legacy behavior and full diagnostics/exit severity. Explicit ledger arguments cannot bypass selected fork context; unsupported graph-intent use fails closed until its existing migration node lands.",
+      "justifies": [
+        "FR-12",
+        "FR-13",
+        "FR-14",
+        "FR-15",
+        "FR-17",
+        "NFR-05",
+        "AC-01",
+        "AC-03",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-14",
+        "AC-15"
+      ],
+      "intent_hashes": {
+        "AC-01": "sha256:046e10287e23a574c4531868789969895f73d3af2b35813eacc9ba424689503b",
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-11": "sha256:6732a46d6e35da2f4e1c66883adeea7d4872ffc54ffa8e9c97b2e05ff6089911",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "AC-15": "sha256:6c592cdb685f583cb8fdef72117266c51535e207bbb1d276df9164ce0db6715c",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-14": "sha256:754d410dc6692c4fc567704407ee560a081bdb1e8b76a605fdbef19c85eec578",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c",
+        "NFR-05": "sha256:0bf379a3b7bd576956bedb87c4135ccc71e2892654b3c7c0cffdea0738ed1fcf"
+      },
+      "deps": [
+        "shared-fork-validation-context"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkValidationRealEntryPoint",
+            "file": "cmd/sdd/decide_fork_validate_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkValidationIndependentSets",
+            "file": "cmd/sdd/decide_fork_validate_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkValidationLegacyCorpus",
+            "file": "cmd/sdd/decide_fork_validate_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "derives-state"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide_validate.go",
+        "cmd/sdd/decide_fork_validate_test.go",
+        "cmd/sdd/decide_fork_read.go",
+        "cmd/sdd/validate.go",
+        "cmd/sdd/root.go",
+        "cmd/sdd/apply.go",
+        "cmd/sdd/transition.go",
+        "cmd/sdd/section.go",
+        "cmd/sdd/migrate.go",
+        "internal/compile/compile.go",
+        "internal/compile/fork_citations_test.go",
+        "tools/regression/corpus.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 151,
+        "artifact_digests": {
+          "cmd/sdd/apply.go": "sha256:b423c80dc97d660c2c9a1aeb244370c629f97c5b6176ab160f6b6eaff0062f3c",
+          "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
+          "cmd/sdd/decide_fork_validate_test.go": "sha256:d69e75e0a8b2fcb265b4d64019c8aefdf949595ea02a77874b47cdad8cb05bdf",
+          "cmd/sdd/decide_validate.go": "sha256:9b9a5429d0d240db0e61ac59a6550af1391198c0c77c41ae3fa7b90374f82525",
+          "cmd/sdd/migrate.go": "sha256:628b8ee9c2346de08490864cff3bb59a2a4fdc12c384a2aa275a4bf53c587d1d",
+          "cmd/sdd/root.go": "sha256:3d047d62807da5e3d508ac4fc5f372ca88f1a931e54ae616ada5b30a7d5bd176",
+          "cmd/sdd/section.go": "sha256:edbe75085b5a2a30ac80d3734ac4b2838ebdb0e02dd97c48c903bd1c83c88717",
+          "cmd/sdd/transition.go": "sha256:dcab3749c7c1e52fedfc591f28462f97f77c2dd72dc3707dad48f208738fc55f",
+          "cmd/sdd/validate.go": "sha256:dbe11a9722cb948207b806bebd6adc2129e4d14f615b8058c58eec1e4d4609ed",
+          "internal/compile/compile.go": "sha256:6f07e4b4b2c37ac5c6faa7b50bf308830cd938c26f969c2fe4dc9ecd9c57c61d",
+          "internal/compile/fork_citations_test.go": "sha256:ee34c0bf520c66cedfa2105e9972e33646df59fb37270503fed7097f1dc2c2c1",
+          "tools/regression/corpus.go": "sha256:27e75320e115c11c43e24e96240e8490dfc42bf99b0cecd29a64c4c60e17808e"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkValidationIndependentSets": 68,
+        "TestForkValidationRealEntryPoint": 68
+      }
+    },
+    {
+      "id": "simple-config-replacement",
+      "contract": "For the rarely changed represented-repository planning-config.json only, stage and flush/close the complete new file, remove the old config, then rename the staged file. The user accepts the temporary missing-path and crash window. Keep errors truthful and preserve staged bytes after a failed post-removal rename; do not change ledger publication, approval checks, or source ownership protections.",
+      "justifies": [
+        "FR-16",
+        "DD-10",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "decision-read-cli",
+        "explicit-recovery-completion",
+        "selector-recovery-capture"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestConfigReplacementStagedSequence",
+            "file": "internal/decisionview/config_replace_test.go"
+          },
+          {
+            "id": "TestConfigReplacementFailurePreservesStagedBytes",
+            "file": "internal/decisionview/config_replace_test.go"
+          },
+          {
+            "id": "TestConfigReplacementDoesNotChangeLedgerPublisher",
+            "file": "internal/decisionview/config_replace_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/decisionview/config_replace.go",
+        "internal/decisionview/config_replace_test.go",
+        "internal/decisionview/transaction.go",
+        "internal/decisionview/recovery.go"
+      ],
+      "estimate": 2,
+      "phase": "03-consumers",
+      "history": "User explicitly accepted create-new/remove-old/rename for planning-config.json because it is expected to change rarely, superseding the earlier continuous-path requirement for that file only. Do not expand recovery machinery or weaken ordinary ledger writes.",
+      "verification": {
+        "result": "pass",
+        "seq": 147,
+        "artifact_digests": {
+          "internal/decisionview/config_replace.go": "sha256:61f4084fe3580ce662ccb57e85e9dbf174540b5f6238e9072e42941a092a9a55",
+          "internal/decisionview/config_replace_test.go": "sha256:16af741c964d0784cf33b50c671d2df3cc198cce64ccc7716846b2de561ee12f",
+          "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
+          "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestConfigReplacementFailurePreservesStagedBytes": 78,
+        "TestConfigReplacementStagedSequence": 78
+      }
+    },
+    {
+      "id": "decision-write-cli-completion",
+      "contract": "Real fork CLI preview/apply/inspect/recover and existing local add paths preserve exact approval, local-only mutation and truthful transaction outcomes through a public create-save-load lifecycle. Config replacement follows the explicit user-approved rare-config risk exception; unsupported mutations refuse rather than using inherited defaults.",
+      "justifies": [
+        "FR-08",
+        "FR-09",
+        "FR-13",
+        "FR-16",
+        "DD-9",
+        "DD-10",
+        "DD-12",
+        "AC-02",
+        "AC-04",
+        "AC-06",
+        "AC-09",
+        "AC-13",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-02": "sha256:171e356cc613ec82d2312166691ac7aa939d0caaac7832bb0eb8ee537c93aa2e",
+        "AC-04": "sha256:a34e0c32fec234f3b6a955f89f9f971851383aec83f275e37909adaeb72a8da1",
+        "AC-06": "sha256:2c0668afafcc0d3419309a8aaa689069714194a9dc7d59f47e7d2bcb360cda28",
+        "AC-09": "sha256:636de9bc13c8132116b21668ae18df6f06b9e52e367844e430b861906c3580b5",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "DD-10": "sha256:2d13ad3b0a0a54d346fc6ef0d71e94aa773232bb99c595872ab8ce79c6fcd82b",
+        "DD-12": "sha256:fc385d107665f8cbfa465e907d14837788eed138d061cca65e78954ebd526541",
+        "DD-9": "sha256:b3204890b39c4e19fd373dbca4c9e40ed113b6de458f08fe70554537473fafce",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-09": "sha256:53cc752dd851fc18f766b64756f9d1f4e7e2e92c9311eabf3d42efb98ba14759",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "simple-config-replacement"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkWriteCLIRealEntryPoint",
+            "file": "cmd/sdd/decide_fork_write_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkWriteCLIPublicRoundTrip",
+            "file": "cmd/sdd/decide_fork_write_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkWriteCLIApprovalAndRecovery",
+            "file": "cmd/sdd/decide_fork_write_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint",
+        "persists-state"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide.go",
+        "cmd/sdd/decide_fork_read.go",
+        "cmd/sdd/decide_fork_write.go",
+        "cmd/sdd/decide_fork_write_test.go",
+        "cmd/sdd/root.go",
+        "cmd/sdd/root_test.go",
+        "internal/hook/guard.go"
+      ],
+      "estimate": 4,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 148,
+        "artifact_digests": {
+          "cmd/sdd/decide.go": "sha256:ddad9bb7d65b19ea8e43f4977542d9a4e93da56f1fac9f63d2786f0c664920b2",
+          "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
+          "cmd/sdd/decide_fork_write.go": "sha256:bf36cbf8a2595f08ee8ba70c66cfbd07873dc2cf603183e325fa24aa132a9d12",
+          "cmd/sdd/decide_fork_write_test.go": "sha256:afd9d1a82c5a6ed441eea4fbfc710d7412e2a9c36ad11bebe7a5a4482bf7d6da",
+          "cmd/sdd/root.go": "sha256:3d047d62807da5e3d508ac4fc5f372ca88f1a931e54ae616ada5b30a7d5bd176",
+          "cmd/sdd/root_test.go": "sha256:d5066a3fd40703c03606c331cf8b3ced679925435d7ebc93749f777e4d4ece01",
+          "internal/hook/guard.go": "sha256:5740a3ee183dca05bb39003b2133766c9059785638c2f3ed3baa0dc44c319c6e"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkWriteCLIApprovalAndRecovery": 81,
+        "TestForkWriteCLIPublicRoundTrip": 81,
+        "TestForkWriteCLIRealEntryPoint": 81
+      }
+    },
+    {
+      "id": "core-context-review-fixes",
+      "contract": "Preserve shared fork authority and global failures through scoped roots, apply owner-aware scope validation and explicit legacy-root citation context, and refuse known missing-selector staging/history without activating staged authority.",
+      "justifies": [
+        "FR-05",
+        "FR-12",
+        "FR-15",
+        "AC-03",
+        "AC-12",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "FR-05": "sha256:5365ecb218232a61a1593b855c7c3b90e98388b077c448803dd8bb30fd46c982",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840"
+      },
+      "deps": [
+        "validation-entrypoint-integration"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkScopedAuthorityPreservation",
+            "file": "internal/rules/fork_review_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkOwnerAwareScopeAndLegacyContext",
+            "file": "internal/rules/fork_review_test.go"
+          },
+          {
+            "id": "TestForkKnownMissingSelectorRefusal",
+            "file": "internal/decisionview/consumer_review_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/rules/scope.go",
+        "internal/rules/decisions.go",
+        "internal/rules/citations.go",
+        "internal/rules/root.go",
+        "internal/rules/fork_review_test.go",
+        "internal/decisionview/consumer.go",
+        "internal/decisionview/selection.go",
+        "internal/decisionview/consumer_review_test.go",
+        "cmd/sdd/decide_fork_validate_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 152,
+        "artifact_digests": {
+          "cmd/sdd/decide_fork_validate_test.go": "sha256:d69e75e0a8b2fcb265b4d64019c8aefdf949595ea02a77874b47cdad8cb05bdf",
+          "internal/decisionview/consumer.go": "sha256:01ef0ca58719851f229cca449428ad1d483b40dfe9b7a7942a5c40a6252e6540",
+          "internal/decisionview/consumer_review_test.go": "sha256:b62290d58962d5919c2711763a782e47195a8f96e2b53df965dbb2be7f947017",
+          "internal/decisionview/selection.go": "sha256:0f23b796c1c27c4e4a44e8d6b69b583be33f678e27b3be1d197868061195a949",
+          "internal/rules/citations.go": "sha256:99b01ee3bd4622ac8bcd85d37ca6852a14ec8d62550b192b2312202570c9eb3a",
+          "internal/rules/decisions.go": "sha256:0ccd63cb19dc61acb6ca2202dd9941922c60199856e1fcc9e1f89bf70f03a634",
+          "internal/rules/fork_review_test.go": "sha256:3284bfae7ba80deab1e0e6a3a4ebdf4258ddbf1278c1171763d9934a4b590140",
+          "internal/rules/root.go": "sha256:c4931a93655b06642c2c0690ebd9661e606bc123955cde12db5c9e917f73a496",
+          "internal/rules/scope.go": "sha256:a3c2f23a7b31460d05d446e1fe0108059545cbb88fac91d0bca208f8638dbd81"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkKnownMissingSelectorRefusal": 94,
+        "TestForkOwnerAwareScopeAndLegacyContext": 94,
+        "TestForkScopedAuthorityPreservation": 94
+      }
+    },
+    {
+      "id": "core-storage-review-fixes",
+      "contract": "Harden publication and recovery root normalization, adoption source-barrier checks, readable journal size bounds and committed barrier cleanup while preserving target ownership, no-overwrite intent and the accepted config-only remove/rename policy.",
+      "justifies": [
+        "FR-16",
+        "NFR-03",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d",
+        "NFR-03": "sha256:ad7b256aa4a164e4ba3c83c926e152b86017118db1081149f3616ed38e8111ea"
+      },
+      "deps": [
+        "decision-write-cli-completion",
+        "simple-config-replacement"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkPublicationCanonicalRootsAndSourceBarriers",
+            "file": "internal/decisionview/storage_review_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestForkJournalReadableBoundsAndCommittedCleanup",
+            "file": "internal/decisionview/storage_review_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "concurrent-access",
+        "persists-state"
+      ],
+      "artifacts": [
+        "internal/decisionview/transaction.go",
+        "internal/decisionview/journal.go",
+        "internal/decisionview/recovery.go",
+        "internal/decisionview/store_windows.go",
+        "internal/decisionview/store_posix.go",
+        "internal/decisionview/storage_review_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 150,
+        "artifact_digests": {
+          "internal/decisionview/journal.go": "sha256:6434563d70de8297fdb68b3d0224c981b98123ecb300d9867c74b60e5664a171",
+          "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
+          "internal/decisionview/storage_review_test.go": "sha256:d7cc7c911966d95712c6b525e0c86ead21ee35779e9e3f3ade6b392fc7cce6f6",
+          "internal/decisionview/store_posix.go": "sha256:9664c85098588c8f78501d5abfca6f9055f873a3c5e690ea838f2f5c523e119c",
+          "internal/decisionview/store_windows.go": "sha256:9410ad880fae37472f0d326d2c5c2a633ddd202a9f842d9679f050cd9694afeb",
+          "internal/decisionview/transaction.go": "sha256:9a7e199ed9e2fc170868b1dcb1254721dc998cefe331b737cb45aeb7d8ef9492"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkJournalReadableBoundsAndCommittedCleanup": 95,
+        "TestForkPublicationCanonicalRootsAndSourceBarriers": 95
+      }
+    },
+    {
+      "id": "core-cli-review-fixes",
+      "contract": "The CLI accepts both declared source roots and legitimate stale-override restoration, reports canonical capabilities honestly, and uses compatible decision-ID allocation without weakening approval, source or scope checks.",
+      "justifies": [
+        "FR-03",
+        "FR-08",
+        "FR-13",
+        "FR-17",
+        "AC-10",
+        "AC-14"
+      ],
+      "intent_hashes": {
+        "AC-10": "sha256:cff38b97e63866ebb6dc1ec81718cc7f5fc08c4cd25ab84a81f616f0f21b6bcb",
+        "AC-14": "sha256:28cb96ec61cd829d017149ef6acd15f721aa4cec63201e1dcaccc6e524e83102",
+        "FR-03": "sha256:142f6a002deadd2e67ad88c762117e9b8b6a74193f11aa9c12c48d7281541409",
+        "FR-08": "sha256:d1aeb554756064a88019f4eda99a23af6d47b20cc6d9d69d3fca8dc0a6b66b8f",
+        "FR-13": "sha256:7b7dc4427fe2d4fecdc2066b2cb50e9c8e5764aff9fd6b2a2e172103797347d8",
+        "FR-17": "sha256:78e00fec85c3566c8be3620066548c4b17dbb7e7c6c39aed6c4d1083b8fc912c"
+      },
+      "deps": [
+        "decision-write-cli-completion",
+        "simple-config-replacement"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkCLIReviewSourceRestoreCapabilities",
+            "file": "cmd/sdd/decide_fork_review_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkOverrideExtendedIDs",
+            "file": "internal/decisionview/lifecycle_review_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint"
+      ],
+      "artifacts": [
+        "cmd/sdd/decide_fork_read.go",
+        "cmd/sdd/decide_fork_write.go",
+        "cmd/sdd/decide_fork_read_test.go",
+        "cmd/sdd/decide_fork_write_test.go",
+        "cmd/sdd/decide_fork_review_test.go",
+        "internal/decisionview/lifecycle.go",
+        "internal/decisionview/lifecycle_review_test.go"
+      ],
+      "estimate": 2,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 149,
+        "artifact_digests": {
+          "cmd/sdd/decide_fork_read.go": "sha256:ce90002abde394a104c001616bc389d249ff0302b1fee8a7211caf0cf5562785",
+          "cmd/sdd/decide_fork_read_test.go": "sha256:52607a38906335fc59c58bdc9a725371bdb9e618f0eb29ef721cdf0d2498ecef",
+          "cmd/sdd/decide_fork_review_test.go": "sha256:b3f24562e8eadfb0ecb326a76096dc8f4c8b2721cad08174b14b989a837134b8",
+          "cmd/sdd/decide_fork_write.go": "sha256:bf36cbf8a2595f08ee8ba70c66cfbd07873dc2cf603183e325fa24aa132a9d12",
+          "cmd/sdd/decide_fork_write_test.go": "sha256:afd9d1a82c5a6ed441eea4fbfc710d7412e2a9c36ad11bebe7a5a4482bf7d6da",
+          "internal/decisionview/lifecycle.go": "sha256:be164251b7f71256e2ab44b9f91d484f2a6c3bf12e5529f3095c0835a92a344f",
+          "internal/decisionview/lifecycle_review_test.go": "sha256:faeca4cd66567722761fc70c5825c57469478fc10b1a9d9fc765ca10e5d69e12"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkCLIReviewSourceRestoreCapabilities": 97,
+        "TestForkOverrideExtendedIDs": 97
+      }
+    },
+    {
+      "id": "legacy-adoption-recovery",
+      "contract": "Initial adoption from a legacy selector without repositoryId remains explicitly recoverable after interrupted publication; absent original ownership is admitted only for genuine initial adoption, while mismatched or malformed ownership and selector digests remain refused.",
+      "justifies": [
+        "FR-16",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55",
+        "FR-16": "sha256:16beba305a047d0d2bdbd655c0a41a0874af55da2422c30341aa62161dde9e4d"
+      },
+      "deps": [
+        "core-context-review-fixes",
+        "core-storage-review-fixes",
+        "core-cli-review-fixes"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkLegacyAdoptionRecovery",
+            "file": "internal/decisionview/recovery_legacy_test.go",
+            "satisfies": [
+              "persists-state"
+            ]
+          },
+          {
+            "id": "TestForkRecoveryOriginalOwnerGuard",
+            "file": "internal/decisionview/recovery_legacy_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "persists-state"
+      ],
+      "artifacts": [
+        "internal/decisionview/recovery.go",
+        "internal/decisionview/recovery_legacy_test.go"
+      ],
+      "estimate": 2,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 155,
+        "artifact_digests": {
+          "internal/decisionview/recovery.go": "sha256:0e8ce0acf9a2f5f240d8d471122dbc939a20e1b3da6a31f19513e50f8fc6ef44",
+          "internal/decisionview/recovery_legacy_test.go": "sha256:0bb3b8ab54f5a22bf285843921fb43c9233516d1af09ddb7c78b1fc03d57ea13"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkLegacyAdoptionRecovery": 119
+      }
+    },
+    {
+      "id": "root-qualified-consumer-diagnostics",
+      "contract": "Fork validation resolves collection and decision source locators against their declared planning or repository roots, never aliases a different same-relative-path artifact, and reports diagnostics against the actual source file.",
+      "justifies": [
+        "FR-05",
+        "FR-12",
+        "FR-15"
+      ],
+      "intent_hashes": {
+        "FR-05": "sha256:5365ecb218232a61a1593b855c7c3b90e98388b077c448803dd8bb30fd46c982",
+        "FR-12": "sha256:924460e74b0bae233f297255e0d569053fe28a7eb5734bc10886b48c4593997a",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840"
+      },
+      "deps": [
+        "core-context-review-fixes",
+        "core-storage-review-fixes",
+        "core-cli-review-fixes"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkRepositorySourcePathCollision",
+            "file": "internal/rules/fork_locator_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          },
+          {
+            "id": "TestForkRepositorySourceDiagnosticPath",
+            "file": "internal/rules/fork_locator_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/rules/index.go",
+        "internal/rules/decisions.go",
+        "internal/rules/fork_locator_test.go"
+      ],
+      "estimate": 2,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 157,
+        "artifact_digests": {
+          "internal/rules/decisions.go": "sha256:0ccd63cb19dc61acb6ca2202dd9941922c60199856e1fcc9e1f89bf70f03a634",
+          "internal/rules/fork_locator_test.go": "sha256:1f8882ff3874abaa7ae17f7fb6bfe3c23b01ad618f627eefdf9afbd6b8e9aa04",
+          "internal/rules/index.go": "sha256:8cb9a4fe3eedcafa058099b8542eda0162829d47bb6f73e5e326893d3a20674e"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkRepositorySourceDiagnosticPath": 121,
+        "TestForkRepositorySourcePathCollision": 121
+      }
+    },
+    {
+      "id": "legacy-root-resolution-compatibility",
+      "contract": "Preserve baseline VCS-root semantics for legacy explicit planning roots and nested planning configs, while explicit fork selectors retain their represented configuration-owner root and fail closed on malformed authority.",
+      "justifies": [
+        "FR-01",
+        "FR-15",
+        "AC-12"
+      ],
+      "intent_hashes": {
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "FR-01": "sha256:a48d44c4b3dfbe86e5e56e251967c076c02c57a389b402d9f4290a1d963ff308",
+        "FR-15": "sha256:d39a7b0a614b418eaa3431451c17af65b48f048d1bbf715e427172559d869840"
+      },
+      "deps": [
+        "core-context-review-fixes",
+        "core-storage-review-fixes",
+        "core-cli-review-fixes"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestForkLegacyRootResolutionCompatibility",
+            "file": "cmd/sdd/fork_root_compat_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestForkExplicitOwnerRootResolution",
+            "file": "cmd/sdd/fork_root_compat_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint"
+      ],
+      "artifacts": [
+        "cmd/sdd/validate.go",
+        "cmd/sdd/fork_root_compat_test.go"
+      ],
+      "estimate": 2,
+      "phase": "03-consumers",
+      "verification": {
+        "result": "pass",
+        "seq": 156,
+        "artifact_digests": {
+          "cmd/sdd/fork_root_compat_test.go": "sha256:7d83078a61b0bfc245d4dcbcef458671b9a3f7aa8056ebca62fc70db59644bad",
+          "cmd/sdd/validate.go": "sha256:dbe11a9722cb948207b806bebd6adc2129e4d14f615b8058c58eec1e4d4609ed"
+        },
+        "report_digest": "sha256:161d155684588392611d0b60369bd89c3c0dbe8723a0de1d11ad7a2faa475b97",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "8dd1b797d09ad34768960a784fb0e0add9f9b131"
+        }
+      },
+      "red_seqs": {
+        "TestForkExplicitOwnerRootResolution": 120,
+        "TestForkLegacyRootResolutionCompatibility": 120
+      }
+    },
+    {
+      "id": "authority-core-final-review",
+      "contract": "The integrated authority core and all confirmed review remediations have a fresh frozen Aligned independent full four-lane review over the final aggregate implementation.",
+      "justifies": [
+        "AC-03",
+        "AC-12",
+        "AC-13"
+      ],
+      "intent_hashes": {
+        "AC-03": "sha256:f5d7185bc8918980dad0edc449ee5657d3f0426b8582349d8ce3b708bc722869",
+        "AC-12": "sha256:9ac54db90f492647b27fbd954645c6a475b795ef9fc932adba87a7288b34b607",
+        "AC-13": "sha256:ed2215f6228bd991f893ebe987e31b44d17522eb991feb0c68bc0e37be0aca55"
+      },
+      "deps": [
+        "legacy-adoption-recovery",
+        "root-qualified-consumer-diagnostics",
+        "legacy-root-resolution-compatibility"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 2,
+      "phase": "03-consumers"
     }
+  ],
+  "retired": [
+    "approved-change-preview",
+    "authority-core-review",
+    "authority-core-review-completion",
+    "cross-store-publication",
+    "decision-write-cli",
+    "explicit-recovery",
+    "preview-adoption",
+    "preview-adoption-binding",
+    "test-gate-review",
+    "validation-consumers"
   ]
 }

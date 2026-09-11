@@ -3,7 +3,7 @@ title: "Fork-Aware Decision Ledgers"
 type: design
 status: approved
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-10
 tags: [decision-log, forks, inheritance, transactions, upstream-sync]
 related: [Specs/ForkAwareDecisionLedgers]
 ---
@@ -150,7 +150,9 @@ Barriers are not optional for another checkout selecting the same external ledge
 
 **External-writer limit:** cooperative locks serialize SDD writers, not arbitrary Git merges/editors. Readers use bounded stable-inventory capture/recheck. The operation binds an approved source snapshot; no hashing scheme prevents a later source edit. An interleaved late source change can make a committed override immediately stale, never authoritative over an unapproved basis. Action-bearing consumers refresh before reliance. A stronger universal isolation contract would require a separately approved source-publication protocol.
 
-**Platform publication:** POSIX uses same-filesystem `renameat` with retained directory descriptors and required flushes. Windows uses same-volume `ReplaceFileW` with operation-owned backup for replacement and no-overwrite `MoveFileExW` for new-file publication; no copy-across-volume or delayed-reboot modes. Respect documented partial-failure outcomes and explicitly inspect resulting names/digests. `REPLACEFILE_WRITE_THROUGH` is unsupported and is not a durability argument. Native failpoint/process-crash tests do not alone prove power-loss durability; unreadable journal/config/state fails closed. Unsupported storage/publication capabilities refuse before authority publication.
+**Platform publication:** For ledger/publication files other than the represented repository's `planning-config.json`, POSIX uses same-filesystem `renameat` with retained directory descriptors and required flushes. Windows uses same-volume `ReplaceFileW` with operation-owned backup for replacement and no-overwrite `MoveFileExW` for new-file publication; no copy-across-volume or delayed-reboot modes. Respect documented partial-failure outcomes and explicitly inspect resulting names/digests. `REPLACEFILE_WRITE_THROUGH` is unsupported and is not a durability argument. Native failpoint/process-crash tests do not alone prove power-loss durability; unreadable journal/config/state fails closed. Unsupported storage/publication capabilities refuse before authority publication.
+
+**User-approved rare-config exception (2026-09-10):** For the represented repository's `planning-config.json` only, write and flush/close the complete replacement to a sibling temp file, remove the old config, then rename the temp into place. The user accepts the temporary missing-path and crash/failure window because this config is rarely changed; continuous-path atomic replacement is not required for it. A failed post-removal rename must return an error and retain the staged bytes for manual repair, not claim success. Keep existing locking/approval checks and ordinary ledger protections. Do not add more recovery machinery solely to eliminate this accepted window.
 
 External filesystem pins, retrieved 2026-09-08: [POSIX rename/renameat, Issue 8 / IEEE 1003.1-2024](https://pubs.opengroup.org/onlinepubs/9799919799/functions/rename.html), [Win32 ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew), [Win32 MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw). Microsoft source revision `fa53641576e3603fa7b66d3a4ad969d3ce49d6f3`, updated 2025-07-01. These describe file operations, not remote authentication or cross-filesystem transactions.
 
@@ -180,6 +182,8 @@ Search inventory includes default ledger path strings, bare-ID parsing, accepted
 
 ## Testing Strategy
 Use generic hermetic fixture repositories/planning roots, including two logical owners sharing one external planning root and two checkouts sharing one owner. Do not mutate this repository's real config or ledger to test fork behavior. Keep old regression verdicts frozen; add fork Good/Bad examples. Graph hazard tests must fail for the intended behavior, not simply for a missing future package.
+
+The config-only sequence is tested for complete staging, successful final bytes and truthful errors, not uninterrupted path presence; all ledger/source/integrity checks remain.
 
 | Spec coverage | Required fixture/test families |
 |---|---|

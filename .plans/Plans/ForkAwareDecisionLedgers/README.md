@@ -3,25 +3,25 @@ title: "Fork-Aware Decision Ledgers"
 type: plan
 status: active
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-11
 tags: [decision-log, forks, graph]
 related: [Specs/ForkAwareDecisionLedgers, Designs/ForkAwareDecisionLedgers]
 phases:
   - id: 1
     title: "01-foundations"
-    status: planned
+    status: in-progress
     doc: "01-foundations.md"
   - id: 2
     title: "02-authority"
-    status: planned
+    status: in-progress
     doc: "02-authority.md"
   - id: 3
     title: "03-consumers"
-    status: planned
+    status: in-progress
     doc: "03-consumers.md"
   - id: 4
     title: "04-integration"
-    status: planned
+    status: in-progress
     doc: "04-integration.md"
 ---
 
@@ -71,11 +71,11 @@ Approved related spec/design and accepted D-0025. Existing Go toolchain, local G
 | Phase | Nodes | Doc |
 |---|---|---|
 | 1: 01-foundations | 6 | `01-foundations.md` |
-| 2: 02-authority | 6 | `02-authority.md` |
-| 3: 03-consumers | 6 | `03-consumers.md` |
-| 4: 04-integration | 4 | `04-integration.md` |
+| 2: 02-authority | 14 | `02-authority.md` |
+| 3: 03-consumers | 14 | `03-consumers.md` |
+| 4: 04-integration | 6 | `04-integration.md` |
 
-22 node(s) total. The committed graph (`ForkAwareDecisionLedgers-Graph.json`) is the source of
+40 node(s) total. The committed graph (`ForkAwareDecisionLedgers-Graph.json`) is the source of
 truth; these documents are projections.
 
 <!-- graph-view:end -->

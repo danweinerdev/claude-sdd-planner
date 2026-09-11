@@ -3,10 +3,10 @@ title: "04-integration"
 type: phase
 plan: "ForkAwareDecisionLedgers"
 phase: 4
-status: planned
+status: in-progress
 created: 2026-09-08
-updated: 2026-09-08
-deliverable: "Graph view: 4 node(s) under phase label 04-integration"
+updated: 2026-09-11
+deliverable: "Graph view: 6 node(s) under phase label 04-integration"
 tasks: []
 ---
 
@@ -16,7 +16,7 @@ tasks: []
 
 ## Overview
 
-Rendered view of 4 node(s) from the plan graph (schema v1, seq 0).
+Rendered view of 6 node(s) from the plan graph (schema v1, seq 158).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -26,19 +26,19 @@ full review gates and is never stored or hand-edited here.
 
 - Contract: Every required decision workflow including decide check, onboarding and setup documents the real fork commands/capability and storage contracts, preserves intent isolation and generates matching portable guidance.
 - Justifies: `FR-14`, `FR-17`, `NFR-03`, `NFR-05`, `DD-11`, `D-0025`, `AC-11`, `AC-14`, `AC-15`
-- Depends on: `decision-write-cli`, `graph-intent-consumer`, `hook-context-consumer`
+- Depends on: `decision-write-cli-completion`, `graph-intent-consumer`, `hook-context-consumer`, `simple-config-replacement`
 - Gate: tests — `TestForkWorkflowCommandsAndReferences` in cmd/sdd/fork_workflows_test.go (satisfies ships-prose); `TestForkWorkflowIntentIsolation` in internal/portable/fork_workflows_test.go
 - Hazards: ships-prose
 - Artifacts: commands/, skills/, agents/, shared/, README.md, AGENTS.md, CLAUDE.md, .claude-plugin/plugin.json, internal/version/version.go, internal/provision/provision.go, cmd/sdd/fork_workflows_test.go, internal/portable/fork_workflows_test.go, .codex-plugin/, .opencode-plugin/
 - Estimate: 4
-- Observation: none yet
-- Closure: open — state BLOCKED
+- Observation: **pass** at seq 158 — isolation clean, provenance git 8dd1b797d09a
+- Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
 
 ### end-to-end-contract
 
 - Contract: Independent same-seed end-to-end CLI scenarios agree across every consumer, preserve source/unrelated bytes through upstream updates and recovery, and distinguish structural/candidate/operational outcomes without private fixture data.
 - Justifies: `FR-01`, `FR-02`, `FR-03`, `FR-04`, `FR-05`, `FR-06`, `FR-07`, `FR-08`, `FR-09`, `FR-10`, `FR-11`, `FR-12`, `FR-13`, `FR-14`, `FR-15`, `FR-16`, `FR-17`, `FR-18`, `NFR-01`, `NFR-02`, `NFR-03`, `NFR-04`, `NFR-05`, `AC-01`, `AC-02`, `AC-03`, `AC-04`, `AC-05`, `AC-06`, `AC-07`, `AC-08`, `AC-09`, `AC-10`, `AC-11`, `AC-12`, `AC-13`, `AC-14`, `AC-15`, `AC-16`
-- Depends on: `workflows-and-portable`, `authority-core-review`
+- Depends on: `authority-core-final-review`, `core-cli-review-fixes`, `core-context-review-fixes`, `core-storage-review-fixes`, `legacy-adoption-recovery`, `legacy-root-resolution-compatibility`, `root-qualified-consumer-diagnostics`, `workflows-and-portable`
 - Gate: tests — `TestForkEndToEndRealEntryPoint` in cmd/sdd/fork_e2e_test.go (satisfies user-entrypoint); `TestForkEndToEndSeedReplay` in cmd/sdd/fork_e2e_test.go (satisfies deterministic-replay); `TestForkEndToEndHostileFormats` in cmd/sdd/fork_e2e_test.go (satisfies external-format)
 - Hazards: user-entrypoint, deterministic-replay, external-format
 - Artifacts: cmd/sdd/fork_e2e_test.go, tools/forkfixtures/
@@ -67,6 +67,30 @@ full review gates and is never stored or hand-edited here.
 - Estimate: 1
 - Observation: none yet
 - Closure: open — state BLOCKED
+
+### test-gate-checkout-portability
+
+- Contract: The fresh test gate's tripwires handle LF and CRLF checkouts identically, make unavailable or incompatible dynamic checks visible, and document dry-run limits without removing full-suite checks.
+- Justifies: `NFR-03`, `NFR-05`, `AC-15`
+- Depends on: `test-gate-fresh-execution`
+- Gate: tests — `TestMakeGateHandlesCheckoutLineEndings` in tools/testgate/makefile_test.go; `TestMakeGateRunsFreshTests` in tools/testgate/makefile_test.go; `TestMakeHostExecutableMatchesPlatform` in tools/testgate/makefile_test.go
+- Hazards: none (explicit claim)
+- Artifacts: Makefile, tools/testgate/makefile_test.go
+- Estimate: 1
+- History: Review test-gate-repair.md F-01/F-02/F-03; spec and blind-spots lanes required a CRLF Windows fix despite other lanes classifying the same defect as minor. Preserve all tests and frozen expectations.
+- Observation: **pass** at seq 141 — isolation clean, provenance git 8dd1b797d09a
+- Closure: assumed-closed — GREEN, not yet covered by a passing full review gate (sufficient to build on, not completion-grade)
+
+### test-gate-review-completion
+
+- Contract: The focused test-gate repair and checkout-portability follow-up have a frozen Aligned full four-lane review, including confirmation that all tests, corpus and portable checks remain enabled.
+- Justifies: `NFR-05`, `AC-15`
+- Depends on: `test-gate-checkout-portability`
+- Gate: review — full (carries completion-grade closure)
+- Hazards: none (explicit claim)
+- Estimate: 1
+- Observation: none yet
+- Closure: open — state READY
 
 ## Acceptance Criteria
 
