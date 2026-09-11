@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
@@ -237,7 +238,13 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 			continue
 		}
 		_ = filepath.Walk(base, func(p string, fi os.FileInfo, err error) error {
-			if err != nil || fi.IsDir() {
+			if err != nil {
+				return nil
+			}
+			if fi.IsDir() {
+				if store.IsGraphRuntimeDir(dir, p) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if strings.HasSuffix(p, ".md") {

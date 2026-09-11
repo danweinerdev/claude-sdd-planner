@@ -186,6 +186,9 @@ func migrateAll(root string, dryRun, jsonOut, allowFrozen, stubSections bool) er
 		if err != nil {
 			return err
 		}
+		if d.IsDir() && store.IsGraphRuntimeDir(root, p) {
+			return filepath.SkipDir
+		}
 		if !d.IsDir() && strings.HasSuffix(p, ".md") {
 			files = append(files, p)
 		}
