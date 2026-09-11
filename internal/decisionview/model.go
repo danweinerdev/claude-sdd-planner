@@ -685,22 +685,22 @@ func modelJSONKeys(data []byte, typ reflect.Type, at string, depth int) error {
 }
 
 func modelYAMLJSON(root *yaml.Node) ([]byte, error) {
-	active := map[*yaml.Node]bool{}
-	var convert func(*yaml.Node, int) (any, error)
-	convert = func(n *yaml.Node, depth int) (any, error) {
-		if n == nil || depth > 256 || active[n] {
-			return nil, fmt.Errorf("decisionview: cyclic or excessively nested YAML")
+	guard := newYAMLDecodeGuard()
+	var convert func(*yaml.Node, int, bool) (any, error)
+	convert = func(n *yaml.Node, depth int, throughAlias bool) (any, error) {
+		leave, err := guard.enter(n, depth, throughAlias)
+		if err != nil {
+			return nil, err
 		}
-		active[n] = true
-		defer delete(active, n)
+		defer leave()
 		switch n.Kind {
 		case yaml.DocumentNode:
 			if len(n.Content) != 1 {
 				return nil, fmt.Errorf("decisionview: one YAML document required")
 			}
-			return convert(n.Content[0], depth+1)
+			return convert(n.Content[0], depth+1, throughAlias)
 		case yaml.AliasNode:
-			return convert(n.Alias, depth+1)
+			return convert(n.Alias, depth+1, true)
 		case yaml.MappingNode:
 			if n.Tag != "!!map" || len(n.Content)%2 != 0 {
 				return nil, fmt.Errorf("decisionview: invalid or unsupported YAML mapping")
@@ -714,7 +714,7 @@ func modelYAMLJSON(root *yaml.Node) ([]byte, error) {
 				if _, exists := m[key.Value]; exists {
 					return nil, fmt.Errorf("decisionview: duplicate YAML key %q", key.Value)
 				}
-				v, err := convert(n.Content[i+1], depth+1)
+				v, err := convert(n.Content[i+1], depth+1, throughAlias)
 				if err != nil {
 					return nil, err
 				}
@@ -727,7 +727,7 @@ func modelYAMLJSON(root *yaml.Node) ([]byte, error) {
 			}
 			a := make([]any, 0, len(n.Content))
 			for _, child := range n.Content {
-				v, err := convert(child, depth+1)
+				v, err := convert(child, depth+1, throughAlias)
 				if err != nil {
 					return nil, err
 				}
@@ -760,7 +760,7 @@ func modelYAMLJSON(root *yaml.Node) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("decisionview: unsupported YAML node/tag %q", n.Tag)
 	}
-	v, err := convert(root, 0)
+	v, err := convert(root, 0, false)
 	if err != nil {
 		return nil, err
 	}

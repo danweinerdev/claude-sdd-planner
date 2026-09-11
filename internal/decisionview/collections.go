@@ -292,16 +292,16 @@ func collectionFrontmatter(raw []byte) (map[string]*yaml.Node, error) {
 	if len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("%w: frontmatter must be a mapping", ErrInvalidCollection)
 	}
-	active := map[*yaml.Node]bool{}
-	var visit func(*yaml.Node, int) error
-	visit = func(n *yaml.Node, depth int) error {
-		if n == nil || depth > 256 || active[n] {
-			return fmt.Errorf("%w: cyclic or excessively nested YAML", ErrInvalidCollection)
+	guard := newYAMLDecodeGuard()
+	var visit func(*yaml.Node, int, bool) error
+	visit = func(n *yaml.Node, depth int, throughAlias bool) error {
+		leave, err := guard.enter(n, depth, throughAlias)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalidCollection, err)
 		}
-		active[n] = true
-		defer delete(active, n)
+		defer leave()
 		if n.Kind == yaml.AliasNode {
-			return visit(n.Alias, depth+1)
+			return visit(n.Alias, depth+1, true)
 		}
 		if n.Kind == yaml.MappingNode {
 			seen := map[string]bool{}
@@ -311,20 +311,20 @@ func collectionFrontmatter(raw []byte) (map[string]*yaml.Node, error) {
 					return fmt.Errorf("%w: duplicate or invalid YAML key %q", ErrInvalidCollection, key.Value)
 				}
 				seen[key.Value] = true
-				if err := visit(n.Content[i+1], depth+1); err != nil {
+				if err := visit(n.Content[i+1], depth+1, throughAlias); err != nil {
 					return err
 				}
 			}
 			return nil
 		}
 		for _, child := range n.Content {
-			if err := visit(child, depth+1); err != nil {
+			if err := visit(child, depth+1, throughAlias); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	if err := visit(doc.Content[0], 0); err != nil {
+	if err := visit(doc.Content[0], 0, false); err != nil {
 		return nil, err
 	}
 	out := map[string]*yaml.Node{}

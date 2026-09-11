@@ -2,7 +2,6 @@ package decisionview
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -231,26 +230,7 @@ func consumerDeclaration(repositoryRoot string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return configDeclaresFork(raw), nil
-}
-
-func configDeclaresFork(raw []byte) bool {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		// A malformed declaration must not silently become legacy merely because
-		// the enclosing JSON could not be decoded.
-		return bytes.Contains(bytes.ToLower(raw), []byte(`"decisionlog"`))
-	}
-	_, declared := fields["decisionLog"]
-	if !declared {
-		for key := range fields {
-			if strings.EqualFold(key, "decisionLog") {
-				declared = true
-				break
-			}
-		}
-	}
-	return declared
+	return ConfigDeclaresDecisionLog(raw), nil
 }
 
 func repositoryForkEvidence(repositoryRoot string) bool {
@@ -277,7 +257,7 @@ func repositoryForkEvidence(repositoryRoot string) bool {
 		return false
 	}
 	raw, err := repo.FileAt(head, "planning-config.json")
-	return err == nil && configDeclaresFork(raw)
+	return err == nil && ConfigDeclaresDecisionLog(raw)
 }
 
 func consumerOperational(err error) bool {

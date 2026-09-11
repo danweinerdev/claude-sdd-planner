@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
@@ -409,16 +410,7 @@ func absoluteConfiguredRoot(owner, value string) (string, bool) {
 }
 
 func configDeclaresDecisionLog(raw []byte) bool {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return bytes.Contains(bytes.ToLower(raw), []byte(`"decisionlog"`))
-	}
-	for key := range fields {
-		if strings.EqualFold(key, "decisionLog") {
-			return true
-		}
-	}
-	return false
+	return decisionview.ConfigDeclaresDecisionLog(raw)
 }
 
 // gitRoot walks up from start looking for a `.git` entry (file or directory,
