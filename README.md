@@ -115,6 +115,21 @@ plan targets a different implementation repository. These are historical records
 live inputs or completion evidence. A missing Git object is reported as unverifiable;
 the tool neither silently blesses it nor fetches history or creates retention refs.
 
+### Linear Git history and revision lineage
+
+Rebase parallel graph-node branches onto the latest primary branch, then
+fast-forward it; do not create merge commits. `sdd doctor` installs or restores
+the Git `post-rewrite` capture hook while preserving an existing user hook.
+`sdd doctor --check` diagnoses it without writing. These repository hooks work
+with all runtimes, independently of Claude Code's plugin hooks.
+
+The hook prints a Git-private mapping file. For already-recorded commits, use
+`sdd graph remap-revisions --plan Feature --map <file> --dry-run`, then apply
+with the printed `--expect-digest`. This records old→new lineage without changing
+the revision that was actually tested. Reverify rebased code before completion.
+See [the Git integration workflow](shared/vcs-detection.md) for restrictions,
+worktree lifetime, and the full command sequence.
+
 ## Commands
 
 Claude Code names shown; in Codex/OpenCode the same skills are `sdd-research`, `sdd-plan`, etc., invoked by natural language.

@@ -45,6 +45,72 @@ When a skill needs to inspect or change tracked files, choose the column for the
 | Diff base..head | `git diff <base>..<head>` | `p4 diff2 -dw //path/...@<base> //path/...@<head>` | (skip) |
 | Ignore file written by setup | `.gitignore` | `.p4ignore` | (skip — no ignore file) |
 
+## Git integration of parallel graph nodes — linear history
+
+For `git` / `git-worktree`, integrate worktree or topic-branch work from parallel
+graph nodes by **rebasing the node branch onto the latest primary branch, then
+fast-forwarding the primary branch**. Do not create merge commits. Run
+`git rebase <primary-branch>` from the node branch, resolve conflicts deliberately,
+and rerun verification before recording the final passing observation. On the
+primary branch, use `git merge --ff-only <node-branch>`; this advances the branch
+without creating a merge commit.
+
+Serialize integrations: after each fast-forward, rebase the next node branch
+onto the updated primary branch. If the fast-forward refuses because primary
+advanced, rebase and verify again — never fall back to a merge commit. Rebase
+changes commit IDs, so refresh affected observations through the supported SDD
+verbs; pre-rebase revision evidence is not proof of the rewritten commits. Keep
+per-node commit boundaries, never rebase the primary branch itself, and do not
+force-push shared history without explicit approval. The graph's logical
+sync/merge (claim completion) is distinct from this Git integration step.
+
+### Capturing and recording rewritten revisions
+
+Run `sdd doctor` in the target Git worktree before rebasing. It installs or
+repairs the managed `post-rewrite` dispatcher, honors `core.hooksPath`, restores
+executable permissions, and preserves an existing user hook as
+`post-rewrite.sdd-user` with the same input, arguments, and exit status. It never
+changes Git configuration. Unsafe symlinks or backup collisions are reported,
+not overwritten. `sdd doctor --check` diagnoses without writes: repairable Git
+hook findings exit 1; operational/unsafe failures exit 2. Plain directories have
+no Git hook to install. This Git hook is runtime-neutral, distinct from Claude
+Code's plugin `hooks.json`.
+
+The dispatcher invokes `sdd hook post-rewrite <rebase|amend>` using the
+user-installed binary on `PATH`. It captures Git's native two-column
+`OLD_COMMIT NEW_COMMIT` stream and prints the saved `.map` path. Maps live under
+the current worktree's Git-private `sdd/rewrite-maps` directory, not in the plan
+or a global decision log. Capture never mutates the graph. Preserve/import a map
+before releasing its worktree: removing a linked worktree may remove its private
+Git metadata. Capture retains squash/fixup rows, but remapping below deliberately
+refuses many-to-one mappings rather than silently combining graph-node identities.
+
+For already-recorded revisions, inspect the map and preview the lineage update:
+
+```bash
+sdd graph remap-revisions --plan Feature --map <captured-map> --dry-run --json
+sdd graph remap-revisions --plan Feature --map <captured-map> --expect-digest <preview-graph-digest>
+sdd graph show <node-id> --plan Feature --json
+```
+
+`remap-revisions` accepts full 40-hex commit IDs available in the plan's target
+Git repository. It appends only mappings connected to recorded Git observations
+or existing lineage, reports unreferenced rows, and refuses malformed, cyclic,
+conflicting, or many-to-one mappings. Identical mappings are idempotent; the graph
+digest fence refuses concurrent edits. Capture can also retain Git SHA-256 IDs,
+but remapping currently follows the adapter's SHA-1-only revision contract.
+Dropped/skipped commits cannot be inferred from a missing row, and unavailable
+Git objects require recovery before remapping; the tool neither fetches nor
+creates retention refs automatically.
+
+Lineage records identity, **not proof**: `revision_lineage` preserves the old→new
+chain while original observations, their provenance, `contract_rev`, sequence
+numbers, and frozen reviews stay unchanged. `graph show` distinguishes recorded
+and rewritten revisions. Run fresh verification and record it with `sync` (or
+the applicable `reverify` batch); remapping never asserts that rebased code passed.
+If the first passing observation is recorded only after rebase, it already names
+the new commit and may need no lineage remap.
+
 ## Special cases
 
 - **`git-bare`**: stop and tell the user to operate in a worktree instead. Most skills can't do meaningful work in a bare repo (no checked-out files).

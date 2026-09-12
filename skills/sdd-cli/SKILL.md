@@ -22,14 +22,20 @@ Run `sdd doctor` once when you begin using sdd in a project. It reports the
 binary in use, the resolved planning root, and the embedded schema set. Under
 Claude Code, where `CLAUDE_PLUGIN_ROOT` identifies the active plugin, it also
 regenerates `hooks.json` when that file is absent or does not match this
-plugin version's hook set. Portable runtimes carry no hooks, so doctor neither
-locates nor inspects their plugin installation.
+plugin version's hook set. Portable runtimes carry no plugin hooks, so doctor
+neither locates nor inspects their plugin installation. Independently of runtime,
+in a Git worktree doctor installs or repairs the repository's managed
+`post-rewrite` capture dispatcher, honoring `core.hooksPath` and preserving user
+hooks. It does not change Git configuration or install a binary. See
+`shared/vcs-detection.md` for capture, lineage remapping, and worktree lifetime.
 
 That last part is why it matters: `hooks.json` is generated per platform, so a
 plugin upgrade leaves the previous version's file in place. The events it
 declares keep firing, which means a newly added event silently never runs and
 nothing looks wrong. `doctor` is the only thing that compares. Pass `--check`
-to report without repairing.
+to report without repairing. For the Git capture hook, `--check` exits 1 for
+repairable findings and 2 for operational/unsafe failures. Read-only reviewers
+must use `sdd doctor --check`, never the default repairing invocation.
 
 ## Contracts (apply to every subcommand)
 
@@ -78,10 +84,11 @@ to report without repairing.
 | Look up one decision and its supersession chain | `sdd decide lookup ID [--plan P] [--json]` |
 | Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
-| Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D [--by WHO] [--dry-run] [--json]` |
+| Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |
+| Record Git old→new revision lineage without changing proof | `sdd graph remap-revisions --plan P --map FILE --expect-digest D [--dry-run] [--json]` (omit the digest for preview) |
 | Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
-| Check the environment (and repair Claude Code hooks) | `sdd doctor [--check] [--json]` |
+| Check the environment and repair repository/plugin hooks | `sdd doctor [--check] [--json]` |
 
 ## Discipline
 
@@ -127,7 +134,7 @@ to report without repairing.
   waived.
 - **Read-only contexts stay read-only.** Review and research agents may run
   `validate`, `show`, `list`, `next`, `schema`, `decide list|current|lookup`,
-  `version`, and `doctor` — never `apply`, `section set`, `evidence add`,
+  `version`, and `doctor --check` — never `apply`, `section set`, `evidence add`,
   `decide add`, `graph amend`, or a lifecycle transition. (The PreToolUse
   guard enforces exactly this allowlist for the plugin's read-only agents.)
 - **Missing or outdated binary is a stop.** If `sdd` is absent or below the

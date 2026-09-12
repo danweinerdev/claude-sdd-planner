@@ -160,6 +160,14 @@ Rules:
 
 A plan's compiled graph node carries a `role` field (proposal input): `implementation` (default when absent), `shared-mechanism`, `review`, or `integration-acceptance`. A `review`-role node's `gate.type` must be `review`; a `review`-gate node must have `role: review`. `contract_rev` (an integer, starting at 1) and `origin` (present only on a node added by an `extend` amendment: `{ review: <artifact path>, finding: <id> }`) are tool-owned — refused in proposal payloads, like `intent_hashes` and `claim`.
 
+The committed graph may additionally carry tool-owned `revision_lineage`, a map
+of full old Git commit IDs to rewritten IDs. `sdd graph remap-revisions` appends
+validated, acyclic, one-to-one rewrite bindings under a graph digest fence.
+Proposals cannot author this field. It is identity metadata only: it never
+rewrites observations, their original provenance, contract revisions, sequence
+numbers, or frozen review evidence, and never grants GREEN or closure. Graph
+mutations preserve the map; lineage is not a global decision record.
+
 A review artifact's `findings[]` entries add an `action` field, required whenever `status: open`:
 
 ```yaml

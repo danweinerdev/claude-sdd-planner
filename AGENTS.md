@@ -73,4 +73,9 @@ Harnesses cache plugins by version — a content change without a bump is invisi
 
 ## The `sdd` binary contract
 
-Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries. Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run. Graph execution is part of the binary contract: `compile`, `next --claim`, and the `graph` family (`init|propose|assemble|convert|hazards|sync|reverify|review|amend|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`) own every mutation of a committed plan graph — skills author payloads and read diagnostics, never edit `<Name>-Graph.json` or rendered views by hand.
+Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries. Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run. Graph execution is part of the binary contract: `compile`, `next --claim`, and the `graph` family (`init|propose|assemble|convert|hazards|sync|reverify|review|amend|remap-revisions|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`) own every mutation of a committed plan graph — skills author payloads and read diagnostics, never edit `<Name>-Graph.json` or rendered views by hand.
+
+Git node branches integrate by rebase then fast-forward, never merge commits.
+`sdd doctor` maintains the repository's `post-rewrite` capture dispatcher;
+read-only reviewers use `doctor --check`. `graph remap-revisions` records
+plan-local lineage, not new verification. Follow `shared/vcs-detection.md`.
