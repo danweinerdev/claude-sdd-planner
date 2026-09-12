@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
@@ -51,6 +52,13 @@ type Root struct {
 	// nil for repositories which never explicitly selected fork authority.
 	DecisionView        *decisionview.ConsumerCapture
 	DecisionDiagnostics []Diagnostic
+
+	// PlanDecisions is every Plans/<Name>/<Name>-Decisions.json under the
+	// root (Designs/PlanDecisions), loaded once; DecisionIndex is the
+	// root-wide lookup over them. A malformed file is carried with its Err
+	// so a rule can report it; it contributes no entries.
+	PlanDecisions []decisions.PlanFile
+	DecisionIndex *decisions.Index
 
 	// repoCache memoizes vcs.Detect per directory for this Root's lifetime.
 	// One validation pass detects the same handful of directories (the
@@ -277,6 +285,8 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 		}
 	}
 	r.addDecisionScopeDiagnostics()
+	r.PlanDecisions, _ = decisions.LoadRoot(dir)
+	r.DecisionIndex = decisions.NewIndex(r.PlanDecisions)
 	return r, nil
 }
 

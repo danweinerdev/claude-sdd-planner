@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
@@ -348,6 +349,21 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 		}
 		out.items[src.Rel] = per
 	}
+	// Plan decisions (Designs/PlanDecisions) are citable and fingerprintable
+	// like any requirement: the item text is the normalized statement, so a
+	// node citing `pd-…` carries an intent hash that goes stale only if the
+	// entry changes — which, entries being immutable, means never.
+	for _, file := range out.index.PlanDecisions() {
+		if file.Err != nil {
+			continue
+		}
+		per := map[string]intent.Item{}
+		for _, e := range file.Entries {
+			normalized := intent.Normalize(e.Statement)
+			per[e.ID] = intent.Item{ID: e.ID, Family: "PD", Normalized: normalized, Hash: intent.Hash(normalized)}
+		}
+		out.items[file.Rel] = per
+	}
 	// Coverage is an exit code over the plan's OWN requirement surface
 	// (DD-4): only specs the plan's README directly relates put their ACs
 	// on the coverage demand — and the demand is PER SPEC. Transitively
@@ -542,6 +558,10 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				if status != "accepted" {
 					add(id, "cites decision %s with status %q; live work cites accepted decisions", cited, status)
 				}
+				continue
+			}
+			if _, _, isRef := decisions.ParseRef(cited); isRef {
+				add(id, "cites %q, which no plan under the planning root records; record it with `sdd decide add --plan <plan> --statement ...` or cite the recorded id", cited)
 				continue
 			}
 			add(id, "cites %q, which resolves in no related spec, design, or decision ledger%s", cited, sources.unrelatedHint(cited))

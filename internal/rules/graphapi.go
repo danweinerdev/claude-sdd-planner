@@ -13,6 +13,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 )
 
 // RelatedIdentifierSources returns every artifact whose identifiers `a` may
@@ -49,7 +51,17 @@ type CitationIndex struct {
 	ambiguous map[string][]string
 	defined   map[string]map[string][]string // sourceRel -> family -> ids
 	sources   []*Artifact
+	// decisions resolves plan-decision citations (`pd-…` and
+	// `<Plan>:pd-…`, Designs/PlanDecisions) from the perspective of
+	// citingPlan: a bare id resolves in the citing plan's own file first,
+	// then in the one other plan that carries it, else it is ambiguous.
+	decisions  *decisions.Index
+	citingPlan string
 }
+
+// KindPlanDecisions is CitationHit.Kind for a plan-decision hit; SourceRel
+// is then the decisions file's root-relative path and Qualifier the plan.
+const KindPlanDecisions = "decisions"
 
 // BuildCitationIndex walks the artifact's transitive related graph (specs
 // and designs) and registers every defined id under three spellings: bare,
@@ -57,7 +69,64 @@ type CitationIndex struct {
 // "M1:AC-01"). Any spelling claimed by two different (source, id) pairs
 // resolves for neither and records qualified suggestions instead.
 func BuildCitationIndex(r *Root, a *Artifact) *CitationIndex {
-	return buildCitationIndexFrom(relatedSources(r, a))
+	x := buildCitationIndexFrom(relatedSources(r, a))
+	x.decisions = r.DecisionIndex
+	x.citingPlan = citingPlanOf(r, a)
+	return x
+}
+
+// citingPlanOf names the plan an artifact cites from: the plan itself, a
+// phase's plan, or a review's reviewed plan. "" for artifacts outside any
+// plan.
+func citingPlanOf(r *Root, a *Artifact) string {
+	rel := a.Rel
+	if a.Kind() == "phase" {
+		if plan := metaStr(a.Meta, "plan"); plan != "" {
+			return plan
+		}
+	}
+	if a.Kind() == "review" {
+		if ref, ok := a.Meta["review_of"].(string); ok {
+			if target := resolveRef(r, ref); target != nil {
+				rel = target.Rel
+			}
+		}
+	}
+	if strings.HasPrefix(rel, "Plans/") {
+		rest := strings.TrimPrefix(rel, "Plans/")
+		if i := strings.IndexByte(rest, '/'); i > 0 {
+			return rest[:i]
+		}
+	}
+	return ""
+}
+
+// PlanDecisionHit renders a located plan decision as a citation hit.
+func PlanDecisionHit(l decisions.Located) CitationHit {
+	return CitationHit{
+		SourceRel: "Plans/" + l.Plan + "/" + l.Plan + "-Decisions.json",
+		Qualifier: l.Plan, ID: l.Entry.ID, Kind: KindPlanDecisions,
+	}
+}
+
+// CitingPlan returns the plan this index resolves bare decision ids for.
+func (x *CitationIndex) CitingPlan() string { return x.citingPlan }
+
+// PlanDecisions returns the decision files this index can resolve into.
+func (x *CitationIndex) PlanDecisions() []decisions.PlanFile {
+	if x.decisions == nil {
+		return nil
+	}
+	return x.decisions.Files()
+}
+
+// DecisionSuccessor reports the entry that supersedes a plan-decision id,
+// if any plan under the root recorded one.
+func (x *CitationIndex) DecisionSuccessor(id string) (decisions.Located, bool) {
+	if x.decisions == nil {
+		return decisions.Located{}, false
+	}
+	return x.decisions.SuccessorOf(id)
 }
 
 // CitationKey keys one resolved (source, id) pair the way every per-spec
@@ -123,13 +192,27 @@ func buildCitationIndexFrom(sources []*Artifact) *CitationIndex {
 // Resolve returns the hit for a citation spelling, when exactly one source
 // claims it.
 func (x *CitationIndex) Resolve(citation string) (CitationHit, bool) {
-	hit, ok := x.byKey[citation]
-	return hit, ok
+	if hit, ok := x.byKey[citation]; ok {
+		return hit, true
+	}
+	if x.decisions != nil {
+		if _, _, isRef := decisions.ParseRef(citation); isRef {
+			if l, ok := x.decisions.Resolve(citation, x.citingPlan); ok {
+				return PlanDecisionHit(l), true
+			}
+		}
+	}
+	return CitationHit{}, false
 }
 
 // Ambiguous returns the qualified spellings competing for a citation, or
 // nil when the citation is not ambiguous.
 func (x *CitationIndex) Ambiguous(citation string) []string {
+	if x.decisions != nil {
+		if amb := x.decisions.Ambiguous(citation, x.citingPlan); len(amb) > 0 {
+			return amb
+		}
+	}
 	return append([]string(nil), x.ambiguous[citation]...)
 }
 

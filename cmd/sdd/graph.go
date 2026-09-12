@@ -848,6 +848,13 @@ func compileCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("compile: %w", err)
 			}
+			// Handoff for decisions (Designs/PlanDecisions DD-4): the related
+			// designs' DD bullets are copied into the plan's decisions file
+			// before resolution so nodes can cite them by `pd-` id at once.
+			dsync, err := gcompile.SyncDesignDecisions(root, repoRoot, plan, time.Now().Format("2006-01-02"))
+			if err != nil {
+				return err
+			}
 			res, findings, err := gcompile.Run(root, repoRoot, plan)
 			if err != nil {
 				return err
@@ -876,13 +883,14 @@ func compileCmd() *cobra.Command {
 					views[i] = relPath(v)
 				}
 				return writeJSON(struct {
-					OK       bool                         `json:"ok"`
-					Graph    string                       `json:"graph"`
-					Added    []string                     `json:"added"`
-					Hashes   map[string]map[string]string `json:"intent_hashes,omitempty"`
-					Views    []string                     `json:"views,omitempty"`
-					Consumed string                       `json:"consumed"`
-				}{true, relPath(res.GraphPath), res.Added, res.Hashes, views, relPath(res.Consumed)})
+					OK        bool                         `json:"ok"`
+					Graph     string                       `json:"graph"`
+					Added     []string                     `json:"added"`
+					Hashes    map[string]map[string]string `json:"intent_hashes,omitempty"`
+					Views     []string                     `json:"views,omitempty"`
+					Consumed  string                       `json:"consumed"`
+					Decisions *gcompile.DecisionSync       `json:"decisions,omitempty"`
+				}{true, relPath(res.GraphPath), res.Added, res.Hashes, views, relPath(res.Consumed), dsync})
 			}
 			hashed := 0
 			for _, m := range res.Hashes {
@@ -890,6 +898,9 @@ func compileCmd() *cobra.Command {
 			}
 			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d intent fingerprint(s) embedded, %d view(s) rendered); consumed %s\n",
 				len(res.Added), relPath(res.GraphPath), hashed, len(res.Views), relPath(res.Consumed))
+			if dsync != nil && len(dsync.Added) > 0 {
+				fmt.Fprintf(c.OutOrStdout(), "recorded %d design decision(s) in %s\n", len(dsync.Added), relPath(dsync.Path))
+			}
 			return nil
 		},
 	}
