@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -129,7 +130,11 @@ func Decode(raw []byte) ([]Entry, error) {
 	if err := dec.Decode(&entries); err != nil {
 		return nil, fmt.Errorf("decisions file is not valid: %s", istore.DescribeJSONError(raw, err))
 	}
-	if dec.More() {
+	if entries == nil {
+		return nil, errors.New("decisions file is not valid: top-level value must be a non-null array")
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return nil, errors.New("decisions file is not valid: trailing content after the array")
 	}
 	seen := map[string]int{}
@@ -199,12 +204,13 @@ func Load(path string) ([]Entry, error) {
 	return entries, nil
 }
 
-// Lookup is what Append needs from the root-wide index: resolution of a
-// superseded reference from the writing plan's perspective, and the
-// successor an id already has anywhere under the root. A nil Lookup limits
-// both checks to the file being written.
+// Lookup is what Append needs from the root-wide index: collision detection,
+// resolution of a superseded reference from the writing plan's perspective,
+// and the successor an id already has anywhere under the root. A nil Lookup
+// limits all checks to the file being written.
 type Lookup interface {
 	Resolve(ref, from string) (Located, bool)
+	EntriesWithID(id string) []Located
 	SuccessorsOf(id string) []Located
 }
 
@@ -256,17 +262,24 @@ func Append(path, statement, supersedes, source string, today string, from strin
 				return AppendResult{}, fmt.Errorf("%s: %w", path, err)
 			}
 		}
+		if index != nil {
+			for _, existing := range index.EntriesWithID(entry.ID) {
+				if Normalize(existing.Entry.Statement) != entry.Statement {
+					return AppendResult{}, fmt.Errorf("decide: id %s is already recorded in plan %s for a different statement:\n  existing: %s\n  proposed: %s\nreword the statement", entry.ID, existing.Plan, existing.Entry.Statement, entry.Statement)
+				}
+			}
+		}
 		for _, e := range entries {
 			if e.ID != entry.ID {
 				continue
 			}
-			if e.Statement == entry.Statement {
+			if Normalize(e.Statement) == entry.Statement {
 				return AppendResult{Entry: e, Created: false, Path: path}, nil
 			}
 			return AppendResult{}, fmt.Errorf("decide: id %s is already recorded for a different statement:\n  existing: %s\n  proposed: %s\nreword the statement", entry.ID, e.Statement, entry.Statement)
 		}
 		for _, ref := range entry.SupersededRefs() {
-			target, ok := resolveIn(entries, ref)
+			target, ok := resolveIn(entries, ref, from)
 			if !ok && index != nil {
 				if l, found := index.Resolve(ref, from); found {
 					target, ok = l.Entry, true
@@ -278,16 +291,21 @@ func Append(path, statement, supersedes, source string, today string, from strin
 			if target.ID == entry.ID {
 				return AppendResult{}, fmt.Errorf("decide: a decision cannot supersede itself (%s)", entry.ID)
 			}
-			// A decision has at most one successor, root-wide. A second
+			// A decision has at most one distinct successor identity root-wide. A second
 			// writer that raced in on another plan is refused here rather
 			// than silently forking the history; the reconciliation is one
 			// new entry that supersedes both (Index.Conflicts).
 			var successors []string
 			if succ, already := supersededBy(entries, target.ID); already {
-				successors = append(successors, succ)
+				if succ != entry.ID {
+					successors = append(successors, succ)
+				}
 			}
 			if index != nil {
 				for _, l := range index.SuccessorsOf(target.ID) {
+					if l.Entry.ID == entry.ID {
+						continue // the same content-addressed successor copied into another plan
+					}
 					successors = appendUniqueString(successors, l.Plan+":"+l.Entry.ID)
 				}
 			}
@@ -300,15 +318,13 @@ func Append(path, statement, supersedes, source string, today string, from strin
 		if err != nil {
 			return AppendResult{}, err
 		}
-		var writeErr error
-		if art.Exists {
-			writeErr = istore.WriteAtomicExpecting(path, string(out), digest)
-		} else {
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				return AppendResult{}, err
-			}
-			writeErr = istore.WriteAtomic(path, string(out))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return AppendResult{}, err
 		}
+		// WriteAtomicExpecting treats an empty digest as expected absence, so
+		// first creation has the same CAS fence as replacement. A writer that
+		// lost the creation race re-reads and reapplies its append.
+		writeErr := istore.WriteAtomicExpecting(path, string(out), digest)
 		if writeErr == nil {
 			return AppendResult{Entry: entry, Created: true, Path: path}, nil
 		}
@@ -317,13 +333,15 @@ func Append(path, statement, supersedes, source string, today string, from strin
 			return AppendResult{}, writeErr
 		}
 	}
-	return AppendResult{}, fmt.Errorf("decide: gave up after %d concurrent-write collisions on %s", 16, path)
+	return AppendResult{}, fmt.Errorf("decide: gave up after %d concurrent-write collisions on %s", attempts, path)
 }
 
 // resolveIn finds a bare or same-plan-qualified id inside one file's entries.
-func resolveIn(entries []Entry, ref string) (Entry, bool) {
-	_, id, ok := ParseRef(ref)
-	if !ok {
+// An explicit qualifier names a specific plan, so another plan's qualifier
+// must resolve through the derived index even when this file carries the id.
+func resolveIn(entries []Entry, ref, from string) (Entry, bool) {
+	plan, id, ok := ParseRef(ref)
+	if !ok || (plan != "" && plan != from) {
 		return Entry{}, false
 	}
 	for _, e := range entries {
@@ -393,6 +411,10 @@ func LoadRoot(planningRoot string) ([]PlanFile, error) {
 		planDir := filepath.Join(plansDir, d.Name())
 		path := PathFor(planDir)
 		if _, err := os.Stat(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			out = append(out, PlanFile{Plan: d.Name(), Path: path, Rel: "Plans/" + d.Name() + "/" + filepath.Base(path), Err: err})
 			continue
 		}
 		pf := PlanFile{Plan: d.Name(), Path: path, Rel: "Plans/" + d.Name() + "/" + filepath.Base(path)}
@@ -403,6 +425,42 @@ func LoadRoot(planningRoot string) ([]PlanFile, error) {
 	return out, nil
 }
 
+// ValidatedIndex builds a decision index only when every discovered per-plan
+// file decoded successfully and same-id copies have the same normalized
+// statement. Authority-sensitive callers must not derive a partial or
+// collision-ambiguous view.
+func ValidatedIndex(files []PlanFile) (*Index, error) {
+	seen := map[string]Located{}
+	for _, file := range files {
+		if file.Err != nil {
+			return nil, fmt.Errorf("per-plan decisions snapshot is incomplete: %s: %w", file.Rel, file.Err)
+		}
+		for _, entry := range file.Entries {
+			located := Located{Plan: file.Plan, Entry: entry}
+			if prior, ok := seen[entry.ID]; ok && Normalize(prior.Entry.Statement) != Normalize(entry.Statement) {
+				return nil, fmt.Errorf("decision authority has id collision %s between plans %s and %s:\n  %s: %s\n  %s: %s", entry.ID, prior.Plan, file.Plan, prior.Plan, prior.Entry.Statement, file.Plan, entry.Statement)
+			}
+			seen[entry.ID] = located
+		}
+	}
+	return NewIndex(files), nil
+}
+
+// LoadValidatedIndex reads per-plan files and derives a complete cross-plan
+// reference index. It stores no global ledger and grants no root-wide authority:
+// callers must select the plan whose decisions they intend to consume.
+func LoadValidatedIndex(planningRoot string) ([]PlanFile, *Index, error) {
+	files, err := LoadRoot(planningRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	index, err := ValidatedIndex(files)
+	if err != nil {
+		return files, nil, err
+	}
+	return files, index, nil
+}
+
 // Located is an entry together with the plan that carries it.
 type Located struct {
 	Plan  string `json:"plan"`
@@ -411,15 +469,21 @@ type Located struct {
 
 // Index is the root-wide lookup over every plan's decisions.
 type Index struct {
-	files    []PlanFile
-	byID     map[string][]Located // an id compiled into two plans appears twice
-	bySource map[string][]Located // e.g. "Designs/X:DD-3" -> the compiled entries
+	files      []PlanFile
+	byID       map[string][]Located // an id compiled into two plans appears twice
+	bySource   map[string][]Located // e.g. "Designs/X:DD-3" -> the compiled entries
+	successors map[string][]Located // superseded id -> entries that supersede it
 }
 
 // NewIndex builds the lookup. Malformed files contribute nothing; the
 // caller reports PlanFile.Err separately.
 func NewIndex(files []PlanFile) *Index {
-	x := &Index{files: files, byID: map[string][]Located{}, bySource: map[string][]Located{}}
+	x := &Index{
+		files:      files,
+		byID:       map[string][]Located{},
+		bySource:   map[string][]Located{},
+		successors: map[string][]Located{},
+	}
 	for _, f := range files {
 		if f.Err != nil {
 			continue
@@ -430,9 +494,23 @@ func NewIndex(files []PlanFile) *Index {
 			if e.Source != "" {
 				x.bySource[e.Source] = append(x.bySource[e.Source], l)
 			}
+			seenTargets := map[string]bool{}
+			for _, ref := range e.SupersededRefs() {
+				if _, id, ok := ParseRef(ref); ok && !seenTargets[id] {
+					x.successors[id] = append(x.successors[id], l)
+					seenTargets[id] = true
+				}
+			}
 		}
 	}
 	return x
+}
+
+// EntriesWithID returns every plan-local occurrence of id. Identical
+// content-addressed copies are valid; callers use the statements to refuse a
+// truncated-digest collision instead of silently treating it as a copy.
+func (x *Index) EntriesWithID(id string) []Located {
+	return append([]Located(nil), x.byID[id]...)
 }
 
 // BySource returns the entries compiled from one provenance reference
@@ -502,21 +580,7 @@ func (x *Index) Ambiguous(ref, from string) []string {
 // than one is a conflict (two plans raced to supersede the same decision);
 // see Conflicts.
 func (x *Index) SuccessorsOf(id string) []Located {
-	var out []Located
-	for _, f := range x.files {
-		if f.Err != nil {
-			continue
-		}
-		for _, e := range f.Entries {
-			for _, ref := range e.SupersededRefs() {
-				if _, sid, ok := ParseRef(ref); ok && sid == id {
-					out = append(out, Located{Plan: f.Plan, Entry: e})
-					break
-				}
-			}
-		}
-	}
-	return out
+	return append([]Located(nil), x.successors[id]...)
 }
 
 // SuccessorOf returns the entry that supersedes id anywhere under the root.
@@ -537,32 +601,129 @@ type Conflict struct {
 	Successors []Located `json:"successors"`
 }
 
-// Conflicts lists every id that two or more entries supersede. Per-file
-// CAS cannot prevent two plans from superseding the same decision on
-// different branches; this is where the merge surfaces it. Reconciliation
-// is one new entry whose `supersedes` lists every competing successor.
+// Conflicts lists every id whose distinct successor branches still have more
+// than one live descendant. Per-file CAS cannot prevent two plans from
+// superseding the same decision on different branches; this is where the merge
+// surfaces it. Advancing only one branch does not erase the fork. It clears
+// only when one reconciling descendant supersedes every live branch. Copies of
+// the same content-addressed successor id are one branch, not a conflict.
 func (x *Index) Conflicts() []Conflict {
 	var out []Conflict
+	liveMemo := map[string]map[string]Located{}
 	for id := range x.byID {
-		succ := x.SuccessorsOf(id)
-		if len(succ) < 2 {
+		immediate := x.uniqueSuccessors(id)
+		if len(immediate) < 2 {
 			continue
 		}
-		// A successor that is itself superseded by a reconciling entry no
-		// longer competes.
-		var live []Located
-		for _, s := range succ {
-			if len(x.SuccessorsOf(s.Entry.ID)) == 0 {
-				live = append(live, s)
+		var frontiers []map[string]Located
+		liveByID := map[string]Located{}
+		for _, successor := range immediate {
+			frontier := x.liveDescendants(successor.Entry.ID, liveMemo, map[string]bool{})
+			frontiers = append(frontiers, frontier)
+			for liveID, live := range frontier {
+				liveByID[liveID] = live
 			}
 		}
-		if len(live) < 2 {
+		// A later decision reconciles the original fork when every immediate
+		// branch reaches the same current frontier. If that shared descendant
+		// later forks again, Conflicts reports the new fork at that descendant
+		// rather than incorrectly reviving this already-reconciled one.
+		converged := true
+		for i := 1; i < len(frontiers); i++ {
+			if !sameLocatedIDs(frontiers[0], frontiers[i]) {
+				converged = false
+				break
+			}
+		}
+		if converged {
 			continue
 		}
+		if len(liveByID) < 2 {
+			continue
+		}
+		live := make([]Located, 0, len(liveByID))
+		for _, successor := range liveByID {
+			live = append(live, successor)
+		}
+		sort.Slice(live, func(i, j int) bool {
+			if live[i].Entry.ID != live[j].Entry.ID {
+				return live[i].Entry.ID < live[j].Entry.ID
+			}
+			return live[i].Plan < live[j].Plan
+		})
 		out = append(out, Conflict{ID: id, Successors: live})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+func (x *Index) uniqueSuccessors(id string) []Located {
+	byID := map[string]Located{}
+	for _, successor := range x.SuccessorsOf(id) {
+		if _, seen := byID[successor.Entry.ID]; !seen {
+			byID[successor.Entry.ID] = successor
+		}
+	}
+	out := make([]Located, 0, len(byID))
+	for _, successor := range byID {
+		out = append(out, successor)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Entry.ID < out[j].Entry.ID })
+	return out
+}
+
+func (x *Index) liveDescendants(id string, memo map[string]map[string]Located, visiting map[string]bool) map[string]Located {
+	if live, ok := memo[id]; ok {
+		return live
+	}
+	if visiting[id] {
+		// Supersession histories should be DAGs, but a malformed or synthetic
+		// index can contain a cycle. Treat the back-edge identity as a live
+		// frontier so traversal terminates without pretending the cycle erased
+		// the branch.
+		return x.locatedIdentity(id)
+	}
+	visiting[id] = true
+	defer delete(visiting, id)
+	successors := x.uniqueSuccessors(id)
+	if len(successors) == 0 {
+		live := x.locatedIdentity(id)
+		memo[id] = live
+		return live
+	}
+	live := map[string]Located{}
+	for _, successor := range successors {
+		for liveID, descendant := range x.liveDescendants(successor.Entry.ID, memo, visiting) {
+			live[liveID] = descendant
+		}
+	}
+	memo[id] = live
+	return live
+}
+
+func (x *Index) locatedIdentity(id string) map[string]Located {
+	if hits := x.byID[id]; len(hits) > 0 {
+		chosen := hits[0]
+		for _, hit := range hits[1:] {
+			if hit.Plan < chosen.Plan {
+				chosen = hit
+			}
+		}
+		return map[string]Located{id: chosen}
+	}
+	return map[string]Located{}
+}
+
+func sameLocatedIDs(a, b map[string]Located) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id := range a {
+		if _, ok := b[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // CurrentEntry is one line of `sdd decide current`: an id, the plans that

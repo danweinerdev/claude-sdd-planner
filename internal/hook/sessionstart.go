@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 // maxStandingDecisions bounds the number of standing decisions injected. Entries
@@ -18,17 +19,20 @@ func SessionStartContext(projectDir string) string {
 	return sessionStartContext(projectDir, 16*1024)
 }
 
-const truncatedNotice = "> **Warning:** Standing decisions are truncated. Read the full set with `sdd decide current`.\n"
+const incompleteDecisionsNotice = "> **Warning:** Plan decisions could not be loaded completely. No standing decision context was injected; run `sdd validate` and repair every SDD190 finding before relying on the per-plan decision files.\n"
 
 // sessionStartContext keeps the context budget injectable for focused tests.
 func sessionStartContext(projectDir string, byteBudget int) string {
 	root := findPlanningRoot(projectDir)
-	files, err := decisions.LoadRoot(root)
-	if err != nil {
+	plan, ok := singleActivePlan(root)
+	if !ok {
 		return ""
 	}
-	index := decisions.NewIndex(files)
-	current := index.Current("")
+	_, index, err := decisions.LoadValidatedIndex(root)
+	if err != nil {
+		return incompleteDecisionsNotice
+	}
+	current := index.Current(plan)
 	if len(current) == 0 {
 		return ""
 	}
@@ -38,13 +42,50 @@ func sessionStartContext(projectDir string, byteBudget int) string {
 		lines = append(lines, "- "+e.ID+" ["+strings.Join(e.Plans, ", ")+"]: "+e.Statement)
 	}
 
-	header := "## Standing decisions\n" +
-		"Accepted plan decisions — standing constraints on planning and implementation. " +
-		"A new decision that contradicts one must stop for user reconciliation:\n"
+	header := "## Standing decisions for plan `" + plan + "`\n" +
+		"Accepted decisions carried by this active plan — constraints for that plan's planning and implementation. " +
+		"A new decision for that plan that contradicts one must stop for user reconciliation:\n"
 	if len(lines) <= maxStandingDecisions && fitsBudget(byteBudget, header+strings.Join(lines, "\n")) {
 		return header + strings.Join(lines, "\n")
 	}
+	truncatedNotice := "> **Warning:** Standing decisions are truncated. Read the full set with `sdd decide current --plan " + plan + "`.\n"
 	return budgetedDecisionContext(header, lines, byteBudget, truncatedNotice)
+}
+
+// singleActivePlan selects a plan only when exactly one Plans/*/README.md has
+// valid frontmatter with status: active. Any unreadable or malformed candidate
+// makes selection unsafe, so the hook declines to guess.
+func singleActivePlan(root string) (string, bool) {
+	entries, err := os.ReadDir(filepath.Join(root, "Plans"))
+	if err != nil {
+		return "", false
+	}
+	active := ""
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		rel := filepath.ToSlash(filepath.Join("Plans", entry.Name(), "README.md"))
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", false
+		}
+		artifact := rules.ParseArtifactBytes(raw, rel)
+		if artifact.ParseStage != "" && artifact.ParseStage != "SDD003" {
+			return "", false
+		}
+		if artifact.Kind() != "plan" || artifact.Status() != "active" {
+			continue
+		}
+		if active != "" {
+			return "", false
+		}
+		active = entry.Name()
+	}
+	return active, active != ""
 }
 
 func budgetedDecisionContext(header string, lines []string, byteBudget int, notice string) string {

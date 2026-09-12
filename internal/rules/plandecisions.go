@@ -1,9 +1,10 @@
 package rules
 
 // Plan decisions (Designs/PlanDecisions): the per-plan decisions file is a
-// record the validator reads but never writes. Three rules: a malformed
+// record the validator reads but never writes. Four rules: a malformed
 // file (SDD190), a live citation of a superseded decision (SDD191,
-// advisory), and competing successors after a merge (SDD192).
+// advisory), competing successors after a merge (SDD192), and unresolved or
+// ambiguous Markdown citations (SDD193).
 
 import (
 	"regexp"
@@ -28,10 +29,22 @@ func pdEntry(statement, date, supersedes string) string {
 func init() {
 	Register(&Rule{
 		Code: "SDD190", Severity: Error, Native: true,
-		What: "a plan's decisions file (Plans/<Name>/<Name>-Decisions.json) is malformed",
+		What: "a plan's decisions file is malformed or its decision identity collides with another plan",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			seen := map[string]decisions.Located{}
 			for _, f := range r.PlanDecisions {
 				if f.Err == nil {
+					for _, entry := range f.Entries {
+						if prior, exists := seen[entry.ID]; exists && decisions.Normalize(prior.Entry.Statement) != decisions.Normalize(entry.Statement) {
+							emit(Diagnostic{
+								Code: "SDD190", Severity: Error, Path: f.Rel, Line: 1,
+								Message:    "Decision identity `" + entry.ID + "` names a different statement in plan `" + prior.Plan + "`.",
+								Correction: "Stop and reconcile the colliding records; do not silently merge different statements or select one by plan order.",
+							})
+						} else if !exists {
+							seen[entry.ID] = decisions.Located{Plan: f.Plan, Entry: entry}
+						}
+					}
 					continue
 				}
 				emit(Diagnostic{
@@ -140,6 +153,66 @@ func init() {
 			"Plans/P/P-Decisions.json": planDecisionsFixture(pdEntry("p wins", "2026-01-02", "Q:"+decisions.IDFor("base"))),
 			"Plans/R/README.md":        validPlan(false),
 			"Plans/R/R-Decisions.json": planDecisionsFixture(pdEntry("r wins", "2026-01-02", "Q:"+decisions.IDFor("base"))),
+		}}},
+	})
+
+	Register(&Rule{
+		Code: "SDD193", Severity: Error, Native: true,
+		What: "a live plan or phase contains an unresolved or ambiguous plan-decision citation",
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			authority, err := r.ValidatedDecisionIndex()
+			if err != nil {
+				// SDD190 owns malformed authority files. Avoid deriving
+				// additional unknown-citation claims from a partial snapshot.
+				return
+			}
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || !isLiveArtifact(a) {
+					continue
+				}
+				if kind := a.Kind(); kind != "plan" && kind != "phase" {
+					continue
+				}
+				index := BuildCitationIndex(r, a)
+				index.decisions = authority
+				seen := map[string]bool{}
+				for _, cited := range citePDRe.FindAllString(citationBody(a), -1) {
+					if seen[cited] {
+						continue
+					}
+					seen[cited] = true
+					if _, ok := index.Resolve(cited); ok {
+						continue
+					}
+					if ambiguous := index.Ambiguous(cited); len(ambiguous) > 0 {
+						emit(Diagnostic{
+							Code: "SDD193", Severity: Error, Path: a.Rel, Line: citationLine(a, cited),
+							Message:    "Plan-decision citation `" + cited + "` is ambiguous; it is carried by " + strings.Join(ambiguous, ", ") + ".",
+							Correction: "Replace the bare citation with one of the listed plan-qualified spellings.",
+						})
+						continue
+					}
+					emit(Diagnostic{
+						Code: "SDD193", Severity: Error, Path: a.Rel, Line: citationLine(a, cited),
+						Message:    "Plan-decision citation `" + cited + "` is not recorded in any plan under the planning root.",
+						Correction: "Correct the citation or record the exact user-approved decision with `sdd decide add`.",
+					})
+				}
+			}
+		},
+		Bad: []Example{
+			{Name: "unknown-plan-decision-citation", Files: map[string]string{
+				"Plans/Sample/README.md": strReplace(validPlan(false), "## Overview\n\nText.", "## Overview\n\nGoverned by pd-deadbeef."),
+			}},
+			{Name: "ambiguous-plan-decision-citation", Files: map[string]string{
+				"Plans/Sample/README.md":   strReplace(validPlan(false), "## Overview\n\nText.", "## Overview\n\nGoverned by "+decisions.IDFor("shared")+"."),
+				"Plans/A/A-Decisions.json": planDecisionsFixture(pdEntry("shared", "2026-01-01", "")),
+				"Plans/B/B-Decisions.json": planDecisionsFixture(pdEntry("shared", "2026-01-01", "")),
+			}},
+		},
+		Good: []Example{{Name: "resolved-plan-decision-citation", Files: map[string]string{
+			"Plans/Sample/README.md":             strReplace(validPlan(false), "## Overview\n\nText.", "## Overview\n\nGoverned by "+decisions.IDFor("current")+"."),
+			"Plans/Sample/Sample-Decisions.json": planDecisionsFixture(pdEntry("current", "2026-01-01", "")),
 		}}},
 	})
 }

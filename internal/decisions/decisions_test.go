@@ -1,9 +1,11 @@
 package decisions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -49,6 +51,71 @@ func TestAppendCreatesFileAndIsIdempotent(t *testing.T) {
 	raw, _ := os.ReadFile(path)
 	if !strings.HasSuffix(string(raw), "]\n") {
 		t.Fatalf("file is not canonical: %q", raw)
+	}
+}
+
+func TestAppendConcurrentFirstWritersLoseNoSuccessfulDecision(t *testing.T) {
+	const writers = 12
+	for trial := 0; trial < 20; trial++ {
+		path := PathFor(filepath.Join(t.TempDir(), "Plans", "P"))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		results := make(chan error, writers)
+		var wg sync.WaitGroup
+		for i := 0; i < writers; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				<-start
+				_, err := Append(path, fmt.Sprintf("decision %d", i), "", "", "2026-01-01", "P", nil)
+				results <- err
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+		close(results)
+
+		succeeded := 0
+		for err := range results {
+			if err != nil {
+				t.Errorf("trial %d: append failed: %v", trial, err)
+				continue
+			}
+			succeeded++
+		}
+		entries, err := Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != succeeded {
+			t.Fatalf("trial %d: %d successful appends but %d entries persisted", trial, succeeded, len(entries))
+		}
+	}
+}
+
+func TestAppendTreatsNormalizedExistingStatementAsIdentical(t *testing.T) {
+	path := PathFor(filepath.Join(t.TempDir(), "Plans", "P"))
+	statement := "Keep   spacing\nnormalized."
+	existing := Entry{ID: IDFor(statement), Date: "2026-01-01", Statement: statement}
+	raw, err := Encode([]Entry{existing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Append(path, "Keep spacing normalized.", "", "", "2026-01-02", "P", nil)
+	if err != nil {
+		t.Fatalf("normalized duplicate was treated as an id collision: %v", err)
+	}
+	if res.Created || res.Entry.ID != existing.ID {
+		t.Fatalf("normalized duplicate was not a no-op: %+v", res)
 	}
 }
 
@@ -149,6 +216,63 @@ func TestCrossPlanSupersedeAndCollapse(t *testing.T) {
 	}
 }
 
+func TestAppendRefusesCrossPlanIDCollisionWithoutChangingDestination(t *testing.T) {
+	const existingStatement = "decision 1454"
+	const collidingStatement = "decision 165661"
+	if IDFor(existingStatement) != "pd-0c071537" || IDFor(collidingStatement) != "pd-0c071537" {
+		t.Fatal("concrete SHA-256 prefix collision fixture changed")
+	}
+
+	root := t.TempDir()
+	p := PathFor(filepath.Join(root, "Plans", "P"))
+	q := PathFor(filepath.Join(root, "Plans", "Q"))
+	if _, err := Append(p, existingStatement, "", "", "2026-01-01", "P", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Append(q, "Q's existing decision.", "", "", "2026-01-01", "Q", nil); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := LoadRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := ValidatedIndex(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Append(q, collidingStatement, "", "", "2026-01-02", "Q", index); err == nil {
+		t.Fatal("cross-plan id collision was appended")
+	} else if !strings.Contains(err.Error(), "pd-0c071537") || !strings.Contains(err.Error(), existingStatement) || !strings.Contains(err.Error(), collidingStatement) {
+		t.Fatalf("collision error lacks actionable detail: %v", err)
+	}
+	after, err := os.ReadFile(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("destination changed on refused collision:\n--- before\n%s--- after\n%s", before, after)
+	}
+}
+
+func TestValidatedIndexRefusesCrossPlanIDCollision(t *testing.T) {
+	const first = "decision 1454"
+	const second = "decision 165661"
+	files := []PlanFile{
+		{Plan: "P", Rel: "Plans/P/P-Decisions.json", Entries: []Entry{{ID: IDFor(first), Date: "2026-01-01", Statement: first}}},
+		{Plan: "Q", Rel: "Plans/Q/Q-Decisions.json", Entries: []Entry{{ID: IDFor(second), Date: "2026-01-02", Statement: second}}},
+	}
+	if _, err := ValidatedIndex(files); err == nil {
+		t.Fatal("validated index accepted distinct statements with the same id")
+	} else if !strings.Contains(err.Error(), "pd-0c071537") || !strings.Contains(err.Error(), "P") || !strings.Contains(err.Error(), "Q") {
+		t.Fatalf("collision error lacks plans and id: %v", err)
+	}
+}
+
 func TestDecodeIsStrict(t *testing.T) {
 	cases := map[string]string{
 		"unknown field":    `[{"id":"pd-00000000","date":"2026-01-01","statement":"x","rationale":"no"}]`,
@@ -157,6 +281,9 @@ func TestDecodeIsStrict(t *testing.T) {
 		"empty statement":  `[{"id":"` + IDFor("") + `","date":"2026-01-01","statement":""}]`,
 		"bad date":         `[{"id":"` + IDFor("x") + `","date":"yesterday","statement":"x"}]`,
 		"trailing content": `[] []`,
+		"trailing bracket": `[]]`,
+		"trailing brace":   `[]}`,
+		"null":             `null`,
 		"not an array":     `{}`,
 	}
 	for name, raw := range cases {
@@ -167,6 +294,20 @@ func TestDecodeIsStrict(t *testing.T) {
 	good := `[{"id":"` + IDFor("x") + `","date":"2026-01-01","statement":"x"}]`
 	if _, err := Decode([]byte(good)); err != nil {
 		t.Fatalf("canonical refused: %v", err)
+	}
+}
+
+func TestExplicitSupersessionQualifierIsHonored(t *testing.T) {
+	path := PathFor(filepath.Join(t.TempDir(), "Plans", "P"))
+	first, err := Append(path, "base", "", "", "2026-01-01", "P", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Append(path, "replacement", "Nonexistent:"+first.Entry.ID, "", "2026-01-02", "P", NewIndex(nil)); err == nil {
+		t.Fatal("qualified supersedes resolved against the local file despite naming another plan")
+	}
+	if _, err := Append(path, "replacement", "P:"+first.Entry.ID, "", "2026-01-02", "P", nil); err != nil {
+		t.Fatalf("matching-plan qualifier did not resolve locally: %v", err)
 	}
 }
 
@@ -300,6 +441,116 @@ func TestSecondSuccessorRefusedRootWideAndConflictsReconcile(t *testing.T) {
 	cur := x.Current("")
 	if len(cur) != 1 || cur[0].Statement != "Reconciled replacement." {
 		t.Fatalf("current = %+v", cur)
+	}
+}
+
+func TestConflictsFollowLiveDescendantBranchesUntilConvergence(t *testing.T) {
+	mk := func(statement, supersedes string) Entry {
+		return Entry{ID: IDFor(statement), Date: "2026-01-01", Statement: statement, Supersedes: supersedes}
+	}
+	base := mk("base", "")
+	b := mk("branch B", base.ID)
+	c := mk("branch C", base.ID)
+	d := mk("branch B update", b.ID)
+	x := NewIndex([]PlanFile{
+		{Plan: "A", Entries: []Entry{base}},
+		{Plan: "B", Entries: []Entry{b, d}},
+		{Plan: "C", Entries: []Entry{c}},
+	})
+	conflicts := x.Conflicts()
+	if len(conflicts) != 1 || conflicts[0].ID != base.ID || len(conflicts[0].Successors) != 2 {
+		t.Fatalf("live descendant fork was not reported: %+v", conflicts)
+	}
+	want := map[string]bool{c.ID: true, d.ID: true}
+	for _, successor := range conflicts[0].Successors {
+		delete(want, successor.Entry.ID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("conflict did not name both live descendants: %+v", conflicts[0].Successors)
+	}
+
+	reconciled := mk("converged", "B:"+d.ID+", C:"+c.ID)
+	x = NewIndex([]PlanFile{
+		{Plan: "A", Entries: []Entry{base}},
+		{Plan: "B", Entries: []Entry{b, d}},
+		{Plan: "C", Entries: []Entry{c}},
+		{Plan: "R", Entries: []Entry{reconciled}},
+	})
+	if conflicts := x.Conflicts(); len(conflicts) != 0 {
+		t.Fatalf("conflict survived actual branch convergence: %+v", conflicts)
+	}
+}
+
+func TestDuplicateSuccessorIdentityAcrossPlansIsNotAConflict(t *testing.T) {
+	base := Entry{ID: IDFor("base"), Date: "2026-01-01", Statement: "base"}
+	successor := Entry{ID: IDFor("replacement"), Date: "2026-01-02", Statement: "replacement", Supersedes: base.ID, Source: "Designs/X:DD-2"}
+	x, err := ValidatedIndex([]PlanFile{
+		{Plan: "A", Entries: []Entry{base}},
+		{Plan: "P", Entries: []Entry{successor}},
+		{Plan: "Q", Entries: []Entry{successor}},
+	})
+	if err != nil {
+		t.Fatalf("identical successor copies were rejected: %v", err)
+	}
+	if conflicts := x.Conflicts(); len(conflicts) != 0 {
+		t.Fatalf("identical successor copies were treated as competing branches: %+v", conflicts)
+	}
+}
+
+func TestReconciledForkIsNotRevivedByLaterFork(t *testing.T) {
+	mk := func(statement, supersedes string) Entry {
+		return Entry{ID: IDFor(statement), Date: "2026-01-01", Statement: statement, Supersedes: supersedes}
+	}
+	base := mk("base", "")
+	left := mk("left", base.ID)
+	right := mk("right", base.ID)
+	joined := mk("joined", "Left:"+left.ID+", Right:"+right.ID)
+	one := mk("later one", joined.ID)
+	two := mk("later two", joined.ID)
+	x := NewIndex([]PlanFile{
+		{Plan: "Base", Entries: []Entry{base}},
+		{Plan: "Left", Entries: []Entry{left}},
+		{Plan: "Right", Entries: []Entry{right}},
+		{Plan: "Joined", Entries: []Entry{joined}},
+		{Plan: "One", Entries: []Entry{one}},
+		{Plan: "Two", Entries: []Entry{two}},
+	})
+	conflicts := x.Conflicts()
+	if len(conflicts) != 1 || conflicts[0].ID != joined.ID {
+		t.Fatalf("later fork should be reported only at its origin: %+v", conflicts)
+	}
+}
+
+func TestConflictsHandlesTwentyFiveStageReconciledDiamondHistory(t *testing.T) {
+	mk := func(statement, supersedes string) Entry {
+		return Entry{ID: IDFor(statement), Date: "2026-01-01", Statement: statement, Supersedes: supersedes}
+	}
+	base := mk("diamond base", "")
+	entries := []Entry{base}
+	previous := base
+	for stage := 1; stage <= 25; stage++ {
+		left := mk(fmt.Sprintf("diamond stage %d left", stage), previous.ID)
+		right := mk(fmt.Sprintf("diamond stage %d right", stage), previous.ID)
+		joined := mk(fmt.Sprintf("diamond stage %d joined", stage), left.ID+", "+right.ID)
+		entries = append(entries, left, right, joined)
+		previous = joined
+	}
+
+	x := NewIndex([]PlanFile{{Plan: "History", Entries: entries}})
+	if conflicts := x.Conflicts(); len(conflicts) != 0 {
+		t.Fatalf("fully reconciled diamond history has conflicts: %+v", conflicts)
+	}
+}
+
+func TestConflictsHandlesSupersessionCycle(t *testing.T) {
+	base := Entry{ID: IDFor("cycle base"), Date: "2026-01-01", Statement: "cycle base"}
+	a := Entry{ID: IDFor("cycle a"), Date: "2026-01-01", Statement: "cycle a"}
+	b := Entry{ID: IDFor("cycle b"), Date: "2026-01-01", Statement: "cycle b"}
+	a.Supersedes = base.ID + ", " + b.ID
+	b.Supersedes = base.ID + ", " + a.ID
+	x := NewIndex([]PlanFile{{Plan: "Cycle", Entries: []Entry{base, a, b}}})
+	if conflicts := x.Conflicts(); len(conflicts) != 0 {
+		t.Fatalf("converged cycle was reported as a conflict: %+v", conflicts)
 	}
 }
 

@@ -311,6 +311,11 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compile: loading planning root: %w", err)
 	}
+	index, err := loaded.ValidatedDecisionIndex()
+	if err != nil {
+		return nil, fmt.Errorf("compile: refusing incomplete per-plan decisions snapshot: %w", err)
+	}
+	loaded.DecisionIndex = index
 	planRel := "Plans/" + plan + "/README.md"
 	planArt, ok := loaded.ByPath[planRel]
 	if !ok {

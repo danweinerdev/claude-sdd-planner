@@ -9,9 +9,8 @@ package compile
 //   - Anchor is the single resolver/embedder. It keys every embedded hash by
 //     the citation AS WRITTEN — qualified spellings included — so states'
 //     staleness lookups match what IntentSnapshot serves under the same keys.
-//   - Decision exemptions are resolution-based: a citation is exempt only
-//     when the loaded authority snapshot resolves it to an effective accepted
-//     decision. Decisions have no fingerprintable item, so Anchor skips them.
+//   - Plan decisions are fingerprintable like other citations. There is no
+//     decision-shaped exemption from intent anchoring or staleness checks.
 //   - Sources is one plan's citation-resolution snapshot. Split builds it once
 //     and shares it across the anchor and validate paths, so a spec edit
 //     landing mid-split cannot re-anchor children against text the gate did
@@ -50,8 +49,8 @@ func Anchor(n *model.Node, resolve Resolver) {
 }
 
 // Sources is one plan's citation-resolution snapshot: which ids exist (per
-// the validator's own reachability), their fingerprints, and the decision
-// plan decisions. It carries the same resolution opinion every consumer
+// the validator's own reachability), their fingerprints, and the per-plan
+// decisions. It carries the same resolution opinion every consumer
 // needs, built once, so embed, validate, and repair can never disagree about
 // what a citation means. It also carries the input resolver, so validation
 // and split anchor both citations and declared inputs from one snapshot.
@@ -146,10 +145,9 @@ func (s *Sources) ClassifyCitation(cited string) CitationDisposition {
 
 // IntentSnapshot is one plan's citation-disposition snapshot, resolved once:
 // the current fingerprint of every resolvable fingerprintable citation (keyed
-// by the citation AS WRITTEN) plus the set of legitimate exempt decisions.
-// Both halves come from the SAME source-resolution snapshot, so derive can
+// by the citation AS WRITTEN). All entries come from the same snapshot, so derive can
 // never disagree with what compile/split embedded — a citation that vanishes,
-// unlinks, or turns ambiguous lands in neither half and derives stale, while
+// unlinks, or turns ambiguous is absent and derives stale, while
 // every citation is fingerprintable, so an unhashed one is stale.
 type IntentSnapshot struct {
 	// Items maps cited id (as written) -> the resolved requirement item
@@ -160,8 +158,7 @@ type IntentSnapshot struct {
 
 // Hashes returns the hash half of the snapshot: cited id -> current
 // fingerprint. A cited id absent from the result does not currently resolve
-// to a fingerprintable requirement (deleted, unlinked, ambiguous, or a
-// decision).
+// to a fingerprintable requirement (deleted, unlinked, or ambiguous).
 func (s IntentSnapshot) Hashes() map[string]string {
 	out := make(map[string]string, len(s.Items))
 	for id, item := range s.Items {

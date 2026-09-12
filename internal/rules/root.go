@@ -80,6 +80,14 @@ type Root struct {
 	bareComputed    bool
 }
 
+// ValidatedDecisionIndex returns the derived cross-plan reference index or an
+// error when any discovered per-plan file was malformed or unreadable.
+// Validation rules may inspect PlanDecisions directly to report every SDD190;
+// mutation and compilation consumers must use this fail-closed view.
+func (r *Root) ValidatedDecisionIndex() (*decisions.Index, error) {
+	return decisions.ValidatedIndex(r.PlanDecisions)
+}
+
 // Artifact mirrors the Python validator's Artifact dataclass plus the parse
 // failure it would otherwise short-circuit on. A file that fails to parse
 // still gets an *Artifact* (so the _parse family's rules can run over it),
@@ -257,7 +265,11 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 			r.ByPath[rel] = a
 		}
 	}
-	r.PlanDecisions, _ = decisions.LoadRoot(dir)
+	var decisionErr error
+	r.PlanDecisions, decisionErr = decisions.LoadRoot(dir)
+	if decisionErr != nil {
+		return nil, decisionErr
+	}
 	r.DecisionIndex = decisions.NewIndex(r.PlanDecisions)
 	return r, nil
 }

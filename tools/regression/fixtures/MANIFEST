@@ -133,3 +133,5 @@ SDD181/unverifiable-retirement
 SDD190/malformed-decisions-file
 SDD191/cites-superseded
 SDD192/competing-successors
+SDD193/ambiguous-plan-decision-citation
+SDD193/unknown-plan-decision-citation

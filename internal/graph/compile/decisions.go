@@ -29,6 +29,11 @@ func SyncDesignDecisions(root, repoRoot, plan, today string) (*DecisionSync, err
 	if err != nil {
 		return nil, fmt.Errorf("compile: loading planning root: %w", err)
 	}
+	index, err := loaded.ValidatedDecisionIndex()
+	if err != nil {
+		return nil, fmt.Errorf("compile: refusing incomplete decision snapshot: %w", err)
+	}
+	loaded.DecisionIndex = index
 	planRel := "Plans/" + plan + "/README.md"
 	planArt, ok := loaded.ByPath[planRel]
 	if !ok {
@@ -70,8 +75,12 @@ func SyncDesignDecisions(root, repoRoot, plan, today string) (*DecisionSync, err
 				out.Added = append(out.Added, res.Entry)
 				// Later DDs in this run may supersede this one; refresh the
 				// index so BySource sees the entry just written.
-				files, _ := decisions.LoadRoot(root)
-				loaded.DecisionIndex = decisions.NewIndex(files)
+				files, index, loadErr := decisions.LoadValidatedIndex(root)
+				if loadErr != nil {
+					return out, fmt.Errorf("compile: refreshing decision snapshot after recording %s: %w", source, loadErr)
+				}
+				loaded.PlanDecisions = files
+				loaded.DecisionIndex = index
 			} else {
 				out.Skipped = append(out.Skipped, source)
 			}

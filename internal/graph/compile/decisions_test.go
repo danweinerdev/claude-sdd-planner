@@ -10,6 +10,20 @@ import (
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
+func TestNewSourcesRefusesMalformedPerPlanDecisions(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	other := filepath.Join(root, "Plans", "Other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisions.PathFor(other), []byte("null"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewSources(root, root, "SamplePlan"); err == nil {
+		t.Fatal("citation anchoring accepted an incomplete per-plan decisions index")
+	}
+}
+
 func TestSyncDesignDecisionsCopiesDDsVerbatimAndIsIdempotent(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
 	first, err := SyncDesignDecisions(root, root, "SamplePlan", "2026-09-11")
@@ -133,5 +147,58 @@ func TestSyncRecordsSupersessionDeclaredInDesign(t *testing.T) {
 	os.WriteFile(designPath, append(raw, []byte("- **DD-2**: Something.\n  Supersedes DD-9.\n")...), 0o644)
 	if _, err := SyncDesignDecisions(root, root, "SamplePlan", "2026-09-11"); err == nil {
 		t.Fatal("dangling supersedes accepted")
+	}
+}
+
+func TestSyncAllowsIdenticalSupersedingDesignDecisionCopiesAcrossPlans(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	designPath := filepath.Join(root, "Designs", "Sample", "README.md")
+	raw, err := os.ReadFile(designPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(designPath, append(raw, []byte("- **DD-2**: Replacement.\n  Supersedes DD-1. Decision: replacement.\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	otherDir := filepath.Join(root, "Plans", "Other")
+	if err := os.MkdirAll(otherDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherDir, "README.md"), []byte(fixturePlan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncDesignDecisions(root, root, "SamplePlan", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncDesignDecisions(root, root, "Other", "2026-01-02"); err != nil {
+		t.Fatalf("identical design successor could not be copied into a second plan: %v", err)
+	}
+	entries, err := decisions.Load(decisions.PathFor(otherDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[1].Supersedes != entries[0].ID {
+		t.Fatalf("second plan decisions = %+v", entries)
+	}
+}
+
+func TestSyncRefusesIncompleteDecisionSnapshot(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	badDir := filepath.Join(root, "Plans", "Other")
+	if err := os.MkdirAll(badDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisions.PathFor(badDir), []byte("[{broken]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncDesignDecisions(root, root, "SamplePlan", "2026-01-01"); err == nil {
+		t.Fatal("decision sync mutated against a partial decision snapshot")
+	}
+	entries, err := decisions.Load(decisions.PathFor(filepath.Join(root, "Plans", "SamplePlan")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("sync partially appended before refusing incomplete snapshot: %+v", entries)
 	}
 }

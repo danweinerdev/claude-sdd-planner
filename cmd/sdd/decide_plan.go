@@ -102,16 +102,44 @@ func decisionIndex() (string, *decisions.Index, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	files, err := decisions.LoadRoot(root)
+	_, index, err := decisions.LoadValidatedIndex(root)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("decide: %w", err)
 	}
-	for _, f := range files {
-		if f.Err != nil {
-			return "", nil, fmt.Errorf("decide: %v", f.Err)
-		}
+	return root, index, nil
+}
+
+func decidePlanDir(root, plan, verb string) (string, error) {
+	if plan == "" || plan == "." || plan == ".." || filepath.IsAbs(plan) ||
+		strings.ContainsAny(plan, `/\`) || strings.ContainsRune(plan, ':') || filepath.Clean(plan) != plan {
+		return "", fmt.Errorf("decide %s: plan %q must be a single directory name under Plans/", verb, plan)
 	}
-	return root, decisions.NewIndex(files), nil
+	plansDir := filepath.Join(root, "Plans")
+	plansInfo, err := os.Lstat(plansDir)
+	if err != nil || !plansInfo.IsDir() || plansInfo.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("decide %s: Plans/ must be a real directory under the planning root", verb)
+	}
+	planDir := filepath.Join(plansDir, plan)
+	info, err := os.Stat(planDir)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("decide %s: plan %q has no directory under Plans/", verb, plan)
+	}
+	realPlans, err := filepath.EvalSymlinks(plansDir)
+	if err != nil {
+		return "", fmt.Errorf("decide %s: resolving Plans/: %w", verb, err)
+	}
+	realPlan, err := filepath.EvalSymlinks(planDir)
+	if err != nil {
+		return "", fmt.Errorf("decide %s: resolving plan %q: %w", verb, plan, err)
+	}
+	rel, err := filepath.Rel(realPlans, realPlan)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("decide %s: plan %q resolves outside Plans/", verb, plan)
+	}
+	if linkInfo, err := os.Lstat(planDir); err != nil || linkInfo.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("decide %s: plan %q must be a real directory, not a symlink under Plans/", verb, plan)
+	}
+	return planDir, nil
 }
 
 func cmdDecideAdd(c *cobra.Command, plan, statement, supersedes, source string, asJSON bool) error {
@@ -119,9 +147,9 @@ func cmdDecideAdd(c *cobra.Command, plan, statement, supersedes, source string, 
 	if err != nil {
 		return err
 	}
-	planDir := filepath.Join(root, "Plans", plan)
-	if info, err := os.Stat(planDir); err != nil || !info.IsDir() {
-		return fmt.Errorf("decide: plan %q has no directory under Plans/", plan)
+	planDir, err := decidePlanDir(root, plan, "add")
+	if err != nil {
+		return err
 	}
 	res, err := decisions.Append(decisions.PathFor(planDir), statement, supersedes, source, time.Now().UTC().Format("2006-01-02"), plan, index)
 	if err != nil {
@@ -149,7 +177,11 @@ func cmdDecideList(c *cobra.Command, plan string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	path := decisions.PathFor(filepath.Join(root, "Plans", plan))
+	planDir, err := decidePlanDir(root, plan, "list")
+	if err != nil {
+		return err
+	}
+	path := decisions.PathFor(planDir)
 	entries, err := decisions.Load(path)
 	if err != nil {
 		return fmt.Errorf("decide: %w", err)
@@ -171,9 +203,14 @@ func cmdDecideList(c *cobra.Command, plan string, asJSON bool) error {
 }
 
 func cmdDecideCurrent(c *cobra.Command, plan string, asJSON bool) error {
-	_, index, err := decisionIndex()
+	root, index, err := decisionIndex()
 	if err != nil {
 		return err
+	}
+	if plan != "" {
+		if _, err := decidePlanDir(root, plan, "current"); err != nil {
+			return err
+		}
 	}
 	cur := index.Current(plan)
 	conflicts := index.Conflicts()
@@ -210,9 +247,14 @@ func cmdDecideCurrent(c *cobra.Command, plan string, asJSON bool) error {
 }
 
 func cmdDecideLookup(c *cobra.Command, ref, plan string, asJSON bool) error {
-	_, index, err := decisionIndex()
+	root, index, err := decisionIndex()
 	if err != nil {
 		return err
+	}
+	if plan != "" {
+		if _, err := decidePlanDir(root, plan, "lookup"); err != nil {
+			return err
+		}
 	}
 	chain, ok := index.Lookup(ref, plan)
 	if !ok {
@@ -254,9 +296,9 @@ func cmdDecideRender(c *cobra.Command, plan string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	planDir := filepath.Join(root, "Plans", plan)
-	if info, err := os.Stat(planDir); err != nil || !info.IsDir() {
-		return fmt.Errorf("decide render: plan %q has no directory under Plans/", plan)
+	planDir, err := decidePlanDir(root, plan, "render")
+	if err != nil {
+		return err
 	}
 	entries, err := decisions.Load(decisions.PathFor(planDir))
 	if err != nil {
