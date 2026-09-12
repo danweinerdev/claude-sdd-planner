@@ -16,7 +16,34 @@ import (
 
 var citePDRe = regexp.MustCompile(`\b(?:[A-Za-z0-9][A-Za-z0-9._-]*:)?pd-[0-9a-f]{8}\b`)
 
+// citeRetiredRe is the retired global-ledger id family. Live plans and phases
+// must not cite it: the ledger no longer exists, so the citation resolves to
+// nothing. Frozen and archived content keeps it as historical text.
+var citeRetiredRe = regexp.MustCompile(`\bD-\d{4,9}\b`)
+
 func planDecisionsFixture(entries string) string { return "[" + entries + "]\n" }
+
+// openWork reports whether a plan or phase still has work ahead of it: the
+// owning plan is not complete or archived, and a phase is not itself
+// complete. Anything else is frozen history and keeps the ids it carried.
+func openWork(r *Root, a *Artifact) bool {
+	plan := a
+	if a.Kind() == "phase" {
+		if name := metaStr(a.Meta, "plan"); name != "" {
+			if p, ok := r.ByPath["Plans/"+name+"/README.md"]; ok {
+				plan = p
+			}
+		}
+		if a.Status() == "complete" {
+			return false
+		}
+	}
+	switch plan.Status() {
+	case "complete", "archived":
+		return false
+	}
+	return true
+}
 
 func pdEntry(statement, date, supersedes string) string {
 	s := `{"id":"` + decisions.IDFor(statement) + `","date":"` + date + `","statement":"` + statement + `"`
@@ -158,7 +185,7 @@ func init() {
 
 	Register(&Rule{
 		Code: "SDD193", Severity: Error, Native: true,
-		What: "a live plan or phase contains an unresolved or ambiguous plan-decision citation",
+		What: "a live plan or phase contains an unresolved, ambiguous, or retired-ledger decision citation",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
 			authority, err := r.ValidatedDecisionIndex()
 			if err != nil {
@@ -175,8 +202,27 @@ func init() {
 				}
 				index := BuildCitationIndex(r, a)
 				index.decisions = authority
+				body := citationBody(a)
+				retiredSeen := map[string]bool{}
+				// Completed plans and phases are frozen history: their text
+				// keeps the ids it carried. Only open work must move to
+				// pd- citations.
+				for _, cited := range citeRetiredRe.FindAllString(body, -1) {
+					if !openWork(r, a) {
+						break
+					}
+					if retiredSeen[cited] {
+						continue
+					}
+					retiredSeen[cited] = true
+					emit(Diagnostic{
+						Code: "SDD193", Severity: Error, Path: a.Rel, Line: citationLine(a, cited),
+						Message:    "Live artifact cites retired global-ledger id `" + cited + "`; the ledger no longer exists.",
+						Correction: "Record the decision with `sdd decide add` and cite its pd- id, or drop the citation.",
+					})
+				}
 				seen := map[string]bool{}
-				for _, cited := range citePDRe.FindAllString(citationBody(a), -1) {
+				for _, cited := range citePDRe.FindAllString(body, -1) {
 					if seen[cited] {
 						continue
 					}
@@ -201,6 +247,9 @@ func init() {
 			}
 		},
 		Bad: []Example{
+			{Name: "retired-ledger-citation", Files: map[string]string{
+				"Plans/Sample/README.md": strReplace(validPlan(false), "## Overview\n\nText.", "## Overview\n\nGoverned by D-0024."),
+			}},
 			{Name: "unknown-plan-decision-citation", Files: map[string]string{
 				"Plans/Sample/README.md": strReplace(validPlan(false), "## Overview\n\nText.", "## Overview\n\nGoverned by pd-deadbeef."),
 			}},

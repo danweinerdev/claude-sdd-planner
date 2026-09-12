@@ -44,7 +44,12 @@ type Result struct {
 
 // idTokenRe extracts identifier citations from a v1 task's prose justifies
 // field: requirement/criterion ids and design decisions.
-var idTokenRe = regexp.MustCompile(`\b(?:FR|NFR|AC)-\d{2,}\b|\bDD-\d{1,4}[a-z]?\b|\bD-\d{4,}\b`)
+var idTokenRe = regexp.MustCompile(`\b(?:FR|NFR|AC)-\d{2,}\b|\bDD-\d{1,4}[a-z]?\b`)
+
+// retiredDecisionRe matches the retired global-ledger id family. A v1 task
+// that cited one keeps it in `history` as provenance; the decision itself is
+// recorded per plan with `sdd decide add` and cited by its pd- id.
+var retiredDecisionRe = regexp.MustCompile(`\bD-\d{4,}\b`)
 
 // Run converts one v1 plan into a staged proposal fragment. The plan's graph
 // is initialized when absent (initialization is mechanical; the judgments
@@ -124,6 +129,14 @@ func Run(root, repoRoot, plan string) (*Result, error) {
 			if str(task["status"]) == "complete" {
 				n.History = historyLine(taskID, evidence[taskID])
 				completed++
+			}
+			if retired := retiredDecisionRe.FindAllString(str(task["justifies"]), -1); len(retired) > 0 {
+				note := "v1 justifies cited retired global-ledger decision(s) " + strings.Join(retired, ", ") + "; record each as a plan decision (`sdd decide add`) and cite its pd- id"
+				if n.History == "" {
+					n.History = note
+				} else {
+					n.History += "; " + note
+				}
 			}
 			nodes = append(nodes, n)
 			ph.nodes = append(ph.nodes, n.ID)

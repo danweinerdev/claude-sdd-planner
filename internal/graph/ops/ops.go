@@ -7,6 +7,7 @@
 package ops
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -192,16 +193,8 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 			if err != nil {
 				return nil, nil, err
 			}
-			if len(priorScope) == 0 {
-				priorScope = append([]string(nil), n.Deps...)
-			}
 			v := *n.Verification
-			v.Reviewed = make(map[string]model.ReviewedRef, len(priorScope))
-			for _, id := range priorScope {
-				if prior := g.NodeByID(id); prior != nil {
-					v.Reviewed[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
-				}
-			}
+			v.Reviewed = states.LegacyReviewedSet(g, n.ID, priorScope)
 			n.Verification = &v
 		}
 		var deps []string
@@ -243,6 +236,14 @@ func cloneRevisionLineage(in map[string]string) map[string]string {
 		out[oldRev] = newRev
 	}
 	return out
+}
+
+// sameTests reports whether two declared test lists are identical in order
+// and content.
+func sameTests(a, b []model.Test) bool {
+	ra, _ := json.Marshal(a)
+	rb, _ := json.Marshal(b)
+	return string(ra) == string(rb)
 }
 
 // introducedFindings diffs two finding sets by rendered text.
@@ -302,7 +303,21 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 				}
 			}
 		}
+		if sameTests(n.Gate.Tests, tests) {
+			return nil
+		}
 		n.Gate.Tests = tests
+		if n.Verification != nil {
+			// The gate is owned normative content (ReviewDrivenAmendment
+			// DD-4): changing it under an observation advances the contract
+			// revision, so the old proof is history and RED is owed again for
+			// every hazard-discharging test at the new revision. A never-
+			// observed node only prunes bookkeeping for tests it no longer
+			// declares.
+			n.ContractRev = n.EffectiveContractRev() + 1
+			n.RedSeqs = nil
+			return nil
+		}
 		for id := range n.RedSeqs {
 			if !seen[id] {
 				delete(n.RedSeqs, id)

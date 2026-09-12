@@ -249,6 +249,18 @@ func Append(path, statement, supersedes, source string, today string, from strin
 	}
 	const attempts = 16
 	for attempt := 0; attempt < attempts; attempt++ {
+		// The cross-plan checks (successor, id collision) read other plans'
+		// files, which this file's lock does not cover. Re-derive the index
+		// on every attempt so the window is the check-to-write gap, not the
+		// caller's whole session; a successor that lands in that gap is
+		// still caught at merge time by Index.Conflicts / SDD192.
+		if r, ok := index.(Reloader); ok && index != nil {
+			fresh, err := r.Reload()
+			if err != nil {
+				return AppendResult{}, fmt.Errorf("decide: refreshing the cross-plan decision index: %w", err)
+			}
+			index = fresh
+		}
 		art, err := istore.Read(path)
 		if err != nil {
 			return AppendResult{}, err
@@ -446,6 +458,25 @@ func ValidatedIndex(files []PlanFile) (*Index, error) {
 	return NewIndex(files), nil
 }
 
+// Reloader is an optional Lookup capability: re-derive the index from disk.
+// Append uses it on every write attempt (see the loop comment there).
+type Reloader interface {
+	Reload() (Lookup, error)
+}
+
+// Reload re-reads every plan file under the root this index was loaded
+// from. An index built from an explicit file list (no root) returns itself.
+func (x *Index) Reload() (Lookup, error) {
+	if x.root == "" {
+		return x, nil
+	}
+	_, fresh, err := LoadValidatedIndex(x.root)
+	if err != nil {
+		return nil, err
+	}
+	return fresh, nil
+}
+
 // LoadValidatedIndex reads per-plan files and derives a complete cross-plan
 // reference index. It stores no global ledger and grants no root-wide authority:
 // callers must select the plan whose decisions they intend to consume.
@@ -458,6 +489,7 @@ func LoadValidatedIndex(planningRoot string) ([]PlanFile, *Index, error) {
 	if err != nil {
 		return files, nil, err
 	}
+	index.root = planningRoot
 	return files, index, nil
 }
 
@@ -470,6 +502,7 @@ type Located struct {
 // Index is the root-wide lookup over every plan's decisions.
 type Index struct {
 	files      []PlanFile
+	root       string               // planning root when loaded via LoadValidatedIndex; "" otherwise
 	byID       map[string][]Located // an id compiled into two plans appears twice
 	bySource   map[string][]Located // e.g. "Designs/X:DD-3" -> the compiled entries
 	successors map[string][]Located // superseded id -> entries that supersede it

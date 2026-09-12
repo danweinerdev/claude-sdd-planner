@@ -46,15 +46,7 @@ A red run is a **successful** sync — recording the failure is the point. It st
 
 ### 3. Green — implement, commit, sync the pass
 
-**Git rewrite capture.** Run `sdd doctor` in the target worktree before rebasing
-to establish or repair the `post-rewrite` hook. If a rebase rewrites revisions
-already recorded in this graph, import the captured map with
-`sdd graph remap-revisions --plan <Name> --map <captured-map> --dry-run`, then
-apply using its `--expect-digest`. Do this before worktree release removes the
-Git-private map. Lineage never rewrites old proof; still rerun verification and
-sync the new revision. See `shared/vcs-detection.md` for capture and safety rules.
-
-Implement inside the workspace until the named tests pass. **Commit the complete slice in the workspace first** — the revision anchor must name the tested bytes, and sync refuses a passing report from a dirty worktree. For Git, rebase the node branch onto the latest primary branch and rerun verification before the final passing sync, so its revision anchor names the rebased commit (`shared/vcs-detection.md` § Git integration of parallel graph nodes). Then:
+Implement inside the workspace until the named tests pass. **Commit the complete slice in the workspace first** — the revision anchor must name the tested bytes, and sync refuses a passing report from a dirty worktree. Then:
 
 ```
 sdd graph sync --plan <Name> --node <id> --by <identity> --report green.xml
@@ -62,7 +54,15 @@ sdd graph sync --plan <Name> --node <id> --by <identity> --report green.xml
 
 A clean pass by the claim holder **merges atomically**: observation recorded (with artifact digests, report digest, isolation, VCS provenance), claim cleared, workspace released. A pass with shared-dirty isolation records provisionally instead — the node derives STALE, never GREEN, until a clean re-verify. There is no assert path: `--command-exit` needs a real exit code, asserted isolation is refused by default.
 
-**Then integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On Git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`) — fast-forward the primary branch with `git merge --ff-only <node-branch>`, never a merge commit. Integrate parallel node branches one at a time, rebasing each onto the updated primary branch first. If primary advanced since verification, rebase again, rerun verification, and refresh the affected observations through supported SDD verbs before completion; do not reuse pre-rebase revision evidence. Until the bytes land on the mainline, the node honestly derives STALE from the shared tree's perspective (the recorded digests name bytes mainline doesn't have). Follow `shared/vcs-detection.md` § Git integration of parallel graph nodes for linear-history and shared-history safeguards. Integrate after every logical merge, before the next claim of dependent work.
+**Then integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On Git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`). Integrate by rebase then fast-forward, never a merge commit, one node branch at a time:
+
+1. Run `sdd doctor` in the target worktree once so the `post-rewrite` capture hook is in place.
+2. `git rebase <primary>` on the node branch. Git's hook captures the old→new commit map.
+3. `git merge --ff-only <node-branch>` on the primary branch.
+4. `sdd graph status --plan <Name>`. **Proof is keyed on artifact digests, not on commit ids**: a node whose files came through the rebase byte-identical stays GREEN and needs nothing. Only a node whose files changed in the rebase (conflict resolution) derives STALE by digest, and only that node re-runs its gate and syncs again.
+5. `sdd graph remap-revisions --plan <Name> --map <captured-map> --dry-run`, then apply with the printed `--expect-digest`, so the recorded provenance follows the rewritten commits. Do this before worktree release removes the Git-private map. Lineage is identity, never proof; it neither grants nor withdraws GREEN.
+
+Until the bytes land on the mainline, the node honestly derives STALE from the shared tree's perspective (the recorded digests name bytes mainline doesn't have); the fast-forward self-heals it. Follow `shared/vcs-detection.md` § Git integration of parallel graph nodes for the safeguards. Integrate after every logical merge, before the next claim of dependent work.
 
 **Commit cadence.** The workspace commit above is the only per-node commit. `<Name>-Graph.json`, rendered views, and the plan README change on every verb and are committed at phase boundaries — when a review gate greens, or the plan opens or closes — never per sync (`shared/autonomy.md` § SCM boundary cadence).
 

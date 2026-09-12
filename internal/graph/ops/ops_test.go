@@ -1307,3 +1307,37 @@ func TestSplitRefusesUnreachableDesignCitationAtomically(t *testing.T) {
 		t.Fatal("the qualified DD citation must anchor its fingerprint")
 	}
 }
+
+// set-tests changes owned normative content: under an observation it advances
+// the contract revision and restarts red-before-green, so a GREEN node cannot
+// have its gate swapped while keeping its proof (ReviewDrivenAmendment DD-4).
+func TestSetTestsUnderObservationAdvancesRevision(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("helper")
+		n.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean, ContractRev: 1}
+		n.RedSeqs = map[string]int{"test_helper": 1}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	same := []model.Test{{ID: "test_helper", File: "t.ext"}}
+	if err := SetTests(planDir, "helper", "", same); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if n := g.NodeByID("helper"); n.EffectiveContractRev() != 1 || len(n.RedSeqs) != 1 {
+		t.Fatalf("an unchanged test list is a no-op: rev=%d red=%v", n.ContractRev, n.RedSeqs)
+	}
+	if err := SetTests(planDir, "helper", "", []model.Test{{ID: "test_helper_v2", File: "t.ext"}}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	n := g.NodeByID("helper")
+	if n.ContractRev != 2 || n.RedSeqs != nil {
+		t.Fatalf("a changed gate under an observation must advance the revision and clear red bookkeeping: rev=%d red=%v", n.ContractRev, n.RedSeqs)
+	}
+	if st := states.Derive(states.Inputs{Graph: g}); st["helper"].State == states.Green {
+		t.Fatalf("old proof must not survive a gate change: %+v", st["helper"])
+	}
+}

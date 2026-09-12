@@ -118,6 +118,28 @@ func ReviewScope(g *model.Graph, gateID string) ([]string, error) {
 	return ReviewScopeFromStates(g, gateID, Derive(Inputs{Graph: g}))
 }
 
+// LegacyReviewedSet materializes the reviewed set a pre-reviewed-set
+// observation (Reviewed == nil) implicitly covered: the review's current
+// scope at the current contract revisions, or every direct dep when the
+// scope is empty (everything covered by inner GREEN reviews) — never a
+// single dep, which would misstate what was reviewed. Callers pin it onto
+// the observation before an amendment or split touches the scope, so the
+// old proof becomes REVIEW-STALE by exact comparison afterward.
+func LegacyReviewedSet(g *model.Graph, reviewID string, scope []string) map[string]model.ReviewedRef {
+	if len(scope) == 0 {
+		if r := g.NodeByID(reviewID); r != nil {
+			scope = append([]string(nil), r.Deps...)
+		}
+	}
+	out := make(map[string]model.ReviewedRef, len(scope))
+	for _, id := range scope {
+		if prior := g.NodeByID(id); prior != nil {
+			out[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
+		}
+	}
+	return out
+}
+
 // ReviewScopeFromStates derives review scope from an already-computed state
 // snapshot. Keeping this below package review lets Derive and completion
 // closure use the same current-GREEN subtraction rule without an import cycle.
@@ -387,6 +409,20 @@ func Derive(in Inputs) map[string]NodeState {
 			// extension, so later scope growth still invalidates the old proof.
 			// A non-nil set must match exactly.
 			reviewStale := map[string]bool{}
+			if n.Gate.Type == model.GateReview && v.Reviewed == nil {
+				// Legacy shape (no reviewed set): current only while nothing
+				// in its scope has been revised. A revision above 1 anywhere
+				// in scope means the reviewed contract moved under an
+				// observation that cannot say which revision it covered, so
+				// it is history, not proof (ReviewDrivenAmendment DD-9).
+				if currentScope, err := reviewScope(g, n.ID, func(id string) bool { return out[id].State == Green }); err == nil {
+					for _, reviewedID := range currentScope {
+						if m, present := byID[reviewedID]; present && m.EffectiveContractRev() > 1 {
+							reviewStale[reviewedID] = true
+						}
+					}
+				}
+			}
 			if n.Gate.Type == model.GateReview && v.Reviewed != nil {
 				if currentScope, err := reviewScope(g, n.ID, func(id string) bool { return out[id].State == Green }); err == nil {
 					current := map[string]bool{}

@@ -381,3 +381,47 @@ func TestAmendRefusesUnsafePlanNameBeforePathResolution(t *testing.T) {
 		t.Fatalf("plan traversal must refuse before graph or artifact access: %v", err)
 	}
 }
+
+// A legacy review pass (no reviewed set) must not survive a revise of a node
+// it reviewed: the amendment materializes the pre-revise set, and derivation
+// independently treats a legacy pass over a revised scope as history.
+func TestAmendReviseInvalidatesLegacyReview(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.SeqCounter = 3
+		g.NodeByID("helper").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
+		g.NodeByID("big").Verification = &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}
+		g.NodeByID("feature-gate").Verification = &model.Verification{Result: model.ResultPass, Seq: 3, Isolation: model.IsolationClean}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if st := states.Derive(states.Inputs{Graph: g}); st["feature-gate"].State != states.Green {
+		t.Fatalf("precondition: legacy review is GREEN: %+v", st["feature-gate"])
+	}
+	rel := frozenReview(t, root, "  - id: F-01\n    severity: major\n    title: \"big is wrong\"\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: \"does too much, revised\"\n")
+	res, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest, ExpectReportDigest: res.Plan.ReportDigest}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	st := states.Derive(states.Inputs{Graph: g})
+	if st["feature-gate"].State != states.Stale || !containsString(st["feature-gate"].ReviewStale, "big") {
+		t.Fatalf("legacy review must stale on a revise of a reviewed node: %+v reviewed=%v", st["feature-gate"], g.NodeByID("feature-gate").Verification.Reviewed)
+	}
+	// The derive rule alone (no materialization) also catches it.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("feature-gate").Verification.Reviewed = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	if st := states.Derive(states.Inputs{Graph: g}); st["feature-gate"].State != states.Stale {
+		t.Fatalf("a legacy review over a revised scope is history, not proof: %+v", st["feature-gate"])
+	}
+}

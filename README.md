@@ -126,7 +126,8 @@ with all runtimes, independently of Claude Code's plugin hooks.
 The hook prints a Git-private mapping file. For already-recorded commits, use
 `sdd graph remap-revisions --plan Feature --map <file> --dry-run`, then apply
 with the printed `--expect-digest`. This records old→new lineage without changing
-the revision that was actually tested. Reverify rebased code before completion.
+the revision that was actually tested. Proof is keyed on artifact digests, so a
+byte-identical rebase never re-verifies; only files changed by the rebase do.
 See [the Git integration workflow](shared/vcs-detection.md) for restrictions,
 worktree lifetime, and the full command sequence.
 

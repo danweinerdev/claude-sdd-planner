@@ -200,11 +200,14 @@ func TestConvertMapsMechanicsAndMarksJudgments(t *testing.T) {
 	if !reflect.DeepEqual(api.Deps, []string{"task-1-1"}) {
 		t.Fatalf("task depends_on must map: %v", api.Deps)
 	}
-	if api.History != "" {
-		t.Fatal("non-complete tasks carry no history")
+	// A retired global-ledger id never becomes a node citation (it would
+	// resolve to nothing); it is kept as a history note so the operator
+	// records the decision per plan and cites its pd- id.
+	if !reflect.DeepEqual(api.Justifies, []string{"AC-01"}) {
+		t.Fatalf("justifies extraction must drop retired D- ids: %v", api.Justifies)
 	}
-	if !reflect.DeepEqual(api.Justifies, []string{"AC-01", "D-0001"}) {
-		t.Fatalf("justifies extraction: %v", api.Justifies)
+	if !strings.Contains(api.History, "D-0001") || !strings.Contains(api.History, "sdd decide add") {
+		t.Fatalf("retired citation must be preserved as a history note: %q", api.History)
 	}
 
 	// Phase-level depends_on densifies: every phase-2 node depends on every

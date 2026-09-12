@@ -35,8 +35,10 @@ if [ -z "$tmp" ]; then
 fi
 trap 'rm -f "$tmp"' 0 HUP INT TERM
 
+spooled=1
 if ! cat >"$tmp"; then
-  echo "sdd post-rewrite: warning: could not spool hook stdin completely" >&2
+  spooled=0
+  echo "sdd post-rewrite: warning: could not spool hook stdin completely; rewrite map NOT captured (a partial map would under-record lineage)" >&2
 fi
 
 user_status=0
@@ -45,7 +47,9 @@ if [ -x "$user_hook" ]; then
   user_status=$?
 fi
 
-if command -v sdd >/dev/null 2>&1; then
+if [ "$spooled" -ne 1 ]; then
+  :
+elif command -v sdd >/dev/null 2>&1; then
   if ! sdd hook post-rewrite "$@" <"$tmp"; then
     echo "sdd post-rewrite: warning: capture failed; run 'sdd hook post-rewrite $1' manually if needed" >&2
   fi

@@ -4154,6 +4154,17 @@
     ],
     "exit": 1
   },
+  "SDD193/retired-ledger-citation": {
+    "diagnostics": [
+      {
+        "code": "SDD193",
+        "line": 14,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
   "SDD193/unknown-plan-decision-citation": {
     "diagnostics": [
       {

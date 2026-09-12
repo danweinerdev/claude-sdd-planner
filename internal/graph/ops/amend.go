@@ -19,6 +19,7 @@ import (
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -209,32 +210,20 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			record.Extended = append(record.Extended, n.ID)
 		}
 	}
-	if len(record.Extended) > 0 {
+	if len(record.Extended) > 0 || len(record.Revised) > 0 {
 		r := &out.Nodes[reviewIdx]
 		// A pre-reviewed-set graph encoded a passing review with Reviewed absent.
-		// Existing graphs retain that historical meaning until their scope grows.
-		// Materialize the scope assumed immediately before this amend so the new
-		// dependency is mechanically absent and the old proof becomes
-		// REVIEW-STALE without misusing contract_rev (deps are structural) or
-		// deleting the historical observation.
+		// Existing graphs retain that historical meaning until an amendment
+		// touches their scope. Materialize the scope assumed immediately before
+		// this amend, at the pre-amend contract revisions, so an extended
+		// dependency is mechanically absent and a revised member's revision no
+		// longer matches; the old proof becomes REVIEW-STALE without misusing
+		// contract_rev (deps are structural) or deleting the observation.
 		if r.Verification != nil && r.Verification.Reviewed == nil {
 			v := *r.Verification
-			legacyScope := append([]string(nil), plan.Scope...)
-			if len(legacyScope) == 0 {
-				// Empty maps are omitted on the wire and would decode back to the
-				// legacy nil shape. A valid review has at least one old dep; retain
-				// that pre-extension boundary as the compatibility assumption so
-				// the new exact-scope comparison remains fail-closed after reload.
-				if priorReview := g.NodeByID(plan.Review); priorReview != nil && len(priorReview.Deps) > 0 {
-					legacyScope = append(legacyScope, priorReview.Deps[0])
-				}
-			}
-			v.Reviewed = make(map[string]model.ReviewedRef, len(legacyScope))
-			for _, id := range legacyScope {
-				if prior := g.NodeByID(id); prior != nil {
-					v.Reviewed[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
-				}
-			}
+			// Pinned from the pre-amend graph `g`, so revised members keep
+			// their old revision in the set and mismatch afterward.
+			v.Reviewed = states.LegacyReviewedSet(g, plan.Review, plan.Scope)
 			r.Verification = &v
 		}
 	}

@@ -50,17 +50,23 @@ When a skill needs to inspect or change tracked files, choose the column for the
 For `git` / `git-worktree`, integrate worktree or topic-branch work from parallel
 graph nodes by **rebasing the node branch onto the latest primary branch, then
 fast-forwarding the primary branch**. Do not create merge commits. Run
-`git rebase <primary-branch>` from the node branch, resolve conflicts deliberately,
-and rerun verification before recording the final passing observation. On the
-primary branch, use `git merge --ff-only <node-branch>`; this advances the branch
-without creating a merge commit.
+`git rebase <primary-branch>` from the node branch and resolve conflicts
+deliberately. On the primary branch, use `git merge --ff-only <node-branch>`;
+this advances the branch without creating a merge commit.
+
+**A rebase does not by itself cost verification.** Graph proof is anchored to
+artifact digests; the commit id is supplementary provenance. A node whose
+files come through the rebase byte-identical stays GREEN. Only a node whose
+files changed in the rebase (conflict resolution) derives STALE by digest, and
+only that node re-runs its gate and syncs a fresh observation. Check with
+`sdd graph status` after the fast-forward; never re-verify on the commit id
+alone. The rewritten commit ids are recorded as lineage (below) so provenance
+stays followable.
 
 Serialize integrations: after each fast-forward, rebase the next node branch
 onto the updated primary branch. If the fast-forward refuses because primary
-advanced, rebase and verify again — never fall back to a merge commit. Rebase
-changes commit IDs, so refresh affected observations through the supported SDD
-verbs; pre-rebase revision evidence is not proof of the rewritten commits. Keep
-per-node commit boundaries, never rebase the primary branch itself, and do not
+advanced, rebase again — never fall back to a merge commit. Keep per-node
+commit boundaries, never rebase the primary branch itself, and do not
 force-push shared history without explicit approval. The graph's logical
 sync/merge (claim completion) is distinct from this Git integration step.
 
@@ -106,10 +112,12 @@ creates retention refs automatically.
 Lineage records identity, **not proof**: `revision_lineage` preserves the old→new
 chain while original observations, their provenance, `contract_rev`, sequence
 numbers, and frozen reviews stay unchanged. `graph show` distinguishes recorded
-and rewritten revisions. Run fresh verification and record it with `sync` (or
-the applicable `reverify` batch); remapping never asserts that rebased code passed.
-If the first passing observation is recorded only after rebase, it already names
-the new commit and may need no lineage remap.
+and rewritten revisions. Remapping neither grants nor withdraws GREEN: a node
+whose artifact digests still match its observation stays current across the
+rewrite, and a node whose digests changed re-verifies through `sync` (or the
+applicable `reverify` batch) regardless of lineage. If the first passing
+observation is recorded only after rebase, it already names the new commit and
+may need no lineage remap.
 
 ## Special cases
 
