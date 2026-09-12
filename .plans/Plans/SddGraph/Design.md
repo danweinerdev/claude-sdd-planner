@@ -17,13 +17,6 @@ Planning-root artifacts are the only work-tracking layer: plan/phase/task frontm
 - Source: `Decisions/decisions.md:D-0023`
 - Supersedes: SDD-Toolchain:pd-d86fd37e
 
-### pd-b9031144 (2026-08-31)
-
-For graph-executed plans per Designs/SddGraph, completion is observation-gated: node state is derived on read from structure plus recorded observations, and the only path to GREEN is a mechanical artifact (parsed test report, command exit/output, or frozen review artifact) synced through the sdd binary — never narrated evidence. A node's GREEN is assumed closure, sufficient for dependants to build on; completion-grade closure is the derived predicate 'GREEN and covered by a GREEN frozen full review gate whose aggregate diff digest still matches.' The frozen Aligned four-lane review obligation is preserved but scoped to feature review gates rather than phase cuts; phase completion is the projection 'every node in the phase is closed'; review findings naming scope nodes demote them to RED mechanically. Bisectability is per-VCS: git — one node = one clean revision anchored in its observation; p4 — one plan/phase = one changelist, with per-node history in observation records; plain trees anchor by digest only. v1 markdown plans not yet converted remain governed by shared/completion-evidence.md's evidence-table discipline until conversion.
-
-- Source: `Decisions/decisions.md:D-0022`
-- Supersedes: SDD-Toolchain:pd-cc12eb79
-
 ### pd-2c12dec8 (2026-09-02)
 
 SDD lifecycle records commit at phase boundaries only: one commit when a phase (or plan) opens, N implementation commits, one commit at phase close carrying every task status, evidence, amendment, decision, review, and debrief written during the phase; plus one commit at the end of a contiguous spec/design/plan session outside implementation. Never per edit, never at task closeout, never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies a commit.
@@ -31,6 +24,12 @@ SDD lifecycle records commit at phase boundaries only: one commit when a phase (
 - Source: `Decisions/decisions.md:D-0024`
 - Supersedes: SDD-Toolchain:pd-b697da19
 
+### pd-b9b76630 (2026-09-12)
+
+For graph-executed plans per Designs/SddGraph, completion is observation-gated: node state is derived on read from structure plus recorded observations, and the only path to GREEN is a mechanical artifact (parsed test report, command exit/output, or frozen review artifact) recorded through the sdd binary — never narrated evidence. GREEN is sufficient for dependants to build on, but completion-grade closure requires current frozen full-review coverage; an integration-acceptance node cannot substitute for that coverage. The frozen Aligned four-lane review obligation is preserved and scoped to feature review nodes rather than phase cuts; phase completion is the projection 'every node in the phase is closed'. Open review findings never mechanically demote nodes to RED: they become explicit revise or extend amendments applied through sdd graph amend. Revised obligations invalidate prior contract-revision proof and require fresh RED observations for hazard-discharging tests before a new passing observation counts; extended review scope invalidates earlier review coverage. Bisectability is per-VCS: git — one node = one clean revision anchored in its observation; p4 — one plan/phase = one changelist, with per-node history in observation records; plain trees anchor by digest only. v1 markdown plans not yet converted remain governed by shared/completion-evidence.md's evidence-table discipline until conversion.
+
+- Supersedes: pd-b9031144
+
 ## Superseded
 
-None.
+- ~~pd-b9031144~~ (2026-08-31) → SddGraph:pd-b9b76630 — For graph-executed plans per Designs/SddGraph, completion is observation-gated: node state is derived on read from structure plus recorded observations, and the only path to GREEN is a mechanical artifact (parsed test report, command exit/output, or frozen review artifact) synced through the sdd binary — never narrated evidence. A node's GREEN is assumed closure, sufficient for dependants to build on; completion-grade closure is the derived predicate 'GREEN and covered by a GREEN frozen full review gate whose aggregate diff digest still matches.' The frozen Aligned four-lane review obligation is preserved but scoped to feature review gates rather than phase cuts; phase completion is the projection 'every node in the phase is closed'; review findings naming scope nodes demote them to RED mechanically. Bisectability is per-VCS: git — one node = one clean revision anchored in its observation; p4 — one plan/phase = one changelist, with per-node history in observation records; plain trees anchor by digest only. v1 markdown plans not yet converted remain governed by shared/completion-evidence.md's evidence-table discipline until conversion.

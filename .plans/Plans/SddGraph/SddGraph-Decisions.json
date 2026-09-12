@@ -19,5 +19,11 @@
     "statement": "SDD lifecycle records commit at phase boundaries only: one commit when a phase (or plan) opens, N implementation commits, one commit at phase close carrying every task status, evidence, amendment, decision, review, and debrief written during the phase; plus one commit at the end of a contiguous spec/design/plan session outside implementation. Never per edit, never at task closeout, never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies a commit.",
     "supersedes": "SDD-Toolchain:pd-b697da19",
     "source": "Decisions/decisions.md:D-0024"
+  },
+  {
+    "id": "pd-b9b76630",
+    "date": "2026-09-12",
+    "statement": "For graph-executed plans per Designs/SddGraph, completion is observation-gated: node state is derived on read from structure plus recorded observations, and the only path to GREEN is a mechanical artifact (parsed test report, command exit/output, or frozen review artifact) recorded through the sdd binary — never narrated evidence. GREEN is sufficient for dependants to build on, but completion-grade closure requires current frozen full-review coverage; an integration-acceptance node cannot substitute for that coverage. The frozen Aligned four-lane review obligation is preserved and scoped to feature review nodes rather than phase cuts; phase completion is the projection 'every node in the phase is closed'. Open review findings never mechanically demote nodes to RED: they become explicit revise or extend amendments applied through sdd graph amend. Revised obligations invalidate prior contract-revision proof and require fresh RED observations for hazard-discharging tests before a new passing observation counts; extended review scope invalidates earlier review coverage. Bisectability is per-VCS: git — one node = one clean revision anchored in its observation; p4 — one plan/phase = one changelist, with per-node history in observation records; plain trees anchor by digest only. v1 markdown plans not yet converted remain governed by shared/completion-evidence.md's evidence-table discipline until conversion.",
+    "supersedes": "pd-b9031144"
   }
 ]

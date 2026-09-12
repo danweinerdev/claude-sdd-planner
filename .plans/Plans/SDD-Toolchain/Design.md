@@ -81,6 +81,12 @@ The sdd binary is provisioned exclusively by the user running `go install github
 - Source: `Decisions/decisions.md:D-0021`
 - Supersedes: SDD-Toolchain:pd-a0fd22ba
 
+### pd-a4ac7981 (2026-09-12)
+
+The global decision log and fork-ledger authority model are retired. Decisions are recorded only in per-plan append-only files at Plans/<Name>/<Name>-Decisions.json. Cross-plan lookup, citation, and supersession are derived reads over those files, not a separate global ledger or a source of universal constraints. SessionStart injects only decisions carried by an unambiguously selected active plan; otherwise it injects no decisions. Decisions from unrelated, completed, or archived plans are not automatically promoted into session-wide authority. Malformed files and conflicting identities must be surfaced rather than silently omitted when resolving references. Every decision append requires the user's explicit approval of the exact statement shown in full beforehand.
+
+- Supersedes: ForkAwareDecisionLedgers:pd-764da52e
+
 ## Superseded
 
 - ~~pd-234e6074~~ (2026-07-13) → SDD-Toolchain:pd-f5c57caf — User decisions are tracked as durable truth in a single canonical ledger, Decisions/decisions.md, with a machine-readable decisions[] frontmatter array.

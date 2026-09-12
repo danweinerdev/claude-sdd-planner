@@ -130,5 +130,11 @@
     "statement": "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@v\u003cversion\u003e` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`.",
     "supersedes": "SDD-Toolchain:pd-a0fd22ba",
     "source": "Decisions/decisions.md:D-0021"
+  },
+  {
+    "id": "pd-a4ac7981",
+    "date": "2026-09-12",
+    "statement": "The global decision log and fork-ledger authority model are retired. Decisions are recorded only in per-plan append-only files at Plans/\u003cName\u003e/\u003cName\u003e-Decisions.json. Cross-plan lookup, citation, and supersession are derived reads over those files, not a separate global ledger or a source of universal constraints. SessionStart injects only decisions carried by an unambiguously selected active plan; otherwise it injects no decisions. Decisions from unrelated, completed, or archived plans are not automatically promoted into session-wide authority. Malformed files and conflicting identities must be surfaced rather than silently omitted when resolving references. Every decision append requires the user's explicit approval of the exact statement shown in full beforehand.",
+    "supersedes": "ForkAwareDecisionLedgers:pd-764da52e"
   }
 ]
