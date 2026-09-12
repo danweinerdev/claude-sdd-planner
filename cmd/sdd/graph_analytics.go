@@ -36,6 +36,38 @@ type analyticsCtx struct {
 	estimate  map[string]int
 }
 
+const revisionLineageNote = "revision lineage records Git rewrite identity only; it does not prove the rewritten code"
+
+type revisionLineageView struct {
+	RecordedRevision  string   `json:"recorded_revision"`
+	RewrittenRevision string   `json:"rewritten_revision"`
+	Chain             []string `json:"chain"`
+	Note              string   `json:"note"`
+}
+
+func nodeRevisionLineage(g *model.Graph, n *model.Node) *revisionLineageView {
+	if n.Verification == nil || n.Verification.Provenance == nil {
+		return nil
+	}
+	recorded := n.Verification.Provenance.Revision
+	chain := g.RevisionChain(recorded)
+	if len(chain) < 2 {
+		return nil
+	}
+	return &revisionLineageView{RecordedRevision: recorded, RewrittenRevision: chain[len(chain)-1], Chain: chain, Note: revisionLineageNote}
+}
+
+func printNodeRevisionLineage(w io.Writer, g *model.Graph, n *model.Node) {
+	lineage := nodeRevisionLineage(g, n)
+	if lineage == nil {
+		return
+	}
+	fmt.Fprintf(w, "  recorded revision: %s\n", lineage.RecordedRevision)
+	fmt.Fprintf(w, "  rewritten revision: %s\n", lineage.RewrittenRevision)
+	fmt.Fprintf(w, "  revision lineage: %s\n", strings.Join(lineage.Chain, " -> "))
+	fmt.Fprintf(w, "  note: %s.\n", lineage.Note)
+}
+
 func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	planDir, err := planDirFor(plan, verb)
 	if err != nil {
@@ -294,20 +326,22 @@ func graphShowCmd() *cobra.Command {
 			ns := ctx.st[n.ID]
 			if asJSON {
 				return writeJSON(struct {
-					OK          bool        `json:"ok"`
-					Node        *model.Node `json:"node"`
-					Role        string      `json:"role"`
-					ContractRev int         `json:"contract_rev"`
-					State       string      `json:"state"`
-					Closed      bool        `json:"closed"`
-					Stale       []string    `json:"stale_artifacts,omitempty"`
-					Intent      []string    `json:"stale_intent,omitempty"`
-					Inputs      []string    `json:"stale_inputs,omitempty"`
-				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale})
+					OK          bool                 `json:"ok"`
+					Node        *model.Node          `json:"node"`
+					Role        string               `json:"role"`
+					ContractRev int                  `json:"contract_rev"`
+					State       string               `json:"state"`
+					Closed      bool                 `json:"closed"`
+					Stale       []string             `json:"stale_artifacts,omitempty"`
+					Intent      []string             `json:"stale_intent,omitempty"`
+					Inputs      []string             `json:"stale_inputs,omitempty"`
+					Lineage     *revisionLineageView `json:"revision_lineage,omitempty"`
+				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, nodeRevisionLineage(ctx.g, n)})
 			}
 			w := c.OutOrStdout()
 			if brief {
 				printBrief(w, ctx.g, n, ctx.st)
+				printNodeRevisionLineage(w, ctx.g, n)
 				return nil
 			}
 			fmt.Fprintf(w, "%s  [%s] (role %s, contract_rev %d)\n", n.ID, ns.State, n.EffectiveRole(), n.EffectiveContractRev())
@@ -330,6 +364,7 @@ func graphShowCmd() *cobra.Command {
 			if v := n.Verification; v != nil {
 				fmt.Fprintf(w, "  observation: %s at seq %d (isolation %s)\n", v.Result, v.Seq, v.Isolation)
 			}
+			printNodeRevisionLineage(w, ctx.g, n)
 			if ctx.closed[n.ID] {
 				fmt.Fprintln(w, "  closure: closed (completion-grade)")
 			}

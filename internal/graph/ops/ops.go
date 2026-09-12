@@ -164,6 +164,7 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 	out := &clone
 	out.Nodes = nil
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
+	out.RevisionLineage = cloneRevisionLineage(g.RevisionLineage)
 	out.Retired = append(append([]string(nil), g.Retired...), nodeID)
 	sort.Strings(out.Retired)
 
@@ -231,6 +232,17 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 	out.Nodes = append(out.Nodes, children...)
 	sort.Strings(rewired)
 	return out, &SplitResult{Retired: nodeID, Children: sortedChildren, Rewired: rewired}, nil
+}
+
+func cloneRevisionLineage(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for oldRev, newRev := range in {
+		out[oldRev] = newRev
+	}
+	return out
 }
 
 // introducedFindings diffs two finding sets by rendered text.

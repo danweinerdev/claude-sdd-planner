@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // SchemaVersion is the graph and payload schema version this package
@@ -112,9 +113,13 @@ const (
 // Graph is the committed master graph: structure plus observations, nothing
 // derivable.
 type Graph struct {
-	Version    int    `json:"version"`
-	SeqCounter int    `json:"seq_counter"`
-	Nodes      []Node `json:"nodes"`
+	Version    int `json:"version"`
+	SeqCounter int `json:"seq_counter"`
+	// RevisionLineage is tool-owned append-only Git rewrite identity. Keys
+	// and values are full commit IDs; observations retain their originally
+	// recorded revision, and this map only records how Git rewrote it.
+	RevisionLineage map[string]string `json:"revision_lineage,omitempty"`
+	Nodes           []Node            `json:"nodes"`
 	// Retired is the append-only register of node ids that once existed and
 	// were retired (split, cut). A retired id is never reused — the same
 	// stable-identifier discipline the markdown artifacts carry — so
@@ -465,6 +470,33 @@ func (g *Graph) NodeByID(id string) *Node {
 		}
 	}
 	return nil
+}
+
+// RevisionChain returns revision followed by every recorded rewrite. Strict
+// decoding guarantees the map is acyclic, so a chain always terminates.
+func (g *Graph) RevisionChain(revision string) []string {
+	if revision == "" {
+		return nil
+	}
+	chain := []string{revision}
+	seen := map[string]bool{strings.ToLower(revision): true}
+	for {
+		next, ok := g.RevisionLineage[revision]
+		if !ok {
+			for oldRev, candidate := range g.RevisionLineage {
+				if strings.EqualFold(oldRev, revision) {
+					next, ok = candidate, true
+					break
+				}
+			}
+		}
+		if !ok || seen[strings.ToLower(next)] {
+			return chain
+		}
+		chain = append(chain, next)
+		seen[strings.ToLower(next)] = true
+		revision = next
+	}
 }
 
 // sortedKeys returns a map's keys in sorted order — small helper shared by

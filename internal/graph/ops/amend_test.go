@@ -40,6 +40,7 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	root, planDir := fixtureRoot(t)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		g.SeqCounter = 2
+		g.RevisionLineage = map[string]string{"1111111111111111111111111111111111111111": "2222222222222222222222222222222222222222"}
 		big := g.NodeByID("big")
 		big.Verification = passAt(2)
 		big.RedSeqs = map[string]int{"test_big": 1}
@@ -94,6 +95,9 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	}
 	if len(g.Amendments) != 1 || g.Amendments[0].Revised[0] != "big" || g.Amendments[0].Seq != 3 {
 		t.Fatalf("amendment register = %+v", g.Amendments)
+	}
+	if g.RevisionLineage["1111111111111111111111111111111111111111"] != "2222222222222222222222222222222222222222" {
+		t.Fatalf("amend discarded revision lineage: %+v", g.RevisionLineage)
 	}
 	st := states.Derive(states.Inputs{Graph: g})
 	if st["big"].State != states.Ready || !st["big"].RevIncompatible {

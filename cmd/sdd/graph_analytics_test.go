@@ -173,21 +173,42 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 		t.Fatalf("human status must expose effective role and contract revision:\n%s", human)
 	}
 
+	ctx, err := loadAnalytics("Demo", "show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const recorded = "1111111111111111111111111111111111111111"
+	const rewritten = "2222222222222222222222222222222222222222"
+	ctx.g.NodeByID("m").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean, Provenance: &model.Provenance{Kind: "git", Revision: recorded}}
+	ctx.g.RevisionLineage = map[string]string{recorded: rewritten}
+	if err := gstore.Save(gstore.PathFor(ctx.planDir), ctx.g); err != nil {
+		t.Fatal(err)
+	}
+
 	var show struct {
 		Node        *model.Node `json:"node"`
 		Role        string      `json:"role"`
 		ContractRev int         `json:"contract_rev"`
 		State       string      `json:"state"`
+		Lineage     *struct {
+			Recorded  string   `json:"recorded_revision"`
+			Rewritten string   `json:"rewritten_revision"`
+			Chain     []string `json:"chain"`
+			Note      string   `json:"note"`
+		} `json:"revision_lineage"`
 	}
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "graph", "show", "m", "--plan", "Demo", "--json")), &show); err != nil {
 		t.Fatal(err)
 	}
-	if show.Node == nil || show.Node.ID != "m" || show.State != "BLOCKED" ||
+	if show.Node == nil || show.Node.ID != "m" || show.State != "STALE" ||
 		show.Role != model.RoleImplementation || show.ContractRev != 1 {
 		t.Fatalf("show: %+v", show)
 	}
-	if human := runGraphVerb(t, "graph", "show", "m", "--plan", "Demo"); !strings.Contains(human, "m  [BLOCKED]") ||
-		!strings.Contains(human, "deps: a, b") {
+	if show.Lineage == nil || show.Lineage.Recorded != recorded || show.Lineage.Rewritten != rewritten || len(show.Lineage.Chain) != 2 || !strings.Contains(show.Lineage.Note, "does not prove") {
+		t.Fatalf("show lineage: %+v", show.Lineage)
+	}
+	if human := runGraphVerb(t, "graph", "show", "m", "--plan", "Demo"); !strings.Contains(human, "m  [STALE]") ||
+		!strings.Contains(human, "deps: a, b") || !strings.Contains(human, "recorded revision: "+recorded) || !strings.Contains(human, "rewritten revision: "+rewritten) || !strings.Contains(human, "does not prove the rewritten code") {
 		t.Fatalf("human show output:\n%s", human)
 	}
 
@@ -216,7 +237,7 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 	}
 
 	// An unknown format refuses naming the vocabulary.
-	_, err := captureStdout(t, func() error {
+	_, err = captureStdout(t, func() error {
 		root := newRootCmd()
 		root.SetArgs([]string{"graph", "export", "--plan", "Demo", "--format", "png"})
 		return root.Execute()

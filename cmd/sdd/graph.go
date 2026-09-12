@@ -57,6 +57,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphAmendCmd())
+	c.AddCommand(graphRemapRevisionsCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphSetInputsCmd())

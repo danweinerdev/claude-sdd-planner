@@ -128,11 +128,11 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	// view the new nodes would change) must leave the graph untouched and
 	// the payload staged. The dry-run needs the same derived truth the real
 	// render will project, so the derive pass runs on the preview graph.
-	preview := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, Retired: g.Retired, RetirementSources: g.RetirementSources}
-	preview.Nodes = append(append(preview.Nodes, g.Nodes...), p.Nodes...)
+	preview := *g
+	preview.Nodes = append(append([]model.Node(nil), g.Nodes...), p.Nodes...)
 	deriveFor := deriveClosure(repoRoot, sources, inRes)
-	pst, pclosed := deriveFor(preview)
-	if err := preflightViews(root, plan, preview, pst, pclosed); err != nil {
+	pst, pclosed := deriveFor(&preview)
+	if err := preflightViews(root, plan, &preview, pst, pclosed); err != nil {
 		return nil, nil, err
 	}
 

@@ -155,6 +155,7 @@ func TestSplitPreservesAmendmentsAndInvalidatesLegacyReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.Amendments = []model.AmendmentRecord{{Seq: 1, Review: "feature-gate", ReportDigest: "prior-report", Extended: []string{"helper"}}}
+	g.RevisionLineage = map[string]string{"1111111111111111111111111111111111111111": "2222222222222222222222222222222222222222"}
 	g.SeqCounter = 4
 	g.NodeByID("helper").Verification = passAt(2)
 	g.NodeByID("big").Verification = passAt(3)
@@ -169,6 +170,9 @@ func TestSplitPreservesAmendmentsAndInvalidatesLegacyReview(t *testing.T) {
 	}
 	if !reflect.DeepEqual(out.Amendments, g.Amendments) {
 		t.Error("split discarded amendment replay-protection history")
+	}
+	if !reflect.DeepEqual(out.RevisionLineage, g.RevisionLineage) {
+		t.Error("split discarded revision lineage")
 	}
 	if got := states.Derive(states.Inputs{Graph: out})["feature-gate"].State; got == states.Green {
 		t.Error("legacy review remained GREEN after its reviewed node was split")

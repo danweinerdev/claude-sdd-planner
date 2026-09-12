@@ -40,6 +40,74 @@ func TestRetirementSourcesRemainToolOwned(t *testing.T) {
 	}
 }
 
+func TestRevisionLineageStrictRoundTripAndProposalRefusal(t *testing.T) {
+	const oldRev = "1111111111111111111111111111111111111111"
+	const midRev = "2222222222222222222222222222222222222222"
+	const newRev = "3333333333333333333333333333333333333333"
+	raw := []byte(`{"version":1,"revision_lineage":{"` + oldRev + `":"` + midRev + `","` + midRev + `":"` + newRev + `"},"nodes":[]}`)
+	g, err := DecodeGraph(raw)
+	if err != nil {
+		t.Fatalf("decode lineage: %v", err)
+	}
+	if g.RevisionLineage[oldRev] != midRev || g.RevisionLineage[midRev] != newRev {
+		t.Fatalf("lineage lost: %+v", g.RevisionLineage)
+	}
+	encoded, err := g.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeGraph(encoded)
+	if err != nil {
+		t.Fatalf("encoded lineage did not decode: %v\n%s", err, encoded)
+	}
+	if decoded.RevisionLineage[oldRev] != midRev || decoded.RevisionLineage[midRev] != newRev {
+		t.Fatalf("round trip lost exact hashes: %+v", decoded.RevisionLineage)
+	}
+	if _, err := DecodeProposal(raw); err == nil {
+		t.Fatal("a proposal must not assert tool-owned revision lineage")
+	}
+	upperOld, upperNew := strings.Repeat("A", 40), strings.Repeat("B", 40)
+	upperRaw := []byte(`{"version":1,"revision_lineage":{"` + upperOld + `":"` + upperNew + `"},"nodes":[]}`)
+	upperGraph, err := DecodeGraph(upperRaw)
+	if err != nil {
+		t.Fatalf("uppercase full commit IDs must decode: %v", err)
+	}
+	if upperGraph.RevisionLineage[upperOld] != upperNew {
+		t.Fatalf("decode must preserve exact commit-ID spelling: %+v", upperGraph.RevisionLineage)
+	}
+	if chain := upperGraph.RevisionChain(strings.ToLower(upperOld)); len(chain) != 2 || chain[1] != upperNew {
+		t.Fatalf("lineage lookup must compare commit identities case-insensitively: %v", chain)
+	}
+	upperEncoded, err := upperGraph.Encode()
+	if err != nil || !strings.Contains(string(upperEncoded), `"`+upperOld+`": "`+upperNew+`"`) {
+		t.Fatalf("encode must preserve exact commit-ID spelling: %v\n%s", err, upperEncoded)
+	}
+}
+
+func TestRevisionLineageRejectsMalformedIdentityFanInAndCycles(t *testing.T) {
+	const a = "1111111111111111111111111111111111111111"
+	const b = "2222222222222222222222222222222222222222"
+	const c = "3333333333333333333333333333333333333333"
+	upper, lower := strings.Repeat("A", 40), strings.Repeat("a", 40)
+	cases := []struct {
+		name, lineage, want string
+	}{
+		{"short key", `{"abc":"` + b + `"}`, "revision_lineage.abc"},
+		{"non-string value", `{"` + a + `":7}`, "must be a string"},
+		{"short value", `{"` + a + `":"abc"}`, "full 40-character Git commit ID"},
+		{"identity", `{"` + a + `":"` + a + `"}`, "self-mapping"},
+		{"fan-in", `{"` + a + `":"` + c + `","` + b + `":"` + c + `"}`, "fan-in"},
+		{"cycle", `{"` + a + `":"` + b + `","` + b + `":"` + a + `"}`, "cycle"},
+		{"case alias", `{"` + upper + `":"` + b + `","` + lower + `":"` + b + `"}`, "commit identity conflicts"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := DecodeGraph([]byte(`{"version":1,"revision_lineage":` + tc.lineage + `,"nodes":[]}`))
+			wantFinding(t, err, tc.want)
+		})
+	}
+}
+
 // fullGraph is a canonical full-featured fixture: three nodes covering the
 // three gate types, a claim, a verification with provenance, red_seqs,
 // and all three hazards shapes (filled, untriaged, explicit empty).

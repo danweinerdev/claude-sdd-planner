@@ -148,6 +148,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"set-artifacts": false,
 	// mutating: re-embeds cited intent fingerprints (cosmetic-drift ack)
 	"rehash": false,
+	// mutating: appends Git rewrite identity under a caller-supplied digest
+	"remap-revisions": false,
 }
 
 var (

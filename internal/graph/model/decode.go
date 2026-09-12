@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -62,7 +63,7 @@ var toolOwnedNodeKeys = map[string]string{
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "nodes", "retired", "retirement_sources", "amendments"}
+	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments"}
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	originKeys       = []string{"review", "finding"}
@@ -203,6 +204,9 @@ func (d *decoder) graph(raw any) *Graph {
 			g.SeqCounter = n
 		}
 	}
+	if v, present := obj["revision_lineage"]; present && !d.proposal {
+		g.RevisionLineage = d.revisionLineage(v)
+	}
 	if v, present := obj["retired"]; present && !d.proposal {
 		g.Retired = d.stringList("retired", v)
 	}
@@ -233,6 +237,88 @@ func (d *decoder) graph(raw any) *Graph {
 		g.Nodes = append(g.Nodes, d.node(fmt.Sprintf("nodes[%d]", i), item))
 	}
 	return g
+}
+
+var fullGitCommitID = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+
+func (d *decoder) revisionLineage(raw any) map[string]string {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf("revision_lineage", "must be an object mapping old full Git commit IDs to new full Git commit IDs, got %s", typeName(raw))
+		return nil
+	}
+	out := make(map[string]string, len(obj))
+	normalized := make(map[string]string, len(obj))
+	originalByNormalized := make(map[string]string, len(obj))
+	for _, originalKey := range sortedKeys(obj) {
+		path := "revision_lineage." + originalKey
+		if !fullGitCommitID.MatchString(originalKey) {
+			d.errf(path, "key must be a full 40-character Git commit ID")
+			continue
+		}
+		value, ok := obj[originalKey].(string)
+		if !ok {
+			d.errf(path, "must be a string, got %s", typeName(obj[originalKey]))
+			continue
+		}
+		if !fullGitCommitID.MatchString(value) {
+			d.errf(path, "value must be a full 40-character Git commit ID")
+			continue
+		}
+		oldRev, newRev := strings.ToLower(originalKey), strings.ToLower(value)
+		if oldRev == newRev {
+			d.errf(path, "self-mapping is not stored; unchanged revisions are an explicit remap no-op")
+			continue
+		}
+		if _, exists := originalByNormalized[oldRev]; exists {
+			d.errf(path, "commit identity conflicts with another spelling of the same source revision")
+			continue
+		}
+		originalByNormalized[oldRev] = originalKey
+		normalized[oldRev] = newRev
+		out[originalKey] = value
+	}
+
+	// Rewrites are one-to-one. Fan-in would make the reverse identity
+	// ambiguous and can silently conflate two independently observed commits.
+	reverse := map[string]string{}
+	for _, oldRev := range sortedKeys(normalized) {
+		newRev := normalized[oldRev]
+		if prior, exists := reverse[newRev]; exists && prior != oldRev {
+			d.errf("revision_lineage."+originalByNormalized[oldRev], "fan-in is not allowed: %s and %s both map to %s", prior, oldRev, newRev)
+			continue
+		}
+		reverse[newRev] = oldRev
+	}
+
+	// A lineage is a chain, never an alias cycle. Report each cycle once at
+	// its lexicographically first member for deterministic diagnostics.
+	reported := map[string]bool{}
+	for _, start := range sortedKeys(normalized) {
+		positions := map[string]int{}
+		var walk []string
+		cur := start
+		for {
+			if at, seen := positions[cur]; seen {
+				cycle := append([]string(nil), walk[at:]...)
+				sort.Strings(cycle)
+				key := strings.Join(cycle, ",")
+				if !reported[key] {
+					reported[key] = true
+					d.errf("revision_lineage."+originalByNormalized[cycle[0]], "cycle is not allowed in revision lineage: %s", strings.Join(cycle, " -> "))
+				}
+				break
+			}
+			next, exists := normalized[cur]
+			if !exists {
+				break
+			}
+			positions[cur] = len(walk)
+			walk = append(walk, cur)
+			cur = next
+		}
+	}
+	return out
 }
 
 func (d *decoder) retirementSources(raw any) map[string]RetirementRecord {

@@ -213,6 +213,13 @@ func happyProposalCiting(id string) string {
 
 func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
+	graphPath := gstore.PathFor(filepath.Join(root, "Plans", "SamplePlan"))
+	if _, err := gstore.Update(graphPath, func(g *model.Graph) error {
+		g.RevisionLineage = map[string]string{"1111111111111111111111111111111111111111": "2222222222222222222222222222222222222222"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	recordFixtureDecision(t, root)
 	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 
@@ -229,6 +236,9 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	g, err := gstore.Load(res.GraphPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if g.RevisionLineage["1111111111111111111111111111111111111111"] != "2222222222222222222222222222222222222222" {
+		t.Fatalf("compile discarded revision lineage: %+v", g.RevisionLineage)
 	}
 	implFR := g.NodeByID("impl-fr")
 	if implFR == nil || implFR.IntentHashes["FR-01"] == "" ||

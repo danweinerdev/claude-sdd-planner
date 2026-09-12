@@ -156,6 +156,7 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 	out := *g
 	out.Nodes = append([]model.Node(nil), g.Nodes...)
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
+	out.RevisionLineage = cloneRevisionLineage(g.RevisionLineage)
 	index := map[string]int{}
 	for i := range out.Nodes {
 		index[out.Nodes[i].ID] = i

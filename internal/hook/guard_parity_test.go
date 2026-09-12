@@ -180,6 +180,9 @@ func TestSddAllowlistCoversEverySubcommand(t *testing.T) {
 	if got := checkSdd([]string{"sdd", "graph", "made-up"}, "sdd graph made-up"); !got.Deny {
 		t.Error("an unknown graph sub-verb must deny by default")
 	}
+	if got := checkSdd([]string{"sdd", "graph", "remap-revisions"}, "sdd graph remap-revisions"); !got.Deny {
+		t.Error("`sdd graph remap-revisions` appends lineage and must deny")
+	}
 
 	// `next` is flag-sensitive (DD-10): the bare read is allowed, the claim
 	// is a graph mutation.
