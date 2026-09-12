@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
@@ -273,7 +274,7 @@ func graphStatusCmd() *cobra.Command {
 // graphShowCmd prints one node's full record plus its derived state.
 func graphShowCmd() *cobra.Command {
 	var plan string
-	var asJSON bool
+	var asJSON, brief bool
 	c := &cobra.Command{
 		Use:   "show <node-id>",
 		Short: "One node's full record with its derived state and closure",
@@ -300,7 +301,11 @@ func graphShowCmd() *cobra.Command {
 				}{true, n, string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale})
 			}
 			w := c.OutOrStdout()
-			fmt.Fprintf(w, "%s  [%s]\n", n.ID, ns.State)
+			if brief {
+				printBrief(w, ctx.g, n, ctx.st)
+				return nil
+			}
+			fmt.Fprintf(w, "%s  [%s] (role %s, contract_rev %d)\n", n.ID, ns.State, n.EffectiveRole(), n.EffectiveContractRev())
 			fmt.Fprintf(w, "  contract: %s\n", n.Contract)
 			fmt.Fprintf(w, "  justifies: %s\n", strings.Join(n.Justifies, ", "))
 			if len(n.Deps) > 0 {
@@ -332,6 +337,12 @@ func graphShowCmd() *cobra.Command {
 			if len(ns.InputStale) > 0 {
 				fmt.Fprintf(w, "  INPUT-STALE: %s (re-read the declared inputs)\n", strings.Join(ns.InputStale, ", "))
 			}
+			if ns.RevIncompatible {
+				fmt.Fprintln(w, "  REV-INCOMPATIBLE: the latest observation predates a revise; it is history, not proof")
+			}
+			if len(ns.ReviewStale) > 0 {
+				fmt.Fprintf(w, "  REVIEW-STALE: %s changed since this review (re-review)\n", strings.Join(ns.ReviewStale, ", "))
+			}
 			if cl := n.Claim; cl != nil {
 				fmt.Fprintf(w, "  claim: %s (lease expires %s)\n", cl.By, cl.LeaseExpires)
 			}
@@ -340,6 +351,7 @@ func graphShowCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	c.Flags().BoolVar(&brief, "brief", false, "self-contained claim brief: for a review node, the reviewed contracts, artifacts, digests, and lanes")
 	return c
 }
 
@@ -448,4 +460,51 @@ func exportPlan(ctx *analyticsCtx) string {
 		fmt.Fprintf(&b, "%2d. %s — %s [%s, estimate %d]\n", i+1, id, n.Contract, mark, n.Estimate)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// printBrief renders the self-contained brief a claimant needs (contract
+// text, inputs, gate) and, for a review node, the reviewed set: every scope
+// node's contract, contract revision, artifacts with current digests, and
+// the lanes to run — so the review needs no other reads
+// (ReviewDrivenAmendment § Interfaces).
+func printBrief(w io.Writer, g *model.Graph, n *model.Node, st map[string]states.NodeState) {
+	fmt.Fprintf(w, "%s  [%s] role %s, contract_rev %d\n", n.ID, st[n.ID].State, n.EffectiveRole(), n.EffectiveContractRev())
+	fmt.Fprintf(w, "contract: %s\n", n.Contract)
+	if len(n.Justifies) > 0 {
+		fmt.Fprintf(w, "justifies: %s\n", strings.Join(n.Justifies, ", "))
+	}
+	if n.EffectiveRole() != model.RoleReview {
+		fmt.Fprintf(w, "gate: %s\n", n.Gate.Type)
+		for _, t := range n.Gate.Tests {
+			fmt.Fprintf(w, "  test %s (%s)\n", t.ID, t.File)
+		}
+		if len(n.Artifacts) > 0 {
+			fmt.Fprintf(w, "artifacts: %s\n", strings.Join(n.Artifacts, ", "))
+		}
+		return
+	}
+	lanes := n.Gate.Lanes
+	if lanes == nil {
+		lanes = model.ReviewLanes
+	}
+	fmt.Fprintf(w, "lanes: %s\n", strings.Join(lanes, ", "))
+	scope, err := greview.Scope(g, n.ID)
+	if err != nil {
+		fmt.Fprintf(w, "scope: %v\n", err)
+		return
+	}
+	fmt.Fprintf(w, "reviewed set (%d node(s)):\n", len(scope))
+	for _, id := range scope {
+		m := g.NodeByID(id)
+		fmt.Fprintf(w, "  %s  [%s] contract_rev %d\n    contract: %s\n", id, st[id].State, m.EffectiveContractRev(), m.Contract)
+		for _, a := range m.Artifacts {
+			fmt.Fprintf(w, "    artifact: %s\n", a)
+		}
+	}
+	if v := n.Verification; v != nil {
+		fmt.Fprintf(w, "last review: %s at seq %d against contract_rev %d\n", v.Result, v.Seq, v.EffectiveContractRev())
+	}
+	if len(st[n.ID].ReviewStale) > 0 {
+		fmt.Fprintf(w, "REVIEW-STALE: %s\n", strings.Join(st[n.ID].ReviewStale, ", "))
+	}
 }

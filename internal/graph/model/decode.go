@@ -56,19 +56,24 @@ var toolOwnedNodeKeys = map[string]string{
 	"claim":         "`next --claim` records claims under the store lock",
 	"verification":  "`graph sync` records observations from parsed reports",
 	"red_seqs":      "`graph sync` records first-failure seqs from parsed reports",
+	"contract_rev":  "`graph amend` advances contract revisions",
+	"origin":        "`graph amend` records which finding created a node",
 }
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "nodes", "retired", "retirement_sources"}
+	graphKeys        = []string{"version", "seq_counter", "nodes", "retired", "retirement_sources", "amendments"}
 	proposalKeys     = []string{"version", "nodes"}
-	nodeKeys         = []string{"id", "contract", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
+	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
+	originKeys       = []string{"review", "finding"}
+	amendmentKeys    = []string{"seq", "review", "artifact", "report_digest", "revised", "extended"}
+	reviewedKeys     = []string{"contract_rev", "artifact_digests"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
 	testKeys         = []string{"id", "file", "satisfies"}
 	inputKeys        = []string{"root", "path", "section"}
 	inputSectionKeys = []string{"heading_path"}
 	claimKeys        = []string{"by", "lease_expires", "workspace"}
-	verificationKeys = []string{"result", "seq", "artifact_digests", "report_digest", "isolation", "provenance"}
+	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "report_digest", "isolation", "provenance"}
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
 
@@ -204,6 +209,16 @@ func (d *decoder) graph(raw any) *Graph {
 	if v, present := obj["retirement_sources"]; present && !d.proposal {
 		g.RetirementSources = d.retirementSources(v)
 	}
+	if v, present := obj["amendments"]; present && !d.proposal {
+		list, ok := v.([]any)
+		if !ok {
+			d.errf("amendments", "must be a list of amendment records, got %s", typeName(v))
+		} else {
+			for i, item := range list {
+				g.Amendments = append(g.Amendments, d.amendment(fmt.Sprintf("amendments[%d]", i), item))
+			}
+		}
+	}
 	nodesRaw, present := obj["nodes"]
 	if !present {
 		d.errf("nodes", "missing required field")
@@ -277,6 +292,10 @@ func (d *decoder) node(path string, raw any) Node {
 
 	n := Node{Estimate: 1}
 	n.ID = d.requiredString(path, obj, "id")
+	n.Role = d.optionalString(path+".role", obj["role"])
+	if n.Role != "" && !KnownRole(n.Role) {
+		d.errf(path+".role", "%q is not a role; valid roles are %q, %q, %q, %q", n.Role, RoleImplementation, RoleSharedMechanism, RoleReview, RoleIntegrationAcceptance)
+	}
 	n.Contract = d.requiredString(path, obj, "contract")
 	n.Justifies = d.stringList(path+".justifies", obj["justifies"])
 	n.Deps = d.stringList(path+".deps", obj["deps"])
@@ -328,8 +347,45 @@ func (d *decoder) node(path string, raw any) Node {
 		if v, present := obj["red_seqs"]; present {
 			n.RedSeqs = d.intMap(path+".red_seqs", v)
 		}
+		if v, present := obj["contract_rev"]; present {
+			if r, ok := d.intVal(path+".contract_rev", v); ok {
+				if r < 1 {
+					d.errf(path+".contract_rev", "must be >= 1, got %d", r)
+				}
+				n.ContractRev = r
+			}
+		}
+		if v, present := obj["origin"]; present {
+			obj2, ok := v.(map[string]any)
+			if !ok {
+				d.errf(path+".origin", "must be an object, got %s", typeName(v))
+			} else {
+				d.unknownKeys(path+".origin", obj2, originKeys)
+				n.Origin = &Origin{Review: d.requiredString(path+".origin", obj2, "review"), Finding: d.requiredString(path+".origin", obj2, "finding")}
+			}
+		}
 	}
 	return n
+}
+
+func (d *decoder) amendment(path string, raw any) AmendmentRecord {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return AmendmentRecord{}
+	}
+	d.unknownKeys(path, obj, amendmentKeys)
+	a := AmendmentRecord{
+		Review: d.requiredString(path, obj, "review"), Artifact: d.requiredString(path, obj, "artifact"),
+		ReportDigest: d.requiredString(path, obj, "report_digest"),
+		Revised:      d.stringList(path+".revised", obj["revised"]), Extended: d.stringList(path+".extended", obj["extended"]),
+	}
+	if v, present := obj["seq"]; present {
+		a.Seq, _ = d.intVal(path+".seq", v)
+	} else {
+		d.errf(path+".seq", "missing required field")
+	}
+	return a
 }
 
 func (d *decoder) gate(path string, raw any) Gate {
@@ -545,6 +601,46 @@ func (d *decoder) verification(path string, raw any) *Verification {
 	}
 	if av, present := obj["artifact_digests"]; present {
 		v.ArtifactDigests = d.stringMap(path+".artifact_digests", av)
+	}
+	if rv, present := obj["contract_rev"]; present {
+		if n, ok := d.intVal(path+".contract_rev", rv); ok {
+			if n < 1 {
+				d.errf(path+".contract_rev", "must be >= 1, got %d", n)
+			}
+			v.ContractRev = n
+		}
+	}
+	if rv, present := obj["reviewed"]; present {
+		obj2, ok := rv.(map[string]any)
+		if !ok {
+			d.errf(path+".reviewed", "must be an object keyed by node id, got %s", typeName(rv))
+		} else {
+			v.Reviewed = map[string]ReviewedRef{}
+			var ids []string
+			for id := range obj2 {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				p := path + ".reviewed." + id
+				ref, ok := obj2[id].(map[string]any)
+				if !ok {
+					d.errf(p, "must be an object")
+					continue
+				}
+				d.unknownKeys(p, ref, reviewedKeys)
+				r := ReviewedRef{}
+				if cv, present := ref["contract_rev"]; present {
+					r.ContractRev, _ = d.intVal(p+".contract_rev", cv)
+				} else {
+					d.errf(p+".contract_rev", "missing required field")
+				}
+				if av, present := ref["artifact_digests"]; present {
+					r.ArtifactDigests = d.stringMap(p+".artifact_digests", av)
+				}
+				v.Reviewed[id] = r
+			}
+		}
 	}
 	v.ReportDigest = d.optionalString(path+".report_digest", obj["report_digest"])
 	v.Isolation = d.requiredString(path, obj, "isolation")

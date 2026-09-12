@@ -337,6 +337,16 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 		}
 		out.items[src.Rel] = per
 	}
+	// Frozen review findings (ReviewDrivenAmendment DD-6): an extend node
+	// cites the finding that demanded it; the title is the fingerprint.
+	for rel, per := range out.index.ReviewFindings() {
+		items := map[string]intent.Item{}
+		for id, title := range per {
+			normalized := intent.Normalize(title)
+			items[id] = intent.Item{ID: id, Family: "F", Normalized: normalized, Hash: intent.Hash(normalized)}
+		}
+		out.items[rel] = items
+	}
 	// Plan decisions (Designs/PlanDecisions) are citable and fingerprintable
 	// like any requirement: the item text is the normalized statement, so a
 	// node citing `pd-…` carries an intent hash that goes stale only if the
@@ -471,6 +481,25 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				if hazards.Known(h) && !satisfied[h] {
 					shape, _ := hazards.Lookup(h)
 					add(id, "hazard %q is discharged by no test; one of the node's tests must declare `satisfies: [%q]` and take the required shape: %s", h, h, shape.RequiresTestThat)
+				}
+			}
+		}
+
+		// Roles (ReviewDrivenAmendment DD-1): a review node is exactly a
+		// node with a review gate, and it reviews its deps, so it must have
+		// some. An acceptance node depends on review nodes, never on raw
+		// work, so scrutiny is on the path to closure (DD-8).
+		switch role := n.EffectiveRole(); {
+		case role == model.RoleReview && n.Gate.Type != model.GateReview:
+			add(id, "has role review but gate type %q; a review node's gate is `review`", n.Gate.Type)
+		case role != model.RoleReview && n.Gate.Type == model.GateReview:
+			add(id, "has a review gate but role %q; only a review node carries a review gate", role)
+		case role == model.RoleReview && len(n.Deps) == 0:
+			add(id, "is a review node with no deps; a review node reviews the contract nodes it depends on")
+		case role == model.RoleIntegrationAcceptance:
+			for _, dep := range n.Deps {
+				if d, ok := merged[dep]; ok && d.EffectiveRole() != model.RoleReview && d.EffectiveRole() != model.RoleIntegrationAcceptance {
+					add(id, "is an acceptance node depending on %q (role %s); acceptance depends on review nodes, not raw work", dep, d.EffectiveRole())
 				}
 			}
 		}

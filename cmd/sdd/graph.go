@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,6 +56,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSyncCmd())
 	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
+	c.AddCommand(graphAmendCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphSetInputsCmd())
@@ -726,6 +728,76 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 // all three freeze signals read together, and findings that name scope
 // nodes demote them in the same compare-and-swap cycle. Mutating:
 // guard-covered per D-0014.
+// printAmendmentPlan renders a preview: one line per amendment, then the
+// revised fields or the new node's contract.
+func printAmendmentPlan(w io.Writer, p *greview.Plan) {
+	for _, a := range p.Amendments {
+		switch a.Action {
+		case greview.ActionRevise:
+			fmt.Fprintf(w, "  %s revise %s (changes: %s)\n", a.Finding, a.Node, strings.Join(a.Changed, ", "))
+			if a.Before != nil && a.After != nil && a.Before.Contract != a.After.Contract {
+				fmt.Fprintf(w, "      contract: %s\n             -> %s\n", a.Before.Contract, a.After.Contract)
+			}
+		case greview.ActionExtend:
+			fmt.Fprintf(w, "  %s extend %s (deps: %s)\n      contract: %s\n", a.Finding, a.Node, strings.Join(a.New.Deps, ", "), a.New.Contract)
+		}
+	}
+}
+
+// graphAmendCmd applies a frozen review artifact's open findings as one
+// fenced amendment (ReviewDrivenAmendment DD-2, DD-8). Mutating.
+func graphAmendCmd() *cobra.Command {
+	var plan, node, artifact, expect, by string
+	var dryRun, asJSON bool
+	c := &cobra.Command{
+		Use:   "amend",
+		Short: "Apply a frozen review's open findings as revise/extend amendments",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" || node == "" || artifact == "" {
+				return fmt.Errorf("graph amend: --plan, --node, and --from-review are required")
+			}
+			root, err := store.FindPlanningRoot(".")
+			if err != nil {
+				return fmt.Errorf("graph amend: %w", err)
+			}
+			_, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph amend: %w", err)
+			}
+			res, err := ops.AmendFromReview(ops.AmendOptions{
+				Root: root, RepoRoot: repoRoot, Plan: plan, Node: node, Artifact: artifact,
+				ExpectDigest: expect, By: by, DryRun: dryRun,
+			})
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(res)
+			}
+			w := c.OutOrStdout()
+			if !res.Applied {
+				fmt.Fprintf(w, "dry run: %d amendment(s) would apply to %s\n", len(res.Plan.Amendments), plan)
+				printAmendmentPlan(w, res.Plan)
+				fmt.Fprintf(w, "expect-digest: %s\n", res.ExpectDigest)
+				return nil
+			}
+			fmt.Fprintf(w, "applied %d amendment(s) at seq %d\n", len(res.Plan.Amendments), res.Seq)
+			printAmendmentPlan(w, res.Plan)
+			fmt.Fprintf(w, "revised nodes owe a fresh RED at their new contract revision; %s re-runs once they are GREEN\n", node)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "the review node whose artifact is applied")
+	c.Flags().StringVar(&artifact, "from-review", "", "path to the frozen review artifact carrying the findings")
+	c.Flags().StringVar(&expect, "expect-digest", "", "graph digest the preview was computed against (printed by `sdd graph review`)")
+	c.Flags().StringVar(&by, "by", "", "claimant identity (required to revise a node you hold)")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "print the amendment plan and expect-digest without writing")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
 func graphReviewCmd() *cobra.Command {
 	var plan, node, artifact, by string
 	var asJSON bool
@@ -761,11 +833,15 @@ func graphReviewCmd() *cobra.Command {
 			if asJSON {
 				return writeJSON(res)
 			}
-			fmt.Fprintf(c.OutOrStdout(), "recorded review gate %s: pass at seq %d\n", res.Node, res.Observation.Seq)
-			fmt.Fprintf(c.OutOrStdout(), "scope (%d node(s)): %s\n", len(res.Scope), strings.Join(res.Scope, ", "))
-			if len(res.Demoted) > 0 {
-				fmt.Fprintf(c.OutOrStdout(), "demoted by findings (RED, workable again): %s\n", strings.Join(res.Demoted, ", "))
+			if res.Plan != nil {
+				w := c.OutOrStdout()
+				fmt.Fprintf(w, "not recorded: %s carries %d open finding(s); nothing was written\n", res.Artifact, len(res.Plan.Amendments))
+				printAmendmentPlan(w, res.Plan)
+				fmt.Fprintf(w, "apply with:\n  sdd graph amend --plan %s --node %s --from-review %s --expect-digest %s\n", plan, node, artifact, res.ExpectDigest)
+				return &refusedError{n: len(res.Plan.Amendments)}
 			}
+			fmt.Fprintf(c.OutOrStdout(), "recorded review node %s: pass at seq %d (contract_rev %d, %d reviewed node(s))\n", res.Node, res.Observation.Seq, res.Observation.ContractRev, len(res.Observation.Reviewed))
+			fmt.Fprintf(c.OutOrStdout(), "scope (%d node(s)): %s\n", len(res.Scope), strings.Join(res.Scope, ", "))
 			if res.Merged {
 				fmt.Fprintln(c.OutOrStdout(), "claim completed")
 			}

@@ -57,7 +57,14 @@ type CitationIndex struct {
 	// then in the one other plan that carries it, else it is ambiguous.
 	decisions  *decisions.Index
 	citingPlan string
+	// findings holds frozen review artifacts of the citing plan as
+	// citation sources (ReviewDrivenAmendment DD-6): sourceRel -> finding
+	// id -> title. An extend node cites the finding that demanded it.
+	findings map[string]map[string]string
 }
+
+// KindReviewFinding is CitationHit.Kind for a frozen review finding.
+const KindReviewFinding = "review"
 
 // KindPlanDecisions is CitationHit.Kind for a plan-decision hit; SourceRel
 // is then the decisions file's root-relative path and Qualifier the plan.
@@ -72,8 +79,80 @@ func BuildCitationIndex(r *Root, a *Artifact) *CitationIndex {
 	x := buildCitationIndexFrom(relatedSources(r, a))
 	x.decisions = r.DecisionIndex
 	x.citingPlan = citingPlanOf(r, a)
+	x.registerReviewFindings(r)
 	return x
 }
+
+// registerReviewFindings adds every frozen, resolved review artifact that
+// reviews a document under the citing plan as a citation source: its
+// `findings[].id` values resolve bare (when unambiguous) and qualified by
+// the artifact's path. Unfrozen artifacts are never sources — a citation
+// cannot point at text that can still change.
+func (x *CitationIndex) registerReviewFindings(r *Root) {
+	if x.citingPlan == "" {
+		return
+	}
+	prefix := "Plans/" + x.citingPlan + "/"
+	x.findings = map[string]map[string]string{}
+	register := func(key string, hit CitationHit) {
+		if prior, taken := x.byKey[key]; taken {
+			if prior == hit {
+				return
+			}
+			delete(x.byKey, key)
+			x.ambiguous[key] = appendUnique(x.ambiguous[key], prior.Qualifier+":"+prior.ID, hit.Qualifier+":"+hit.ID)
+			return
+		}
+		if others := x.ambiguous[key]; others != nil {
+			x.ambiguous[key] = appendUnique(others, hit.Qualifier+":"+hit.ID)
+			return
+		}
+		x.byKey[key] = hit
+	}
+	for _, a := range r.Artifacts {
+		if a.Meta == nil || a.Kind() != "review" {
+			continue
+		}
+		frozen, _ := a.Meta["frozen"].(bool)
+		if !frozen || metaStr(a.Meta, "status") != "resolved" {
+			continue
+		}
+		reviewOf, _ := a.Meta["review_of"].(string)
+		if !strings.HasPrefix(reviewOf, prefix) {
+			continue
+		}
+		qualifier := SourceQualifier(a.Rel)
+		base := path.Base(qualifier)
+		per := map[string]string{}
+		for _, item := range asAnyList(a.Meta["findings"]) {
+			m := planEntry(item)
+			if m == nil {
+				continue
+			}
+			id := metaStr(m, "id")
+			if id == "" {
+				continue
+			}
+			per[id] = metaStr(m, "title")
+			hit := CitationHit{SourceRel: a.Rel, Qualifier: qualifier, ID: id, Kind: KindReviewFinding}
+			register(id, hit)
+			register(qualifier+":"+id, hit)
+			if base != qualifier {
+				register(base+":"+id, hit)
+			}
+		}
+		if len(per) > 0 {
+			x.findings[a.Rel] = per
+		}
+	}
+	for key := range x.ambiguous {
+		sortStrings(x.ambiguous[key])
+	}
+}
+
+// ReviewFindings returns the frozen review findings this index resolves:
+// sourceRel -> finding id -> title (the fingerprintable text).
+func (x *CitationIndex) ReviewFindings() map[string]map[string]string { return x.findings }
 
 // citingPlanOf names the plan an artifact cites from: the plan itself, a
 // phase's plan, or a review's reviewed plan. "" for artifacts outside any

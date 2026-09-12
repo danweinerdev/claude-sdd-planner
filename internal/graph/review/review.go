@@ -15,7 +15,6 @@ package review
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,8 +26,8 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
-	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
 // Scope derives what a review gate reviews: the gate's dependency closure
@@ -91,6 +90,22 @@ func Scope(g *model.Graph, gateID string) ([]string, error) {
 // completion-grade.
 func Closed(g *model.Graph, statesByID map[string]states.NodeState) map[string]bool {
 	closed := map[string]bool{}
+	// Acceptance nodes (ReviewDrivenAmendment DD-8): a GREEN
+	// integration-acceptance node closes its whole dependency closure —
+	// scrutiny is on the path by construction, so no coverage subtraction
+	// is needed.
+	for i := range g.Nodes {
+		acc := &g.Nodes[i]
+		if acc.EffectiveRole() != model.RoleIntegrationAcceptance || statesByID[acc.ID].State != states.Green {
+			continue
+		}
+		closed[acc.ID] = true
+		for _, m := range closureOf(g, acc.ID) {
+			if statesByID[m].State == states.Green {
+				closed[m] = true
+			}
+		}
+	}
 	for i := range g.Nodes {
 		b := &g.Nodes[i]
 		if b.Gate.Type != model.GateReview || b.Gate.Lanes != nil {
@@ -119,6 +134,30 @@ func Closed(g *model.Graph, statesByID map[string]states.NodeState) map[string]b
 	return closed
 }
 
+// closureOf returns every transitive dependency of id (excluding id).
+func closureOf(g *model.Graph, id string) []string {
+	seen := map[string]bool{}
+	var out []string
+	var walk func(string)
+	walk = func(cur string) {
+		n := g.NodeByID(cur)
+		if n == nil {
+			return
+		}
+		for _, dep := range n.Deps {
+			if seen[dep] {
+				continue
+			}
+			seen[dep] = true
+			out = append(out, dep)
+			walk(dep)
+		}
+	}
+	walk(id)
+	sort.Strings(out)
+	return out
+}
+
 // facts is what the gate reads from a review artifact's frontmatter: the
 // three freeze signals D-0020 binds together, the lane results, and the
 // findings with the nodes they name.
@@ -131,11 +170,7 @@ type facts struct {
 		Lane   string `yaml:"lane"`
 		Result string `yaml:"result"`
 	} `yaml:"lane_results"`
-	Findings []struct {
-		ID     string   `yaml:"id"`
-		Status string   `yaml:"status"`
-		Nodes  []string `yaml:"nodes"`
-	} `yaml:"findings"`
+	Findings []finding `yaml:"findings"`
 }
 
 // readFacts extracts and decodes the artifact's frontmatter block.
@@ -171,27 +206,32 @@ type Options struct {
 	Now      func() time.Time
 }
 
-// Result is one recording's outcome.
+// Result is one recording's outcome. Exactly one of Observation (the
+// artifact had no open findings and greened the node) or Plan (it had open
+// findings: nothing was written, and Plan is the amendment preview to apply
+// with `sdd graph amend --from-review`) is set.
 type Result struct {
-	Node     string   `json:"node"`
-	Artifact string   `json:"artifact"`
-	Scope    []string `json:"scope"`
-	// Demoted lists scope nodes the artifact's findings named: each now
-	// carries a failing observation (RED, workable again).
-	Demoted           []string            `json:"demoted,omitempty"`
+	Node              string              `json:"node"`
+	Artifact          string              `json:"artifact"`
+	Scope             []string            `json:"scope"`
 	Observation       *model.Verification `json:"observation,omitempty"`
+	Plan              *Plan               `json:"plan,omitempty"`
+	ExpectDigest      string              `json:"expect_digest,omitempty"`
 	Merged            bool                `json:"merged,omitempty"`
 	WorkspaceReleased string              `json:"workspace_released,omitempty"`
 }
 
-// Record wires a frozen review artifact into a review gate's observation.
-// The gate greens ONLY from an artifact that is resolved AND frozen: true
-// AND verdict Aligned — three signals read together, because D-0020 sets
-// them atomically at resolve and any one alone can be a stale or reopened
-// artifact. Findings that name scope nodes demote them in the same
-// compare-and-swap cycle: failing observations, seq-stamped before the
-// gate's own, so a faulted node is RED the moment the review is recorded and
-// the gate goes seq-stale the moment rework re-verifies it.
+// Record wires a frozen review artifact into a review node's observation.
+// The node greens ONLY from an artifact that is resolved AND frozen: true
+// AND verdict Aligned — three signals read together, because resolve sets
+// them atomically and any one alone can be a stale or reopened artifact —
+// AND that carries no open findings. Open findings never demote anything:
+// they are amendments (revise / extend), previewed here and applied by
+// `sdd graph amend --from-review` under a digest fence
+// (ReviewDrivenAmendment DD-2, DD-7). A pass records the reviewed set —
+// every scope node's contract revision and artifact digests — so a later
+// contract-only change stales the review even when the bytes did not move
+// (DD-9).
 func Record(o Options) (*Result, error) {
 	if o.Now == nil {
 		o.Now = time.Now
@@ -209,6 +249,9 @@ func Record(o Options) (*Result, error) {
 	if node.Gate.Type != model.GateReview {
 		return nil, fmt.Errorf("graph review: %q has gate type %q; test and command gates record through `sdd graph sync`", o.Node, node.Gate.Type)
 	}
+	if role := node.EffectiveRole(); role != model.RoleReview {
+		return nil, fmt.Errorf("graph review: %q has role %q; only a review node records a review artifact", o.Node, role)
+	}
 	if node.Claim != nil {
 		if o.By == "" {
 			return nil, fmt.Errorf("graph review: %q is claimed by %q; pass --by to record as its holder", o.Node, node.Claim.By)
@@ -223,18 +266,12 @@ func Record(o Options) (*Result, error) {
 		}
 	}
 
-	artifactPath := o.Artifact
-	if _, statErr := os.Stat(artifactPath); statErr != nil && !filepath.IsAbs(artifactPath) {
-		artifactPath = filepath.Join(o.Root, filepath.FromSlash(o.Artifact))
-	}
-	raw, err := os.ReadFile(artifactPath)
+	art, err := ReadArtifact(o.Root, o.Artifact)
 	if err != nil {
-		return nil, fmt.Errorf("graph review: reading the review artifact: %w", err)
+		return nil, fmt.Errorf("graph review: %w", err)
 	}
-	f, err := readFacts(raw)
-	if err != nil {
-		return nil, fmt.Errorf("graph review: %s: %v", o.Artifact, err)
-	}
+	f := art.Facts
+	reportDigest := art.ReportDigest
 
 	// The three freeze signals, refused together (batched, naming each).
 	var missing []string
@@ -263,7 +300,6 @@ func Record(o Options) (*Result, error) {
 	if !strings.HasPrefix(filepath.ToSlash(f.ReviewOf), planPrefix) {
 		return nil, fmt.Errorf("graph review: %s reviews %q, which is not under %s — a review of another plan is not evidence for this gate", o.Artifact, f.ReviewOf, planPrefix)
 	}
-	reportDigest := digest.Bytes(raw)
 	for i := range g.Nodes {
 		other := &g.Nodes[i]
 		if other.ID == o.Node || other.Gate.Type != model.GateReview {
@@ -307,44 +343,57 @@ func Record(o Options) (*Result, error) {
 		inScope[id] = true
 	}
 
-	// Demotion set: findings name graph nodes via their `nodes:` field. The
-	// field's presence IS the demotion request — a finding without it (a
-	// deferred hygiene note, a followup tracked elsewhere) demotes nothing.
-	demote := map[string]bool{}
-	var outOfScope []string
-	for _, finding := range f.Findings {
-		for _, named := range finding.Nodes {
-			if !inScope[named] {
-				outOfScope = append(outOfScope, fmt.Sprintf("%s names %q", finding.ID, named))
-				continue
-			}
-			demote[named] = true
+	// Open findings are amendments, not demotions. Plan them now so a
+	// malformed finding refuses here, then hand the preview back unwritten:
+	// the node cannot green from an artifact that still demands change.
+	if open := art.OpenFindings(); len(open) > 0 {
+		plan, err := PlanAmendments(g, o.Node, art)
+		if err != nil {
+			return nil, err
 		}
+		expect, err := gstore.Digest(graphPath)
+		if err != nil {
+			return nil, err
+		}
+		return &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Plan: plan, ExpectDigest: expect}, nil
 	}
-	if len(outOfScope) > 0 {
-		return nil, fmt.Errorf("graph review: finding(s) name node(s) outside %q's scope — %s; the scope is: %s", o.Node, strings.Join(outOfScope, "; "), strings.Join(scope, ", "))
+	for i := range g.Nodes {
+		if g.Nodes[i].Verification == nil {
+			continue
+		}
+		for _, a := range g.Amendments {
+			if a.ReportDigest == reportDigest {
+				return nil, fmt.Errorf("graph review: %s was already applied as an amendment (seq %d); a re-review needs a fresh artifact", o.Artifact, a.Seq)
+			}
+		}
+		break
 	}
-	demoted := make([]string, 0, len(demote))
-	for id := range demote {
-		demoted = append(demoted, id)
-	}
-	sort.Strings(demoted)
 
-	// The aggregate diff the gate reviewed: every scope node's declared
-	// artifacts, digested from the shared tree (a review is of merged,
-	// committed state). Recorded on the gate's observation so drift in any
-	// of them derives the gate STALE via ordinary digest staleness (DD-6).
+	// The reviewed set (DD-9): every scope node's contract revision and
+	// artifact digests, digested from the shared tree (a review is of
+	// merged, committed state). The aggregate artifact digests are also
+	// recorded on the observation so drift in any of them derives the node
+	// STALE via ordinary digest staleness (DD-6).
 	digester := digest.New(o.RepoRoot)
 	agg := map[string]string{}
+	reviewed := map[string]model.ReviewedRef{}
 	for _, id := range scope {
-		for _, a := range g.NodeByID(id).Artifacts {
-			if _, seen := agg[a]; seen {
+		sn := g.NodeByID(id)
+		ref := model.ReviewedRef{ContractRev: sn.EffectiveContractRev()}
+		for _, a := range sn.Artifacts {
+			d := digester.Artifact(a)
+			if d == "" {
 				continue
 			}
-			if d := digester.Artifact(a); d != "" {
+			if ref.ArtifactDigests == nil {
+				ref.ArtifactDigests = map[string]string{}
+			}
+			ref.ArtifactDigests[a] = d
+			if _, seen := agg[a]; !seen {
 				agg[a] = d
 			}
 		}
+		reviewed[id] = ref
 	}
 
 	prov := o.Provider
@@ -358,7 +407,7 @@ func Record(o Options) (*Result, error) {
 		return nil, fmt.Errorf("graph review: reading provenance: %w", err)
 	}
 
-	res := &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Demoted: demoted}
+	res := &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope}
 	handle := ""
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 		n := fresh.NodeByID(o.Node)
@@ -368,27 +417,13 @@ func Record(o Options) (*Result, error) {
 		if n.Claim != nil && n.Claim.By != o.By {
 			return fmt.Errorf("graph review: %q was claimed by %q while this record ran", o.Node, n.Claim.By)
 		}
-		// Demotions first: the named nodes' failing observations carry
-		// seqs BELOW the gate's, so the gate derives GREEN now and goes
-		// seq-stale exactly when rework re-verifies a demoted node.
-		for _, id := range demoted {
-			dn := fresh.NodeByID(id)
-			if dn == nil {
-				return fmt.Errorf("graph review: demoted node %q vanished mid-record", id)
-			}
-			fresh.SeqCounter++
-			dn.Verification = &model.Verification{
-				Result:       model.ResultFail,
-				Seq:          fresh.SeqCounter,
-				ReportDigest: reportDigest,
-				Isolation:    model.IsolationClean,
-			}
-		}
 		fresh.SeqCounter++
 		n.Verification = &model.Verification{
 			Result:          model.ResultPass,
 			Seq:             fresh.SeqCounter,
+			ContractRev:     n.EffectiveContractRev(),
 			ArtifactDigests: agg,
+			Reviewed:        reviewed,
 			ReportDigest:    reportDigest,
 			Isolation:       model.IsolationClean,
 			Provenance:      provenance,

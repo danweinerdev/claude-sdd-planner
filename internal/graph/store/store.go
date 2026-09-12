@@ -136,6 +136,19 @@ func Update(path string, fn func(*model.Graph) error) (*model.Graph, error) {
 	return nil, fmt.Errorf("updating graph %s: gave up after %d concurrent-write collisions", path, updateAttempts)
 }
 
+// Digest returns the committed graph file's content digest — the fence
+// `sdd graph amend --expect-digest` takes — or "" when the file is absent.
+func Digest(path string) (string, error) {
+	art, err := istore.Read(path)
+	if err != nil {
+		return "", fmt.Errorf("reading graph: %w", err)
+	}
+	if !art.Exists {
+		return "", nil
+	}
+	return art.Digest, nil
+}
+
 // ignoreLines is what Init guarantees a plan's .gitignore covers: the
 // advisory-lock sidecars (never committed — a leftover lock is machine
 // state, not record) and the .graph/ workspace area (fragments, per-claim

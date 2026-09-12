@@ -116,8 +116,7 @@ var SddVerbReadOnly = map[string]bool{
 
 // sddDecideReadOnly are the `sdd decide` subcommands that only read.
 var sddDecideReadOnly = map[string]bool{
-	"capabilities": true, "effective": true, "history": true, "lookup": true,
-	"list": true, "search": true, "validate": true, "fork": false,
+	"list": true, "current": true, "lookup": true, "add": false,
 }
 
 // SddGraphVerbReadOnly classifies every `sdd graph` subcommand, current and
@@ -134,8 +133,9 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"init": false, "propose": false, "assemble": false, "convert": false,
 	// mutating, later phases (reserved: denied before they exist)
 	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
-	// mutating, phase 4: records gate observations and finding demotions
-	"review": false,
+	// mutating: records review-node observations; `amend` applies a frozen
+	// review's revise/extend findings under a digest fence
+	"review": false, "amend": false,
 	// mutating: batch observation recording (the converted-plan on-ramp)
 	"reverify": false,
 	// mutating: appends to the graph's retired register

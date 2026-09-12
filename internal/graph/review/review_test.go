@@ -10,8 +10,8 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
-	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
 func work(id string, deps []string, artifacts ...string) model.Node {
@@ -304,7 +304,7 @@ func TestRecordGreensGateAndStalesOnDrift(t *testing.T) {
 	}
 }
 
-func TestRecordDemotesNamedNodes(t *testing.T) {
+func TestRecordOpenFindingsPreviewWithoutWriting(t *testing.T) {
 	a := work("a", nil, "src/a.ext")
 	a.Verification = pass(1)
 	b := work("b", nil, "src/b.ext")
@@ -312,50 +312,88 @@ func TestRecordDemotesNamedNodes(t *testing.T) {
 	gate := fullGate("g1", []string{"a", "b"})
 	root, planDir := fixture(t, 2, a, b, gate)
 	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(),
-		"  - id: F-01\n    severity: major\n    title: \"a is faulted\"\n    status: deferred\n    nodes: [a]\n"))
+		"  - id: F-01\n    severity: major\n    title: \"a is faulted\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"does a, and also handles the empty case\"\n"))
+	before, _ := os.ReadFile(gstore.PathFor(planDir))
 
 	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
 		Artifact: filepath.Join(root, "reviews", "r.md")})
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
-	if !reflect.DeepEqual(res.Demoted, []string{"a"}) {
-		t.Fatalf("demoted: %v", res.Demoted)
+	if res.Observation != nil || res.Plan == nil || res.ExpectDigest == "" {
+		t.Fatalf("open findings must preview, not record: %+v", res)
 	}
-
+	if len(res.Plan.Amendments) != 1 || res.Plan.Amendments[0].Action != ActionRevise || res.Plan.Amendments[0].Node != "a" || !reflect.DeepEqual(res.Plan.Amendments[0].Changed, []string{"contract"}) {
+		t.Fatalf("plan = %+v", res.Plan.Amendments)
+	}
+	after, _ := os.ReadFile(gstore.PathFor(planDir))
+	if string(before) != string(after) {
+		t.Fatal("a preview must not write the graph")
+	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
-	demoted := g.NodeByID("a").Verification
-	gateObs := g.NodeByID("g1").Verification
-	if demoted.Result != model.ResultFail {
-		t.Fatal("a named node carries a failing observation")
-	}
-	if !(demoted.Seq < gateObs.Seq) {
-		t.Fatalf("demotions are seq-stamped before the gate's own observation: %d vs %d", demoted.Seq, gateObs.Seq)
-	}
 	st := states.Derive(states.Inputs{Graph: g})
-	if st["a"].State != states.Red || !st["a"].Workable {
-		t.Fatalf("a demoted node is RED and workable again: %+v", st["a"])
+	if st["a"].State != states.Green || g.NodeByID("g1").Verification != nil {
+		t.Fatalf("nothing changed on disk: a=%s", st["a"].State)
 	}
-	if st["b"].State != states.Green {
-		t.Fatalf("an unnamed sibling keeps its state: %+v", st["b"])
-	}
-	if st["g1"].State != states.Green {
-		t.Fatalf("the gate itself is GREEN until rework re-verifies: %+v", st["g1"])
-	}
+}
 
-	// Rework re-verifies the demoted node: the gate goes STALE by seq —
-	// its review predates the rework.
+func TestRecordNonOpenFindingsDoNotAmend(t *testing.T) {
+	a := work("a", nil, "src/a.ext")
+	a.Verification = pass(1)
+	gate := fullGate("g1", []string{"a"})
+	root, planDir := fixture(t, 1, a, gate)
+	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(),
+		"  - id: F-01\n    severity: minor\n    title: \"deferred note\"\n    status: deferred\n    nodes: [a]\n"))
+	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "r.md")})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if res.Observation == nil || res.Plan != nil {
+		t.Fatalf("a deferred finding is not an amendment: %+v", res)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("a").Verification.Result != model.ResultPass {
+		t.Fatal("no demotion: the named node keeps its pass")
+	}
+}
+
+func TestRecordBindsReviewedSetAndStalesOnContractRevision(t *testing.T) {
+	a := work("a", nil, "src/a.ext")
+	a.Verification = pass(1)
+	b := work("b", nil, "src/b.ext")
+	b.Verification = pass(2)
+	gate := fullGate("g1", []string{"a", "b"})
+	root, planDir := fixture(t, 2, a, b, gate)
+	writeFile(t, root, "src/a.ext", "content a")
+	writeFile(t, root, "src/b.ext", "content b")
+	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "r.md")})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	obs := res.Observation
+	if obs.ContractRev != 1 || len(obs.Reviewed) != 2 || obs.Reviewed["a"].ContractRev != 1 || obs.Reviewed["a"].ArtifactDigests["src/a.ext"] == "" {
+		t.Fatalf("reviewed set not recorded: %+v", obs)
+	}
+	if st := deriveWithDigests(t, root, planDir); st["g1"].State != states.Green {
+		t.Fatalf("fresh review is GREEN: %+v", st["g1"])
+	}
+	// A contract-only revision of b, bytes untouched, stales the review.
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
-		fresh.SeqCounter++
-		fresh.NodeByID("a").Verification = pass(fresh.SeqCounter)
+		fresh.NodeByID("b").ContractRev = 2
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	g, _ = gstore.Load(gstore.PathFor(planDir))
-	st = states.Derive(states.Inputs{Graph: g})
-	if st["g1"].State != states.Stale || !st["g1"].SeqStale {
-		t.Fatalf("rework must stale the gate by seq: %+v", st["g1"])
+	st := deriveWithDigests(t, root, planDir)
+	if st["g1"].State != states.Stale || !reflect.DeepEqual(st["g1"].ReviewStale, []string{"b"}) {
+		t.Fatalf("contract revision must stale the review even with identical bytes: %+v", st["g1"])
+	}
+	// b's own old pass is history now, not proof: b derives READY.
+	if st["b"].State != states.Ready || !st["b"].RevIncompatible {
+		t.Fatalf("revised node's prior pass is incompatible: %+v", st["b"])
 	}
 }
 
@@ -365,7 +403,7 @@ func TestRecordRefusesOutOfScopeFindingNodes(t *testing.T) {
 	unrelated := work("z", nil)
 	root, _ := fixture(t, 0, a, gate, unrelated)
 	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(),
-		"  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: deferred\n    nodes: [z]\n"))
+		"  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: open\n    action: revise\n    nodes: [z]\n    revise:\n      contract: \"changed\"\n"))
 
 	_, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
 		Artifact: filepath.Join(root, "reviews", "r.md")})

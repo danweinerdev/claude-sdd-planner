@@ -70,6 +70,15 @@ type NodeState struct {
 	// (shared-dirty, or an asserted record). Provisionally accepted, never
 	// GREEN: the mandatory clean re-verify is what lifts it (DD-7).
 	IsolationStale bool
+	// RevIncompatible: the latest observation was recorded against an
+	// earlier contract revision (a `revise` amendment landed since). It is
+	// history, not current proof; the node derives as if unobserved
+	// (ReviewDrivenAmendment DD-3).
+	RevIncompatible bool
+	// ReviewStale lists, for a review node, the reviewed nodes whose
+	// contract revision or artifact digests no longer match the recorded
+	// reviewed set (ReviewDrivenAmendment DD-9).
+	ReviewStale []string
 
 	// Workable: READY, RED, or STALE.
 	Workable bool
@@ -155,6 +164,17 @@ func Derive(in Inputs) map[string]NodeState {
 
 		switch v := n.Verification; {
 		case v == nil:
+			if depsAllGreen {
+				ns.State = Ready
+			} else {
+				ns.State = Blocked
+			}
+		case v.EffectiveContractRev() != n.EffectiveContractRev():
+			// Recorded against an earlier contract revision: kept as
+			// history, ignored as proof. RED included — the old failure
+			// says nothing about the revised obligation, and a fresh RED
+			// is required before the next GREEN.
+			ns.RevIncompatible = true
 			if depsAllGreen {
 				ns.State = Ready
 			} else {
@@ -247,7 +267,27 @@ func Derive(in Inputs) map[string]NodeState {
 			if v.Isolation != model.IsolationClean {
 				ns.IsolationStale = true
 			}
-			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale {
+			// A review node's evidence binds to the reviewed set: each
+			// reviewed node's contract revision (always) and artifact
+			// digests (when a digester is available). A node that left
+			// the graph is drift too.
+			for reviewedID, ref := range v.Reviewed {
+				reviewed, present := byID[reviewedID]
+				if !present || reviewed.EffectiveContractRev() != ref.ContractRev {
+					ns.ReviewStale = append(ns.ReviewStale, reviewedID)
+					continue
+				}
+				if in.ArtifactDigest != nil {
+					for artifact, recorded := range ref.ArtifactDigests {
+						if in.ArtifactDigest(artifact) != recorded {
+							ns.ReviewStale = append(ns.ReviewStale, reviewedID)
+							break
+						}
+					}
+				}
+			}
+			sort.Strings(ns.ReviewStale)
+			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || len(ns.ReviewStale) > 0 {
 				ns.State = Stale
 			} else {
 				ns.State = Green

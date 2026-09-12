@@ -264,6 +264,7 @@ func Run(o Options) (*Result, error) {
 		v := &model.Verification{
 			Result:          result,
 			Seq:             seq,
+			ContractRev:     n.EffectiveContractRev(),
 			ArtifactDigests: artifactDigests,
 			ReportDigest:    reportDigest,
 			Isolation:       isolation,

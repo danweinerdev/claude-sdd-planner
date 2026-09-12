@@ -152,7 +152,7 @@ func TestSddAllowlistCoversEverySubcommand(t *testing.T) {
 	}
 
 	for verb, readOnly := range map[string]bool{
-		"list": true, "search": true, "validate": true, "add": false,
+		"list": true, "current": true, "lookup": true, "add": false,
 	} {
 		got := checkSdd([]string{"sdd", "decide", verb}, "sdd decide "+verb)
 		if readOnly && got.Deny {

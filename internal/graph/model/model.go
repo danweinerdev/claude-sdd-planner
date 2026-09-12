@@ -77,6 +77,30 @@ const (
 	IsolationAsserted    = "asserted"
 )
 
+// Node roles (Designs/ReviewDrivenAmendment DD-1). A node without one is
+// an implementation node — except a node carrying a review gate, which is
+// a review node: the pre-role feature gate already sat on its own node
+// with the reviewed work as deps, so it IS the review node.
+const (
+	RoleImplementation        = "implementation"
+	RoleSharedMechanism       = "shared-mechanism"
+	RoleReview                = "review"
+	RoleIntegrationAcceptance = "integration-acceptance"
+)
+
+// Roles is the closed role vocabulary.
+var Roles = []string{RoleImplementation, RoleSharedMechanism, RoleReview, RoleIntegrationAcceptance}
+
+// KnownRole reports whether name is one of the four roles.
+func KnownRole(name string) bool {
+	for _, r := range Roles {
+		if r == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Input root selectors: which explicit root a declared input's path resolves
 // against. Never the process working directory — the two roots travel with
 // every graph operation, so a session running anywhere resolves identically.
@@ -101,6 +125,21 @@ type Graph struct {
 	// RetirementSources is immutable historical provenance, not live input
 	// context or execution evidence. Written only by graph retire.
 	RetirementSources map[string]RetirementRecord `json:"retirement_sources,omitempty"`
+	// Amendments is the append-only register of review-driven amendments
+	// applied to this graph (ReviewDrivenAmendment DD-2): one record per
+	// frozen review artifact whose findings were applied, so the same
+	// artifact can never be applied twice.
+	Amendments []AmendmentRecord `json:"amendments,omitempty"`
+}
+
+// AmendmentRecord is one applied review amendment.
+type AmendmentRecord struct {
+	Seq          int      `json:"seq"`
+	Review       string   `json:"review"`        // review node id
+	Artifact     string   `json:"artifact"`      // planning-root-relative path
+	ReportDigest string   `json:"report_digest"` // digest of the artifact applied
+	Revised      []string `json:"revised,omitempty"`
+	Extended     []string `json:"extended,omitempty"`
 }
 
 // Node is one unit of work: a falsifiable contract, its dependencies, the
@@ -108,9 +147,21 @@ type Graph struct {
 // it. GREEN is assumed closure; completion-grade closure is derived, never
 // stored (D-0022).
 type Node struct {
-	ID        string   `json:"id"`
+	ID string `json:"id"`
+	// Role is the node's kind of work (RoleImplementation when absent;
+	// RoleReview when absent on a review-gate node — see EffectiveRole).
+	Role      string   `json:"role,omitempty"`
 	Contract  string   `json:"contract"`
 	Justifies []string `json:"justifies,omitempty"`
+	// ContractRev is tool-owned: the revision of the node's owned normative
+	// content (contract, gate, justifies, inputs). Starts at 1; a `revise`
+	// amendment advances it, which makes every earlier observation
+	// incompatible for GREEN without rewriting history
+	// (ReviewDrivenAmendment DD-3, DD-4). Absent means 1.
+	ContractRev int `json:"contract_rev,omitempty"`
+	// Origin is tool-owned provenance for a node created by an `extend`
+	// amendment: the frozen review artifact and finding that demanded it.
+	Origin *Origin `json:"origin,omitempty"`
 	// IntentHashes is tool-owned: SHA-256 over the normalized text of each
 	// cited requirement, embedded by compile and rechecked on read
 	// (INTENT-STALE, DD-4). Rejected in proposal payloads.
@@ -152,6 +203,32 @@ type Node struct {
 	// a test never seen to fail proves nothing about the code that makes it
 	// pass (DD-5).
 	RedSeqs map[string]int `json:"red_seqs,omitempty"`
+}
+
+// Origin records which review finding created an extend node.
+type Origin struct {
+	Review  string `json:"review"`
+	Finding string `json:"finding"`
+}
+
+// EffectiveContractRev returns the node's contract revision, 1 when unset.
+func (n *Node) EffectiveContractRev() int {
+	if n.ContractRev < 1 {
+		return 1
+	}
+	return n.ContractRev
+}
+
+// EffectiveRole returns the node's role, defaulting a review-gate node to
+// RoleReview and everything else to RoleImplementation.
+func (n *Node) EffectiveRole() string {
+	if n.Role != "" {
+		return n.Role
+	}
+	if n.Gate.Type == GateReview {
+		return RoleReview
+	}
+	return RoleImplementation
 }
 
 // Hazards is a node's triaged failure-class list. nil = untriaged
@@ -299,12 +376,36 @@ type Claim struct {
 // anchors to content digests plus seq, with VCS revisions as supplementary
 // provenance (DD-6).
 type Verification struct {
-	Result          string            `json:"result"`
-	Seq             int               `json:"seq"`
+	Result string `json:"result"`
+	Seq    int    `json:"seq"`
+	// ContractRev is the node's contract revision this observation was
+	// recorded against; an observation from another revision is history,
+	// never current proof (ReviewDrivenAmendment DD-3). Absent means 1.
+	ContractRev     int               `json:"contract_rev,omitempty"`
 	ArtifactDigests map[string]string `json:"artifact_digests,omitempty"`
-	ReportDigest    string            `json:"report_digest,omitempty"`
-	Isolation       string            `json:"isolation"`
-	Provenance      *Provenance       `json:"provenance,omitempty"`
+	// Reviewed is a review node's reviewed set: for every node in scope at
+	// recording time, its contract revision and artifact digests. The
+	// review is current proof only while every entry still matches
+	// (ReviewDrivenAmendment DD-9).
+	Reviewed     map[string]ReviewedRef `json:"reviewed,omitempty"`
+	ReportDigest string                 `json:"report_digest,omitempty"`
+	Isolation    string                 `json:"isolation"`
+	Provenance   *Provenance            `json:"provenance,omitempty"`
+}
+
+// ReviewedRef is one node's identity as a review observed it.
+type ReviewedRef struct {
+	ContractRev     int               `json:"contract_rev"`
+	ArtifactDigests map[string]string `json:"artifact_digests,omitempty"`
+}
+
+// EffectiveContractRev returns the revision the observation was recorded
+// against, 1 when unset.
+func (v *Verification) EffectiveContractRev() int {
+	if v.ContractRev < 1 {
+		return 1
+	}
+	return v.ContractRev
 }
 
 // Provenance is whatever the VCS natively produces: a git commit and
