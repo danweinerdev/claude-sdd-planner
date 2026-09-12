@@ -120,14 +120,52 @@ func planSetInputs(g *model.Graph, nodeID string, decl []model.Input, hashes map
 		return nil, nil
 	}
 	if n.Verification != nil {
-		*refusals = append(*refusals, fmt.Sprintf("%s carries a recorded verification; inputs may not be re-set against evidence", nodeID))
-		return nil, nil
+		// Narrowing is provable (VerificationFreshness DD-4): every new
+		// declaration must be a section of a currently declared whole-file
+		// input whose bytes the run saw, and that file must be unchanged
+		// since the run — so the section is a subset of exercised bytes.
+		if reason := narrowingRefusal(n, decl); reason != "" {
+			*refusals = append(*refusals, fmt.Sprintf("%s carries a recorded verification; inputs may only be narrowed against evidence — %s", nodeID, reason))
+			return nil, nil
+		}
+		return &SetInputsResult{Node: nodeID, Inputs: len(decl), Hashes: hashes}, nil
 	}
 	if len(n.RedSeqs) > 0 {
 		*refusals = append(*refusals, fmt.Sprintf("%s carries red observations; re-setting inputs would launder them", nodeID))
 		return nil, nil
 	}
 	return &SetInputsResult{Node: nodeID, Inputs: len(decl), Hashes: hashes}, nil
+}
+
+// narrowingRefusal returns "" when decl narrows n's declared inputs faithfully
+// against its observation snapshot, else the reason it does not.
+func narrowingRefusal(n *model.Node, decl []model.Input) string {
+	ran := n.Verification.InputHashes
+	if ran == nil {
+		return "the observation recorded no input snapshot; re-verify after re-setting inputs"
+	}
+	declared := map[string]model.Input{}
+	for _, in := range n.Inputs {
+		declared[model.InputKey(in)] = in
+	}
+	for _, next := range decl {
+		key := model.InputKey(next)
+		if _, same := declared[key]; same {
+			continue // unchanged declaration
+		}
+		if next.Section == nil {
+			return fmt.Sprintf("input %s is not a narrowing (no section)", inputLabel(next))
+		}
+		whole := model.Input{Root: next.Root, Path: next.Path}
+		wholeKey := model.InputKey(whole)
+		if _, ok := declared[wholeKey]; !ok {
+			return fmt.Sprintf("input %s narrows %s, which is not currently declared whole", inputLabel(next), inputLabel(whole))
+		}
+		if ran[wholeKey] == "" || n.InputHashes[wholeKey] != ran[wholeKey] {
+			return fmt.Sprintf("input %s: the run's recorded digest for %s is missing or predates the anchor; re-verify instead", inputLabel(next), inputLabel(whole))
+		}
+	}
+	return ""
 }
 
 // inputLabel renders a declared input for refusal text.

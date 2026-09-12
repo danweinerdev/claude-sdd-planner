@@ -247,13 +247,25 @@ func graphStatusCmd() *cobra.Command {
 			}
 			counts := map[string]int{}
 			closedCount := 0
+			type reasons struct {
+				Dependency []string `json:"dependency,omitempty"`
+				Digest     []string `json:"digest,omitempty"`
+				Intent     []string `json:"intent,omitempty"`
+				Input      []string `json:"input,omitempty"`
+				Review     []string `json:"review,omitempty"`
+				Seq        bool     `json:"seq,omitempty"`
+				Revision   bool     `json:"revision,omitempty"`
+				Isolation  bool     `json:"isolation,omitempty"`
+			}
 			type line struct {
-				ID          string `json:"id"`
-				State       string `json:"state"`
-				Closed      bool   `json:"closed"`
-				Role        string `json:"role"`
-				ContractRev int    `json:"contract_rev"`
-				Claimed     string `json:"claimed_by,omitempty"`
+				ID          string   `json:"id"`
+				State       string   `json:"state"`
+				Closed      bool     `json:"closed"`
+				Role        string   `json:"role"`
+				ContractRev int      `json:"contract_rev"`
+				Claimed     string   `json:"claimed_by,omitempty"`
+				Reasons     *reasons `json:"reasons,omitempty"`
+				Advisories  []string `json:"advisories,omitempty"`
 			}
 			lines := make([]line, 0, len(ctx.g.Nodes))
 			for i := range ctx.g.Nodes {
@@ -268,6 +280,14 @@ func graphStatusCmd() *cobra.Command {
 				if n.Claim != nil {
 					l.Claimed = n.Claim.By
 				}
+				if ns.State == states.Stale {
+					l.Reasons = &reasons{
+						Dependency: ns.DependencyStale, Digest: ns.DigestStale, Intent: ns.IntentStale,
+						Input: ns.InputStale, Review: ns.ReviewStale, Seq: ns.SeqStale,
+						Revision: ns.RevIncompatible, Isolation: ns.IsolationStale,
+					}
+				}
+				l.Advisories = ns.AnchorAdvisory
 				lines = append(lines, l)
 			}
 			sort.Slice(lines, func(i, j int) bool { return lines[i].ID < lines[j].ID })
@@ -379,6 +399,15 @@ func graphShowCmd() *cobra.Command {
 			}
 			if ns.RevIncompatible {
 				fmt.Fprintln(w, "  REV-INCOMPATIBLE: the latest observation predates a revise; it is history, not proof")
+			}
+			if ns.SeqStale {
+				fmt.Fprintln(w, "  SEQ-STALE: legacy observation (no dependency digests); a dependency re-verified after it — re-sync to record what this node exercises")
+			}
+			if len(ns.DependencyStale) > 0 {
+				fmt.Fprintf(w, "  DEPENDENCY-STALE: %s changed since this run exercised it (re-run the gate)\n", strings.Join(ns.DependencyStale, ", "))
+			}
+			if len(ns.AnchorAdvisory) > 0 {
+				fmt.Fprintf(w, "  advisory: text changed since the anchor for %s (judge it: `sdd graph acknowledge`, or rework)\n", strings.Join(ns.AnchorAdvisory, ", "))
 			}
 			if len(ns.ReviewStale) > 0 {
 				fmt.Fprintf(w, "  REVIEW-STALE: %s changed since this review (re-review)\n", strings.Join(ns.ReviewStale, ", "))

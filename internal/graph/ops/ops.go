@@ -166,6 +166,7 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 	out.Nodes = nil
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
 	out.RevisionLineage = cloneRevisionLineage(g.RevisionLineage)
+	out.Acknowledgements = append([]model.AcknowledgementRecord(nil), g.Acknowledgements...)
 	out.Retired = append(append([]string(nil), g.Retired...), nodeID)
 	sort.Strings(out.Retired)
 

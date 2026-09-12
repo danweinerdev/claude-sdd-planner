@@ -87,6 +87,7 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |
 | Record Git old→new revision lineage without changing proof | `sdd graph remap-revisions --plan P --map FILE --expect-digest D [--dry-run] [--json]` (omit the digest for preview) |
 | Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
+| Record that a cited requirement's or input's text changed without changing the obligation | `sdd graph acknowledge --plan P --node N (--citation ID \| --input KEY) --expect-digest D [--by WHO] [--dry-run] [--json]` — rebinds one compile anchor, writes no observation, never greens |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment and repair repository/plugin hooks | `sdd doctor [--check] [--json]` |
 

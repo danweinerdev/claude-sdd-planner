@@ -135,6 +135,9 @@ type Graph struct {
 	// frozen review artifact whose findings were applied, so the same
 	// artifact can never be applied twice.
 	Amendments []AmendmentRecord `json:"amendments,omitempty"`
+	// Acknowledgements is the append-only register of anchor rebinding
+	// judgments (VerificationFreshness DD-3).
+	Acknowledgements []AcknowledgementRecord `json:"acknowledgements,omitempty"`
 }
 
 // AmendmentRecord is one applied review amendment.
@@ -392,10 +395,35 @@ type Verification struct {
 	// recording time, its contract revision and artifact digests. The
 	// review is current proof only while every entry still matches
 	// (ReviewDrivenAmendment DD-9).
-	Reviewed     map[string]ReviewedRef `json:"reviewed,omitempty"`
-	ReportDigest string                 `json:"report_digest,omitempty"`
-	Isolation    string                 `json:"isolation"`
-	Provenance   *Provenance            `json:"provenance,omitempty"`
+	Reviewed map[string]ReviewedRef `json:"reviewed,omitempty"`
+	// DependencyDigests is the identity of what this run exercised below
+	// it: for each direct dependency, that node's artifact digests when the
+	// observation was recorded. Staleness compares bytes, never observation
+	// order (VerificationFreshness DD-1). Absent on observations recorded
+	// before this field existed; those keep sequence semantics.
+	DependencyDigests map[string]map[string]string `json:"dependency_digests,omitempty"`
+	// InputHashes / IntentHashes are the fingerprints the run saw for the
+	// node's declared inputs and citations, distinct from the node's
+	// compile-time anchors of the same names (VerificationFreshness DD-2).
+	InputHashes  map[string]string `json:"input_hashes,omitempty"`
+	IntentHashes map[string]string `json:"intent_hashes,omitempty"`
+	ReportDigest string            `json:"report_digest,omitempty"`
+	Isolation    string            `json:"isolation"`
+	Provenance   *Provenance       `json:"provenance,omitempty"`
+}
+
+// AcknowledgementRecord is one recorded judgment that a citation's or
+// input's text changed without changing the obligation: the node's compile
+// anchor was rebound from Old to New by By (VerificationFreshness DD-3).
+// It writes no observation and can green nothing.
+type AcknowledgementRecord struct {
+	Seq  int    `json:"seq"`
+	Node string `json:"node"`
+	Kind string `json:"kind"` // "citation" | "input"
+	Key  string `json:"key"`
+	Old  string `json:"old,omitempty"`
+	New  string `json:"new"`
+	By   string `json:"by,omitempty"`
 }
 
 // ReviewedRef is one node's identity as a review observed it.

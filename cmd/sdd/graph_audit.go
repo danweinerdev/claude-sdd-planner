@@ -79,7 +79,13 @@ func graphAuditCmd() *cobra.Command {
 				for _, s := range rep.Stale {
 					var reasons []string
 					if s.SeqStale {
-						reasons = append(reasons, "seq")
+						reasons = append(reasons, "seq (legacy observation)")
+					}
+					if len(s.DependencyStale) > 0 {
+						reasons = append(reasons, "dependency:"+strings.Join(s.DependencyStale, ","))
+					}
+					if len(s.ReviewStale) > 0 {
+						reasons = append(reasons, "review:"+strings.Join(s.ReviewStale, ","))
 					}
 					if len(s.DigestStale) > 0 {
 						reasons = append(reasons, "digest:"+strings.Join(s.DigestStale, ","))

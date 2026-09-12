@@ -69,11 +69,14 @@ type FamilyCoverage struct {
 
 // StaleNode is one node's derived staleness reasons.
 type StaleNode struct {
-	ID          string   `json:"id"`
-	SeqStale    bool     `json:"seq_stale,omitempty"`
-	DigestStale []string `json:"digest_stale,omitempty"`
-	IntentStale []string `json:"intent_stale,omitempty"`
-	InputStale  []string `json:"input_stale,omitempty"`
+	ID              string   `json:"id"`
+	SeqStale        bool     `json:"seq_stale,omitempty"`
+	DependencyStale []string `json:"dependency_stale,omitempty"`
+	DigestStale     []string `json:"digest_stale,omitempty"`
+	IntentStale     []string `json:"intent_stale,omitempty"`
+	InputStale      []string `json:"input_stale,omitempty"`
+	ReviewStale     []string `json:"review_stale,omitempty"`
+	AnchorAdvisory  []string `json:"anchor_advisory,omitempty"`
 }
 
 // DuplicateTest is a test id declared twice within one node.
@@ -158,8 +161,9 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 		ns := st[n.ID]
 		if ns.State == states.Stale {
 			rep.Stale = append(rep.Stale, StaleNode{
-				ID: n.ID, SeqStale: ns.SeqStale,
+				ID: n.ID, SeqStale: ns.SeqStale, DependencyStale: ns.DependencyStale,
 				DigestStale: ns.DigestStale, IntentStale: ns.IntentStale, InputStale: ns.InputStale,
+				ReviewStale: ns.ReviewStale, AnchorAdvisory: ns.AnchorAdvisory,
 			})
 		}
 

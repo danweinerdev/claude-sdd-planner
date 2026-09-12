@@ -513,3 +513,33 @@ func TestSyncRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
 		t.Fatalf("CAS retry lost one of the writes: %+v", g.Nodes)
 	}
 }
+
+// VerificationFreshness DD-1: a passing sync records what it exercised
+// below it — each direct dependency's artifact digests — so a later
+// re-verification of the dependency with identical bytes never stales it.
+func TestSyncRecordsDependencyDigests(t *testing.T) {
+	dep := testsNode("dep", "test_dep")
+	dep.Artifacts = []string{"src/dep.ext"}
+	consumer := testsNode("consumer", "test_c")
+	consumer.Deps = []string{"dep"}
+	planDir, repoRoot := fixture(t, dep, consumer)
+	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "src", "dep.ext"), []byte("dep impl"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "consumer",
+		ReportName: "r.xml", ReportBytes: []byte(`<testsuite><testcase name="test_c"/></testsuite>`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := res.Observation
+	if v.DependencyDigests == nil || v.DependencyDigests["dep"]["src/dep.ext"] != digest.Bytes([]byte("dep impl")) {
+		t.Fatalf("dependency digests not recorded: %+v", v.DependencyDigests)
+	}
+	// Bare graph fixture: no plan README, so no anchor snapshot — honest.
+	if res.AnchorSnapshot {
+		t.Fatal("a root without the plan README records no anchor snapshot")
+	}
+}

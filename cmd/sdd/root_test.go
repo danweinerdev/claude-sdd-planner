@@ -252,6 +252,7 @@ func handlerFlagSets() []struct {
 		{"sdd graph shape", []string{"plan", "json"}},
 		{"sdd graph status", []string{"plan", "json"}},
 		{"sdd graph show", []string{"plan", "json", "brief"}},
+		{"sdd graph acknowledge", []string{"plan", "node", "citation", "input", "expect-digest", "by", "dry-run", "json"}},
 		{"sdd graph amend", []string{"plan", "node", "from-review", "expect-digest", "expect-report-digest", "by", "dry-run", "json"}},
 		{"sdd graph remap-revisions", []string{"plan", "map", "expect-digest", "dry-run", "json"}},
 		{"sdd graph export", []string{"plan", "format", "json"}},

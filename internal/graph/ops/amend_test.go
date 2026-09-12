@@ -429,3 +429,55 @@ func TestAmendReviseInvalidatesLegacyReview(t *testing.T) {
 		t.Fatalf("a legacy review over a revised scope is history, not proof: %+v", st["feature-gate"])
 	}
 }
+
+// AC4: acknowledge rebinds the anchor and records the judgment, and it can
+// never green a node by itself.
+func TestAcknowledgeRebindsAnchorButCannotGreen(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	// helper cites AC-01 with a stale compile anchor and a pass whose snapshot
+	// also predates the change: STALE by intent.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("helper")
+		n.IntentHashes = map[string]string{"AC-01": "sha256:stale"}
+		n.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			DependencyDigests: map[string]map[string]string{}, IntentHashes: map[string]string{"AC-01": "sha256:stale"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dry, err := Acknowledge(AcknowledgeOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "helper", Citation: "AC-01", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dry.Applied || dry.Record.Old != "sha256:stale" || dry.Record.New == "" || dry.Record.New == dry.Record.Old {
+		t.Fatalf("dry run = %+v", dry)
+	}
+	if _, err := Acknowledge(AcknowledgeOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "helper", Citation: "AC-01", ExpectDigest: "0000000000000000"}); err == nil {
+		t.Fatal("stale fence must refuse")
+	}
+	res, err := Acknowledge(AcknowledgeOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "helper", Citation: "AC-01", ExpectDigest: dry.ExpectDigest, By: "reviewer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, lerr := gstore.Load(gstore.PathFor(planDir))
+	if lerr != nil {
+		t.Fatalf("graph after acknowledge does not load: %v", lerr)
+	}
+	n := g.NodeByID("helper")
+	if n.IntentHashes["AC-01"] != res.Record.New || len(g.Acknowledgements) != 1 || g.Acknowledgements[0].By != "reviewer" || g.Acknowledgements[0].Seq == 0 {
+		t.Fatalf("anchor not rebound or judgment not recorded: %+v %+v", n.IntentHashes, g.Acknowledgements)
+	}
+	if n.Verification.IntentHashes["AC-01"] != "sha256:stale" {
+		t.Fatal("acknowledge must not touch the observation")
+	}
+	// Still not GREEN: the run's snapshot predates the text; only a new pass greens.
+	snap, _ := gcompile.LoadIntentSnapshot(root, root, "SamplePlan")
+	st := states.Derive(states.Inputs{Graph: g, CurrentIntentHashes: snap.Hashes()})
+	if st["helper"].State == states.Green {
+		t.Fatalf("acknowledge alone must not green: %+v", st["helper"])
+	}
+	// Nothing to acknowledge twice.
+	if _, err := Acknowledge(AcknowledgeOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "helper", Citation: "AC-01", DryRun: true}); err == nil {
+		t.Fatal("a current anchor has nothing to acknowledge")
+	}
+}

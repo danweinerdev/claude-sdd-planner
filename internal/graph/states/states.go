@@ -49,8 +49,21 @@ type NodeState struct {
 	State State
 
 	// SeqStale: an ancestor carries a verification seq newer than this
-	// node's own.
+	// node's own. Legacy axis: it applies only to observations recorded
+	// before dependency digests existed (VerificationFreshness DD-1);
+	// an observation carrying dependency_digests never derives it.
 	SeqStale bool
+	// DependencyStale lists direct dependencies whose artifact bytes differ
+	// from what this node's observation recorded it exercised, or whose
+	// own derived state is STALE by dependency. A dependency re-verified
+	// against identical bytes never appears here.
+	DependencyStale []string
+	// AnchorAdvisory lists citations and input keys whose compile-time
+	// anchor on the node differs from the fingerprint the observation
+	// recorded: the text changed since the node was written for it and a
+	// judgment is owed (`sdd graph acknowledge`). Advisory only — it never
+	// withholds GREEN (VerificationFreshness DD-2, DD-5).
+	AnchorAdvisory []string
 	// DigestStale lists declared artifacts whose current digest no longer
 	// matches the observation (or that the observation never recorded).
 	DigestStale []string
@@ -322,8 +335,40 @@ func Derive(in Inputs) map[string]NodeState {
 			// deps look like now does not un-happen it.
 			ns.State = Red
 		default: // a recorded pass
-			if ancestorSeq > ownSeq {
-				ns.SeqStale = true
+			if v.DependencyDigests == nil {
+				// Legacy observation: no record of what it exercised
+				// below it, so observation order is the only proxy.
+				if ancestorSeq > ownSeq {
+					ns.SeqStale = true
+				}
+			} else {
+				// Content identity for dependencies (DD-1): compare the
+				// bytes the run exercised with the bytes on disk now, and
+				// ripple a dependency's own dependency-staleness upward.
+				for _, dep := range n.Deps {
+					recorded, present := v.DependencyDigests[dep]
+					depNode, exists := byID[dep]
+					switch {
+					case !exists:
+						ns.DependencyStale = append(ns.DependencyStale, dep)
+					case !present:
+						// A dependency added after the observation (an
+						// extend, a rewire): the run never exercised it.
+						if len(depNode.Artifacts) > 0 {
+							ns.DependencyStale = append(ns.DependencyStale, dep)
+						}
+					case len(out[dep].DependencyStale) > 0:
+						ns.DependencyStale = append(ns.DependencyStale, dep)
+					case in.ArtifactDigest != nil:
+						for _, artifact := range depNode.Artifacts {
+							if in.ArtifactDigest(artifact) != recorded[artifact] {
+								ns.DependencyStale = append(ns.DependencyStale, dep)
+								break
+							}
+						}
+					}
+				}
+				sort.Strings(ns.DependencyStale)
 			}
 			if in.ArtifactDigest != nil {
 				for _, artifact := range n.Artifacts {
@@ -353,10 +398,23 @@ func Derive(in Inputs) map[string]NodeState {
 			}
 			if in.CurrentIntentHashes != nil {
 				seen := map[string]bool{}
+				// The run's own snapshot is the identity when it exists
+				// (DD-2); the node's compile anchor is the fallback for
+				// older observations, and the difference between the two is
+				// an advisory, never staleness.
+				recordedIntent := n.IntentHashes
+				if v.IntentHashes != nil {
+					recordedIntent = v.IntentHashes
+					for cited, ran := range v.IntentHashes {
+						if anchor := n.IntentHashes[cited]; anchor != "" && anchor != ran {
+							ns.AnchorAdvisory = append(ns.AnchorAdvisory, cited)
+						}
+					}
+				}
 				// Recorded hashes that no longer match their current
 				// fingerprint — including a source deleted since the
 				// observation (the current map simply has no entry for it).
-				for cited, recorded := range n.IntentHashes {
+				for cited, recorded := range recordedIntent {
 					if recorded == "" {
 						continue // An empty entry still needs disposition checking below.
 					}
@@ -387,9 +445,18 @@ func Derive(in Inputs) map[string]NodeState {
 				// no embedded hash, or whose embedded hash no longer matches
 				// the current content (including an input that no longer
 				// resolves), is stale. There is no exemption shape for inputs.
+				recordedInputs := n.InputHashes
+				if v.InputHashes != nil {
+					recordedInputs = v.InputHashes
+					for key, ran := range v.InputHashes {
+						if anchor := n.InputHashes[key]; anchor != "" && anchor != ran {
+							ns.AnchorAdvisory = append(ns.AnchorAdvisory, key)
+						}
+					}
+				}
 				for _, spec := range n.Inputs {
 					key := model.InputKey(spec)
-					recorded := n.InputHashes[key]
+					recorded := recordedInputs[key]
 					if recorded == "" || in.CurrentInputHashes[key] != recorded {
 						ns.InputStale = append(ns.InputStale, key)
 					}
@@ -460,7 +527,8 @@ func Derive(in Inputs) map[string]NodeState {
 				ns.ReviewStale = append(ns.ReviewStale, reviewedID)
 			}
 			sort.Strings(ns.ReviewStale)
-			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || len(ns.ReviewStale) > 0 {
+			sort.Strings(ns.AnchorAdvisory)
+			if ns.SeqStale || len(ns.DependencyStale) > 0 || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || len(ns.ReviewStale) > 0 {
 				ns.State = Stale
 			} else {
 				ns.State = Green

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
@@ -52,14 +53,19 @@ type Buckets struct {
 // reconciliation that found the node unverifiable (unresolved or ambiguous
 // declared tests) — the buckets say exactly why, and nothing was guessed.
 type Result struct {
-	Node         string              `json:"node"`
-	Recorded     bool                `json:"recorded"`
-	Observation  *model.Verification `json:"observation,omitempty"`
-	Buckets      Buckets             `json:"buckets"`
-	RedSeqsAdded map[string]int      `json:"red_seqs_added,omitempty"`
-	LeaseRenewed string              `json:"lease_renewed,omitempty"`
-	Refusal      string              `json:"refusal,omitempty"`
-	LogPath      string              `json:"log,omitempty"`
+	Node     string `json:"node"`
+	Recorded bool   `json:"recorded"`
+	// AnchorSnapshot reports whether the observation carries the run's own
+	// intent/input fingerprints (VerificationFreshness DD-2). False when the
+	// plan's sources could not be resolved from this planning root; the
+	// node's compile anchors then remain the identity for that observation.
+	AnchorSnapshot bool                `json:"anchor_snapshot"`
+	Observation    *model.Verification `json:"observation,omitempty"`
+	Buckets        Buckets             `json:"buckets"`
+	RedSeqsAdded   map[string]int      `json:"red_seqs_added,omitempty"`
+	LeaseRenewed   string              `json:"lease_renewed,omitempty"`
+	Refusal        string              `json:"refusal,omitempty"`
+	LogPath        string              `json:"log,omitempty"`
 	// Merged: the observation was a clean pass and the claim completed in
 	// the same cycle — claim cleared, workspace released (DD-10's atomic
 	// sequence). A pass that records without merging (shared-dirty
@@ -224,6 +230,41 @@ func Run(o Options) (*Result, error) {
 			artifactDigests[a] = d
 		}
 	}
+	// What the run exercised below it (VerificationFreshness DD-1): each
+	// direct dependency's artifact digests, from the same tree the node's
+	// own bytes were digested from. Always recorded, never nil, so the
+	// observation can never fall back to sequence semantics.
+	dependencyDigests := map[string]map[string]string{}
+	for _, dep := range node.Deps {
+		digests := map[string]string{}
+		if depNode := g.NodeByID(dep); depNode != nil {
+			for _, a := range depNode.Artifacts {
+				if d := digester.Artifact(a); d != "" {
+					digests[a] = d
+				}
+			}
+		}
+		dependencyDigests[dep] = digests
+	}
+	// The anchors the run saw (DD-2): resolved from the plan's sources.
+	// Best effort — a planning root without the plan README (a bare graph
+	// fixture) records no snapshot and keeps compile-anchor semantics.
+	var runIntent, runInputs map[string]string
+	if sources, serr := gcompile.NewSources(filepath.Dir(filepath.Dir(o.PlanDir)), o.RepoRoot, filepath.Base(o.PlanDir)); serr == nil {
+		current := sources.IntentSnapshot().Hashes()
+		runIntent = map[string]string{}
+		for _, cited := range node.Justifies {
+			if h, ok := current[cited]; ok {
+				runIntent[cited] = h
+			}
+		}
+		runInputs = map[string]string{}
+		for _, spec := range node.Inputs {
+			if resolved, rerr := sources.InputResolver().Resolve(spec); rerr == nil {
+				runInputs[model.InputKey(spec)] = resolved.Digest
+			}
+		}
+	}
 
 	// Merge-gate preconditions bind the RECORDING of a pass (DD-5): a pass
 	// that fails them is refused whole with the failing condition named, so
@@ -285,13 +326,16 @@ func Run(o Options) (*Result, error) {
 		fresh.SeqCounter++
 		seq := fresh.SeqCounter
 		v := &model.Verification{
-			Result:          result,
-			Seq:             seq,
-			ContractRev:     node.EffectiveContractRev(),
-			ArtifactDigests: artifactDigests,
-			ReportDigest:    reportDigest,
-			Isolation:       isolation,
-			Provenance:      provenance,
+			Result:            result,
+			Seq:               seq,
+			ContractRev:       node.EffectiveContractRev(),
+			ArtifactDigests:   artifactDigests,
+			DependencyDigests: dependencyDigests,
+			InputHashes:       runInputs,
+			IntentHashes:      runIntent,
+			ReportDigest:      reportDigest,
+			Isolation:         isolation,
+			Provenance:        provenance,
 		}
 		n.Verification = v
 		// red_seq: the first observed failure per declared test, recorded
@@ -327,6 +371,7 @@ func Run(o Options) (*Result, error) {
 		return nil, err
 	}
 	res.Recorded = true
+	res.AnchorSnapshot = runIntent != nil
 	res.Observation = recorded
 	res.RedSeqsAdded = redAdded
 	res.LeaseRenewed = leaseRenewed

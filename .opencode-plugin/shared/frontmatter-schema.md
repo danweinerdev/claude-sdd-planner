@@ -158,6 +158,8 @@ Rules:
 
 ## Graph Node Roles and Amendment Fields
 
+A node's observation (`verification`, tool-owned) records what the run exercised: its own `artifact_digests`, `dependency_digests` (each direct dependency's artifact digests), and the run's own `input_hashes` / `intent_hashes` snapshot. Staleness compares those to the current tree; a node's compile-time `intent_hashes` / `input_hashes` are anchors, and a difference between anchor and snapshot is an advisory cleared by `sdd graph acknowledge`, which appends to the graph's tool-owned `acknowledgements` register.
+
 A plan's compiled graph node carries a `role` field (proposal input): `implementation` (default when absent), `shared-mechanism`, `review`, or `integration-acceptance`. A `review`-role node's `gate.type` must be `review`; a `review`-gate node must have `role: review`. `contract_rev` (an integer, starting at 1) and `origin` (present only on a node added by an `extend` amendment: `{ review: <artifact path>, finding: <id> }`) are tool-owned — refused in proposal payloads, like `intent_hashes` and `claim`.
 
 The committed graph may additionally carry tool-owned `revision_lineage`, a map

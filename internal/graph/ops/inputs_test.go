@@ -246,3 +246,46 @@ func TestSplitAnchorsChildrenInputs(t *testing.T) {
 		t.Fatalf("a child that declares no inputs must carry none: %+v", render.InputHashes)
 	}
 }
+
+// VerificationFreshness DD-4: on a verified node, set-inputs may narrow a
+// declared whole-file input to a section when the run's snapshot proves the
+// file's bytes are unchanged; anything else is refused.
+func TestSetInputsNarrowingIsProvableOnVerifiedNode(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	writeInputDoc(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n")
+	whole, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/context.md"}]`))
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", whole, false); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	wholeKey := model.InputKey(whole[0])
+	ran := g.NodeByID("helper").InputHashes[wholeKey]
+	// A pass whose snapshot saw the file at its current digest.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("helper").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			DependencyDigests: map[string]map[string]string{}, InputHashes: map[string]string{wholeKey: ran}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	narrowed, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/context.md", "section": {"heading_path": ["Alpha"]}}]`))
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", narrowed, false); err != nil {
+		t.Fatalf("provable narrowing must be allowed on a verified node: %v", err)
+	}
+	// Negative: a brand-new file is not a narrowing.
+	writeInputDoc(t, root, "docs/other.md", "# Other\n")
+	other, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/other.md"}]`))
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", other, false); err == nil {
+		t.Fatal("a new input on a verified node must refuse")
+	}
+	// Negative: no snapshot on the observation → refuse.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("helper").Verification.InputHashes = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", narrowed, false); err == nil {
+		t.Fatal("narrowing without a run snapshot must refuse")
+	}
+}

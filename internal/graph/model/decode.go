@@ -63,7 +63,7 @@ var toolOwnedNodeKeys = map[string]string{
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments"}
+	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements"}
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	originKeys       = []string{"review", "finding"}
@@ -74,7 +74,8 @@ var (
 	inputKeys        = []string{"root", "path", "section"}
 	inputSectionKeys = []string{"heading_path"}
 	claimKeys        = []string{"by", "lease_expires", "workspace"}
-	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "report_digest", "isolation", "provenance"}
+	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "provenance"}
+	ackKeys          = []string{"seq", "node", "kind", "key", "old", "new", "by"}
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
 
@@ -212,6 +213,16 @@ func (d *decoder) graph(raw any) *Graph {
 	}
 	if v, present := obj["retirement_sources"]; present && !d.proposal {
 		g.RetirementSources = d.retirementSources(v)
+	}
+	if v, present := obj["acknowledgements"]; present && !d.proposal {
+		list, ok := v.([]any)
+		if !ok {
+			d.errf("acknowledgements", "must be a list of acknowledgement records, got %s", typeName(v))
+		} else {
+			for i, item := range list {
+				g.Acknowledgements = append(g.Acknowledgements, d.acknowledgement(fmt.Sprintf("acknowledgements[%d]", i), item))
+			}
+		}
 	}
 	if v, present := obj["amendments"]; present && !d.proposal {
 		list, ok := v.([]any)
@@ -452,6 +463,29 @@ func (d *decoder) node(path string, raw any) Node {
 		}
 	}
 	return n
+}
+
+func (d *decoder) acknowledgement(path string, raw any) AcknowledgementRecord {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return AcknowledgementRecord{}
+	}
+	d.unknownKeys(path, obj, ackKeys)
+	a := AcknowledgementRecord{
+		Node: d.requiredString(path, obj, "node"), Kind: d.requiredString(path, obj, "kind"),
+		Key: d.requiredString(path, obj, "key"), New: d.requiredString(path, obj, "new"),
+		Old: d.optionalString(path+".old", obj["old"]), By: d.optionalString(path+".by", obj["by"]),
+	}
+	if a.Kind != "citation" && a.Kind != "input" && a.Kind != "" {
+		d.errf(path+".kind", "%q is not an acknowledgement kind; valid kinds are \"citation\" and \"input\"", a.Kind)
+	}
+	if v, present := obj["seq"]; present {
+		a.Seq, _ = d.intVal(path+".seq", v)
+	} else {
+		d.errf(path+".seq", "missing required field")
+	}
+	return a
 }
 
 func (d *decoder) amendment(path string, raw any) AmendmentRecord {
@@ -727,6 +761,28 @@ func (d *decoder) verification(path string, raw any) *Verification {
 				v.Reviewed[id] = r
 			}
 		}
+	}
+	if dv, present := obj["dependency_digests"]; present {
+		obj2, ok := dv.(map[string]any)
+		if !ok {
+			d.errf(path+".dependency_digests", "must be an object keyed by dependency id, got %s", typeName(dv))
+		} else {
+			v.DependencyDigests = map[string]map[string]string{}
+			var ids []string
+			for id := range obj2 {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				v.DependencyDigests[id] = d.stringMap(path+".dependency_digests."+id, obj2[id])
+			}
+		}
+	}
+	if iv, present := obj["input_hashes"]; present {
+		v.InputHashes = d.stringMap(path+".input_hashes", iv)
+	}
+	if iv, present := obj["intent_hashes"]; present {
+		v.IntentHashes = d.stringMap(path+".intent_hashes", iv)
 	}
 	v.ReportDigest = d.optionalString(path+".report_digest", obj["report_digest"])
 	v.Isolation = d.requiredString(path, obj, "isolation")

@@ -25,7 +25,7 @@ type Refusal struct {
 }
 
 func (r Refusal) String() string {
-	s := fmt.Sprintf("%s", r.Code)
+	s := r.Code
 	if r.Line > 0 {
 		s += fmt.Sprintf(" line %d", r.Line)
 	}

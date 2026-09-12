@@ -135,7 +135,7 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
 	// mutating: records review-node observations; `amend` applies a frozen
 	// review's revise/extend findings under a digest fence
-	"review": false, "amend": false,
+	"review": false, "amend": false, "acknowledge": false,
 	// mutating: batch observation recording (the converted-plan on-ramp)
 	"reverify": false,
 	// mutating: appends to the graph's retired register
