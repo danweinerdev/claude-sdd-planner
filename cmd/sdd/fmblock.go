@@ -42,6 +42,13 @@ func (it fmItem) Str(key string) string {
 	}
 }
 
+// Has reports whether the entry carries the key at all, whatever its shape
+// (a nested mapping or sequence reads as "" through Str).
+func (it fmItem) Has(key string) bool {
+	_, ok := it[key]
+	return ok
+}
+
 // List returns a sequence field's elements. A scalar is returned as a
 // single-element list, matching the previous behavior for authors who wrote a
 // bare word where a list was expected.

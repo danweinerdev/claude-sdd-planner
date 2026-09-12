@@ -178,11 +178,21 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 	if !f.Frozen {
 		missing = append(missing, "frozen is not true (a reopened or in-progress review is not evidence)")
 	}
-	if f.Verdict != "Aligned" {
-		missing = append(missing, fmt.Sprintf("verdict is %q, need \"Aligned\"", f.Verdict))
+	open := len(art.OpenFindings())
+	switch f.Verdict {
+	case "Aligned":
+		if open > 0 {
+			missing = append(missing, fmt.Sprintf("verdict is Aligned but %d finding(s) are open; an Aligned review has every finding terminal (resolve refuses this shape)", open))
+		}
+	case "Amend":
+		if open == 0 {
+			missing = append(missing, "verdict is Amend but no finding is open; an Amend review carries the revise/extend findings `sdd graph amend` applies")
+		}
+	default:
+		missing = append(missing, fmt.Sprintf("verdict is %q, need \"Aligned\" (greens the review node) or \"Amend\" (frozen findings report for `sdd graph amend`)", f.Verdict))
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("%s is not a frozen Aligned review — %s; run `sdd review resolve` on it first", art.Rel, strings.Join(missing, "; "))
+		return fmt.Errorf("%s is not a frozen Aligned or Amend review — %s; run `sdd review resolve` on it first", art.Rel, strings.Join(missing, "; "))
 	}
 
 	if strings.TrimSpace(f.ReviewOf) == "" {

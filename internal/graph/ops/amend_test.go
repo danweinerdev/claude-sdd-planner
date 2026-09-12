@@ -18,7 +18,11 @@ import (
 func frozenReview(t *testing.T, root, findings string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("---\ntitle: \"Gate review\"\ntype: review\nstatus: resolved\nreview_of: \"Plans/SamplePlan/README.md\"\nfrozen: true\nverdict: Aligned\nreview_mode: single-agent\nlane_results:\n")
+	verdict := "Aligned"
+	if strings.Contains(findings, "status: open") {
+		verdict = "Amend"
+	}
+	b.WriteString("---\ntitle: \"Gate review\"\ntype: review\nstatus: resolved\nreview_of: \"Plans/SamplePlan/README.md\"\nfrozen: true\nverdict: " + verdict + "\nreview_mode: single-agent\nlane_results:\n")
 	for _, lane := range model.ReviewLanes {
 		b.WriteString("  - lane: " + lane + "\n    result: PASS/Aligned\n    evidence: \"looked\"\n")
 	}
@@ -174,7 +178,7 @@ func TestAmendRefusesForeignOrInadmissibleReviewArtifacts(t *testing.T) {
 		want       string
 	}{
 		{"foreign plan", `review_of: "Plans/SamplePlan/README.md"`, `review_of: "Plans/Foreign/README.md"`, "not under Plans/SamplePlan/"},
-		{"unaligned verdict", "verdict: Aligned", "verdict: Misaligned", "verdict is"},
+		{"unaligned verdict", "verdict: Amend", "verdict: Misaligned", "verdict is"},
 		{"missing lane", "  - lane: review_quality\n    result: PASS/Aligned\n    evidence: \"looked\"\n", "", "review_quality is absent"},
 	}
 	for _, tc := range tests {
@@ -283,7 +287,7 @@ func TestAmendExtendInvalidatesAlreadyGreenReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	findings := "  - id: F-02\n    severity: minor\n    title: extend scope\n    status: open\n    action: extend\n    node:\n      id: big-audit\n      contract: emits audit\n      deps: [big]\n      gate:\n        type: tests\n        tests: [{id: test_big_audit, file: t.ext}]\n      hazards: []\n"
-	extendText := strings.Replace(string(raw), "findings:\n---", "findings:\n"+findings+"---", 1)
+	extendText := strings.Replace(strings.Replace(string(raw), "findings:\n---", "findings:\n"+findings+"---", 1), "verdict: Aligned", "verdict: Amend", 1)
 	extendPath := filepath.Join(root, filepath.FromSlash(extendRel))
 	if err := os.WriteFile(extendPath, []byte(extendText), 0o644); err != nil {
 		t.Fatal(err)

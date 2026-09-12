@@ -57,7 +57,7 @@ var (
 	// skills/<lang>-specifications → shared/language-specs/<lang>.md: the
 	// language reference skills flatten to plain shared docs in the portable
 	// tree, since only Claude auto-loads description-matched skills.
-	langSkillPathRe = regexp.MustCompile(`skills/(cpp|rust|go|python|typescript|java|swift)-specifications\S*`)
+	langSkillPathRe = regexp.MustCompile(`skills/(cpp|rust|go|python|typescript|java|swift)-specifications(?:/SKILL\.md|/)?`)
 )
 
 // Marker grammar, chosen so canonical files remain valid Claude content:

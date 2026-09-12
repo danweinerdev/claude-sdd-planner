@@ -462,3 +462,54 @@ func TestReviewResolveOrdinaryReducedGate(t *testing.T) {
 		t.Fatalf("second resolve should be an already-resolved no-op: %v", err)
 	}
 }
+
+// A frozen findings report for `sdd graph amend` is reachable through the
+// supported verbs: verdict Amend resolves — and freezes — when every open
+// finding is classified revise/extend; unclassified open findings refuse;
+// Amend with nothing open refuses.
+func TestReviewResolveAmendVerdictFreezesActionedFindings(t *testing.T) {
+	_, review := scaffoldedReview(t)
+	for _, lane := range reviewLaneIDs() {
+		if err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+			Lane:     lane,
+			Evidence: "Inspected cmd/sdd/review.go and internal/rules/phasereview.go; diff matches the task scope with no unplanned changes",
+		}); err != nil {
+			t.Fatalf("evidence set %s: %v", lane, err)
+		}
+	}
+	write := func(findings string) {
+		t.Helper()
+		src := readFile(t, review)
+		src = strings.Replace(src, "verdict: Aligned", "verdict: Amend", 1)
+		src = strings.Replace(src, "findings: []", findings, 1)
+		if strings.Contains(findings, "F-01") {
+			src += "\n### F-01 — x\n\nScenario.\n"
+		}
+		if err := os.WriteFile(review, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := readFile(t, review)
+
+	// Amend with nothing open refuses.
+	write("findings: []")
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err == nil || !strings.Contains(err.Error(), "no open, actioned finding") {
+		t.Fatalf("Amend with nothing to amend must refuse: %v", err)
+	}
+	// Open finding without an action refuses.
+	os.WriteFile(review, []byte(base), 0o644)
+	write("findings:\n  - id: F-01\n    severity: major\n    title: \"x\"\n    status: open")
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err == nil || !strings.Contains(err.Error(), "action") {
+		t.Fatalf("unclassified open finding must refuse: %v", err)
+	}
+	// Classified open finding resolves and freezes.
+	os.WriteFile(review, []byte(base), 0o644)
+	write("findings:\n  - id: F-01\n    severity: major\n    title: \"x\"\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: \"y\"")
+	if err := cmdReviewResolve(review, reviewResolveOpts{}); err != nil {
+		t.Fatalf("actioned Amend review must resolve: %v", err)
+	}
+	src := readFile(t, review)
+	if !strings.Contains(src, "\nfrozen: true\n") || !strings.Contains(src, "\nstatus: resolved\n") || !strings.Contains(src, "\nverdict: Amend\n") {
+		t.Fatalf("Amend resolve must freeze and resolve in one write:\n%s", src)
+	}
+}

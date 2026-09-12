@@ -312,7 +312,7 @@ func TestRecordOpenFindingsPreviewWithoutWriting(t *testing.T) {
 	b.Verification = pass(2)
 	gate := fullGate("g1", []string{"a", "b"})
 	root, planDir := fixture(t, 2, a, b, gate)
-	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(),
+	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Amend", allPass(),
 		"  - id: F-01\n    severity: major\n    title: \"a is faulted\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"does a, and also handles the empty case\"\n"))
 	before, _ := os.ReadFile(gstore.PathFor(planDir))
 
@@ -406,7 +406,7 @@ func TestRecordRefusesOutOfScopeFindingNodes(t *testing.T) {
 	gate := fullGate("g1", []string{"a"})
 	unrelated := work("z", nil)
 	root, _ := fixture(t, 0, a, gate, unrelated)
-	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", allPass(),
+	writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Amend", allPass(),
 		"  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: open\n    action: revise\n    nodes: [z]\n    revise:\n      contract: \"changed\"\n"))
 
 	_, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",

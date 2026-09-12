@@ -309,7 +309,7 @@ func init() {
 
 	Register(&Rule{
 		Code: "SDD091", Severity: Error, PyFunc: "_review",
-		What: "a review with status `resolved` still carries open findings",
+		What: "a review with status `resolved` still carries open findings (an Amend-verdict review may carry open findings classified revise/extend)",
 		Check: func(a *Artifact, emit func(Diagnostic)) {
 			if a.Meta == nil || a.Kind() != "review" {
 				return
@@ -317,15 +317,22 @@ func init() {
 			if metaStr(a.Meta, "status") != "resolved" {
 				return
 			}
+			// Verdict Amend is the frozen findings report `sdd graph amend`
+			// consumes: its open findings are its content, each classified
+			// with an action. Unclassified open findings still refuse.
+			amend := metaStr(a.Meta, "verdict") == "Amend"
 			entries, _ := reviewFindings(a)
 			for _, m := range entries {
 				if metaStr(m, "status") != "open" {
 					continue
 				}
+				if action := metaStr(m, "action"); amend && (action == "revise" || action == "extend") {
+					continue
+				}
 				emit(Diagnostic{
 					Code: "SDD091", Severity: Error, Path: a.Rel, Line: 1,
 					Message:    "Resolved review contains open findings.",
-					Correction: "Resolve them or set review status to open.",
+					Correction: "Resolve them, set review status to open, or (graph amendments) set verdict: Amend and give each open finding action: revise|extend.",
 				})
 				return // Python emits once for the review, not once per finding.
 			}
@@ -336,12 +343,21 @@ func init() {
 					"", "### F-01 — one\n\nText.\n", ""),
 				"status: open\ncreated:", "status: resolved\ncreated:"),
 		}}},
-		Good: []Example{{Name: "resolved-all-closed", Files: map[string]string{
-			"Retro/sample-review.md": replaceFirst(
-				reviewWithBlocks("\n  - id: F-01\n    severity: major\n    title: One\n    status: fixed\n",
-					"", "### F-01 — one\n\nText.\n", "### F-01 — fixed\n\n2024-01-01. Done.\n"),
-				"status: open\ncreated:", "status: resolved\ncreated:"),
-		}}},
+		Good: []Example{
+			{Name: "resolved-all-closed", Files: map[string]string{
+				"Retro/sample-review.md": replaceFirst(
+					reviewWithBlocks("\n  - id: F-01\n    severity: major\n    title: One\n    status: fixed\n",
+						"", "### F-01 — one\n\nText.\n", "### F-01 — fixed\n\n2024-01-01. Done.\n"),
+					"status: open\ncreated:", "status: resolved\ncreated:"),
+			}},
+			{Name: "resolved-amend-actioned", Files: map[string]string{
+				"Retro/sample-review.md": replaceFirst(replaceFirst(
+					reviewWithBlocks("\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n    action: extend\n    node:\n      id: extra\n      contract: c\n      deps: [a]\n      gate: {type: tests, tests: [{id: t, file: t.ext}]}\n      hazards: []\n",
+						"", "### F-01 — one\n\nText.\n", ""),
+					"status: open\ncreated:", "status: resolved\ncreated:"),
+					"type: review\n", "type: review\nverdict: Amend\n"),
+			}},
+		},
 	})
 
 	Register(&Rule{

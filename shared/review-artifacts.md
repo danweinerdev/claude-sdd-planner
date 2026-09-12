@@ -84,7 +84,7 @@ findings:
 
 Findings with `status: fixed | deferred | rejected | answered` produce no amendment; `deferred` is recorded in the review node's `history`. `sdd graph review` with zero open findings records a pass; with any open finding it writes nothing and instead prints the amendment preview plus an `expect-digest` for the graph and an `expect-report-digest` for the reviewed artifact. Pass both to `sdd graph amend`; if either changes, re-preview rather than applying stale findings. See `commands/implement/SKILL.md` for the full claim → review → amend flow.
 
-Artifact `status`: `open` while any finding is `open`; `resolved` when every finding has a terminal disposition; `superseded` when a newer review of the same target replaces it (link both ways, like ledger supersession).
+Artifact `status`: `open` while the review is being written; `resolved` when the closing gate holds; `superseded` when a newer review of the same target replaces it (link both ways). Two verdicts resolve: **`Aligned`**, where every finding has a terminal disposition (`fixed`, `deferred`, `rejected`, `answered`) — the only verdict that completes a phase or greens a review node; and **`Amend`**, where every `open` finding carries an `action` (`revise` or `extend`) and at least one is open — the frozen findings report `sdd graph amend` consumes. An open finding without an action never resolves under either verdict, and a review whose findings would need both shapes is two reviews.
 
 ## Phase-completion review gate
 
@@ -145,11 +145,14 @@ transition chain driven by the binary, mirroring `task|phase|plan complete`:
    evidence-quality bar as the validator: a placeholder, a blank, or a
    conclusory "no findings" is refused at write time.
 3. `sdd review resolve <review-path>` is the closing transition. It refuses
-   unless the verdict is `Aligned`, every lane carries real evidence, the
-   schema is valid, every finding has a terminal disposition, and no follow-up
+   unless every lane carries real evidence, the schema is valid, no follow-up
    floats untracked (`--accept-followups` only after the user explicitly
-   accepts one). When the gate is met it sets `frozen: true` and
-   `status: resolved` in one write.
+   accepts one), and the findings match the verdict: `Aligned` needs every
+   finding terminal; `Amend` needs every open finding classified `revise` or
+   `extend` with its `nodes`/`revise` or `node` block, and at least one open.
+   When the gate is met it sets `frozen: true` and `status: resolved` in one
+   write. A phase completes only on an `Aligned` review; an `Amend` review
+   feeds `sdd graph amend` and the re-review that follows is a fresh artifact.
 
 `frozen: true` therefore marks a *finished* review: from that moment the
 artifact is immutable through every supported command (SPK050 refuses

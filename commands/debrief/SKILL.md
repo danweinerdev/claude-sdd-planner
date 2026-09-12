@@ -20,7 +20,8 @@ When a plan phase has been completed (or substantially completed) and you want t
    - Read the plan README for overall context
 
 2. **Gather Information**
-   - Review the phase's tasks and subtasks for completion status
+   - **Graph plans** (`Plans/<Name>/<Name>-Graph.json` exists): the completion record is the graph, never prose. Read `sdd graph status --plan <Name> --json` for derived states and closure, `sdd graph show <id> --plan <Name>` for any node you discuss, and `sdd decide list --plan <Name>` for decisions recorded during the phase. Rendered `NN-*.md` phase views are generated: read them, never edit them, and never fill a completion-evidence section in one. Skip the task-evidence reads below.
+   - **v1 plans** (no graph): review the phase's tasks and subtasks for completion status
    - Read every task's `### Completion Evidence` — an absent or pending section on a `complete` task is a legacy evidence gap (`shared/completion-evidence.md`); report it in the debrief, never treat it as proof
    - Read related designs from `Designs/` to identify deviations from intended architecture
    - Read related specs from `Specs/` to assess requirements coverage
@@ -52,7 +53,8 @@ When a plan phase has been completed (or substantially completed) and you want t
    - For each "Decisions Made" item that will bind work beyond this phase's own narrative and was never recorded during implementation, show the exact statement to the user; once approved, run `sdd decide add --plan <PlanName> --statement "..."` once (`shared/decision-log.md`). Items that only explain how this phase went stay in the debrief.
 
 6. **Update Phase Status**
-   - A status backfill here is subject to the same gate as `/implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
+   - **Graph plans**: there is nothing to set by hand. Phase and plan status derive from observations and the frozen full-review coverage the acceptance node closes on; `sdd graph status` is the answer to "is it done". Run `sdd decide render --plan <Name>` so `Plans/<Name>/Design.md` reflects the phase's decisions, then stop — the remaining bullets are the v1 protocol.
+   - **v1 plans**: a status backfill here is subject to the same gate as `/implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
    - When the gate holds, set the phase status to `complete` in both:
      - The phase doc frontmatter
      - The plan README's `phases[]` array

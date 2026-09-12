@@ -531,10 +531,22 @@ type reviewResolveResult struct {
 }
 
 // terminalFindingStatus mirrors shared/review-artifacts.md: `resolved`
-// requires every finding to carry a terminal disposition.
+// requires every finding to carry a terminal disposition — except under
+// verdict `Amend`, where an `open` finding classified with an `action`
+// (revise | extend) IS its disposition: the graph amendment is what closes it.
 var terminalFindingStatus = map[string]bool{
 	"fixed": true, "deferred": true, "rejected": true, "answered": true,
 }
+
+// amendActions are the finding classifications a graph review node's
+// artifact carries (Designs/ReviewDrivenAmendment DD-2, DD-5).
+var amendActions = map[string]bool{"revise": true, "extend": true}
+
+// reviewVerdicts are the two terminal verdicts `resolve` freezes. `Aligned`
+// is the phase-completion gate and greens a review node; `Amend` never
+// completes a phase — it is the frozen findings report `sdd graph amend`
+// consumes.
+var reviewVerdicts = map[string]bool{"Aligned": true, "Amend": true}
 
 // cmdReviewResolve is the closing transition for a review.
 //
@@ -598,19 +610,42 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	// phase-gate machinery; an ordinary review's reduced gate is only the
 	// scope-independent hygiene below (terminal findings, tracked followups).
 	var blocking []string
+	verdict, _ := doc.FM("verdict")
+	verdict = strings.Trim(verdict, `"'`)
+	amend := verdict == "Amend"
 	if isPhaseGate {
-		if verdict, _ := doc.FM("verdict"); strings.Trim(verdict, `"'`) != "Aligned" {
-			blocking = append(blocking, "verdict must be Aligned; a non-Aligned review is superseded by a fresh review after fixes land, not resolved")
+		if !reviewVerdicts[verdict] {
+			blocking = append(blocking, "verdict must be Aligned (every finding terminal) or Amend (open findings classified as revise/extend for `sdd graph amend`); any other review is superseded by a fresh review after fixes land, not resolved")
 		}
 		if rev, _ := doc.FM("rev"); strings.Trim(rev, `"'`) == "" {
 			blocking = append(blocking, "rev must carry the frozen reviewed identity")
 		}
 		blocking = append(blocking, rules.PhaseReviewSchemaErrors(fmMeta(doc.FrontmatterRaw))...)
 	}
+	openActioned := 0
 	for _, f := range fmSequence(doc.FrontmatterRaw, "findings") {
-		if s := f.Str("status"); !terminalFindingStatus[s] {
-			blocking = append(blocking, fmt.Sprintf("finding %s has status %q; every finding needs a terminal disposition (fixed, deferred, rejected, answered)", f.Str("id"), s))
+		s := f.Str("status")
+		if terminalFindingStatus[s] {
+			continue
 		}
+		if amend && s == "open" {
+			action := f.Str("action")
+			switch {
+			case !amendActions[action]:
+				blocking = append(blocking, fmt.Sprintf("finding %s is open under verdict Amend but its action is %q; every open finding needs action: revise or extend", f.Str("id"), action))
+			case action == "revise" && (len(f.List("nodes")) == 0 || !f.Has("revise")):
+				blocking = append(blocking, fmt.Sprintf("finding %s: action revise needs `nodes` and a `revise` block", f.Str("id")))
+			case action == "extend" && !f.Has("node"):
+				blocking = append(blocking, fmt.Sprintf("finding %s: action extend needs a `node` fragment", f.Str("id")))
+			default:
+				openActioned++
+			}
+			continue
+		}
+		blocking = append(blocking, fmt.Sprintf("finding %s has status %q; every finding needs a terminal disposition (fixed, deferred, rejected, answered), or — under verdict Amend — status open with an action", f.Str("id"), s))
+	}
+	if amend && openActioned == 0 && len(blocking) == 0 {
+		blocking = append(blocking, "verdict Amend with no open, actioned finding; use verdict Aligned")
 	}
 	if !o.AcceptFollowups {
 		for _, fu := range fmSequence(doc.FrontmatterRaw, "followups") {

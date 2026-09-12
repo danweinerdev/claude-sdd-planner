@@ -70,13 +70,13 @@ Until the bytes land on the mainline, the node honestly derives STALE from the s
 
 - `sdd graph status --plan <Name>` between claims; `sdd graph path` when choosing what to unblock first.
 - **Command gates**: run the gate's command, capture output, `sdd graph sync --node <id> --command-exit <N> --command-log out.txt`.
-- **Review nodes** on the frontier (`role: review`; claimable once every reviewed dep is GREEN, like any node): claim it, run `sdd graph show --plan <Name> --node <id> --brief` for the self-contained brief (reviewed contracts, artifact digests, required lanes), run the four-lane review flow (`sdd review scaffold` → fill lanes → `sdd review resolve`), then record it:
+- **Review nodes** on the frontier (`role: review`; claimable once every reviewed dep is GREEN, like any node): claim it, run `sdd graph show <id> --plan <Name> --brief` for the self-contained brief (reviewed contracts, artifact digests, required lanes), run the four-lane review flow (`sdd review scaffold <phase-doc> --frozen <base>..<endpoint>` → `sdd review evidence set` per lane → findings via the normal write path → `sdd review resolve`), then record it:
 
   ```
   sdd graph review --plan <Name> --node <id> --artifact <frozen review path>
   ```
 
-  The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** review node — reusing another node's artifact refuses naming it. Record the review **after** the scope's work is integrated into the mainline: the review's observation digests the aggregate reviewed set from the shared tree, and reviewing bytes that aren't there yet records an anchor of nothing.
+  The artifact must be `resolved` + `frozen: true` (a reopened review is not evidence), must review a document of **this plan**, and supplies evidence exactly **once** — reusing another node's artifact refuses naming it. Its verdict decides what `graph review` does: **`Aligned`** (every finding terminal) greens the node; **`Amend`** (every open finding classified `action: revise` or `extend`) is the frozen findings report that `graph amend` applies. `sdd review resolve` freezes either; it refuses a verdict of `Aligned` with open findings, an `Amend` with an unclassified open finding, and an `Amend` with nothing open. Only an `Aligned` review can complete a phase. Record the review **after** the scope's work is integrated into the mainline: the review's observation digests the aggregate reviewed set from the shared tree, and reviewing bytes that aren't there yet records an anchor of nothing.
 
   **With zero open findings**, the review node goes GREEN. **With any open finding**, nothing is written to the node — instead the tool prints an amendment preview (per finding: `revise` shows the node and its normative-field diff; `extend` shows the proposed node), an `expect-digest` for the graph, and an `expect-report-digest` for the review artifact. Show the user the preview before applying it, then:
 
