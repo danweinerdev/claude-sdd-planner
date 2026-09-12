@@ -17,7 +17,7 @@ Route by graph presence:
 
 ## The Walk Loop
 
-The loop is: **claim → red → green → sync → merge**, repeated until the frontier is empty. Every arrow is a CLI call whose refusal text names the fix. You never assert an outcome — you show the tool a report and it records what the report says (DD-5, D-0022).
+The loop is: **claim → red → green → sync → merge**, repeated until the frontier is empty. Every arrow is a CLI call whose refusal text names the fix. You never assert an outcome — you show the tool a report and it records what the report says (DD-5); graph completion is derived from those observations, never from narrated evidence.
 
 ### 0. Preconditions
 
@@ -56,7 +56,7 @@ A clean pass by the claim holder **merges atomically**: observation recorded (wi
 
 **Then integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`) — merge it into the mainline checkout now. Until the bytes land on the mainline, the node honestly derives STALE from the shared tree's perspective (the recorded digests name bytes mainline doesn't have); integration self-heals it to GREEN. Don't stack un-integrated branches: integrate after every merge, before the next claim of dependent work.
 
-**Commit cadence.** The workspace commit above is the only per-node commit. `<Name>-Graph.json`, rendered views, and the plan README change on every verb and are committed at phase boundaries — when a review gate greens, or the plan opens or closes — never per sync (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+**Commit cadence.** The workspace commit above is the only per-node commit. `<Name>-Graph.json`, rendered views, and the plan README change on every verb and are committed at phase boundaries — when a review gate greens, or the plan opens or closes — never per sync (`shared/autonomy.md` § SCM boundary cadence).
 
 ### 4. Between Rounds
 
@@ -70,10 +70,10 @@ A clean pass by the claim holder **merges atomically**: observation recorded (wi
 
   The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** review node — reusing another node's artifact refuses naming it. Record the review **after** the scope's work is integrated into the mainline: the review's observation digests the aggregate reviewed set from the shared tree, and reviewing bytes that aren't there yet records an anchor of nothing.
 
-  **With zero open findings**, the review node goes GREEN. **With any open finding**, nothing is written to the node — instead the tool prints an amendment preview (per finding: `revise` shows the node and the contract/gate diff; `extend` shows the proposed node) and an `expect-digest`. Show the user the preview before applying it, then:
+  **With zero open findings**, the review node goes GREEN. **With any open finding**, nothing is written to the node — instead the tool prints an amendment preview (per finding: `revise` shows the node and its normative-field diff; `extend` shows the proposed node), an `expect-digest` for the graph, and an `expect-report-digest` for the review artifact. Show the user the preview before applying it, then:
 
   ```
-  sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --by <identity>
+  sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --expect-report-digest <report-digest> --by <identity>
   ```
 
   `--dry-run` re-prints the preview without writing. A successful amend bumps `contract_rev` and clears red bookkeeping on every revised node (it owes a fresh RED before it can green again) and adds any extended node — both re-enter the frontier as ordinary work, deps of the review node. The review node stays BLOCKED behind them; walk those nodes through the usual red → green → sync cycle, then re-claim the review node and re-review. `integration-acceptance` nodes depend on review nodes, so closure requires the review to have passed on the bytes that ship.
@@ -93,7 +93,7 @@ A clean pass by the claim holder **merges atomically**: observation recorded (wi
 - **Lease expiry / crashes**: an expired claim's workspace is preserved as post-mortem evidence. Inspect it if useful, then `sdd graph gc --plan <Name>` — gc persists the expiry and reaps the workspace; the node returns to the frontier. A stale claimant's late sync is refused by claim discipline.
 - **Abandoning a node**: `sdd graph release <id> --by <identity>` — never squat on a claim you aren't working.
 
-### Evidence Language (D-0022)
+### Evidence Language
 
 For graph plans, **observation records and rendered views are the completion record**. You never write completion-evidence prose as a gate input, never edit `<Name>-Graph.json` by hand (the guard denies it; every mutation goes through a verb), and never edit rendered `NN-*.md` views (the renderer overwrites them, or refuses when they are frozen). When the user asks "where are we?", the answer is `sdd graph status` / `sdd graph export --format plan` output — derived truth, not narration.
 
@@ -103,13 +103,13 @@ Node work may be dispatched to `sdd-planner:code-implementer` agents. The dispat
 
 ## v1 Plans (no graph)
 
-v1 markdown plans keep their protocol until converted (D-0022's v1 clause). The non-negotiables, with their normative homes:
+v1 markdown plans keep their protocol until converted. The non-negotiables, with their normative homes:
 
 - **Statuses and waves**: plan `approved/active`, phase `planned → in-progress`, tasks dispatched in dependency-ordered waves to `sdd-planner:code-implementer` agents (one clean, complete, bisectable native-SCM revision per task — a task that cannot land that way is a plan defect, not an implementation detail).
 - **Evidence-gated completion** per `shared/completion-evidence.md`: no status flips to `complete` without conforming retrospective evidence; reject evidence-free success reports — a success report contains the verification commands actually run and their pasted output, never "tests should pass".
 - **Per-task quality scan** (`sdd-planner:quality-scanner`, intent-blind, via `shared/templates/quality-scan-prompt.md`); max 2 review-fix cycles, then block and escalate.
 - **Phase gate** per `shared/review-artifacts.md`: every task complete with evidence, clean worktree, frozen revision range, a persisted resolved frozen **Aligned** four-lane review, populated Phase Completion Evidence, and `sdd validate` passing.
-- **Lifecycle bookkeeping** at phase boundaries only (`shared/autonomy.md` § SCM boundary cadence, D-0024): write statuses and evidence in flow, commit them once at phase close alongside the review and debrief — never per task, never per amendment, never mixed into implementation revisions. `sdd task complete` reports its committed-copy checks as pending until then; that is not a request to commit.
+- **Lifecycle bookkeeping** at phase boundaries only (`shared/autonomy.md` § SCM boundary cadence): write statuses and evidence in flow, commit them once at phase close alongside the review and debrief — never per task, never per amendment, never mixed into implementation revisions. `sdd task complete` reports its committed-copy checks as pending until then; that is not a request to commit.
 
 When a v1 plan keeps generating drift the evidence rules exist to catch, offer conversion instead of more discipline: `sdd graph convert --plan <Name>`. After a converted plan compiles, run the on-ramp before walking: history grants nothing, so every completed v1 task is an unverified node until observations exist — `sdd graph reverify --plan <Name> --report <suite report>` (add `--command-exit`/`--command-log` for command gates) folds one real run against every foldable node in dependency order, and the frontier then offers the genuinely remaining work instead of the already-done past.
 

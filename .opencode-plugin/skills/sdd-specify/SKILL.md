@@ -68,7 +68,7 @@ When you need to define the requirements for a feature before designing or imple
 ```
 Specs/<FeatureName>/README.md
 ```
-Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence).
 
 ## Document Structure
 See `shared/templates/spec.md`:

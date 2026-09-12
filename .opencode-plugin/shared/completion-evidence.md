@@ -82,7 +82,7 @@ at that task commit.
 
 Record completion status and evidence through the planning root's validated
 lifecycle SCM adapter in the phase-close lifecycle commit — never a per-task
-one (`shared/autonomy.md` § SCM boundary cadence, D-0024). The current Git
+one (`shared/autonomy.md` § SCM boundary cadence). The current Git
 planning adapter is strict at the phase boundary: once a phase is complete, its
 own evidence, every task's record, and the final phase review must be
 committed at planning `HEAD`. A complete task inside an in-progress phase is
@@ -105,7 +105,7 @@ Task-level lifecycle bookkeeping is durable when the planning artifact's
 have-revision in the depot carries the completed status, checked subtasks, and
 identical evidence: submit the phase-close lifecycle changelist once the phase
 completes, exactly as the Git adapter expects its phase-close lifecycle commit
-(D-0024).
+under `shared/autonomy.md` § SCM boundary cadence.
 Phase-gate machinery (frozen four-lane review ranges) remains Git-validated;
 a Perforce phase completes only when a validated Perforce phase-review
 identity adapter exists.

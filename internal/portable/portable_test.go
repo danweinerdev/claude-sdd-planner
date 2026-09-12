@@ -1,7 +1,10 @@
 package portable
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -104,6 +107,65 @@ func TestGenerateRealTree(t *testing.T) {
 	}
 	if !strings.Contains(manifest, `"minSddVersion": "`+minSdd+`"`) {
 		t.Errorf("manifest minSddVersion not synced to canonical %s", minSdd)
+	}
+}
+
+// TestNoRetiredDecisionCitations keeps the retired global-ledger D-NNNN id
+// family out of active guidance. Its deliberately narrow canonical roots omit
+// frozen planning artifacts and historical provenance/data; those records must
+// preserve the identifiers they actually carried. Generated portable Markdown
+// is checked separately so a transform or portable variant cannot reintroduce
+// a dangling citation.
+func TestNoRetiredDecisionCitations(t *testing.T) {
+	retiredCitation := regexp.MustCompile(`\bD-[0-9]{4}\b`)
+	root := repoRoot(t)
+
+	check := func(label, rel string, content []byte) {
+		t.Helper()
+		if retiredCitation.Match(content) {
+			t.Errorf("%s %s contains retired decision citation %q", label, rel, retiredCitation.Find(content))
+		}
+	}
+
+	for _, rel := range []string{"README.md", "CLAUDE.md", "AGENTS.md"} {
+		content, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("canonical", rel, content)
+	}
+	for _, dir := range []string{"commands", "skills", "shared", "agents"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			check("canonical", filepath.ToSlash(rel), content)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	generated, err := Generate(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range generated.Files {
+		if strings.HasSuffix(rel, ".md") {
+			check("portable", rel, content)
+		}
 	}
 }
 

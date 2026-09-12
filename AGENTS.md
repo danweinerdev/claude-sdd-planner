@@ -15,7 +15,7 @@ A spec-driven development toolchain published to multiple agent harnesses from o
 
 ```bash
 make build          # compile the sdd binary into build/<os>-<arch>-debug/
-make test           # THE gate: Go suite + frozen regression corpus + template gate + portable drift/leak gates
+make test           # THE gate: Go suite + frozen regression corpus + template gate + portable drift/leak/citation gates
 make plugins        # regenerate .codex-plugin/ and .opencode-plugin/ (sdd plugin sync)
 make plugins-check  # fail if the generated trees are stale
 sdd plugin status   # provenance of every portable file (generated / variant / override)
@@ -25,14 +25,14 @@ Run `make test` before claiming any change works. It fails on:
 - unit or regression failures (`go test ./...`, including the corpus under `tools/`)
 - templates drifting from the schema (`sdd template --check`)
 - either generated tree differing from a fresh generation
-- Claude-isms leaking into portable output (`sdd-planner:`, `the Task tool`, `~/.claude`, …)
+- Claude-isms or retired global-ledger citations leaking into active canonical guidance or portable output
 
 ## Editing rules (the ones that bite)
 
 1. **Edit canonical, regenerate portable.** After touching `commands/`, `skills/`, `agents/`, `shared/`, or `.claude-plugin/plugin.json`, run `make plugins` and commit the regenerated trees with the change.
 2. **Variants shadow generation.** `commands/{code-review,implement,setup}/SKILL.portable.md`, `shared/review-lanes.portable.md`, and `shared/templates/custom-reviewer.portable.md` replace the generated transform of their canonical siblings wholesale. When you edit a canonical file that has a variant, decide whether the variant needs the same change — nothing does this for you.
 3. **Harness markers** handle paragraph-level divergence inside one file: `<!-- claude-only -->…<!-- /claude-only -->` is dropped from portable output; a `<!-- portable-only … -->` comment block is uncommented into it. Used in `shared/path-resolution.md`, `shared/orchestration.md`, `shared/templates/quality-scan-prompt.md`.
-4. **Agent edits propagate automatically.** The portable `shared/agent-prompts/` and `shared/review-prompts/` files are derived from `agents/*.md` — do not edit them directly. `code-implementer` has no prompt by design (D-0009: `implement_task` dispatches carry the task inline).
+4. **Agent edits propagate automatically.** The portable `shared/agent-prompts/` and `shared/review-prompts/` files are derived from `agents/*.md` — do not edit them directly. `code-implementer` has no prompt by design: `implement_task` dispatches carry the task inline under the stable identifier defined by `shared/agent-runtime.md`.
 5. **Templates ↔ schema ↔ validator move together.** Any change to `shared/templates/`, `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, or `shared/review-artifacts.md` must keep all three consistent — `sdd validate` is the enforcement layer.
 6. **Every validation rule carries `Good` and `Bad` examples** (`internal/rules/`); the registry meta-test fails otherwise. After rule changes, `make gen-fixtures` and commit the corpus.
 7. **Never regenerate `tools/parity/frozen-expectations.json`.** It is the retired Python validator's last recorded verdict — the definition of "correct", not a test output.
@@ -55,7 +55,7 @@ The `shared/` documents are normative — read them before changing behavior the
 | Review lanes, four-lane isolation, project socket | `shared/review-lanes.md`, `shared/review-artifacts.md` |
 | Portable runtime resolution + delegation contract | `shared/agent-runtime.md` |
 
-Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions, with lifecycle bookkeeping committed only at phase boundaries (D-0024); `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
+Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions, with lifecycle bookkeeping committed only at phase boundaries per `shared/autonomy.md`; `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is a derived predicate. v1 plans without graphs keep the markdown protocol until converted.
 
 Decision consumers read `sdd decide list|current|lookup` — always derived, never cached. `sdd decide add` is the only write path and runs only after the user approves the exact statement; never hand-edit a `-Decisions.json` file or leak plan decisions into the intent-isolated review lanes.
 
@@ -66,11 +66,11 @@ Decision consumers read `sdd decide list|current|lookup` — always derived, nev
 ```bash
 make bump-patch|bump-minor|bump-major     # test-gated bump + commit + tag, syncs all trees
 python3 bump-version.py set X.Y.Z         # explicit forward jump (no downgrades)
-python3 bump-version.py set-floor X.Y.Z   # advance minSddVersion deliberately (D-0015)
+python3 bump-version.py set-floor X.Y.Z   # advance minSddVersion deliberately
 ```
 
 Harnesses cache plugins by version — a content change without a bump is invisible to users.
 
 ## The `sdd` binary contract
 
-Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries (D-0015). Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run. Graph execution is part of the binary contract: `compile`, `next --claim`, and the `graph` family (`init|propose|assemble|convert|hazards|sync|reverify|review|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`) own every mutation of a committed plan graph — skills author payloads and read diagnostics, never edit `<Name>-Graph.json` or rendered views by hand.
+Users install it themselves (`go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest`); the plugin never ships, compiles, or downloads binaries. Setup skills verify `sdd version` against the manifest's `minSddVersion` and stop with the install command on failure. Exit codes: `0` success, `1` refused mutation / authoritative findings, `2` malformed invocation or could-not-run. Graph execution is part of the binary contract: `compile`, `next --claim`, and the `graph` family (`init|propose|assemble|convert|hazards|sync|reverify|review|amend|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`) own every mutation of a committed plan graph — skills author payloads and read diagnostics, never edit `<Name>-Graph.json` or rendered views by hand.

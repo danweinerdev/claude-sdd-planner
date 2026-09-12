@@ -40,7 +40,8 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
   commit the verified feature slice first and record lifecycle state once per
   affected root at phase close — never at task closeout, never per amendment or
   decision. Shared-root artifacts and decisions files use one boundary commit; external
-  roots record once at the same boundary (D-0024). Dirty or no-SCM work
+  roots record once at the same boundary under the SCM cadence in the plugin's
+  `shared/autonomy.md`. Dirty or no-SCM work
   remains non-complete until a durable native checkpoint exists.
 - Use `planning-config.json` to resolve the planning root and any externally targeted repository paths. There is no local companion config.
 - Each plan's decisions live in its own `<Name>-Decisions.json`, append-only
@@ -61,7 +62,7 @@ artifact and decision update as it becomes known and record once per affected SC
 root at session close — never per artifact, skill, approval, review, or
 decision. Phase close follows the same rule: one planning-root atomic commit
 carries the final review, debrief, phase updates, plan phase-array update, and
-— when final plan checks are ready — plan completion evidence/status (D-0024).
+— when final plan checks are ready — plan completion evidence/status.
 The expected shape of a phase's history is one lifecycle commit at open, N
 implementation commits, one lifecycle commit at close.
 

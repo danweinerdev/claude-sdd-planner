@@ -58,9 +58,9 @@ Four mechanisms, in order of preference:
 3. **Variants** (whole-file divergence): a `*.portable.md` sibling replaces the generated transform of its canonical file. Current variants: `commands/{code-review,implement,setup}/SKILL.portable.md`, `shared/review-lanes.portable.md`, `shared/templates/custom-reviewer.portable.md`. **Editing a canonical file that has a variant means checking whether the variant needs the same change.**
 4. **Overrides** (portable-only files, no canonical sibling): `portable-overrides/` (currently just the portable README).
 
-**Derived prompts**: `shared/agent-prompts/` and `shared/review-prompts/` in the portable trees are generated from `agents/*.md` (`internal/portable/prompts.go`) — frontmatter and Path Resolution dropped, a `{{PLACEHOLDER}}` Inputs block merged in, standard transforms applied. An agent edit propagates to both harnesses automatically. `code-implementer` deliberately has no prompt: implementation dispatches carry the task inline under `implement_task` (D-0009).
+**Derived prompts**: `shared/agent-prompts/` and `shared/review-prompts/` in the portable trees are generated from `agents/*.md` (`internal/portable/prompts.go`) — frontmatter and Path Resolution dropped, a `{{PLACEHOLDER}}` Inputs block merged in, standard transforms applied. An agent edit propagates to both harnesses automatically. `code-implementer` deliberately has no prompt: implementation dispatches carry the task inline under the stable `implement_task` identifier defined by `shared/agent-runtime.md`.
 
-**Gates**: `internal/portable`'s tests run in `make test` and fail on (a) drift — either tree differing from a fresh generation — and (b) leaks — any Claude-ism (`sdd-planner:`, `the Task tool`, `~/.claude`, `## Path Resolution`, …) reaching portable output. The generated manifests take `version`/`minSddVersion` from `.claude-plugin/plugin.json`; `make bump-*` re-syncs them inside the bump commit so all trees release together (D-0016).
+**Gates**: `internal/portable`'s tests run in `make test` and fail on (a) drift — either tree differing from a fresh generation, (b) harness leaks — any Claude-ism (`sdd-planner:`, `the Task tool`, `~/.claude`, `## Path Resolution`, …) reaching portable output, and (c) retired global-ledger citations in active canonical guidance or freshly generated portable Markdown. Frozen planning artifacts and historical provenance/data are outside that citation gate. The generated manifests take `version`/`minSddVersion` from `.claude-plugin/plugin.json`; `make bump-*` re-syncs them inside the bump commit so all trees release together.
 
 `sdd plugin status` prints the generated/variant/override provenance of every portable file.
 
@@ -106,7 +106,7 @@ Plan (README.md)       <- like a Jira Project
 | debrief | `draft`, `complete` |
 
 ### Completion Evidence
-`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter). Lifecycle bookkeeping is written in flow and committed only at phase boundaries — one commit at open, one at close — never per task, amendment, or decision (`shared/autonomy.md` § SCM boundary cadence, D-0024). Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
+`complete` is evidence-gated at every level. Prospective `verification` says how work will be judged; retrospective completion evidence records what actually ran — exact commands, native-SCM revision identity, focused review, observable results. Plan tasks are native-SCM revision boundaries: each lands as one clean, complete, independently bisectable commit (git adapter). Lifecycle bookkeeping is written in flow and committed only at phase boundaries — one commit at open, one at close — never per task, amendment, or decision (`shared/autonomy.md` § SCM boundary cadence). Phase completion additionally requires a persisted, frozen, four-lane `Aligned` review (`shared/review-artifacts.md` § Phase-completion review gate). `shared/completion-evidence.md` is the single source of truth; `sdd validate` (surfaced as `/validate`) enforces it deterministically. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is a derived predicate. v1 plans without graphs keep the markdown protocol until converted.
 
 ### Plan Lifecycle
 Plans live flat under `Plans/<PlanName>/`; lifecycle is the README frontmatter `status`, never a directory move. `/plan` creates `draft` and sets `approved` after review; `/implement` sets `active`, then `complete` when the final phase finishes (evidence-gated); `/debrief` backfills a missed transition subject to the same gate. AI commands filter by `status` to scope what they read.
@@ -174,7 +174,7 @@ Agents without `tools:` frontmatter (`researcher`, `code-implementer`, `quality-
 ```
 /sdd-planner:setup → research → brainstorm → specify → design → plan → implement → code-review → debrief
 ```
-Use `poke-holes` before approving any artifact, `decide` to record or audit decided truths at any point (`decide check` is the ledger hygiene net), and `validate` before implementation, before any completion transition, or in CI.
+Use `poke-holes` before approving any artifact, `decide` to record, look up, render, or reconcile decided truths at any point, and `validate` before implementation, before any completion transition, or in CI.
 
 ## The `sdd` Binary
 
@@ -184,7 +184,7 @@ Every skill and both hooks drive one cross-platform Go binary. The plugin does n
 go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 ```
 
-`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide add|list|current|lookup`, `review scaffold|evidence set|resolve`, `template` (incl. `graph-proposal`), `hook`, `provision`, `plugin sync|check|status`, `doctor` — plus the graph family: `compile`, `next --claim`, and `graph init|propose|assemble|convert|hazards|sync|reverify|review|amend|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`.
+`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old. Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide add|list|current|lookup|render`, `review scaffold|evidence set|resolve`, `template` (incl. `graph-proposal`), `hook`, `provision`, `plugin sync|check|status`, `doctor` — plus the graph family: `compile`, `next --claim`, and `graph init|propose|assemble|convert|hazards|sync|reverify|review|amend|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`.
 
 ## Configuration
 
@@ -213,6 +213,6 @@ When adding, removing, or renaming skills, agents, or user-facing behavior, keep
 | New or changed feature, new skill | `make bump-minor` |
 | Breaking artifact/config/skill-interface change | `make bump-major` |
 | Explicit jump (e.g. release unification) | `python3 bump-version.py set X.Y.Z && make plugins` |
-| Advance the binary floor (deliberate, D-0015) | `python3 bump-version.py set-floor X.Y.Z && make plugins` |
+| Advance the binary floor deliberately | `python3 bump-version.py set-floor X.Y.Z && make plugins` |
 
 Each `make bump-*` target runs the test suite first, updates `plugin.json` + `version.go`, re-syncs the portable manifests, and creates the `vX.Y.Z` commit + tag. Always bump before pushing a release.

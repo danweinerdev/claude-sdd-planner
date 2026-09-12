@@ -249,7 +249,7 @@ claude-sdd-planner/
 
 ```bash
 make build          # compile sdd into build/<os>-<arch>-debug/
-make test           # Go suite + regression corpus + template gate + portable drift/leak gates
+make test           # Go suite + regression corpus + template gate + portable drift/leak/citation gates
 make plugins        # regenerate .codex-plugin/ and .opencode-plugin/
 ```
 

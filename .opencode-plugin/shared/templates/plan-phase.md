@@ -97,7 +97,7 @@ no credentials or user-identifying paths anywhere in evidence
  40-hex native Git commit and may be a validated integration merge. The
  non-merge rule applies only to atomic task implementation evidence; commit the
  feature slice before recording evidence, then record lifecycle/evidence
- bookkeeping in the phase-close commit — never per task (D-0024). Dirty Git,
+ bookkeeping in the phase-close commit — never per task (`shared/autonomy.md` § SCM boundary cadence). Dirty Git,
  no-SCM, and unsupported SCM adapters remain non-complete.
 The exact table columns are
 `Command | Working directory | Result | Observable evidence` or

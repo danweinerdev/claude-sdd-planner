@@ -32,7 +32,7 @@ Cross-skill view of what runs autonomously versus what stops for the user. Each 
 
 ## SCM boundary cadence
 
-Planning artifacts are **written in flow and committed at boundaries** (D-0024).
+Planning artifacts are **written in flow and committed at boundaries**.
 Writing never implies a commit. In a commit-capable Git workflow where commits
 are authorized, the only lifecycle commits are:
 

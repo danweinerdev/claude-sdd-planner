@@ -61,7 +61,7 @@ findings:
       gate: { type: tests, tests: [TestManifestQuery_SelectedPipelineVariant, TestManifestQuery_ExcludesArchived] }
 ```
 
-`nodes` must name at least one node in the reviewing node's scope, and `revise:` must change at least one of `contract`, `gate`, or `inputs`. A revise that changes nothing is refused — a finding with no graph consequence is a comment, and belongs in the body with `status: answered` or `rejected`.
+`nodes` must name at least one node in the reviewing node's scope, and `revise:` must change at least one of `contract`, `gate`, `justifies`, or `inputs`. A revise that changes nothing is refused — a finding with no graph consequence is a comment, and belongs in the body with `status: answered` or `rejected`.
 
 **`extend`** — the reviewed node's promise held but something is missing. Proposes a new node sourced by the finding:
 
@@ -82,7 +82,7 @@ findings:
 
 `node` is a proposal-shaped node fragment (same strict decoding as `sdd graph propose`); its `deps` must include at least one node in the reviewing node's scope. `justifies` is filled by the binary with the qualified finding citation (`<plan-relative artifact path>:<finding id>`, e.g. `Reviews/2026-09-11-catalog-read-path.md:F-04`), which the citation index resolves once the artifact is frozen.
 
-Findings with `status: fixed | deferred | rejected | answered` produce no amendment; `deferred` is recorded in the review node's `history`. `sdd graph review` with zero open findings records a pass; with any open finding it writes nothing and instead prints the amendment preview plus an `expect-digest` for `sdd graph amend`. See `skills/sdd-implement/SKILL.md` for the full claim → review → amend flow.
+Findings with `status: fixed | deferred | rejected | answered` produce no amendment; `deferred` is recorded in the review node's `history`. `sdd graph review` with zero open findings records a pass; with any open finding it writes nothing and instead prints the amendment preview plus an `expect-digest` for the graph and an `expect-report-digest` for the reviewed artifact. Pass both to `sdd graph amend`; if either changes, re-preview rather than applying stale findings. See `skills/sdd-implement/SKILL.md` for the full claim → review → amend flow.
 
 Artifact `status`: `open` while any finding is `open`; `resolved` when every finding has a terminal disposition; `superseded` when a newer review of the same target replaces it (link both ways, like ledger supersession).
 
@@ -162,9 +162,9 @@ planning repository at which the phase and plan README were reviewed. Before
 phase completion, the validator loads both artifacts at that commit and compares
 their lifecycle-normalized content with current artifacts. It permits only
 lifecycle fields, completion evidence, and checklist state to change in those
-two documents. Every other planning-root artifact — specs, designs, the ledger,
+two documents. Every other planning-root artifact — specs, designs, plan decisions files,
 other phase docs, the review itself — is lifecycle after the frozen endpoint
-and rides in the phase-close commit (D-0024). This
+and rides in the phase-close commit under `shared/autonomy.md` § SCM boundary cadence. This
 binding uses the planning SCM identity directly; SDD stores no custom intent
 hashes. A planning SCM without this validated adapter keeps the phase
 non-complete with an explicit diagnostic.

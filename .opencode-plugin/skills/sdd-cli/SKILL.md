@@ -77,7 +77,6 @@ to report without repairing.
 | Standing decisions across plans | `sdd decide current [--plan P] [--json]` |
 | Look up one decision and its supersession chain | `sdd decide lookup ID [--plan P] [--json]` |
 | Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
-| Look up one decision and its supersession chain | `sdd decide lookup <id> [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D [--by WHO] [--dry-run] [--json]` |
 | Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
@@ -117,7 +116,7 @@ to report without repairing.
   atomically with nothing written, and the driver re-previews.
 - **Writes are not commits.** Every write above lands in the working tree;
   lifecycle state is committed once at phase open and once at phase close
-  (`shared/autonomy.md` § SCM boundary cadence, D-0024). `task complete`
+  (`shared/autonomy.md` § SCM boundary cadence). `task complete`
   reports committed-copy checks as pending mid-phase — that is the expected
   state, not a prompt to commit per task.
 - **Silence a check only with a reasoned waiver, never by editing around it.**

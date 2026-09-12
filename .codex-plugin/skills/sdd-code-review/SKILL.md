@@ -76,9 +76,9 @@ name or description field; do not request an agent or model.
    `reviewed_planning_revision`; only lifecycle-only changes may follow review.
    Write the review in-flow. At phase close, it belongs unchanged at planning
    `HEAD` in the planning-root atomic commit with the debrief, evidence/status,
-   and plan phase-array update. Record a repo-owned ledger in that commit when
-   it shares the root; otherwise record its root once at the same boundary
-   (D-0024). In Git, commit only in commit-capable workflows where commits are
+   and plan phase-array update. Record every affected plan decisions file in
+   that same planning-root boundary commit (`shared/autonomy.md` § SCM boundary
+   cadence). In Git, commit only in commit-capable workflows where commits are
    authorized. Unsupported planning or target SCM adapters keep the phase
    non-complete.
 6. Material findings create new planned tasks. Implement each as a complete,

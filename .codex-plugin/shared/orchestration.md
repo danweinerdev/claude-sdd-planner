@@ -46,10 +46,12 @@ Dispatch rules: substitute every `{{PLACEHOLDER}}` before dispatch; reviewer dis
 Orientation read order at the start of a planning session — frontmatter answers most orientation questions; read bodies only when the decision at hand needs them:
 
 1. `planning-config.json` — planning root and repository mappings
-2. The `## Standing decisions` block the SessionStart hook injects from `sdd decide current` (scoped to the active plan when one is known); re-run `sdd decide current --plan <Name>` directly if it's missing or you need a different scope
+2. The plan-scoped `## Standing decisions for plan <Name>` block the SessionStart hook injects only when exactly one `Plans/*/README.md` has `status: active`; it derives that block from `sdd decide current --plan <Name>`
 3. The active plan's README **frontmatter** — status, `phases[]`, `related` (not the body)
 4. The current phase doc — task list, statuses, verification fields, traps
 5. The latest debrief in `Plans/<PlanName>/notes/` — constraints and gotchas discovered last time
+
+The SessionStart hook never unions decisions across plans and never treats every plan's decisions as universal standing authority. With zero active plans, multiple active plans, or an unreadable/malformed plan README that prevents safe selection, it injects no standing-decision block; run `sdd decide current --plan <Name>` explicitly when a different known scope is needed.
 
 ## After a Context Compaction
 

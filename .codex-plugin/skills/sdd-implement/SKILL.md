@@ -27,7 +27,7 @@ The loop is **claim → red → green → sync → merge**, repeated until the f
 3. **Red — prove the tests can fail.** Write the node's **named tests first** (runner-visible ids must match the payload exactly), run them in the workspace against the unimplemented or broken state, and sync the failing report: `sdd graph sync --plan <Name> --node <id> --by <identity> --report red.xml`. A red run is a **successful** sync — it stamps `red_seq`, which arms red-before-green: a hazard-discharging test never observed failing will refuse the later green.
 4. **Green — implement, commit, sync the pass.** Implement inside the workspace until the named tests pass. Commit the complete slice in the workspace first — sync refuses a passing report from a dirty worktree, because the revision anchor must name the tested bytes. Then sync the passing report. A clean pass by the claim holder **merges atomically**: observation recorded, claim cleared, workspace released. A shared-dirty pass records provisionally instead (STALE, never GREEN) until a clean re-verify. There is no assert path.
 5. **Integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`) — merge it into the mainline checkout now. Until the bytes land on the mainline the node honestly derives STALE from the shared tree; integration self-heals it to GREEN. Integrate after every merge, before the next claim of dependent work.
-6. **Between rounds.** `sdd graph status` between claims; `sdd graph path` when choosing what to unblock. **Command gates:** run the gate's command and `sdd graph sync --node <id> --command-exit <N> --command-log out.txt`. **Review nodes:** claim it, run `sdd graph show --node <id> --brief` for the reviewed contracts/artifacts/lanes, run the four-lane review flow (`sdd review scaffold` → fill lanes → `sdd review resolve`), then `sdd graph review --plan <Name> --node <id> --artifact <frozen review path>`. The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** review node. Record it **after** the scope's work is integrated into the mainline. With zero open findings the review node goes GREEN. With any open finding, nothing is written to the node — the tool prints an amendment preview (revise: node + contract/gate diff; extend: proposed node) and an `expect-digest`; show the preview to the user, then `sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --by <identity>` (`--dry-run` to preview only). A successful amend bumps `contract_rev` and clears red bookkeeping on revised nodes, and adds any extended node; both re-enter the frontier as deps of the review node. Walk them through red → green → sync, then re-claim and re-review.
+6. **Between rounds.** `sdd graph status` between claims; `sdd graph path` when choosing what to unblock. **Command gates:** run the gate's command and `sdd graph sync --node <id> --command-exit <N> --command-log out.txt`. **Review nodes:** claim it, run `sdd graph show --node <id> --brief` for the reviewed contracts/artifacts/lanes, run the four-lane review flow (`sdd review scaffold` → fill lanes → `sdd review resolve`), then `sdd graph review --plan <Name> --node <id> --artifact <frozen review path>`. The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** review node. Record it **after** the scope's work is integrated into the mainline. With zero open findings the review node goes GREEN. With any open finding, nothing is written to the node — the tool prints an amendment preview (revise: node + normative-field diff; extend: proposed node), an `expect-digest` for the graph, and an `expect-report-digest` for the review artifact; show the preview to the user, then `sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --expect-report-digest <report-digest> --by <identity>` (`--dry-run` to preview only). Re-preview if either digest changes. A successful amend bumps `contract_rev` and clears red bookkeeping on revised nodes, and adds any extended node; both re-enter the frontier as deps of the review node. Walk them through red → green → sync, then re-claim and re-review.
 
 ### Stopping Rules
 
@@ -60,7 +60,7 @@ v1 markdown plans keep this protocol until converted.
 1. Select unfinished tasks whose dependencies are complete. Group independent tasks only when their expected file ownership does not overlap.
 2. For each task, confirm it defines one clean, complete, independently
    bisectable feature or internal-capability slice and an explicit native SCM
-   revision/checkpoint boundary (D-0014, D-0015). Split or reorder it when a
+   revision/checkpoint boundary. Split or reorder it when a
    smaller complete dependency-ordered unit is available. If it is a horizontal
    half-feature, combines independently complete slices, or cannot leave the
    repository buildable and passing at its boundary, stop and revise the plan
@@ -68,7 +68,7 @@ v1 markdown plans keep this protocol until converted.
    specification/design, code conventions, and test infrastructure and
    implement the task and its tests as that one focused change.
 3. Run the required verification and relevant project checks. Fix failures caused by the change. Report pre-existing failures distinctly, with actual output.
-4. Optionally dispatch each independent implementation task through collaboration when available. When the runtime provides a task name or description field, set that field to exactly `implement_task` unchanged. Each dispatch supplies exactly one plan task, its target paths, acceptance criteria, `### Trap` content (or that no trap is present), relevant accepted-decision statements as constraints, and verification requirements. Do not request an agent, worker type, provider, or model. Do not depend on any delegation API; when collaboration is unavailable, the primary agent implements the same task transparently. (D-0009)
+4. Optionally dispatch each independent implementation task through collaboration when available. When the runtime provides a task name or description field, set that field to exactly `implement_task` unchanged, as required by `shared/agent-runtime.md` § Delegation. Each dispatch supplies exactly one plan task, its target paths, acceptance criteria, `### Trap` content (or that no trap is present), relevant accepted-decision statements as constraints, and verification requirements. Do not request an agent, worker type, provider, or model. Do not depend on any delegation API; when collaboration is unavailable, the primary agent implements the same task transparently.
 5. Before finalizing a task's native SCM revision/checkpoint, perform a focused
    code review of its complete diff for correctness, scope, tests,
    maintainability, and whether it is a complete bisectable feature slice.
@@ -79,7 +79,7 @@ v1 markdown plans keep this protocol until converted.
    as an intent-blind quality pass; otherwise perform the review yourself and
    label it self-review. Use `sdd-code-review`
    for phase-level review or material risk; its four-lane phase gate is not a
-   substitute for this task review (D-0014).
+   substitute for this task review; see `shared/completion-evidence.md` § Task evidence.
 6. Record the reviewed, verified task as the detected SCM's focused native
    revision/checkpoint. It contains the complete task implementation and tests,
    not another task and not SDD lifecycle/evidence bookkeeping. Confirm the
@@ -89,7 +89,7 @@ v1 markdown plans keep this protocol until converted.
 
    **Git adapter:** in a commit-capable Git workflow where commits are
    authorized, this native revision is one immutable scoped implementation
-   commit (D-0016, D-0017, D-0018). A dirty worktree cannot complete; commit
+   commit, as required by `shared/completion-evidence.md` § Git adapter. A dirty worktree cannot complete; commit
    the complete slice before recording completion evidence.
 7. While the task remains `in-progress`, create `### Completion Evidence` if a
    legacy task lacks it, then replace its pending content using
@@ -121,7 +121,7 @@ v1 markdown plans keep this protocol until converted.
    update frontmatter. A task with absent, pending, vague, or failing evidence
    stays non-complete.
 9. Write the task status, checkboxes, and completion evidence in-flow as each
-   fact becomes known; do not commit these individual writes (D-0024). A
+   fact becomes known; do not commit these individual writes. A
    task-related plan decision is written in-flow only **after** the
    user has explicitly approved its exact, unmodified statement, via
    `sdd decide add --plan <Name> --statement "..."` (`shared/decision-log.md`

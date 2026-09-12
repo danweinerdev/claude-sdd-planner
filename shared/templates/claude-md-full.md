@@ -57,7 +57,7 @@ Plans live flat under `Plans/<PlanName>/`. Lifecycle is tracked in the plan READ
 AI commands filter by `status` to scope what they read.
 
 ### Commit cadence
-Planning artifacts are written in flow and committed at boundaries only (D-0024): one commit when a phase opens, one at phase close carrying every task status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Implementation commits stay pure. Never commit per task, per amendment, or per decision — a phase's history should read as one lifecycle commit, N implementation commits, one lifecycle commit.
+Planning artifacts are written in flow and committed at boundaries only: one commit when a phase opens, one at phase close carrying every task status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Implementation commits stay pure. Never commit per task, per amendment, or per decision — a phase's history should read as one lifecycle commit, N implementation commits, one lifecycle commit.
 
 ### File Naming
 - Plans: `Plans/<PlanName>/README.md`, `01-Phase-Name.md`

@@ -22,4 +22,4 @@ Each plan's decisions file is append-only; the only write path is `sdd decide ad
 
 Typical lifecycle: `setup → research → brainstorm → specify → design → plan → implement → code-review → debrief` (all `/sdd-planner:*`).
 
-**Commit cadence (D-0024):** planning artifacts are written in flow and committed only at boundaries — one commit at phase open, one at phase close carrying every status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Never commit per task, per amendment, or per decision; implementation commits carry no planning bytes.
+**Commit cadence:** planning artifacts are written in flow and committed only at boundaries — one commit at phase open, one at phase close carrying every status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Never commit per task, per amendment, or per decision; implementation commits carry no planning bytes.

@@ -23,7 +23,7 @@ Three tasks are LLM-shaped, and this skill does exactly those three: **negotiate
 Route by graph presence, not by preference:
 
 - **`Plans/<Name>/<Name>-Graph.json` exists** → this protocol, in extend/revise mode (new nodes arrive as proposal payloads; the graph is the source of truth).
-- **The plan exists without a graph** → it is a v1 markdown plan and **continues under the v1 conventions until converted** (D-0022's v1 clause): its statuses, completion evidence, and phase reviews keep their existing rules from `shared/frontmatter-schema.md` and `shared/completion-evidence.md`. Make conservative, id-preserving edits only. When the user wants graph execution, offer `sdd graph convert --plan <Name>` — conversion emits blocking sentinels (`untriaged` hazards, `unspecified` gates, `NEEDS-CONTRACT` contracts) that are **real judgments to resolve through the payload path, never defaults to accept**.
+- **The plan exists without a graph** → it is a v1 markdown plan and **continues under the v1 conventions until converted**: its statuses, completion evidence, and phase reviews keep their existing rules from `shared/frontmatter-schema.md` and `shared/completion-evidence.md`. Make conservative, id-preserving edits only. When the user wants graph execution, offer `sdd graph convert --plan <Name>` — conversion emits blocking sentinels (`untriaged` hazards, `unspecified` gates, `NEEDS-CONTRACT` contracts) that are **real judgments to resolve through the payload path, never defaults to accept**.
 - **New plan** → this protocol from the start.
 
 If an existing plan's `status` is `complete` or `archived`, confirm with the user before touching it.
@@ -105,7 +105,7 @@ Plans/<PlanName>/
 └── .graph/                 # gitignored: staged payloads, interview ledger, workspaces
 ```
 
-The graph is the plan. Rendered views carry a generation marker and are overwritten on the next compile; a view whose every node is closed becomes a frozen view the renderer refuses to change. Commit the graph, README, and views once at the end of the planning session — never per compile (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+The graph is the plan. Rendered views carry a generation marker and are overwritten on the next compile; a view whose every node is closed becomes a frozen view the renderer refuses to change. Commit the graph, README, and views once at the end of the planning session — never per compile (`shared/autonomy.md` § SCM boundary cadence).
 
 ## Context
 - Orchestration and role prompts: `shared/orchestration.md`

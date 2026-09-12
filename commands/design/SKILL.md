@@ -44,7 +44,7 @@ When you need to define the technical architecture for a component or system bef
 ```
 Designs/<ComponentName>/README.md
 ```
-Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence).
 
 ## Document Structure
 See `shared/templates/design.md`:

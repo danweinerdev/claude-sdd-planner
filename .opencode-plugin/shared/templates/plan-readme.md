@@ -72,7 +72,7 @@ no credentials or user-identifying paths anywhere in evidence
  40-hex native Git commit and may be a validated integration merge. The
  non-merge rule applies only to atomic task implementation evidence; commit
  implementation before recording evidence, then record lifecycle/evidence
- bookkeeping in the phase- or plan-close commit — never per task (D-0024).
+ bookkeeping in the phase- or plan-close commit — never per task (`shared/autonomy.md` § SCM boundary cadence).
  Dirty Git, no-SCM, and unsupported SCM adapters remain non-complete. The exact table columns are `Command | Working directory | Result | Observable evidence`
 or `Tool / inspection | Context | Result | Observable evidence`. Command
 results use `PASS (exit 0)` — or `PASS (exit N, expected)` for a deliberate

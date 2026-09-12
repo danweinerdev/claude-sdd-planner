@@ -48,7 +48,7 @@ findings: []
 #   title: "One-line finding"
 #   status: open          # open | fixed | deferred | rejected | answered
 #   action: revise        # required when status: open AND reviewing a graph review node: revise | extend
-#     # revise: { nodes: [...], revise: { contract|gate|inputs: ... } }
+#     # revise: { nodes: [...], revise: { contract|gate|justifies|inputs: ... } }
 #     # extend: { node: { id, contract, deps, gate, artifacts, ... } }  (proposal-shaped fragment)
 followups: []
 # Each follow-up entry (created when a finding is deferred without a plan task):

@@ -181,7 +181,7 @@ findings:
       artifacts: [internal/catalog/manifest_audit.go]
 ```
 
-`action: revise` names at least one node in the reviewing node's scope in `nodes` and changes at least one of `contract`/`gate`/`inputs` under `revise:`. `action: extend` supplies a proposal-shaped node fragment under `node:`, whose `deps` must include a node in the reviewing node's scope; its `justifies` is filled by the binary with the qualified finding citation. See `shared/review-artifacts.md` for the full contract.
+`action: revise` names at least one node in the reviewing node's scope in `nodes` and changes at least one of `contract`/`gate`/`justifies`/`inputs` under `revise:`. `action: extend` supplies a proposal-shaped node fragment under `node:`, whose `deps` must include a node in the reviewing node's scope; its `justifies` is filled by the binary with the qualified finding citation. See `shared/review-artifacts.md` for the full contract.
 
 ## Review Artifact Schema
 
