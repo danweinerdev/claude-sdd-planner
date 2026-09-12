@@ -57,6 +57,17 @@ type CitationIndex struct {
 // "M1:AC-01"). Any spelling claimed by two different (source, id) pairs
 // resolves for neither and records qualified suggestions instead.
 func BuildCitationIndex(r *Root, a *Artifact) *CitationIndex {
+	return buildCitationIndexFrom(relatedSources(r, a))
+}
+
+// CitationKey keys one resolved (source, id) pair the way every per-spec
+// coverage consumer keys it, so the compiler's AC demand and the
+// validator's traceability rules can never disagree on identity.
+func CitationKey(sourceRel, id string) string { return sourceRel + "\x00" + id }
+
+// buildCitationIndexFrom indexes an explicit source list. Non-spec/design
+// artifacts are skipped; order is preserved.
+func buildCitationIndexFrom(sources []*Artifact) *CitationIndex {
 	x := &CitationIndex{
 		byKey:     map[string]CitationHit{},
 		ambiguous: map[string][]string{},
@@ -78,7 +89,7 @@ func BuildCitationIndex(r *Root, a *Artifact) *CitationIndex {
 		}
 		x.byKey[key] = hit
 	}
-	for _, src := range relatedSources(r, a) {
+	for _, src := range sources {
 		kind := src.Kind()
 		if kind != "spec" && kind != "design" {
 			continue
@@ -125,6 +136,64 @@ func (x *CitationIndex) Ambiguous(citation string) []string {
 // DefinedBy lists one source's defined ids for a family, sorted.
 func (x *CitationIndex) DefinedBy(sourceRel, family string) []string {
 	return append([]string(nil), x.defined[sourceRel][family]...)
+}
+
+// UnrelatedSource explains a qualified citation that resolves nowhere in
+// this index when the qualifier names a real spec or design that the
+// citing artifact's `related` graph never reaches and that artifact
+// defines the id: the root-relative path of that artifact, or "" when the
+// citation is bare, its qualifier names nothing, or the named artifact does
+// not define the id. Designs are discovered only through the citing
+// artifact's own `related` chain — a spec's back-link to the design that
+// realizes it is not a discovery hop — so the usual cause is a plan citing
+// `Designs/X:DD-N` without relating `Designs/X` directly.
+func (x *CitationIndex) UnrelatedSource(r *Root, citation string) string {
+	colon := strings.LastIndex(citation, ":")
+	if colon <= 0 || colon == len(citation)-1 {
+		return ""
+	}
+	qualifier, id := citation[:colon], citation[colon+1:]
+	family := ""
+	for _, f := range IdentifierFamilies() {
+		if strings.HasPrefix(id, f+"-") {
+			family = f
+		}
+	}
+	if family == "" {
+		return ""
+	}
+	reachable := map[string]bool{}
+	for _, src := range x.sources {
+		reachable[src.Rel] = true
+	}
+	var candidates []*Artifact
+	if a := resolveRef(r, qualifier); a != nil {
+		candidates = append(candidates, a)
+	} else {
+		for _, a := range r.Artifacts {
+			if a.Meta == nil {
+				continue
+			}
+			if kind := a.Kind(); kind != "spec" && kind != "design" {
+				continue
+			}
+			if path.Base(SourceQualifier(a.Rel)) == qualifier {
+				candidates = append(candidates, a)
+			}
+		}
+	}
+	for _, a := range candidates {
+		if kind := a.Kind(); kind != "spec" && kind != "design" {
+			continue
+		}
+		if reachable[a.Rel] {
+			continue
+		}
+		if DefinedIdentifiers(a, family)[id] {
+			return a.Rel
+		}
+	}
+	return ""
 }
 
 // Sources returns the reachable identifier sources, in walk order.

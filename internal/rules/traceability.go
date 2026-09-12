@@ -155,12 +155,12 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 			index := BuildCitationIndex(r, plan)
 			for _, j := range justifies {
 				if hit, ok := index.Resolve(j); ok {
-					graphCited[hit.SourceRel+"\x00"+hit.ID] = true
+					graphCited[CitationKey(hit.SourceRel, hit.ID)] = true
 				}
 			}
 		}
 		graphCites := func(specRel, id string) bool {
-			return graphPlan && graphCited[specRel+"\x00"+id]
+			return graphPlan && graphCited[CitationKey(specRel, id)]
 		}
 		citeFix := func(v1 string) string {
 			if graphPlan {
@@ -169,21 +169,65 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 			return v1
 		}
 
+		// SDD161 is scoped per design to the specs that design REALIZES,
+		// and resolves the design's citations with qualified identity:
+		//
+		//   - A design declares what it realizes through its own `related`
+		//     specs, or through a spec's `related` back-link to it. A design
+		//     that declares nothing realizes every spec on the plan's demand
+		//     (the pre-scoping behavior — an undeclared design never escapes
+		//     the check by staying silent).
+		//   - Each design's prose is resolved through a CitationIndex over the
+		//     specs it realizes, so `Channels:FR-01` counts for the channels
+		//     spec only, and a bare `FR-01` in a design realizing two specs
+		//     that both define it counts for neither (it is ambiguous, the
+		//     same verdict compile gives a bare node citation).
+		//   - A spec no related design realizes puts nothing on the
+		//     design-side demand: the plan may relate a design that realizes
+		//     one of its specs without that design being held to the other
+		//     spec's requirements.
+		//
 		// Python joins each design's comment-stripped body with a JSON dump of
 		// its frontmatter, so a requirement cited only in a design's metadata
 		// still counts as covered.
-		var designParts []string
-		for _, d := range designs {
-			designParts = append(designParts, noComments(d.Body)+"\n"+metaJSONText(d.Meta))
+		type realization struct {
+			design *Artifact
+			specs  map[string]bool // spec rel -> realized
+			cited  map[string]bool // CitationKey(spec rel, id)
 		}
-		designText := strings.Join(designParts, "\n")
+		var realizations []realization
+		for _, d := range designs {
+			realized := realizedSpecs(r, d)
+			if len(realized) == 0 {
+				realized = specs
+			}
+			rz := realization{design: d, specs: map[string]bool{}}
+			for _, spec := range realized {
+				rz.specs[spec.Rel] = true
+			}
+			index := buildCitationIndexFrom(realized)
+			rz.cited = resolvedCitations(index, noComments(d.Body)+"\n"+metaJSONText(d.Meta))
+			realizations = append(realizations, rz)
+		}
 
 		for _, spec := range specs {
 			implicatedSet := map[string]bool{spec.Rel: true}
-			for _, d := range designs {
-				implicatedSet[d.Rel] = true
+			var realizers []realization
+			for _, rz := range realizations {
+				if rz.specs[spec.Rel] {
+					realizers = append(realizers, rz)
+					implicatedSet[rz.design.Rel] = true
+				}
 			}
 			implicated := sortedSetSlice(implicatedSet)
+			designCites := func(id string) bool {
+				for _, rz := range realizers {
+					if rz.cited[CitationKey(spec.Rel, id)] {
+						return true
+					}
+				}
+				return false
+			}
 			ids := specDefinedIDs(spec)
 			for _, family := range []string{"FR", "NFR"} {
 				for _, id := range sortedSetSlice(ids[family]) {
@@ -195,11 +239,11 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 							Implicated: implicated,
 						})
 					}
-					if len(designs) > 0 && !strings.Contains(designText, id) {
+					if len(realizers) > 0 && !designCites(id) {
 						out = append(out, traceabilityFinding{
 							Code: "SDD161", Plan: plan.Rel,
 							Message:    "Related designs never cite `" + id + "` from `" + spec.Rel + "`.",
-							Correction: "Cite the requirement in a realizing design or remove an incorrect design relationship.",
+							Correction: "Cite the requirement in a realizing design (qualified `Spec:ID` when the design realizes specs that share id ranges), or remove an incorrect design relationship.",
 							Implicated: implicated,
 						})
 					}
@@ -215,6 +259,45 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 					Correction: citeFix("Cite the acceptance criterion in task verification/detail or phase acceptance criteria."),
 					Implicated: implicated,
 				})
+			}
+		}
+	}
+	return out
+}
+
+// realizedSpecs returns the specs a design declares it realizes: every spec
+// its own `related` names directly, plus every spec whose `related` names
+// the design (the back-link a spec writes toward its design). One hop in
+// each direction, no traversal — realization is a first-order claim between
+// a design and a spec, not something inherited through a neighbouring
+// design or plan — so the result is cycle-free by construction. Order is
+// deterministic (design-side declarations in frontmatter order, then
+// back-links in root path order); an empty result means the design declares
+// nothing and the caller decides the fallback.
+func realizedSpecs(r *Root, d *Artifact) []*Artifact {
+	seen := map[string]bool{}
+	var out []*Artifact
+	for _, src := range DirectRelatedSources(r, d) {
+		if src.Kind() == "spec" && !seen[src.Rel] {
+			seen[src.Rel] = true
+			out = append(out, src)
+		}
+	}
+	rels := make([]string, 0, len(r.ByPath))
+	for rel := range r.ByPath {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	for _, rel := range rels {
+		spec := r.ByPath[rel]
+		if spec.Meta == nil || spec.Kind() != "spec" || seen[spec.Rel] {
+			continue
+		}
+		for _, target := range DirectRelatedSources(r, spec) {
+			if target.Rel == d.Rel {
+				seen[spec.Rel] = true
+				out = append(out, spec)
+				break
 			}
 		}
 	}
@@ -273,10 +356,10 @@ func init() {
 		}}, {Name: "graph-plan-justifies-ac", Files: map[string]string{
 			// The committed graph's node justifies satisfy the AC demand
 			// without any phase-doc citation text.
-			"Plans/Sample/README.md":        tracePlan(""),
-			"Plans/Sample/01-One.md":        tracePhase("Does the thing."),
+			"Plans/Sample/README.md":         tracePlan(""),
+			"Plans/Sample/01-One.md":         tracePhase("Does the thing."),
 			"Plans/Sample/Sample-Graph.json": traceGraphJSON,
-			"Specs/Sample/README.md":        validSpecTemplate,
+			"Specs/Sample/README.md":         validSpecTemplate,
 		}}},
 	})
 }
@@ -364,10 +447,10 @@ func init() {
 		}}, {Name: "graph-plan-justifies", Files: map[string]string{
 			// A graph plan's citations live in node justifies, not phase
 			// text: the committed graph satisfies traceability by itself.
-			"Plans/Sample/README.md":        tracePlan(""),
-			"Plans/Sample/01-One.md":        tracePhase("Does the thing."),
+			"Plans/Sample/README.md":         tracePlan(""),
+			"Plans/Sample/01-One.md":         tracePhase("Does the thing."),
 			"Plans/Sample/Sample-Graph.json": traceGraphJSON,
-			"Specs/Sample/README.md":        validSpecTemplate,
+			"Specs/Sample/README.md":         validSpecTemplate,
 		}}},
 	})
 
@@ -382,12 +465,66 @@ func init() {
 			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
 			"Specs/Sample/README.md":   validSpecTemplate,
 			"Designs/Sample/README.md": validDesign("Text."),
+		}}, {Name: "design-conflates-same-numbered-id", Files: map[string]string{
+			// The design realizes BOTH overlapping specs but cites a bare
+			// FR-01: ambiguous between them, so it covers neither spec's
+			// requirement. One spec's citation never satisfies the other's.
+			"Plans/Sample/README.md":   tracePlan(`, "Specs/Other", "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Specs/Other/README.md":    otherSpec,
+			"Designs/Sample/README.md": strReplace(validDesign("Realizes FR-01 and NFR-01."), "related: []", "related: [Specs/Sample, Specs/Other]"),
+		}}, {Name: "realized-spec-uncited", Files: map[string]string{
+			// Genuine gap: the design declares it realizes the spec and
+			// never cites its requirements — scoping does not excuse it.
+			"Plans/Sample/README.md":   tracePlan(`, "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Designs/Sample/README.md": strReplace(validDesign("Text."), "related: []", "related: [Specs/Sample]"),
 		}}},
 		Good: []Example{{Name: "design-cites-requirement", Files: map[string]string{
 			"Plans/Sample/README.md":   tracePlan(`, "Designs/Sample"`),
 			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01 and NFR-01."),
 			"Specs/Sample/README.md":   validSpecTemplate,
 			"Designs/Sample/README.md": validDesign("Realizes FR-01 and NFR-01."),
+		}}, {Name: "design-scoped-to-realized-spec", Files: map[string]string{
+			// Two related specs share id ranges; the design declares (via its
+			// own `related`) that it realizes only the second. Its bare
+			// FR-01/NFR-01 resolve to that spec alone, and the first spec —
+			// which no design realizes — puts nothing on the design demand.
+			"Plans/Sample/README.md":   tracePlan(`, "Specs/Other", "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01, NFR-01 and AC-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Specs/Other/README.md":    otherSpec,
+			"Designs/Sample/README.md": strReplace(validDesign("Realizes FR-01 and NFR-01."), "related: []", "related: [Specs/Other]"),
+		}}, {Name: "design-declared-by-spec-backlink", Files: map[string]string{
+			// The realization can also be declared from the spec side: the
+			// spec's `related` names the design, the design's is empty. The
+			// design then cites the spec's ids qualified (SDD122 resolves a
+			// design's bare ids only through the design's own `related`).
+			"Plans/Sample/README.md":   tracePlan(`, "Specs/Other", "Designs/Sample"`),
+			"Plans/Sample/01-One.md":   tracePhase("Covers FR-01, NFR-01 and AC-01."),
+			"Specs/Sample/README.md":   validSpecTemplate,
+			"Specs/Other/README.md":    strReplace(otherSpec, "related: []", "related: [Designs/Sample]"),
+			"Designs/Sample/README.md": validDesign("Realizes Other:FR-01 and Other:NFR-01."),
+		}}, {Name: "graph-plan-scoped-design", Files: map[string]string{
+			// A graph plan over two overlapping specs, with the design
+			// realizing one of them and citing it with qualified spellings:
+			// per-spec identity holds on both the plan and design sides.
+			"Plans/Sample/README.md":         tracePlan(`, "Specs/Other", "Designs/Sample"`),
+			"Plans/Sample/01-One.md":         tracePhase("Does the thing."),
+			"Plans/Sample/Sample-Graph.json": traceTwoSpecGraphJSON,
+			"Specs/Sample/README.md":         validSpecTemplate,
+			"Specs/Other/README.md":          otherSpec,
+			"Designs/Sample/README.md":       strReplace(validDesign("Realizes Other:FR-01 and Specs/Other:NFR-01."), "related: []", "related: [Specs/Other]"),
 		}}},
 	})
 }
+
+// otherSpec is a second spec sharing the sample's id ranges (FR-01, NFR-01,
+// AC-01) — the cross-spec collision surface.
+var otherSpec = strReplace(validSpecTemplate, "title: Sample Spec", "title: Other Spec")
+
+// traceTwoSpecGraphJSON covers both overlapping specs with qualified
+// citations: a bare id would be ambiguous and cover neither.
+const traceTwoSpecGraphJSON = `{"version":1,"seq_counter":0,"nodes":[{"id":"n1","contract":"c","justifies":["Specs/Sample:FR-01","Specs/Sample:NFR-01","Specs/Sample:AC-01","Other:FR-01","Other:NFR-01","Other:AC-01"],"gate":{"type":"tests","tests":[{"id":"t","file":"f.ext"}]},"hazards":[],"estimate":1}]}`

@@ -121,7 +121,9 @@ SDD157/missing-completed-task-identities
 SDD158/legacy-rollup
 SDD158/missing-completed-phase-identities
 SDD160/uncited-requirement
+SDD161/design-conflates-same-numbered-id
 SDD161/design-omits-requirement
+SDD161/realized-spec-uncited
 SDD162/uncited-ac
 SDD163/unlisted-phase
 SDD164/artifact-deleted

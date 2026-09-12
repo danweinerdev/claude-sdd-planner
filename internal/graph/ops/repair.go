@@ -155,7 +155,7 @@ func planRepair(g *model.Graph, nodeID string, sources *gcompile.Sources) (*Repa
 			case gcompile.CitationAmbiguous:
 				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which is defined by more than one related source (%s)", n.ID, cited, strings.Join(d.Suggestions, ", ")))
 			case gcompile.CitationUnresolved:
-				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which resolves in no related spec, design, or decision ledger", n.ID, cited))
+				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which resolves in no related spec, design, or decision ledger%s", n.ID, cited, d.Hint))
 			case gcompile.CitationDecision:
 				// Decisions are never fingerprinted — not a refusal.
 			}

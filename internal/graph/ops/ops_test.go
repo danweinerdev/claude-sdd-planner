@@ -1172,3 +1172,90 @@ func TestRehashAcknowledgesCosmeticIntentDrift(t *testing.T) {
 		t.Fatal("a citation that no longer resolves is a replan signal, not a rehash")
 	}
 }
+
+const opsDesign = `---
+title: "Sample Design"
+type: design
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [design]
+related: [Specs/Sample]
+---
+
+# Sample Design
+
+## Design Decisions
+
+- **DD-1**: Answer once.
+  Context: c. Decision: d. Rationale: r.
+`
+
+// TestSplitRefusesUnreachableDesignCitationAtomically: review children
+// citing a design's DD ids compile only when the plan relates the design
+// directly. With the design reachable only through the spec's back-link the
+// split refuses — naming the fix — and the graph stays byte-identical
+// (parent present, no children). Relating the design from the plan makes
+// the same split succeed.
+func TestSplitRefusesUnreachableDesignCitationAtomically(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	write := func(rel, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "Designs", "Sample"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write("Designs/Sample/README.md", opsDesign)
+	write("Specs/Sample/README.md", strings.Replace(opsSpec, "related: []", "related: [Designs/Sample]", 1))
+	children := strings.Replace(splitChildren, `"big-render", "contract": "renders the output", "justifies": ["AC-01"]`,
+		`"big-render", "contract": "renders the output", "justifies": ["AC-01", "Designs/Sample:DD-1"]`, 1)
+	if children == splitChildren {
+		t.Fatal("fixture children not rewritten")
+	}
+
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Split(root, root, "SamplePlan", "big", []byte(children))
+	if err == nil {
+		t.Fatal("a split citing an unreachable design must refuse")
+	}
+	for _, want := range []string{
+		`big-render: cites "Designs/Sample:DD-1", which resolves in no related spec, design, or decision ledger`,
+		"Designs/Sample/README.md defines it but is not reachable through the plan's `related` graph",
+		"relate it directly from Plans/SamplePlan/README.md",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal missing %q:\n%s", want, err)
+		}
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("a refused split must leave the graph byte-identical")
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("big") == nil || g.NodeByID("big-render") != nil || g.NodeByID("big-parse") != nil {
+		t.Fatal("a refused split must keep the parent and create no children")
+	}
+
+	// Representation A: relate the design directly from the plan.
+	write("Plans/SamplePlan/README.md", strings.Replace(opsPlan, "related: [Specs/Sample]", "related: [Specs/Sample, Designs/Sample]", 1))
+	res, err := Split(root, root, "SamplePlan", "big", []byte(children))
+	if err != nil {
+		t.Fatalf("split with the design directly related must succeed: %v", err)
+	}
+	if res.Retired != "big" || len(res.Children) != 2 {
+		t.Fatalf("result: %+v", res)
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("big-render").IntentHashes["Designs/Sample:DD-1"] == "" {
+		t.Fatal("the qualified DD citation must anchor its fingerprint")
+	}
+}

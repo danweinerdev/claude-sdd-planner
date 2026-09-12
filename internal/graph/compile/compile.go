@@ -237,6 +237,10 @@ type sourceSet struct {
 	acPairs   []acPair          // direct specs x defined ACs, sorted
 	decisions map[string]string // D-NNNN -> status
 	fork      *forkDecisionIntent
+	// loaded and planRel let refusals explain a qualified citation whose
+	// source exists but is not on the plan's related graph.
+	loaded  *rules.Root
+	planRel string
 }
 
 // resolveItem resolves one citation spelling to its defining source's
@@ -249,6 +253,23 @@ func (s *sourceSet) resolveItem(cited string) (rules.CitationHit, intent.Item, b
 	}
 	item, ok := s.items[hit.SourceRel][hit.ID]
 	return hit, item, ok
+}
+
+// unrelatedHint explains an unresolved qualified citation whose qualifier
+// names a real spec or design the plan's `related` graph never reaches:
+// designs are discovered only through the citing artifact's own `related`
+// chain (a spec's back-link to its realizing design is not a hop), so the
+// repair is to relate the source directly from the plan README. Empty when
+// the citation is bare or names nothing.
+func (s *sourceSet) unrelatedHint(cited string) string {
+	if s.loaded == nil || s.index == nil {
+		return ""
+	}
+	src := s.index.UnrelatedSource(s.loaded, cited)
+	if src == "" {
+		return ""
+	}
+	return fmt.Sprintf("; %s defines it but is not reachable through the plan's `related` graph — relate it directly from %s (a spec's back-link to its design is not a discovery hop)", src, s.planRel)
 }
 
 // intentSnapshot resolves the plan's citation dispositions from this source
@@ -287,8 +308,9 @@ func (s *sourceSet) intentSnapshot() IntentSnapshot {
 	return snap
 }
 
-// acKey keys per-spec AC coverage.
-func acKey(sourceRel, id string) string { return sourceRel + "\x00" + id }
+// acKey keys per-spec AC coverage — the validator's own key, so the two
+// coverage opinions share one identity.
+func acKey(sourceRel, id string) string { return rules.CitationKey(sourceRel, id) }
 
 // identifierSources loads the root and collects everything the plan's
 // related graph lets its nodes cite.
@@ -302,7 +324,7 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	if !ok {
 		return nil, fmt.Errorf("compile: %s does not exist; the plan's README carries the `related` graph citations resolve through", planRel)
 	}
-	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded)}
+	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded), loaded: loaded, planRel: planRel}
 	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
 	out.planDir = filepath.Dir(planArt.AbsPath)
 	out.fork, err = newForkDecisionIntent(loaded, planRel)
@@ -522,7 +544,7 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				}
 				continue
 			}
-			add(id, "cites %q, which resolves in no related spec, design, or decision ledger", cited)
+			add(id, "cites %q, which resolves in no related spec, design, or decision ledger%s", cited, sources.unrelatedHint(cited))
 		}
 
 		seenTests := map[[2]string]bool{}

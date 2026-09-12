@@ -1059,3 +1059,130 @@ func TestPerSpecACCoverageAndQualifiedCitations(t *testing.T) {
 		t.Fatalf("basename-qualified citation must fingerprint: %+v", g.NodeByID("w3").IntentHashes)
 	}
 }
+
+// TestDesignDiscoveryIsDirectNotViaSpecBacklink pins the design-discovery
+// policy behind the cross-spec design-reference report: a plan cites a
+// design's DD ids only when the design is on the plan's own `related`
+// chain. A spec's back-link to the design that realizes it is NOT a
+// discovery hop — following it would let every spec's realizing design
+// (and every spec those designs relate) silently widen the citation
+// registry and the coverage demand. Representation A (design related
+// directly) resolves qualified DDs across two overlapping specs;
+// representation B (design reachable only through the spec's back-link)
+// refuses with a hint naming the fix; an unknown DD and an unrelated
+// design refuse without one; every refusal leaves the graph untouched.
+func TestDesignDiscoveryIsDirectNotViaSpecBacklink(t *testing.T) {
+	proposalJSON := `{
+  "version": 1,
+  "nodes": [
+    {"id": "w1", "contract": "sample ones", "justifies": ["Specs/Sample:AC-01", "Sample:FR-01", "Designs/Sample:DD-1"],
+     "gate": {"type": "tests", "tests": [{"id": "t1", "file": "f.ext"}]}, "hazards": []},
+    {"id": "w2", "contract": "sample twos", "justifies": ["AC-02", "Sample:DD-1"], "deps": ["w1"],
+     "gate": {"type": "tests", "tests": [{"id": "t2", "file": "f.ext"}]}, "hazards": []},
+    {"id": "w3", "contract": "other ones", "justifies": ["Other:AC-01", "Other:FR-01"], "deps": ["w1"],
+     "gate": {"type": "tests", "tests": [{"id": "t3", "file": "f.ext"}]}, "hazards": []},
+    {"id": "gate-final", "contract": "reviewed", "justifies": ["Specs/Sample:AC-01"], "deps": ["w2", "w3"],
+     "gate": {"type": "review", "lanes": "full"}, "hazards": []}
+  ]
+}
+`
+	rewritePlanRelated := func(t *testing.T, root, to string) {
+		t.Helper()
+		p := filepath.Join(root, "Plans", "SamplePlan", "README.md")
+		plan, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		updated := strings.Replace(string(plan), "related: [Specs/Sample, Specs/Other, Designs/Sample]", to, 1)
+		if updated == string(plan) {
+			t.Fatalf("fixture related line not found:\n%s", plan)
+		}
+		if err := os.WriteFile(p, []byte(updated), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	compile := func(t *testing.T, root string) string {
+		t.Helper()
+		planDir := filepath.Join(root, "Plans", "SamplePlan")
+		before, err := os.ReadFile(gstore.PathFor(planDir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, findings, err := Run(root, root, "SamplePlan")
+		if err != nil {
+			t.Fatalf("compile must refuse with findings, not fail: %v", err)
+		}
+		joined := ""
+		for _, f := range findings {
+			joined += f.String() + "\n"
+		}
+		if joined != "" {
+			after, err := os.ReadFile(gstore.PathFor(planDir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(before) != string(after) {
+				t.Fatal("a refused compile must not touch the graph")
+			}
+		}
+		return joined
+	}
+
+	t.Run("A: design related directly resolves qualified DDs", func(t *testing.T) {
+		root := twoSpecRoot(t)
+		stage(t, root, proposalJSON)
+		if joined := compile(t, root); joined != "" {
+			t.Fatalf("representation A must compile clean:\n%s", joined)
+		}
+	})
+
+	t.Run("B: design reachable only via spec back-link refuses with hint", func(t *testing.T) {
+		root := twoSpecRoot(t)
+		// The spec back-links to its design; the plan no longer relates it.
+		specPath := filepath.Join(root, "Specs", "Sample", "README.md")
+		spec, err := os.ReadFile(specPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		linked := strings.Replace(string(spec), "related: []", "related: [Designs/Sample]", 1)
+		if linked == string(spec) {
+			t.Fatalf("fixture spec related line not found:\n%s", spec)
+		}
+		if err := os.WriteFile(specPath, []byte(linked), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		rewritePlanRelated(t, root, "related: [Specs/Sample, Specs/Other]")
+		stage(t, root, proposalJSON)
+		joined := compile(t, root)
+		for _, want := range []string{
+			`w1: cites "Designs/Sample:DD-1", which resolves in no related spec, design, or decision ledger; Designs/Sample/README.md defines it but is not reachable through the plan's ` + "`related`" + ` graph — relate it directly from Plans/SamplePlan/README.md`,
+			`w2: cites "Sample:DD-1", which resolves in no related spec, design, or decision ledger; Designs/Sample/README.md defines it`,
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("missing %q in:\n%s", want, joined)
+			}
+		}
+		// The spec citations still resolve: only the design is unreachable.
+		for _, forbidden := range []string{`"Sample:FR-01"`, `"Other:FR-01"`, `"Specs/Sample:AC-01"`} {
+			if strings.Contains(joined, forbidden) {
+				t.Errorf("spec citation %s must still resolve:\n%s", forbidden, joined)
+			}
+		}
+	})
+
+	t.Run("unknown DD and undefined qualifier refuse without a hint", func(t *testing.T) {
+		root := twoSpecRoot(t)
+		bad := strings.Replace(proposalJSON, `"Designs/Sample:DD-1"`, `"Designs/Sample:DD-9"`, 1)
+		bad = strings.Replace(bad, `"Sample:DD-1"`, `"Designs/Ghost:DD-1"`, 1)
+		stage(t, root, bad)
+		joined := compile(t, root)
+		for _, want := range []string{
+			`w1: cites "Designs/Sample:DD-9", which resolves in no related spec, design, or decision ledger` + "\n",
+			`w2: cites "Designs/Ghost:DD-1", which resolves in no related spec, design, or decision ledger` + "\n",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("missing %q in:\n%s", want, joined)
+			}
+		}
+	})
+}

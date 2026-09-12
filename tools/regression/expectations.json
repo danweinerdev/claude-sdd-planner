@@ -4233,7 +4233,83 @@
     ],
     "exit": 1
   },
+  "SDD161/design-conflates-same-numbered-id": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
   "SDD161/design-omits-requirement": {
+    "diagnostics": [
+      {
+        "code": "SDD152",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD161",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      },
+      {
+        "code": "SDD162",
+        "line": 1,
+        "path": "Plans/Sample/README.md",
+        "severity": "error"
+      }
+    ],
+    "exit": 1
+  },
+  "SDD161/realized-spec-uncited": {
     "diagnostics": [
       {
         "code": "SDD152",

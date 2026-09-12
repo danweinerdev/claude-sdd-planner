@@ -445,23 +445,34 @@ func strReplace(s, old, new string) string {
 // been catching. Requiring the colon keeps every unqualified dangling id
 // failing, which is the point of the rule.
 func qualifiedCitation(text string, start int) bool {
+	_, ok := citationQualifier(text, start)
+	return ok
+}
+
+// citationQualifier returns the qualifier word in front of the identifier
+// starting at `start` (`ArkBootstrapApi` for `ArkBootstrapApi:DD-4`), and
+// whether the citation is qualified at all — the same colon-only test
+// qualifiedCitation applies. Directory qualifiers (`Specs/M1:AC-01`) yield
+// their basename (`M1`), which the CitationIndex registers alongside the
+// full directory spelling.
+func citationQualifier(text string, start int) (string, bool) {
 	i := start
 	// Step back over exactly one separator: a colon or a single space.
 	if i == 0 {
-		return false
+		return "", false
 	}
 	switch text[i-1] {
 	case ':', ' ':
 		i--
 	default:
-		return false
+		return "", false
 	}
 	end := i
 	for i > 0 && isQualifierChar(text[i-1]) {
 		i--
 	}
 	if i == end {
-		return false
+		return "", false
 	}
 	word := text[i:end]
 	// Only the COLON form qualifies. The space-separated form
@@ -472,9 +483,39 @@ func qualifiedCitation(text string, start int) bool {
 	// mean an external reference write `ReleaseControlService:FR-08`, which
 	// is what the templates and skills now emit.
 	if text[end] != ':' {
-		return false
+		return "", false
 	}
-	return word[0] >= 'A' && word[0] <= 'Z'
+	if word[0] < 'A' || word[0] > 'Z' {
+		return "", false
+	}
+	return word, true
+}
+
+// resolvedCitations scans prose for every FR/NFR/AC/DD citation and resolves
+// each through the index — a bare `FR-01` by itself, a qualified
+// `Channels:FR-01` under its qualifier — returning the (source, id) pairs
+// that resolved unambiguously, keyed the way CitationKey keys them. A bare
+// id that two sources define resolves to neither: prose that says `FR-01`
+// while related to two specs that both define it has cited nothing
+// specific, and counting it for either would let one spec's citation
+// satisfy the other's same-numbered requirement.
+func resolvedCitations(x *CitationIndex, text string) map[string]bool {
+	out := map[string]bool{}
+	for _, family := range []struct {
+		name string
+		re   *regexp.Regexp
+	}{{"FR", citeFRRe}, {"NFR", citeNFRRe}, {"AC", citeACRe}, {"DD", citeDDRe}} {
+		for _, idx := range family.re.FindAllStringSubmatchIndex(text, -1) {
+			spelling := family.name + "-" + text[idx[2]:idx[3]]
+			if qualifier, ok := citationQualifier(text, idx[0]); ok {
+				spelling = qualifier + ":" + spelling
+			}
+			if hit, ok := x.Resolve(spelling); ok {
+				out[CitationKey(hit.SourceRel, hit.ID)] = true
+			}
+		}
+	}
+	return out
 }
 
 func isQualifierChar(c byte) bool {

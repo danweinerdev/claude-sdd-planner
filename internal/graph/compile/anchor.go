@@ -118,6 +118,10 @@ type CitationDisposition struct {
 	// Suggestions lists the qualified spellings competing for an ambiguous
 	// bare citation.
 	Suggestions []string
+	// Hint, for an unresolved citation, is the compiler's explanation suffix
+	// (the qualifier names a real source the plan's related graph never
+	// reaches), or "".
+	Hint string
 }
 
 // ClassifyCitation classifies one citation spelling with the SAME resolution
@@ -138,12 +142,12 @@ func (s *Sources) ClassifyCitation(cited string) CitationDisposition {
 		if suggestions := s.set.fork.ambiguous(cited); len(suggestions) > 0 {
 			return CitationDisposition{Kind: CitationAmbiguous, Suggestions: suggestions}
 		}
-		return CitationDisposition{Kind: CitationUnresolved}
+		return CitationDisposition{Kind: CitationUnresolved, Hint: s.set.unrelatedHint(cited)}
 	}
 	if _, ok := s.set.decisions[cited]; ok {
 		return CitationDisposition{Kind: CitationDecision}
 	}
-	return CitationDisposition{Kind: CitationUnresolved}
+	return CitationDisposition{Kind: CitationUnresolved, Hint: s.set.unrelatedHint(cited)}
 }
 
 // IntentSnapshot is one plan's citation-disposition snapshot, resolved once:
