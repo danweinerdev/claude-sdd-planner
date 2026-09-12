@@ -28,17 +28,24 @@ type schemaInfo struct {
 // to what this spike actually has: no plugin config, no MCP servers, no
 // review lanes — just the schema set, the planning root, and artifact counts).
 type doctorReport struct {
-	Version           string       `json:"version"`
-	BinaryPath        string       `json:"binary_path,omitempty"`
-	PlanningRoot      string       `json:"planning_root,omitempty"`
-	PlanningRootError string       `json:"planning_root_error,omitempty"`
-	Schemas           []schemaInfo `json:"schemas"`
-	PluginRoot        string       `json:"plugin_root,omitempty"`
-	PluginRootSource  string       `json:"plugin_root_source,omitempty"`
-	HookBinary        string       `json:"hook_binary,omitempty"`
-	HookBinaryError   string       `json:"hook_binary_error,omitempty"`
-	HooksFile         string       `json:"hooks_file,omitempty"`
-	HooksFileError    string       `json:"hooks_file_error,omitempty"`
+	Version               string       `json:"version"`
+	BinaryPath            string       `json:"binary_path,omitempty"`
+	PlanningRoot          string       `json:"planning_root,omitempty"`
+	PlanningRootError     string       `json:"planning_root_error,omitempty"`
+	Schemas               []schemaInfo `json:"schemas"`
+	PluginRoot            string       `json:"plugin_root,omitempty"`
+	PluginRootSource      string       `json:"plugin_root_source,omitempty"`
+	HookBinary            string       `json:"hook_binary,omitempty"`
+	HookBinaryError       string       `json:"hook_binary_error,omitempty"`
+	HooksFile             string       `json:"hooks_file,omitempty"`
+	HooksFileError        string       `json:"hooks_file_error,omitempty"`
+	GitPostRewriteHook    string       `json:"git_post_rewrite_hook,omitempty"`
+	GitPostRewriteBackup  string       `json:"git_post_rewrite_backup,omitempty"`
+	GitPostRewriteState   string       `json:"git_post_rewrite_state,omitempty"`
+	GitPostRewriteDetail  string       `json:"git_post_rewrite_detail,omitempty"`
+	GitPostRewriteSDD     string       `json:"git_post_rewrite_sdd,omitempty"`
+	GitPostRewriteWarning string       `json:"git_post_rewrite_warning,omitempty"`
+	GitPostRewriteChanged bool         `json:"git_post_rewrite_changed,omitempty"`
 	// GitignoreSuggestion is advice, not a finding: an unignored lock sidecar
 	// is untidy, never incorrect.
 	GitignoreSuggestion string `json:"gitignore_suggestion,omitempty"`
@@ -74,6 +81,20 @@ func cmdDoctor(o doctorOpts) error {
 	if err != nil {
 		return fmt.Errorf("doctor: %w", err)
 	}
+	var gitHookErr error
+	var gitHook provision.PostRewriteReport
+	if o.Check {
+		gitHook, gitHookErr = provision.CheckPostRewrite(wd)
+	} else {
+		gitHook, gitHookErr = provision.InstallPostRewrite(wd)
+	}
+	rep.GitPostRewriteHook = gitHook.HookPath
+	rep.GitPostRewriteBackup = gitHook.BackupPath
+	rep.GitPostRewriteState = string(gitHook.State)
+	rep.GitPostRewriteDetail = gitHook.Detail
+	rep.GitPostRewriteSDD = gitHook.SDDPath
+	rep.GitPostRewriteWarning = gitHook.Warning
+	rep.GitPostRewriteChanged = gitHook.Changed
 	root, rootErr := store.FindPlanningRoot(wd)
 	if rootErr != nil {
 		rep.PlanningRootError = rootErr.Error()
@@ -113,10 +134,29 @@ func cmdDoctor(o doctorOpts) error {
 		printDoctorReport(rep)
 	}
 
+	if gitHookErr != nil {
+		return fmt.Errorf("doctor: %w", gitHookErr)
+	}
+	if gitHook.State == provision.PostRewriteUnsafe {
+		return fmt.Errorf("doctor: Git post-rewrite hook is unsafe: %s", gitHook.Detail)
+	}
+	if o.Check && doctorGitHookFinding(gitHook.State) {
+		return &refusedError{n: 1, msg: fmt.Sprintf("doctor: Git post-rewrite hook is %s; run `sdd doctor` to repair it", gitHook.State)}
+	}
 	if rootErr != nil {
 		return fmt.Errorf("doctor: %w", rootErr)
 	}
 	return nil
+}
+
+func doctorGitHookFinding(state provision.PostRewriteState) bool {
+	switch state {
+	case provision.PostRewriteMissing, provision.PostRewriteUserHook,
+		provision.PostRewriteStale, provision.PostRewriteNotExecutable:
+		return true
+	default:
+		return false
+	}
 }
 
 func printDoctorReport(r doctorReport) {
@@ -135,6 +175,29 @@ func printDoctorReport(r doctorReport) {
 		fmt.Printf("  hooks file: %s — %s\n", r.HooksFile, r.HooksFileError)
 	} else if r.HooksFile != "" {
 		fmt.Printf("  hooks file: %s (current)\n", r.HooksFile)
+	}
+	if r.GitPostRewriteState != "" {
+		path := r.GitPostRewriteHook
+		if path == "" {
+			path = "(none)"
+		}
+		fmt.Printf("  Git post-rewrite hook: %s — %s", path, r.GitPostRewriteState)
+		if r.GitPostRewriteChanged {
+			fmt.Print(" (repaired)")
+		}
+		if r.GitPostRewriteDetail != "" {
+			fmt.Printf(": %s", r.GitPostRewriteDetail)
+		}
+		fmt.Println()
+		if r.GitPostRewriteBackup != "" {
+			fmt.Printf("    user-hook backup: %s\n", r.GitPostRewriteBackup)
+		}
+		if r.GitPostRewriteSDD != "" {
+			fmt.Printf("    capture binary: %s (from PATH)\n", r.GitPostRewriteSDD)
+		}
+		if r.GitPostRewriteWarning != "" {
+			fmt.Printf("    warning: %s\n", r.GitPostRewriteWarning)
+		}
 	}
 	if r.PlanningRootError != "" {
 		fmt.Printf("  planning root: ERROR: %s\n", r.PlanningRootError)

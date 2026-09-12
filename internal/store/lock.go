@@ -185,3 +185,15 @@ func acquireExclusive(path string) (*fileLock, error) {
 		time.Sleep(lockRetryInterval)
 	}
 }
+
+// AcquireExclusiveLock serializes a compound operation on path using the same
+// OS-backed advisory sidecar lock as artifact writes. The returned release must
+// be deferred; process exit also releases the kernel lock. It does not read or
+// replace path. Callers must not nest a store write of the same path while held.
+func AcquireExclusiveLock(path string) (func(), error) {
+	lock, err := acquireExclusive(path)
+	if err != nil {
+		return nil, err
+	}
+	return lock.Release, nil
+}

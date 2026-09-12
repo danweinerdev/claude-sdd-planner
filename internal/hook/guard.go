@@ -102,8 +102,8 @@ var denyWithArgs = []struct{ head, args *regexp.Regexp }{
 // and that parity test read; a private copy in either place would drift.
 var SddVerbReadOnly = map[string]bool{
 	"validate": true, "show": true, "list": true, "next": true,
-	"version": true, "doctor": true, "schema": true,
-	"hook":  true, // reads a payload and decides; writes nothing
+	"version": true, "doctor": false, "schema": true, // doctor --check is classified separately
+	"hook":  false, // capture writes Git-private maps; read-only events are classified below
 	"apply": false, "section": false, "migrate": false,
 	"evidence": false, "task": false, "phase": false, "plan": false,
 	"spec": false, "design": false,
@@ -360,6 +360,28 @@ func checkSdd(tokens []string, segment string) Decision {
 		return Decision{}
 	}
 	sub := args[0]
+	if sub == "doctor" {
+		check := false
+		for _, token := range tokens[1:] {
+			if token == "--check" {
+				check = true
+			} else if strings.HasPrefix(token, "--check=") {
+				// Restrict to the canonical true spelling; unknown/false values
+				// never grant access to doctor's default repairing behavior.
+				check = token == "--check=true"
+			}
+		}
+		if check {
+			return Decision{}
+		}
+		return deny("Blocked `" + segment + "`: `sdd doctor` repairs hooks; use `sdd doctor --check` for a read-only diagnosis.")
+	}
+	if sub == "hook" {
+		if len(args) >= 2 && (args[1] == "pretooluse" || args[1] == "sessionstart") {
+			return Decision{}
+		}
+		return deny("Blocked `" + segment + "`: this hook event can write Git-private rewrite maps.")
+	}
 	if sub == "decide" {
 		if len(args) < 2 || !sddDecideReadOnly[args[1]] {
 			verb := "add"

@@ -133,6 +133,7 @@ func TestJSONFlagCoverage(t *testing.T) {
 		"sdd hook":              "emits its own hook JSON protocol",
 		"sdd hook pretooluse":   "emits its own hook JSON protocol",
 		"sdd hook sessionstart": "emits its own hook JSON protocol",
+		"sdd hook post-rewrite": "Git hook protocol emits a human remediation hint",
 		"sdd plugin":            "group",
 		"sdd task":              "group",
 		"sdd phase":             "group",

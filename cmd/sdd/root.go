@@ -555,12 +555,15 @@ func doctorCmd() *cobra.Command {
 	var o doctorOpts
 	c := &cobra.Command{
 		Use:   "doctor",
-		Short: "Check the environment and repair the Claude hook installation",
+		Short: "Check the environment and repair managed hook installations",
 		Long: `Reports the binary in use, the resolved planning root, and the embedded
 schema set. Under Claude Code, where CLAUDE_PLUGIN_ROOT identifies the active
 plugin, it also regenerates hooks.json when that file is absent or does not
 match this version's hook set. Portable runtimes carry no hooks, so doctor does
-not locate or inspect their plugin installation.
+not locate or inspect their plugin installation. Independently of the harness,
+doctor resolves the current Git repository's effective hooks directory and
+installs or repairs the managed post-rewrite dispatcher without changing Git
+configuration; an existing user hook is preserved.
 
 Run it once when starting to use sdd in a project: a stale hooks.json is
 invisible otherwise, because the events it does declare keep firing while a
@@ -571,7 +574,7 @@ newly added one silently never runs. Pass --check to report without repairing.`,
 		},
 	}
 	c.Flags().BoolVar(&o.JSON, "json", false, "emit JSON")
-	c.Flags().BoolVar(&o.Check, "check", false, "report only; do not repair the hooks file")
+	c.Flags().BoolVar(&o.Check, "check", false, "report only; do not repair hook files")
 	return c
 }
 
@@ -623,10 +626,14 @@ fails when either is stale, and 'status' reports each file's provenance.`,
 func hookCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "hook",
-		Short: "Serve the plugin's hooks (reads a payload on stdin)",
-		Long: `Both events fail open on every error path and always exit 0: a hook that
+		Short: "Serve harness and repository Git hooks (reads stdin)",
+		Long: `The Claude harness events fail open on every error path and always exit 0: a hook that
 exits nonzero or emits malformed JSON degrades the session for every later
-call, which is worse than a missed denial.`,
+call, which is worse than a missed denial.
+
+The Git post-rewrite handler validates and captures Git's raw old-new pairs in
+Git-private worktree metadata. Its managed shell dispatcher preserves any user
+hook's exit status and treats capture failure as a warning.`,
 	}
 	for _, ev := range []struct{ use, short string }{
 		{"pretooluse", "Guard read-only agents' Bash/Write/Edit calls"},
@@ -638,6 +645,19 @@ call, which is worse than a missed denial.`,
 			RunE: func(_ *cobra.Command, _ []string) error { return cmdHook(e.use) },
 		})
 	}
+	c.AddCommand(&cobra.Command{
+		Use:       "post-rewrite <rebase|amend>",
+		Short:     "Capture Git rewrite pairs for an explicit later graph remap",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"rebase", "amend"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("hook post-rewrite: resolving cwd: %w", err)
+			}
+			return cmdHookPostRewrite(cwd, args[0], cmd.InOrStdin(), cmd.OutOrStdout())
+		},
+	})
 	return c
 }
 
