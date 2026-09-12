@@ -38,8 +38,8 @@ phases: []
   AC-NN from every related spec in phase task verification/detail or phase
   Acceptance Criteria. Directly related designs collectively cite every
   FR-NN and NFR-NN from those specs. Requirement citations must resolve through
-  the `related` graph; live artifacts do not cite rejected/superseded D-NNNN
-  ids.
+  the `related` graph; live artifacts do not cite superseded `pd-<hex>`
+  ids without naming the successor.
 - A complete plan has only complete phases and populated completion evidence.
 -->
 

@@ -9,7 +9,7 @@ A spec-driven development toolchain published to multiple agent harnesses from o
 - **Repo root** — the canonical, hand-edited Claude Code plugin: `commands/` (lifecycle skills), `agents/` (review/implementation agent definitions), `skills/` (model-loaded reference skills), `shared/` (conventions + templates), `hooks/`.
 - **`.codex-plugin/` and `.opencode-plugin/`** — GENERATED plugin trees for Codex and OpenCode, identical content, produced by `sdd plugin sync`. **Never edit these by hand** — any hand edit is destroyed by the next sync and rejected by the drift gate.
 - **`cmd/sdd` + `internal/`** — the cross-platform Go binary behind every skill: deterministic validation (`sdd validate`), artifact writes, lifecycle transitions, hooks, and the portable-tree generator (`internal/portable`).
-- **`.plans/`** — this repo's own planning artifacts. `.plans/Decisions/decisions.md` is the decision ledger; its `accepted` D-NNNN entries are standing constraints on all work here. A change that contradicts one must stop for user reconciliation, never silently proceed. The ledger itself is never edited — for any reason — without the user's explicit approval of the exact, unmodified text of the change, shown in full beforehand.
+- **`.plans/`** — this repo's own planning artifacts. Each plan's `Plans/<Name>/<Name>-Decisions.json` holds its `pd-<hex>` entries — standing constraints on work in that plan. A change that contradicts one must stop for user reconciliation, never silently proceed. A decisions file is append-only and is never edited directly — for any reason — the only write path is `sdd decide add`, run only after the user's explicit approval of the exact, unmodified statement, shown in full beforehand.
 
 ## Build and test
 
@@ -47,7 +47,7 @@ The `shared/` documents are normative — read them before changing behavior the
 |---|---|
 | Artifact frontmatter + statuses + sensitive-data rules | `shared/frontmatter-schema.md` |
 | Evidence-gated completion (task/phase/plan) | `shared/completion-evidence.md` |
-| Decision authority: fork capability/effective view, schema, approval, admission, collisions | `shared/decision-log.md` |
+| Plan decisions: per-plan JSON file, entry schema, write protocol, conflicts | `shared/decision-log.md` |
 | Decision discipline for every skill/agent | `shared/decision-framework.md` |
 | Planning-root / plugin-dir / target-repo resolution | `shared/path-resolution.md` |
 | VCS detection + git/p4/plain operations table | `shared/vcs-detection.md` |
@@ -57,7 +57,7 @@ The `shared/` documents are normative — read them before changing behavior the
 
 Key invariants worth internalizing: plan tasks are single clean bisectable native-SCM revisions, with lifecycle bookkeeping committed only at phase boundaries (D-0024); `complete` is never set without conforming retrospective evidence; phase completion requires a persisted frozen four-lane `Aligned` review; every plan task carries a `justifies` source or is cut; artifacts never contain credentials or machine-specific absolute paths. Graph plans (a committed `<Name>-Graph.json`) tighten all of this mechanically: states derive from observations (never stored), completion is sync-only (a parsed report, never an assertion), hazard-discharging tests must be observed red before a green counts, review gates green only from frozen `Aligned` review artifacts, and closure is the derived closed predicate (D-0022). v1 plans without graphs keep the markdown protocol until converted.
 
-Decision consumers inspect `decisionLog`: no selector uses `sdd decide list --status accepted --json` and conventional reads; explicit `fork`/`detached` admits canonical `decision_forks` and uses `sdd decide effective --json`. Full exact preview bytes require approval before a digest. Never edit inherited authority or leak it into isolated lanes.
+Decision consumers read `sdd decide list|current|lookup` — always derived, never cached. `sdd decide add` is the only write path and runs only after the user approves the exact statement; never hand-edit a `-Decisions.json` file or leak plan decisions into the intent-isolated review lanes.
 
 ## Versioning
 

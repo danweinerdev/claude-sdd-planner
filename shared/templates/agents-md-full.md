@@ -14,9 +14,9 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
 ├── Specs/<feature>/README.md
 ├── Designs/<component>/README.md
 ├── Plans/<PlanName>/README.md
+├── Plans/<PlanName>/<PlanName>-Decisions.json   # this plan's decisions, append-only
 ├── Plans/<PlanName>/<NN>-<Phase>.md
-├── Plans/<PlanName>/notes/<phase>.md
-└── Decisions/decisions.md        # conventional legacy default; a selected fork may differ
+└── Plans/<PlanName>/notes/<phase>.md
 ```
 
 ## Conventions
@@ -32,20 +32,20 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
 - Every task, phase, and plan has a completion-evidence section. Record exact
   commands/tools, context, revision/checkpoint, result, and observable evidence
   before any `complete` transition; prospective verification criteria are not
-  proof. Write artifacts in-flow, but never commit per edit; decision-ledger
-  entries are never written without explicit user approval of the exact text.
+  proof. Write artifacts in-flow, but never commit per edit; plan-decision
+  entries are never written without explicit user approval of the exact
+  statement — the only write path is `sdd decide add --plan <Name>
+  --statement "..."`.
   **Git adapter:** in commit-capable workflows where commits are authorized,
   commit the verified feature slice first and record lifecycle state once per
   affected root at phase close — never at task closeout, never per amendment or
-  decision. Shared-root artifacts and ledgers use one boundary commit; external
+  decision. Shared-root artifacts and decisions files use one boundary commit; external
   roots record once at the same boundary (D-0024). Dirty or no-SCM work
   remains non-complete until a durable native checkpoint exists.
 - Use `planning-config.json` to resolve the planning root and any externally targeted repository paths. There is no local companion config.
-- Decision authority branches on this repository's `decisionLog`. Explicit
-  `fork`/`detached` selection requires canonical `decision_forks` capability
-  and `sdd decide effective --json`; no selector uses
-  `sdd decide list --status accepted --json` and the conventional legacy ledger. Never edit inherited
-  authority directly.
+- Each plan's decisions live in its own `<Name>-Decisions.json`, append-only
+  and content-addressed (`pd-<hex>` ids). Read with
+  `sdd decide list|current|lookup`; never hand-edit the file.
 - Consult the plugin's frontmatter schema, templates, and language-verification references when creating or changing artifacts.
 
 ## Lifecycle
@@ -57,7 +57,7 @@ The normal progression is: `sdd-setup` -> `sdd-research` -> `sdd-brainstorm` -> 
 Plans come in two execution models, routed by graph presence. A plan with a committed `<Name>-Graph.json` executes as a graph walk (`sdd-plan` authors node payloads compiled into it; `sdd-implement` walks claim → red → green → sync → merge, with completion derived from observations, never narrated). A plan without a graph is a v1 markdown plan and keeps the wave protocol and evidence rules until converted with `sdd graph convert` — conversion emits blocking sentinels that are real judgments, never defaults.
 
 For a contiguous specification, design, or planning session, write every
-artifact and ledger update as it becomes known and record once per affected SCM
+artifact and decision update as it becomes known and record once per affected SCM
 root at session close — never per artifact, skill, approval, review, or
 decision. Phase close follows the same rule: one planning-root atomic commit
 carries the final review, debrief, phase updates, plan phase-array update, and

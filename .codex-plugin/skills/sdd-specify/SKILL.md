@@ -62,14 +62,13 @@ When you need to define the requirements for a feature before designing or imple
    - After findings are addressed and the user explicitly approves, run `sdd spec approve <spec-path>`. If the user declines or defers, leave it at `review`. (Later transitions: `sdd spec implement` once built; `sdd spec supersede --by <successor>` when replaced.)
    - Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
 
-5. **Record Decisions**
-   - After approval, run each user-resolved open question and each user-made scoping/requirements choice through the **admission test** in `shared/decision-log.md` § Capture, and record only those that pass — a choice whose whole effect is what this spec now says is the spec's content, not a ledger entry. What qualifies here is typically a scoping boundary or a definition other features must honor. Run the collision check before each append (a collision stops for the user). Scope entries to `Specs/<FeatureName>`, and **cite each new entry's id inline** in the governed spec section (e.g., "(D-0012)") — the bidirectional link is what makes supersession detection work. Skip questions marked non-blocking without a user answer — nothing was decided.
+5. **Nothing recorded here.** There are no decisions before a design exists (`shared/decision-log.md`): a resolved open question or scoping choice is this spec's own content. Every user-resolved open question either becomes part of what the spec now says, or — when it constrains a callers-visible contract beyond this spec — is carried forward into the design's `## Design Decisions` section, which compiles into the plan's decisions file later.
 
 ## Output
 ```
 Specs/<FeatureName>/README.md
 ```
-Plus qualifying user-resolved decisions through `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, and use only supported exact-approved writes (fork add refuses; never directly edit inherited files). Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Document Structure
 See `shared/templates/spec.md`:

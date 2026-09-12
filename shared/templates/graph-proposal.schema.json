@@ -65,6 +65,11 @@
           "type": "string",
           "description": "Presentation grouping for rendered views. No scheduling or review obligation reads it."
         },
+        "role": {
+          "type": "string",
+          "enum": ["implementation", "shared-mechanism", "review", "integration-acceptance"],
+          "description": "The node's kind of work. Absent means implementation, or review when the gate is a review gate. A review node's deps are the contract nodes it reviews; an integration-acceptance node depends on review nodes and its GREEN closes its whole closure."
+        },
         "history": {
           "type": "string",
           "description": "Authored annotation for the human reader (conversion records a v1 task's completion provenance here). Never machine-consumed: states derive from observations alone, and history grants no GREEN."

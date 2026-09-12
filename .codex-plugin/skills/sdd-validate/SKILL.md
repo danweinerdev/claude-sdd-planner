@@ -28,7 +28,7 @@ Pass `--scope <planning-root-relative-path-or-artifact-name>` when the user name
 
 If `sdd` is unavailable, report the error and stop rather than silently replacing deterministic checks with model judgment. Exit `0` means scripted checks passed, exit `1` means the JSON diagnostics are authoritative findings, and exit `2` means validation could not run. Never execute artifact-recorded evidence commands as part of validation.
 
-For a focused decision audit, inspect `decisionLog`. Explicit `fork`/`detached` mode runs `sdd decide capabilities --json`, requires canonical `decision_forks`, then runs `sdd decide effective --json` and `sdd decide validate --format json`. With no selector, use `sdd decide list --status accepted --json` and `sdd decide validate <resolved-ledger> --format json`. Fork commands are not legacy aliases. The full validator remains authoritative for cross-artifact checks.
+For a focused decision audit, run `sdd decide current [--plan <Name>]` and `sdd decide list --plan <Name>` for the raw file; `sdd validate` itself carries the deterministic checks (SDD190 malformed file, SDD191 superseded citation, SDD192 competing successors). The full validator remains authoritative for cross-artifact checks.
 
 Identity mode defaults to `auto`, which performs current target-worktree and governing lifecycle-content checks for every populated evidence section. Use the equivalent explicit `--identity-mode current` immediately before a completion transition. Use `--identity-mode historical` only for a confirmed historical audit where later legitimate work makes current-source comparison inappropriate.
 
@@ -59,6 +59,5 @@ Open with `Valid` or `Invalid`. For every finding include severity, artifact and
 
 ## Context
 - Validator: `sdd validate` (deterministic layer; read-only)
-- Ledger validator: `sdd decide validate`
 - Conventions enforced: `shared/frontmatter-schema.md`, `shared/completion-evidence.md`, `shared/review-artifacts.md`, `shared/decision-log.md`
 - Path resolution: `shared/path-resolution.md`

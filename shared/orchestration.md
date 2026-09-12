@@ -12,7 +12,7 @@ The primary context acts as a **tech lead** — it reads enough to make informed
 
 **Agents** handle:
 - Heavy reading (scanning many artifacts, reading large codebases)
-- Analysis (complexity analysis, decision-ledger audits, adversarial review prep)
+- Analysis (complexity analysis, standing-decision cross-checks, adversarial review prep)
 - Code changes (implementation, fixes)
 - Reviews (code review, plan review, spec review)
 
@@ -47,8 +47,8 @@ Dispatch rules: substitute every `{{PLACEHOLDER}}` before dispatch; reviewer dis
 
 Orientation read order at the start of a planning session — frontmatter answers most orientation questions; read bodies only when the decision at hand needs them:
 
-1. `planning-config.json` — planning root, repository mappings, and any repository-owned decision selection
-2. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks` or stop with user-install guidance for a fork-capable binary, then run `sdd decide effective --json` and retain provenance and every diagnostic. With no selector, run `sdd decide list --status accepted --json` and use conventional legacy history. Never invoke fork reads as legacy aliases
+1. `planning-config.json` — planning root and repository mappings
+2. The `## Standing decisions` block the SessionStart hook injects from `sdd decide current` (scoped to the active plan when one is known); re-run `sdd decide current --plan <Name>` directly if it's missing or you need a different scope
 3. The active plan's README **frontmatter** — status, `phases[]`, `related` (not the body)
 4. The current phase doc — task list, statuses, verification fields, traps
 5. The latest debrief in `Plans/<PlanName>/notes/` — constraints and gotchas discovered last time
@@ -59,7 +59,7 @@ Summaries drop operational detail and misremember statuses. Before resuming work
 
 - The current phase doc's `tasks[]` statuses — the frontmatter is the source of truth for what's done; never trust the summary's recollection of it
 - The plan README frontmatter
-- Reinspect `decisionLog`: explicit `fork`/`detached` mode re-runs capability admission and `sdd decide effective --json`; no selector re-runs `sdd decide list --status accepted --json` and conventional reads. Summaries never choose the branch
+- Re-run `sdd decide current --plan <Name>` for the active plan's standing decisions; summaries never substitute for the fresh read
 - Any escalation or question that was presented to the user and not yet answered
 
 Do **not** re-read spec/design bodies wholesale after compaction — delegate that to agents, same as always.

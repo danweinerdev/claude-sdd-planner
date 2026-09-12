@@ -4,7 +4,7 @@ Single source of truth for how sdd-planner skills and agents resolve the three r
 
 ## Planning Root (artifacts)
 
-Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`, `Decisions/`) are read from and written to the **planning root**. Legacy `Retro/` and `Diagrams/` directories remain readable; artifacts of the retired `retro` and `diagram` types are ignored by validation (still resolvable as references, never checked, no longer created).
+Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`) are read from and written to the **planning root**. Each plan's decisions live at `Plans/<Name>/<Name>-Decisions.json`, alongside its README — there is no separate top-level decisions directory. Legacy `Retro/` and `Diagrams/` directories remain readable; artifacts of the retired `retro` and `diagram` types are ignored by validation (still resolvable as references, never checked, no longer created).
 
 1. Find `planning-config.json`: look in the current working directory; if absent, walk up parent directories to the repository root.
 2. If no `planning-config.json` exists anywhere, the planning root is the repository root (treat `planningRoot` as `"."`).
@@ -13,16 +13,6 @@ Artifacts (`Research/`, `Brainstorm/`, `Specs/`, `Designs/`, `Plans/`, `Decision
    - Relative path (e.g., `"Planning"`) → resolved against the directory containing `planning-config.json`
    - Absolute path (e.g., `"/home/user/planning-repo"`) → used as-is (an external planning directory shared by multiple repos)
 
-The represented repository's own `planning-config.json` also owns decision
-selection. Config-level `repositoryId` is a sibling of the optional
-`decisionLog` object; `decisionLog` contains `version`, `mode` (`fork` or
-`detached`), `ledgerId`, and a safe `path` relative to that repository's
-configured planning root. Never consult a shared planning repository's config
-to select authority for a target repository, and never infer ownership from a
-directory name or VCS remote. Before relying on the declaration, require
-`sdd decide capabilities --json` to advertise canonical `decision_forks`
-schema/canonicalization/transaction support. Unknown, malformed, pending, or
-known-removed selection stops; it never falls back to filename discovery.
 
 <!-- claude-only -->
 ## Plugin Directory (templates, schema, shared conventions)

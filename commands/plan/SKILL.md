@@ -52,7 +52,7 @@ Interview in **bounded multiple-choice waves**, not freeform conversation:
 
 ### 3. Gather Context (delegated to `sdd-planner:researcher`)
 
-Ask the researcher for a **structured** summary aimed at the payload you are about to write: the spec requirement and acceptance-criterion ids in scope (`FR-NN`/`NFR-NN`/`AC-NN`), design decisions (`DD-N`) and accepted ledger entries (`D-NNNN`) that constrain the work, existing code the nodes would extend or replace, and related plans touching the same area. Every node you author cites ids this step surfaced — `justifies` is how compile enforces coverage, so uncovered ACs and unsourced nodes both refuse.
+Ask the researcher for a **structured** summary aimed at the payload you are about to write: the spec requirement and acceptance-criterion ids in scope (`FR-NN`/`NFR-NN`/`AC-NN`), design decisions (`DD-N`) and standing plan decisions (`pd-<hex>`, via `sdd decide current`) that constrain the work, existing code the nodes would extend or replace, and related plans touching the same area. Every node you author cites ids this step surfaced — `justifies` is how compile enforces coverage, so uncovered ACs and unsourced nodes both refuse.
 
 ### 4. Decompose into Nodes (DD-13)
 
@@ -66,7 +66,7 @@ A node is **one red→green cycle**: one falsifiable contract, verified by named
 - **Hazards** — triage against the closed vocabulary from `sdd graph hazards`. An empty list (`[]`) is a legitimate *explicit* claim of "no failure classes here"; silence is not — untriaged hazards block compile. Never invent hazards the operator didn't confirm, and never claim `[]` on the operator's behalf: hazard triage is an interview-grade judgment. Each declared hazard needs a test whose `satisfies` names it, shaped as the vocabulary requires.
 - **Estimate** — relative positive integer cost weight (throughput analytics only, not a time promise).
 - **Deps** — real ordering only. A dep exists because the node consumes the other's output, not because it "comes after".
-- **Review gates** — place a full four-lane review gate at each feature integrator (the node where independent slices join user-visible behavior); subset-lane gates (`lanes: [review_quality]` etc.) are lighter checkpoints where risk concentrates. Compile refuses any node not covered by some full gate — the template's terminal gate is the backstop, not the ideal placement.
+- **Review nodes** — author a `role: review` node with a `gate: { type: review, lanes: null }` (full four-lane) depending on the contract nodes at each feature integrator (the point where independent slices join user-visible behavior); a subset-lane review node (`lanes: [review_quality]` etc.) is a lighter checkpoint where risk concentrates. Compile refuses any work node not covered by some full review node's scope, and refuses an `integration-acceptance` node whose deps don't transitively cover every work node through a review node — the terminal review node is the backstop, not the ideal placement.
 
 Do **not** shape the decomposition like a document. Node count follows from red→green cycles; there is no "3-7 phases / 2-6 tasks" quota, and importing that shape recreates the serial CHAIN decompositions the silhouette check exists to reject. The optional `phase` field is a presentation label for rendered views, nothing more.
 
@@ -90,7 +90,7 @@ Structure is measurable — read it back before calling the plan done:
 ### 7. Approve and Record Decisions
 
 - Set the plan README `status: approved` once the user accepts the read-back (graph plans keep the README lifecycle; `sdd plan approve` runs the same gate).
-- Take each user-resolved question through `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, then apply admission and collision checks. Legacy mode may use `sdd decide add` after exact approval. Fork add is unsupported and refuses without direct local/inherited-file edits; use an exact-preview supported operation only if it faithfully expresses the change. Cite each recorded qualified identity inline.
+- `sdd compile` copies every related design's `DD-N` bullets verbatim into `Plans/<Name>/<Name>-Decisions.json` (`source: Designs/<X>:DD-N`) — nothing to author here. For a question the interview resolved that isn't already a compiled DD and will bind work beyond this plan's own document, show the exact statement to the user and, once approved, run `sdd decide add --plan <Name> --statement "..."` once (`shared/decision-log.md`). Cite each recorded `pd-<hex>` inline in the plan where relevant.
 
 ## Output
 
@@ -112,5 +112,5 @@ The graph is the plan. Rendered views carry a generation marker and are overwrit
 - Payload template: `sdd template graph-proposal` (exemplar + `--schema`)
 - Hazard vocabulary: `sdd graph hazards`
 - Frontmatter schema (README identity, v1 plans): `shared/frontmatter-schema.md`
-- Decision ledger discipline: `shared/decision-log.md`
+- Plan decisions discipline: `shared/decision-log.md`
 - Agents: `sdd-planner:researcher`

@@ -41,7 +41,48 @@ findings:
     status: open             # open | fixed | deferred | rejected | answered
 ```
 
-The body carries one section per finding — the concrete scenario, why it matters, the recommended mitigation, and the artifact/code ids it impugns (`FR-NN`, `AC-NN`, task `N.M`, `D-NNNN`) — followed by the Resolution Log. Findings and lane evidence follow `shared/frontmatter-schema.md` § Sensitive Data: repo-relative paths, no credentials, no `/home/<user>`-style absolute paths in pasted output.
+The body carries one section per finding — the concrete scenario, why it matters, the recommended mitigation, and the artifact/code ids it impugns (`FR-NN`, `AC-NN`, task `N.M`, `pd-<hex>`) — followed by the Resolution Log. Findings and lane evidence follow `shared/frontmatter-schema.md` § Sensitive Data: repo-relative paths, no credentials, no `/home/<user>`-style absolute paths in pasted output.
+
+### Findings against a graph plan's review node
+
+When the reviewed target is a graph plan's `review`-role node (`sdd graph review`), every finding with `status: open` additionally carries an `action`, one of `revise` or `extend`. Missing or unknown `action` on an open finding refuses the whole artifact.
+
+**`revise`** — the reviewed node's promise was wrong or unproven. Names the affected node(s) and the normative change:
+
+```yaml
+findings:
+  - id: F-03
+    severity: major
+    title: "Manifest query ignores archived variants"
+    status: open
+    action: revise
+    nodes: [manifest-query]
+    revise:
+      gate: { type: tests, tests: [TestManifestQuery_SelectedPipelineVariant, TestManifestQuery_ExcludesArchived] }
+```
+
+`nodes` must name at least one node in the reviewing node's scope, and `revise:` must change at least one of `contract`, `gate`, or `inputs`. A revise that changes nothing is refused — a finding with no graph consequence is a comment, and belongs in the body with `status: answered` or `rejected`.
+
+**`extend`** — the reviewed node's promise held but something is missing. Proposes a new node sourced by the finding:
+
+```yaml
+findings:
+  - id: F-04
+    severity: minor
+    title: "No audit event on cross-tenant read refusal"
+    status: open
+    action: extend
+    node:
+      id: manifest-query-audit-refusal
+      contract: "Emit an audit event when a manifest read is refused for tenant mismatch."
+      deps: [manifest-query]
+      gate: { type: tests, tests: [TestManifestQuery_AuditOnRefusal] }
+      artifacts: [internal/catalog/manifest_audit.go]
+```
+
+`node` is a proposal-shaped node fragment (same strict decoding as `sdd graph propose`); its `deps` must include at least one node in the reviewing node's scope. `justifies` is filled by the binary with the qualified finding citation (`<plan-relative artifact path>:<finding id>`, e.g. `Reviews/2026-09-11-catalog-read-path.md:F-04`), which the citation index resolves once the artifact is frozen.
+
+Findings with `status: fixed | deferred | rejected | answered` produce no amendment; `deferred` is recorded in the review node's `history`. `sdd graph review` with zero open findings records a pass; with any open finding it writes nothing and instead prints the amendment preview plus an `expect-digest` for `sdd graph amend`. See `skills/sdd-implement/SKILL.md` for the full claim → review → amend flow.
 
 Artifact `status`: `open` while any finding is `open`; `resolved` when every finding has a terminal disposition; `superseded` when a newer review of the same target replaces it (link both ways, like ledger supersession).
 
@@ -163,16 +204,16 @@ Split task 2.4's migration into its own task 2.7 with a rollback step.
 Governing fact: AC-04 requires zero-downtime cutover. Commit: abc1234.
 ```
 
-- Every entry states **what was decided, what was done**, and — for `deferred`/`rejected` — **why**. Cite the governing facts by id (`D-NNNN`, `FR-NN`, `AC-NN`, task ids, commits).
+- Every entry states **what was decided, what was done**, and — for `deferred`/`rejected` — **why**. Cite the governing facts by id (`pd-<hex>`, `FR-NN`, `AC-NN`, task ids, commits).
 - Update the finding's `status` in `findings[]` to match; the frontmatter is the machine layer, the log entry is the narrative.
-- Dispositions: `fixed` (change applied), `deferred` (tracked follow-up — see below), `rejected` (won't fix, rationale required), `answered` (a question resolved; if the answer constrains future work, it belongs in the decision ledger too).
+- Dispositions: `fixed` (change applied), `deferred` (tracked follow-up — see below), `rejected` (won't fix, rationale required), `answered` (a question resolved; if the answer constrains future work, it belongs in the plan's decisions file too — `shared/decision-log.md`).
 
 ## Acting on findings — the disposition rules
 
 Classify each finding before touching anything:
 
-- **Mechanical fix — apply directly.** The correction is fully determined by *hard facts*: an `accepted` decision-ledger entry, the explicit text of an approved spec/design/plan, or an objectively verifiable fact (a path exists, a command's output, a pinned external contract). No judgment call remains. Apply the fix, cite the governing fact in the Resolution Log entry. This is a template-following write per `shared/autonomy.md` — no user stop.
-- **Design decision — stop and discuss.** The fix requires choosing between viable approaches, changes the meaning or scope of an approved artifact, or touches anything an accepted ledger entry governs (or would supersede one). Present the options with trade-offs and let the user decide. When the outcome passes the admission test in `shared/decision-log.md` § Capture — it binds work beyond the artifact being fixed — record it in the ledger (collision check; a fresh answer colliding with an accepted entry uses one-step supersession), then execute and log the resolution citing the new `D-NNNN`. When it only settles this artifact, the Resolution Log entry is the whole record.
+- **Mechanical fix — apply directly.** The correction is fully determined by *hard facts*: a standing plan decision, the explicit text of an approved spec/design/plan, or an objectively verifiable fact (a path exists, a command's output, a pinned external contract). No judgment call remains. Apply the fix, cite the governing fact in the Resolution Log entry. This is a template-following write per `shared/autonomy.md` — no user stop.
+- **Design decision — stop and discuss.** The fix requires choosing between viable approaches, changes the meaning or scope of an approved artifact, or touches anything a standing plan decision governs (or would supersede one). Present the options with trade-offs and let the user decide. When the outcome will bind work beyond the artifact being fixed, show the exact statement for approval and run `sdd decide add --plan <Name> --statement "..." [--supersedes <id>]` (`shared/decision-log.md`), then execute and log the resolution citing the new `pd-<hex>`. When it only settles this artifact, the Resolution Log entry is the whole record.
 - **When the bucket is ambiguous, treat it as a design decision.** A false stop costs one confirmation; a wrongly-autonomous "fix" silently forks the truth.
 
 ## Reconciliation — after fixes land

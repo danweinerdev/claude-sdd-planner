@@ -93,13 +93,13 @@ Think of it as the planning-artifact counterpart to the `review_blind_spots` lan
    Never downscope severity by estimating how long a fix would take a human. Agents are not constrained by human development timelines. Severity reflects the impact of the flaw, not the cost of the fix. The right fix is right; surface it and let the user decide.
 
 6. **Persist the Review**
-   Write the findings to a review artifact per `shared/review-artifacts.md`: `<target-home>/reviews/<NN>-<target-slug>-adversarial-review-<rev>.md` from `shared/templates/review.md` (Plans > Designs > Specs precedence; a flat artifact with no resolvable home stays inline — say so). Number findings `F-NN`, mirror them in the `findings[]` frontmatter, cite the ids each finding impugns (`FR-NN`, `AC-NN`, task `N.M`, `D-NNNN`), and set `status: open`.
+   Write the findings to a review artifact per `shared/review-artifacts.md`: `<target-home>/reviews/<NN>-<target-slug>-adversarial-review-<rev>.md` from `shared/templates/review.md` (Plans > Designs > Specs precedence; a flat artifact with no resolvable home stays inline — say so). Number findings `F-NN`, mirror them in the `findings[]` frontmatter, cite the ids each finding impugns (`FR-NN`, `AC-NN`, task `N.M`, `pd-<hex>`), and set `status: open`.
 
 7. **Present Results**
    Show findings grouped by severity, referencing the review file. Each finding includes: the concrete scenario, why it matters, and a concrete mitigation or question to resolve.
 
 8. **Offer to Resolve**
-   Ask the user if they want to act on findings now. If yes, follow `shared/review-artifacts.md`; for a design decision also follow `shared/decision-log.md` to admit fork capability, consult effective authority/diagnostics, and use only supported exact-approved writes. Fork add/hygiene refuse without direct local or inherited-file edits. Append Resolution Log entries and run the reconciliation sweep. Other options: create research or leave the review `open`.
+   Ask the user if they want to act on findings now. If yes, follow `shared/review-artifacts.md`; for a design decision that binds work beyond this artifact, also follow `shared/decision-log.md` — show the exact statement, then `sdd decide add --plan <Name> --statement "..."` once approved. Append Resolution Log entries and run the reconciliation sweep. Other options: create research or leave the review `open`.
 
 ## Output
 ```

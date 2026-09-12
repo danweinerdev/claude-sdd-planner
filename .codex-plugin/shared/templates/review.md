@@ -47,6 +47,9 @@ findings: []
 #   severity: critical    # critical | major | minor | question
 #   title: "One-line finding"
 #   status: open          # open | fixed | deferred | rejected | answered
+#   action: revise        # required when status: open AND reviewing a graph review node: revise | extend
+#     # revise: { nodes: [...], revise: { contract|gate|inputs: ... } }
+#     # extend: { node: { id, contract, deps, gate, artifacts, ... } }  (proposal-shaped fragment)
 followups: []
 # Each follow-up entry (created when a finding is deferred without a plan task):
 #   id: FU-01
@@ -63,7 +66,7 @@ followups: []
 ## Findings
 
 ### F-01 — [Severity] One-line finding
-**Impugns:** [FR-NN / AC-NN / task N.M / D-NNNN / file:line]
+**Impugns:** [FR-NN / AC-NN / task N.M / pd-<hex> / file:line]
 **Scenario:** The concrete sequence of events, inputs, or conditions that exposes the flaw.
 **Why it matters:** Impact if unaddressed.
 **Recommendation:** Concrete mitigation or the question to resolve.
@@ -74,5 +77,5 @@ followups: []
      findings[] to match. See shared/review-artifacts.md.
 
 ### F-01 — fixed (YYYY-MM-DD)
-What was decided and done; governing facts by id; commit/task/D-NNNN links.
+What was decided and done; governing facts by id; commit/task/pd-<hex> links.
 -->

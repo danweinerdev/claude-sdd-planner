@@ -20,7 +20,7 @@ Every artifact includes these fields (one exception: `phase` docs omit `tags` an
 
 ```yaml
 title: "Human-readable title"
-type: research | brainstorm | spec | design | plan | phase | debrief | decision-log | review
+type: research | brainstorm | spec | design | plan | phase | debrief | review
 status: <type-specific, see below>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -30,7 +30,7 @@ related: [Specs/FeatureName, Research/topic-slug.md]
 
 `related` entries are planning-root-relative: use the **directory** path for specs, designs, and plans (`Specs/FeatureName`, `Designs/ComponentName`, `Plans/PlanName`), and the **file** path for flat artifacts (`Research/topic-slug.md`, `Brainstorm/topic-slug.md`). Legacy `Retro/YYYY-MM-DD-slug.md` and `Diagrams/slug.md` references remain valid for read compatibility; artifacts of the retired `retro` and `diagram` types are ignored by validation — they still resolve as references but are never checked and are no longer created. Consumers that need the document behind a directory entry append `/README.md`.
 
-Any artifact may additionally declare an optional `refresh_when` field — a list of event-shaped trigger descriptions that force a refresh (e.g., `refresh_when: ["dependency X ships v3", "Specs/Payments changes", "vendor answers the webhooks question"]`). A fired trigger makes the artifact stale regardless of its `updated` date (lifecycle skills honor known-fired triggers; `sdd-decide check` audits them on `assumption` ledger entries); demonstrably-unfired triggers exempt it from the default 30-day staleness rule.
+Any artifact may additionally declare an optional `refresh_when` field — a list of event-shaped trigger descriptions that force a refresh (e.g., `refresh_when: ["dependency X ships v3", "Specs/Payments changes", "vendor answers the webhooks question"]`). A fired trigger makes the artifact stale regardless of its `updated` date (lifecycle skills honor known-fired triggers); demonstrably-unfired triggers exempt it from the default 30-day staleness rule.
 
 ## Status Values by Type
 
@@ -44,7 +44,6 @@ Any artifact may additionally declare an optional `refresh_when` field — a lis
 | phase | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | task | `planned`, `in-progress`, `complete`, `blocked`, `deferred` |
 | debrief | `draft`, `complete` |
-| decision-log | `active`, `archived` |
 | review | `open`, `resolved`, `superseded` |
 
 ## Plan Schema
@@ -110,7 +109,7 @@ tasks:
 | `status` | yes | Task status (see status values above) |
 | `depends_on` | no | List of task IDs this task depends on |
 | `verification` | yes | How we know the work is good and complete — name each new or changed behavior to cover, not test counts. Where the check is commandable, include the exact command and expected observable output (e.g., `cargo test auth:: — 14 pass incl. the new refresh-expiry case`); prose-only criteria are for behavior no command can observe |
-| `justifies` | yes | Why this task exists — the demand that motivates it, not what it does. Either cite the ids it serves (`FR-NN`, `NFR-NN`, `AC-NN`, `D-NNNN`) or name the concrete failure it prevents (e.g., "prevents silent data loss when a partial write is retried"). `verification` says how we know it is done; `justifies` says why it should be started. Restating the title, or a placeholder like "required for completeness", "might need it later", or "part of the architecture", does not justify a task — an unsourced task is cut, not annotated |
+| `justifies` | yes | Why this task exists — the demand that motivates it, not what it does. Either cite the ids it serves (`FR-NN`, `NFR-NN`, `AC-NN`, `DD-N`, `pd-<hex>`, `<review qualifier>:F-NN`) or name the concrete failure it prevents (e.g., "prevents silent data loss when a partial write is retried"). `verification` says how we know it is done; `justifies` says why it should be started. Restating the title, or a placeholder like "required for completeness", "might need it later", or "part of the architecture", does not justify a task — an unsourced task is cut, not annotated |
 
 Body contains task detail sections keyed by task ID as headings:
 
@@ -141,7 +140,7 @@ Numbered elements carry stable, per-document identifiers so artifacts can cite e
 | Acceptance criterion | `AC-NN` | spec Acceptance Criteria |
 | Phase / task | `N` / `N.M` | plan frontmatter (existing convention) |
 | Design decision | `DD-N` | design (`## Design Decisions`) |
-| Decision | `D-NNNN` | decision ledger |
+| Plan decision | `pd-<hex>` | `Plans/<Name>/<Name>-Decisions.json` |
 | Review finding | `F-NN` | review artifact |
 | Review follow-up | `FU-NN` | review artifact |
 
@@ -154,8 +153,35 @@ Rules:
 - **Where each family resolves.** `FR-NN`/`NFR-NN`/`AC-NN` resolve against the **specs** reachable through the citing artifact's `related` graph; `DD-N` resolves against the **designs** on that same graph. A design is both a citation source (it owns `DD`) and a hop on the way to the specs it realizes, so a plan related to a design can cite that design's decisions and the spec's requirements alike.
 - **Design discovery is direct, never through a spec's back-link.** The `related` walk follows plan → plan/design/review hops and design → design/spec hops; a **spec is a terminal** — its own `related` (including the back-link it writes to the design that realizes it) is never traversed on another artifact's behalf. So a plan that cites `Designs/X:DD-N` must list `Designs/X` in its own `related`; relating only the spec that `Designs/X` realizes leaves the design unreachable and the citation refused (`sdd compile`, `sdd graph split`, and SDD122 agree, and the refusal names the design to relate). Following back-links would let every related spec silently widen the citation registry with its realizing designs and every spec those designs relate. The same walk is shared by the validator and the graph compiler, seeded once per artifact and cycle-safe.
 - **Design-side coverage is scoped to what a design realizes (SDD161).** A design declares the specs it realizes through its own `related` specs or a spec's `related` back-link to it; a design that declares neither is held to every spec on the plan's demand. Each realizing design's citations resolve with qualified identity — `Channels:FR-01` counts for the channels spec only, and a bare `FR-01` in a design that realizes two specs both defining it counts for neither (ambiguous, the same verdict the compiler gives a bare node citation). A plan may therefore relate two specs with overlapping id ranges and a design that realizes only one of them: the design is held to that spec's requirements, and the other spec — realized by no related design — puts nothing on the design-side demand. This is scoping, not waiver: a design that declares a spec and fails to cite one of its requirements still fails.
-- **Cross-reference by id.** A plan task's `verification` (or its body section) names the `AC-NN`/`FR-NN` ids it satisfies; a design section that realizes a requirement cites its `FR-NN`; governed sections cite ledger ids (`D-NNNN`) per `shared/decision-log.md`. These citations are what make drift detectable — without them every reconciliation check is blind.
-- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site (same pattern as the decision ledger's supersession cascade). `sdd-validate` audits for unnumbered elements and dangling id citations.
+- **Cross-reference by id.** A plan task's `verification` (or its body section) names the `AC-NN`/`FR-NN` ids it satisfies; a design section that realizes a requirement cites its `FR-NN`; a graph node's `justifies` cites a plan decision (`pd-<hex>` or `<Plan>:pd-<hex>`) per `shared/decision-log.md`, or a frozen review finding (`<review qualifier>:F-NN`) for an `extend` amendment. These citations are what make drift detectable — without them every reconciliation check is blind.
+- **Changing a numbered element is a reconciliation event**: after editing it, grep the other artifacts for its id and update or flag every citing site. A plan decision is never edited — a change of mind is a fresh entry with `supersedes`, per `shared/decision-log.md`. `sdd-validate` audits for unnumbered elements and dangling id citations.
+
+## Graph Node Roles and Amendment Fields
+
+A plan's compiled graph node carries a `role` field (proposal input): `implementation` (default when absent), `shared-mechanism`, `review`, or `integration-acceptance`. A `review`-role node's `gate.type` must be `review`; a `review`-gate node must have `role: review`. `contract_rev` (an integer, starting at 1) and `origin` (present only on a node added by an `extend` amendment: `{ review: <artifact path>, finding: <id> }`) are tool-owned — refused in proposal payloads, like `intent_hashes` and `claim`.
+
+A review artifact's `findings[]` entries add an `action` field, required whenever `status: open`:
+
+```yaml
+findings:
+  - id: F-03
+    status: open
+    action: revise
+    nodes: [manifest-query]
+    revise:
+      gate: { type: tests, tests: [TestManifestQuery_ExcludesArchived] }
+  - id: F-04
+    status: open
+    action: extend
+    node:
+      id: manifest-query-audit-refusal
+      contract: "Emit an audit event when a manifest read is refused for tenant mismatch."
+      deps: [manifest-query]
+      gate: { type: tests, tests: [TestManifestQuery_AuditOnRefusal] }
+      artifacts: [internal/catalog/manifest_audit.go]
+```
+
+`action: revise` names at least one node in the reviewing node's scope in `nodes` and changes at least one of `contract`/`gate`/`inputs` under `revise:`. `action: extend` supplies a proposal-shaped node fragment under `node:`, whose `deps` must include a node in the reviewing node's scope; its `justifies` is filled by the binary with the qualified finding citation. See `shared/review-artifacts.md` for the full contract.
 
 ## Review Artifact Schema
 
@@ -179,51 +205,9 @@ native revision and compares lifecycle-normalized content to the current
 artifacts, allowing lifecycle-only changes. The complete example and
 Git-specific frozen-identity adapter are in `shared/review-artifacts.md`.
 
-## Decision Ledger Schema
+## Plan Decisions Schema
 
-The decision ledger (`Decisions/decisions.md`, type `decision-log`) carries a `decisions[]` frontmatter array — the same structured-list convention as `phases[]`/`tasks[]`. Entry fields, lifecycle rules (append-only; accepted entries mutate only via `status` + `superseded_by`), the collision procedure, and distribution rules are defined in `shared/decision-log.md` — the single source of truth for this artifact.
-
-Per-entry statuses (these are entry-level fields inside `decisions[]`, **not** artifact `type` statuses — the ledger artifact itself is only ever `active` or `archived`): `proposed`, `accepted`, `rejected`, `superseded`. `rejected` entries are kept as negative truths, never deleted. Consumers rendering entries map their statuses: `accepted` → green, `proposed` → gray, `rejected`/`superseded` → muted.
-
-### Fork ledger metadata
-
-An explicitly selected fork remains a `decision-log` artifact and adds the
-following top-level frontmatter object. These names and nesting match the
-`internal/decisionview` YAML codecs; workflows must not hand-author or edit this
-metadata—`sdd decide fork preview/apply` owns it.
-
-```yaml
-fork:
-  version: 1
-  ledgerId: <lowercase-uuid>
-  repositoryId: <lowercase-uuid>
-  archives: [Decisions/fork-archive-2026.md]   # optional safe relative paths
-  parentBindingId: <binding-id>                # optional
-  bindings: []
-  events: []
-  legacyContexts: []
-  operationIds: []
-```
-
-`bindings[]` uses `version`, optional `id`, `ownerId`, `collectionId`,
-`source`, optional `parentBindingId`, `description`, `canonicalHash`,
-`canonicalContent`, `forkSource`, `forkBindings`, `forkEvents`, and
-`forkEventOrder`. `source` has `root: planning|repository`, a safe relative
-`path`, and optional relative `archives[]`.
-
-`events[]` uses `version`, `id`, `kind:
-adopt|override|reconcile|restore|rebind|detach`, `date`, `decidedBy`, and
-optional `target`, `basis`, `statement`, `rationale`, `confirmation`, `scope`,
-and `operationId`. A basis uses `version`, `targetId`, and optional `bindingId`,
-`canonicalization` (`entry-v1`), `canonicalHash`, `canonicalContent`, and
-`lineage`. `legacyContexts[]` uses `root`, `path`, `namespace`, and `localIds`.
-Qualified identities use `ledger:<lowercase-uuid>:D-NNNN`.
-
-Selection is JSON configuration, not ledger frontmatter. At the
-`planning-config.json` top level, `repositoryId` is a sibling of `decisionLog`.
-The `decisionLog` object contains `version`, `mode: fork|detached`, `path`, and
-`ledgerId`; a publisher may temporarily add `transaction: {id, journal}`.
-`path` and `journal` are safe paths relative to the configured planning root.
+A plan's decisions file, `Plans/<Name>/<Name>-Decisions.json`, is a flat JSON array — not a frontmatter-bearing artifact. Entry fields (`id`, `date`, `statement`, optional `supersedes`, optional `source`), the write protocol, cross-plan citation, and conflict reconciliation are defined in `shared/decision-log.md` — the single source of truth for this file.
 
 ## Debrief Schema
 
@@ -294,10 +278,7 @@ Waivers are excluded from lifecycle normalization, so declaring one does not
 invalidate the phase review that surfaced the finding. Every other byte is
 still compared — a scope edit made in the same commit is still caught.
 
-**The decision ledger has the same mechanism, narrowly scoped.** A ledger's
-`waivers:` may excuse only `DLG064`/`DLG065` — the id-sequence and ordering
-conditions that append-only history can forbid repairing — under the same
-reason requirement (`DLG078` for an unexplained one, `DLG079` for a stale
-one). `shared/decision-log.md` § Accepted exceptions is its source of truth.
-Ledger severities follow the same compiler model as artifact ones: only
-`error` and `operational` gate; `warning`, `candidate`, and `waived` report.
+A plan's decisions file has no waiver mechanism: it is append-only content
+addressed by digest, so there is no id-sequence or ordering condition to
+excuse — malformed entries and competing successors (SDD190, SDD192) are
+refused and reconciled, not waived.

@@ -38,14 +38,13 @@ When you need to define the technical architecture for a component or system bef
    - After findings are addressed and the user explicitly approves, run `sdd design approve <design-path>`. If the user declines or defers, leave it at `review`. (Later transitions: `sdd design implement` once built; `sdd design supersede --by <successor>` when replaced.)
    - Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
 
-5. **Record Decisions**
-   - After approval, take each Design Decision the user weighed in on (its rejected options go in the entry's `rejected[]`) and each user-resolved open question, run it through the **admission test** in `shared/decision-log.md` § Capture, and record only those that pass — a decision that governs only this component's internals is the design's content, while one that constrains callers, other components, or later implementation earns an entry. Run the collision check before each append — a collision stops for the user. Scope entries to `Designs/<ComponentName>`, and **cite each new entry's id inline** in the governed Design Decision section (e.g., "(D-0012)") — the bidirectional link is what makes supersession detection work. Design Decisions the user never engaged with are the design's own content — don't promote them as `accepted`.
+5. **Nothing recorded here.** The `## Design Decisions` section (its `DD-N` bullets) is the design's own content and stays as authored prose. It becomes durable, machine-readable record only when a plan compiles: `sdd compile` copies every `DD-N` bullet verbatim into that plan's `Plans/<Name>/<Name>-Decisions.json` with `source: Designs/<ComponentName>:DD-N`. Nothing is written at design approval.
 
 ## Output
 ```
 Designs/<ComponentName>/README.md
 ```
-Plus qualifying user-made decisions through `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, and use only supported exact-approved writes (fork add refuses; never directly edit inherited files). Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
+Write in flow; source and external planning history retain their own commit boundaries (`shared/autonomy.md` § SCM boundary cadence, D-0024).
 
 ## Document Structure
 See `shared/templates/design.md`:

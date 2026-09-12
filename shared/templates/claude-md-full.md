@@ -2,7 +2,7 @@
 
 {{DESCRIPTION}}
 
-Decision authority branches on this repository's `decisionLog`. Explicit `fork`/`detached` selection requires `sdd decide capabilities --json`, canonical `decision_forks`, and `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional legacy reads. Never edit inherited ledgers directly.
+Each plan owns a flat, append-only decisions file at `Plans/<Name>/<Name>-Decisions.json`. The only write path is `sdd decide add --plan <Name> --statement "..."`, run only after the user approves the exact statement; reads (`sdd decide list|current|lookup`) are always derived. Never hand-edit a `-Decisions.json` file directly.
 
 This repository holds planning artifacts managed by the `sdd-planner` Claude Code plugin. All commands below are provided by the plugin and are namespaced as `/sdd-planner:*`.
 
@@ -23,10 +23,9 @@ This repository holds planning artifacts managed by the `sdd-planner` Claude Cod
 │   └── <PlanName>/
 │       ├── README.md             # Frontmatter with status, phases[], overview
 │       ├── 01-Phase-Name.md      # Frontmatter with tasks[], details
+│       ├── <PlanName>-Decisions.json  # This plan's decisions, append-only
 │       └── notes/                # After-action notes
 │           └── 01-Phase-Name.md  # Debrief for Phase 1
-├── Decisions/                    # Decision authority storage
-│   └── decisions.md              # conventional legacy default; a selected fork may differ
 ```
 
 ## Conventions
@@ -58,13 +57,13 @@ Plans live flat under `Plans/<PlanName>/`. Lifecycle is tracked in the plan READ
 AI commands filter by `status` to scope what they read.
 
 ### Commit cadence
-Planning artifacts are written in flow and committed at boundaries only (D-0024): one commit when a phase opens, one at phase close carrying every task status, evidence, amendment, decision, review, and debrief, and one at the end of a spec/design/plan session. Implementation commits stay pure. Never commit per task, per amendment, or per decision — a phase's history should read as one lifecycle commit, N implementation commits, one lifecycle commit.
+Planning artifacts are written in flow and committed at boundaries only (D-0024): one commit when a phase opens, one at phase close carrying every task status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Implementation commits stay pure. Never commit per task, per amendment, or per decision — a phase's history should read as one lifecycle commit, N implementation commits, one lifecycle commit.
 
 ### File Naming
 - Plans: `Plans/<PlanName>/README.md`, `01-Phase-Name.md`
 - Phases numbered with zero-padded prefixes: `01-`, `02-`, etc.
 - Specs/Designs: `<Name>/README.md`
-- Decisions: `Decisions/decisions.md` is the conventional legacy default; explicit `decisionLog` may select a different planning-root file
+- Decisions: `Plans/<PlanName>/<PlanName>-Decisions.json`, one flat append-only file per plan
 
 ## Skills
 
@@ -78,9 +77,9 @@ Planning artifacts are written in flow and committed at boundaries only (D-0024)
 | `/sdd-planner:implement` | Walk the plan graph — claim → red → green → sync → merge, observation-gated (v1 plans keep the wave protocol) |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
-| `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
+| `/sdd-planner:decide` | Record or look up a plan's decisions → `Plans/<Name>/<Name>-Decisions.json` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
-| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
+| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and decisions (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories, creates launcher |
 
 ## Agents
@@ -105,7 +104,7 @@ The typical flow through skills:
 ```
 /sdd-planner:setup → /sdd-planner:research → /sdd-planner:brainstorm → /sdd-planner:specify → /sdd-planner:design → /sdd-planner:plan → /sdd-planner:implement → /sdd-planner:code-review → /sdd-planner:debrief
 ```
-Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record, look up, or audit decided truths at any point. Use `/sdd-planner:validate` before implementation, before completion transitions, or in CI.
+Use `/sdd-planner:poke-holes` before approving any artifact. Use `/sdd-planner:decide` to record or look up a plan's decisions at any point. Use `/sdd-planner:validate` before implementation, before completion transitions, or in CI.
 
 ## Artifact Status Values
 

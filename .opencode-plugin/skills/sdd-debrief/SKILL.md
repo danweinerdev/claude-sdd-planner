@@ -51,8 +51,8 @@ When a plan phase has been completed (or substantially completed) and you want t
    - Fill in all sections: Decisions Made, Requirements Assessment, Deviations, Risks & Issues, Lessons Learned, Impact on Subsequent Phases, **Skill Opportunities**
    - The filename mirrors the phase doc number (e.g., `01-Core-Setup.md` -> `notes/01-Core-Setup.md`)
 
-5. **Backfill the Decision Ledger**
-   - For each confirmed item, follow `shared/decision-log.md`: admit fork capability, consult effective authority/diagnostics, and apply the admission/collision/write gates. Fork add is unsupported and refuses rather than directly editing local or inherited files; use an exact-preview supported operation only when applicable. Items that only explain how this phase went stay in the debrief.
+5. **Backfill the Plan's Decisions File**
+   - For each "Decisions Made" item that will bind work beyond this phase's own narrative and was never recorded during implementation, show the exact statement to the user; once approved, run `sdd decide add --plan <PlanName> --statement "..."` once (`shared/decision-log.md`). Items that only explain how this phase went stay in the debrief.
 
 6. **Update Phase Status**
    - A status backfill here is subject to the same gate as `sdd-implement`: every task `complete` with conforming completion evidence, every acceptance criterion checked, `## Phase Completion Evidence` populated, and a persisted frozen four-lane `Aligned` review cited (`shared/completion-evidence.md`, `shared/review-artifacts.md` § Phase-completion review gate). If any of that is missing, leave the status alone and report exactly what's outstanding — a debrief documents the phase, it doesn't wave it through
@@ -60,6 +60,7 @@ When a plan phase has been completed (or substantially completed) and you want t
      - The phase doc frontmatter
      - The plan README's `phases[]` array
    - Update `updated` dates
+   - Run `sdd decide render --plan <PlanName>` so `Plans/<PlanName>/Design.md` reflects every decision recorded through this phase; it is generated, so regenerate rather than edit.
    - If this was the final phase and all phases are now complete (including populated `## Plan Completion Evidence`), set the plan README frontmatter `status` to `complete`
 
 ## Output

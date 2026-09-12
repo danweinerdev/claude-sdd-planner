@@ -1,6 +1,6 @@
 ---
 name: sdd-cli
-description: "How to drive the sdd binary — artifact reads/writes, lifecycle transitions, evidence, validation, the decision ledger. Load whenever about to run sdd, record completion evidence, transition a task/phase/plan status, create or edit an SDD artifact, or query plans outside a lifecycle skill."
+description: "How to drive the sdd binary — artifact reads/writes, lifecycle transitions, evidence, validation, plan decisions, graph review/amend. Load whenever about to run sdd, record completion evidence, transition a task/phase/plan status, create or edit an SDD artifact, or query plans outside a lifecycle skill."
 disable-model-invocation: true
 ---
 
@@ -38,13 +38,13 @@ to report without repairing.
   `1` means the gate is doing its job — fix the input or complete the
   missing prerequisite; never work around it by editing the file directly.
 - **Severities follow the compiler model.** Only `error` (and `operational`,
-  meaning a check could not run) makes a root or ledger invalid and sets a
+  meaning a check could not run) makes a root invalid and sets a
   failing exit status. `warning` is a real defect that cannot threaten
-  correctness — including one inherited history forbids repairing;
-  `candidate` is a signal for a human to judge; `waived` is a finding
-  someone explicitly excepted. All three are reported and none gates. A
-  clean run with non-blocking findings still says `Valid`, with the count —
-  treat "no findings" and "findings, none blocking" as different states.
+  correctness (e.g. citing a superseded decision, SDD191); `candidate` is a
+  signal for a human to judge; `waived` is a finding someone explicitly
+  excepted. All three are reported and none gates. A clean run with
+  non-blocking findings still says `Valid`, with the count — treat "no
+  findings" and "findings, none blocking" as different states.
 - **Machine reads**: prefer `--json` over parsing rendered markdown.
 - **Preview before mutate**: `--dry-run` and `--diff` are available on the
   writing commands; use them when the change is non-obvious.
@@ -72,10 +72,15 @@ to report without repairing.
 | Scaffold a phase-gate review | `sdd review scaffold <phase-path> --frozen <base>..<endpoint>` |
 | Record one review lane's observation | `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]` (or evidence on stdin) |
 | Close a phase-gate review | `sdd review resolve <review-path> [--accept-followups] [--dry-run]` |
-| Legacy ledger reads | `sdd decide list --status accepted --json` · `sdd decide search <term> --json` · `sdd decide validate <resolved-ledger> --format json` |
-| Legacy ledger writes | `sdd decide add --statement TEXT [--rejected CSV \| --rejected-value TEXT]… [--accept] [--supersedes ID] [--compatible-with ID]…` |
-| Explicit fork/detached reads only | `sdd decide capabilities --json` · `sdd decide effective --json` · `sdd decide history --json` · `sdd decide lookup <qualified-id> --json` · `sdd decide validate --format json` |
-| Fork writes / recovery | `sdd decide fork preview --operation OP --file PROPOSAL --json` · `sdd decide fork apply --file ENVELOPE --approval-digest DIGEST --json` · `sdd decide fork inspect --operation ID --json` · `sdd decide fork recover --operation ID --action ACTION --json` |
+| Record one plan decision (user-approved statement only) | `sdd decide add --plan P --statement TEXT [--supersedes ID] [--source REF] [--json]` |
+| List one plan's decisions | `sdd decide list --plan P [--json]` |
+| Standing decisions across plans | `sdd decide current [--plan P] [--json]` |
+| Look up one decision and its supersession chain | `sdd decide lookup ID [--plan P] [--json]` |
+| Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
+| Look up one decision and its supersession chain | `sdd decide lookup <id> [--json]` |
+| Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
+| Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D [--by WHO] [--dry-run] [--json]` |
+| Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment (and repair Claude Code hooks) | `sdd doctor [--check] [--json]` |
 
@@ -97,26 +102,19 @@ to report without repairing.
 - **Validate before claiming.** Any statement that artifacts are consistent,
   a plan is ready, or a phase can close is checkable: run `sdd validate`
   (scoped where possible) and report its verdict, not your impression.
-- **Legacy ledgers are append-through-the-tool.** `decide add` always runs the collision
-  check. Every candidate must be named by `--supersedes ID` or a repeatable
-  `--compatible-with ID`; compatibility only acknowledges an accepted actual
-  candidate and writes no metadata. Duplicate compatibility acknowledgements
-  are normalized. Unknown, non-accepted, stale/non-candidate, unresolved, or
-  same-ID supersedes-plus-compatible inputs are refused. Never
-  append to `decisions.md` by hand and never auto-resolve a collision.
-  `--rejected-value TEXT` is repeatable and preserves each literal array
-  element, including commas; it is mutually exclusive with the legacy
-  comma-separated `--rejected` flag.
-- **Decision authority branches on `decisionLog`.** Only explicit
-  `fork`/`detached` selection uses capability/effective/history/lookup. No
-  selector uses legacy list/search and conventional live/archive reads. Legacy
-  `decide add` remains collision-checked. Fork add/accept/supersede/archive/
-  hygiene are unsupported and refuse; never substitute a direct local or
-  inherited-file edit.
-- **A digest is not approval.** Show the preview's full exact JSON bytes and
-  obtain explicit user approval before passing `--approval-digest`. Apply the
-  unchanged envelope. Inspect is read-only. Recovery preview omits a digest;
-  after approval, repeat recover with `--approval-digest <digest>` to apply.
+- **`decide add` is the only decisions write path, and only after user approval.**
+  Show the exact statement, get explicit approval, then run `decide add`
+  exactly once — it appends one entry to `Plans/<P>/<P>-Decisions.json` under
+  whole-file CAS and prints what it wrote. There is no draft state, no accept
+  step. Never hand-edit a `-Decisions.json` file. `--supersedes` names one id
+  (or, to reconcile competing successors after a merge, a comma-separated
+  list); a second successor for the same id is refused at write time.
+- **A review node with open findings writes nothing until amended.**
+  `sdd graph review` records a pass only when every finding is terminal; with
+  any `open` finding it prints the amendment preview and an `expect-digest`
+  and writes nothing to the node. Show that preview to the user before
+  running `sdd graph amend --expect-digest`; a mismatched digest is refused
+  atomically with nothing written, and the driver re-previews.
 - **Writes are not commits.** Every write above lands in the working tree;
   lifecycle state is committed once at phase open and once at phase close
   (`shared/autonomy.md` § SCM boundary cadence, D-0024). `task complete`
@@ -124,19 +122,15 @@ to report without repairing.
   state, not a prompt to commit per task.
 - **Silence a check only with a reasoned waiver, never by editing around it.**
   A `waivers:` entry (`code` + `reason`) marks a finding as accepted; it is
-  still reported, as `waived`, with the reason attached. Ledger waivers cover
-  only `DLG064`/`DLG065`, the sequencing conditions append-only history can
-  forbid repairing — everything else describes a ledger that cannot be
-  trusted, and hiding that is not the same as accepting it. An unexplained
-  waiver is an error (`DLG078`); one that matches nothing is reported stale
-  (`DLG079`), because an exception outliving its cause disables a check
-  silently. **Adding a waiver to the ledger is a ledger write: it needs the
-  user's explicit approval of the exact text, like any other entry.**
+  still reported, as `waived`, with the reason attached. A plan's decisions
+  file has no waiver mechanism — it is append-only and content-addressed, so
+  malformed entries and competing successors are refused and reconciled, not
+  waived.
 - **Read-only contexts stay read-only.** Review and research agents may run
-  `validate`, `show`, `list`, `next`, `schema`, `decide list|search|validate`,
+  `validate`, `show`, `list`, `next`, `schema`, `decide list|current|lookup`,
   `version`, and `doctor` — never `apply`, `section set`, `evidence add`,
-  `decide add`, or a lifecycle transition. (The PreToolUse guard enforces
-  exactly this allowlist for the plugin's read-only agents.)
+  `decide add`, `graph amend`, or a lifecycle transition. (The PreToolUse
+  guard enforces exactly this allowlist for the plugin's read-only agents.)
 - **Missing or outdated binary is a stop.** If `sdd` is absent or below the
   plugin's `minSddVersion`, report the exact remedy —
   `go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest` —

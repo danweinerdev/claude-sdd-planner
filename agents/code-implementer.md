@@ -45,12 +45,9 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
    - Existing code related to the task (imports, interfaces, dependencies)
    - Test infrastructure (framework, file locations, run command)
    - Build/lint tooling
-4. **Resolve decision authority** — inspect `decisionLog`. Explicit
-   `fork`/`detached` mode runs `sdd decide capabilities --json`, requires
-   canonical `decision_forks`, then consults `sdd decide effective --json`.
-   With no selector, use `sdd decide list --status accepted --json` and
-   conventional reads. Preserve diagnostics; never pass this intent context to
-   an intent-isolated reviewer.
+4. **Resolve decision authority** — run `sdd decide current --plan <Name>`
+   for the plan's standing decisions. Never pass this intent context to an
+   intent-isolated reviewer.
 
 ## Process
 

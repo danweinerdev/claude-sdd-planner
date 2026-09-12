@@ -27,7 +27,7 @@ The loop is **claim → red → green → sync → merge**, repeated until the f
 3. **Red — prove the tests can fail.** Write the node's **named tests first** (runner-visible ids must match the payload exactly), run them in the workspace against the unimplemented or broken state, and sync the failing report: `sdd graph sync --plan <Name> --node <id> --by <identity> --report red.xml`. A red run is a **successful** sync — it stamps `red_seq`, which arms red-before-green: a hazard-discharging test never observed failing will refuse the later green.
 4. **Green — implement, commit, sync the pass.** Implement inside the workspace until the named tests pass. Commit the complete slice in the workspace first — sync refuses a passing report from a dirty worktree, because the revision anchor must name the tested bytes. Then sync the passing report. A clean pass by the claim holder **merges atomically**: observation recorded, claim cleared, workspace released. A shared-dirty pass records provisionally instead (STALE, never GREEN) until a clean re-verify. There is no assert path.
 5. **Integrate the slice into the mainline.** The merging sync completes the *claim*; the VCS integration is a separate deliberate act because it can conflict, and conflicts are judgment. On git targets the workspace branch survives the release (`git branch --list 'graph/<id>-*'`) — merge it into the mainline checkout now. Until the bytes land on the mainline the node honestly derives STALE from the shared tree; integration self-heals it to GREEN. Integrate after every merge, before the next claim of dependent work.
-6. **Between rounds.** `sdd graph status` between claims; `sdd graph path` when choosing what to unblock. **Command gates:** run the gate's command and `sdd graph sync --node <id> --command-exit <N> --command-log out.txt`. **Review gates:** run the four-lane review flow (`sdd review scaffold` → fill lanes → `sdd review resolve`), then `sdd graph review --plan <Name> --node <gate> --artifact <frozen review path>`. The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** gate. Findings that name scope nodes demote them to RED in the same write — the finding doing its job, not an error to route around. Record gates **after** the scope's work is integrated into the mainline.
+6. **Between rounds.** `sdd graph status` between claims; `sdd graph path` when choosing what to unblock. **Command gates:** run the gate's command and `sdd graph sync --node <id> --command-exit <N> --command-log out.txt`. **Review nodes:** claim it, run `sdd graph show --node <id> --brief` for the reviewed contracts/artifacts/lanes, run the four-lane review flow (`sdd review scaffold` → fill lanes → `sdd review resolve`), then `sdd graph review --plan <Name> --node <id> --artifact <frozen review path>`. The artifact must be `resolved` + `frozen: true` + verdict `Aligned` (all three — a reopened review is not evidence), must review a document of **this plan**, and greens exactly **one** review node. Record it **after** the scope's work is integrated into the mainline. With zero open findings the review node goes GREEN. With any open finding, nothing is written to the node — the tool prints an amendment preview (revise: node + contract/gate diff; extend: proposed node) and an `expect-digest`; show the preview to the user, then `sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --by <identity>` (`--dry-run` to preview only). A successful amend bumps `contract_rev` and clears red bookkeeping on revised nodes, and adds any extended node; both re-enter the frontier as deps of the review node. Walk them through red → green → sync, then re-claim and re-review.
 
 ### Stopping Rules
 
@@ -39,7 +39,7 @@ The loop is **claim → red → green → sync → merge**, repeated until the f
 - **INTENT-STALE:** a cited requirement's fingerprint changed. Re-read the *diff of that requirement only*; then judge — cosmetic change → recompile refreshes the hash; behavioral change → rework the node; contract invalidated → replan. A judgment step; never auto-pick.
 - **INPUT-STALE:** a declared read-only input's fingerprint changed. Re-read the *diff of that input only* (the file or section the node anchored to); judge like intent. `sdd next --claim` inlines each input's resolved text. Changing a node's declared inputs is `sdd graph set-inputs --plan <Name> --node <id> --file inputs.json [--dry-run]` — unclaimed/unverified/no-red-observations only, atomic refusal otherwise, the tool owns `input_hashes`.
 - **Missing fingerprints:** a node cites a fingerprintable requirement but carries no `intent_hashes` entry (e.g. children from an older `split`). `sdd graph repair-intent --plan <Name> [--node <id>] [--dry-run]` backfills only missing/empty hashes on unclaimed, unverified nodes with no red observations — never overwriting an existing hash, refusing atomically on any claimed, verified, red-observed, or ambiguous/unresolved node.
-- **Finding demotion:** demoted nodes re-enter the workable set like any red node. Rework them; the gate going seq-stale after rework is the system asking for re-review.
+- **Revised or extended nodes:** they enter the frontier like any red/new node — a revised node owes a fresh RED at its new `contract_rev` even if it keeps a test's name; an extended node starts its own red → green cycle. The review node they depend on goes GREEN again only after they do and the review is re-run.
 - **Lease expiry / crashes:** an expired claim's workspace is preserved as post-mortem evidence. Inspect if useful, then `sdd graph gc --plan <Name>`; the node returns to the frontier. A stale claimant's late sync is refused.
 - **Abandoning a node:** `sdd graph release <id> --by <identity>` — never squat on a claim you aren't working.
 
@@ -55,7 +55,7 @@ Node work may be dispatched through collaboration when available. When the runti
 
 v1 markdown plans keep this protocol until converted.
 
-**Preconditions.** Read the active plan and phase frontmatter. Inspect `decisionLog`: explicit `fork`/`detached` mode runs `sdd decide capabilities --json`, requires canonical `decision_forks`, then uses `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional reads. Preserve diagnostics and pass applicable constraints—but never to intent-isolated review lanes. Confirm the target repository, dependencies, criteria, and commands; stop on mismatches.
+**Preconditions.** Read the active plan and phase frontmatter. Run `sdd decide current --plan <Name>` for standing decisions and pass applicable constraints—but never to intent-isolated review lanes. Confirm the target repository, dependencies, criteria, and commands; stop on mismatches.
 
 1. Select unfinished tasks whose dependencies are complete. Group independent tasks only when their expected file ownership does not overlap.
 2. For each task, confirm it defines one clean, complete, independently
@@ -122,9 +122,10 @@ v1 markdown plans keep this protocol until converted.
    stays non-complete.
 9. Write the task status, checkboxes, and completion evidence in-flow as each
    fact becomes known; do not commit these individual writes (D-0024). A
-   task-related decision-ledger entry is written in-flow only **after** the
-   user has explicitly approved its exact, unmodified text
-   (`shared/decision-log.md` write gate). Do not commit at task closeout:
+   task-related plan decision is written in-flow only **after** the
+   user has explicitly approved its exact, unmodified statement, via
+   `sdd decide add --plan <Name> --statement "..."` (`shared/decision-log.md`
+   write protocol). Do not commit at task closeout:
    every accumulated lifecycle update is recorded once per affected SCM root
    at phase close, alongside the final review and debrief
    (`shared/autonomy.md` § SCM boundary cadence).
@@ -154,7 +155,9 @@ When a v1 plan keeps generating drift the evidence rules exist to catch, offer c
 
 Ask the user before destructive or production-impacting operations, when requirements are ambiguous, when implementation reveals unplanned scope (for graph plans the remedy is a new proposal payload, never silent extra work inside a claim), when a graph node hits its third consecutive failure, or after two failed attempts to resolve a blocking verification failure.
 
-**Record escalation resolutions.** When the user answers an escalation with a choice that constrains future work, follow `shared/decision-log.md` and the admission/collision rules. Fork add/accept/supersede are currently unsupported and refuse without direct edits; use an exact-preview `override` or `reconcile` only when it faithfully represents the change. The user must see and explicitly approve the full exact JSON before any approval digest is passed. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions—don't log them.
+**Close the walk.** When every node is GREEN and acceptance is closed, run `sdd decide render --plan <Name>` so the plan folder carries its generated `Design.md` before the closing commit.
+
+**Record escalation resolutions.** When the user answers an escalation with a choice that constrains future work, follow `shared/decision-log.md`: write the statement, show it verbatim, and once approved run `sdd decide add --plan <Name> --statement "..."` exactly once. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions—don't log them.
 
 ## Output
 

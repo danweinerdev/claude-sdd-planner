@@ -44,7 +44,7 @@ When you need to generate and evaluate multiple approaches to a problem before c
 
 6. **Finalize**
    - Set `status: active` in the frontmatter once the document is complete and presented to the user. Then re-read the frontmatter and confirm it parses as YAML and includes `title`, `type`, `status`, `created`, `updated`, `tags`, `related`.
-   - **If the user explicitly accepts the recommendation**, follow `shared/decision-log.md`: admit fork capability, consult effective authority and diagnostics, then apply the admission/collision/write gates. Fork add is unsupported and must refuse rather than edit a selected or inherited file directly; use a supported exact-preview operation only if it faithfully represents the requested change. A recommendation merely presented, not endorsed, is never `accepted`.
+   - There are no decisions before a design exists (`shared/decision-log.md`): brainstorm and research stay narrative. An accepted recommendation is carried forward into the design that follows, whose `## Design Decisions` section compiles into the plan's decisions file later.
 
 ## Output
 ```

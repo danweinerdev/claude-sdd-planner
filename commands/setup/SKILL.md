@@ -76,13 +76,6 @@ cases are distinguishable and neither is setup's to repair:
 
 Report the resolved source path and version, then continue.
 
-Also run `sdd decide capabilities --json`. If the target's existing
-`planning-config.json` selects fork mode, require canonical `decision_forks`
-with schema 1, `entry-v1` canonicalization, and transaction support before
-continuing. Missing or old capability stops with the same user-install
-guidance; setup never falls back to a conventional ledger and never installs
-or upgrades the binary itself.
-
 ### 2. Target and VCS
 Determine the target directory (see Arguments; verify it exists). Detect its VCS per `shared/vcs-detection.md`: `git`, `git-worktree`, `git-bare`, `perforce`, or `none`. For `git-bare`, **stop**: "This is a bare git repository. Run setup on individual worktrees instead." Everything else proceeds; the VCS only affects the ignore-file step.
 
@@ -99,14 +92,12 @@ Priority order — the chosen value is stored **verbatim**, never resolved to ab
 ```
 Optionally include `"title"` and `"description"` when the user asks for them. Overwrite only when `planningRoot` differs from an existing config.
 
-Preserve all existing `repositoryId`, `decisionLog`, and unrelated keys byte-for-value; setup does not adopt, retarget, detach, or repair decision authority. The represented repository's config owns selection, while the selected collection and operation state live under its configured planning root—even when that root is external. Never create a second repo-root selector/support file or infer ownership from the planning repository.
-
-Config-only replacement uses the accepted staged remove-and-rename path where direct replacement is unavailable. Warn that a rare interruption in the gap can leave config absent. Manual restoration is permitted: inspect retained staging bytes and, after explicit user confirmation of those exact bytes, rename that stage into place. Never synthesize config or promise automatic/no-gap recovery. Once config is readable, use fork inspect/recover if transaction state requires it.
+Preserve all existing unrelated keys byte-for-value. Never create a second repo-root selector/support file.
 
 ### 5. Bootstrap Planning Directories
 Resolve the planning root for this step only (relative → joined with target; absolute → as-is) and `mkdir -p`:
 ```
-Plans/  Research/  Brainstorm/  Specs/  Designs/  Decisions/
+Plans/  Research/  Brainstorm/  Specs/  Designs/
 ```
 Plan lifecycle is tracked in each plan README's frontmatter `status` — `Plans/` stays flat. Report created vs already-existing.
 

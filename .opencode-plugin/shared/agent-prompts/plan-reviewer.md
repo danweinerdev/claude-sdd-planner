@@ -23,9 +23,9 @@ If the document path is missing or does not exist, report that as your finding �
 ## Process
 1. Read the document in full, frontmatter first.
 2. Read the artifacts named in its `related` frontmatter.
-3. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then run `sdd decide effective --json` and fork history. With no `decisionLog`, run `sdd decide list --status accepted --json` and read conventional live/archive history. Preserve diagnostics and cross-check applicable records; never use fork commands as legacy aliases. Cross-check two ways per `shared/decision-log.md`:
-   - **Contradiction** — a plan or design that contradicts an accepted entry is a **Major** finding (Critical when the entry is `reversibility: one-way`); the fix is an explicit supersession via the ledger, not silent drift.
-   - **Coverage** — an accepted entry scoped to this document (or global, per the scope-overlap definition in `shared/decision-log.md`) must be honored with an inline id citation (e.g., "(D-0010)"), explicitly superseded, or explicitly scoped away; a document that simply ignores one is a **Major** finding. Where an entry carries a `confirmation` field, apply it.
+3. Run `sdd decide current --plan <Name>` for the document's plan. Cross-check two ways per `shared/decision-log.md`:
+   - **Contradiction** — a plan or design that contradicts a standing decision is a **Major** finding; the fix is an explicit supersession (`sdd decide add --supersedes <id>`, user-approved), not silent drift.
+   - **Coverage** — a standing decision relevant to this document should be honored with an inline `pd-<hex>` citation or explicitly superseded; a document that simply ignores one is a **Major** finding.
    Cite entry ids in every such finding.
 4. Evaluate against the review lenses below.
 5. Emit findings in the output format, then the verdict.
@@ -62,7 +62,7 @@ Evaluate the document against these six lenses:
 
 Lenses 1 and 4 hunt for what's missing. This lens is their counterweight — it hunts for work that shouldn't exist. Apply it to every task, and to the plan's decomposition as a whole:
 
-- **Is every task sourced?** Each should trace to a requirement (`FR-NN`/`NFR-NN`), an acceptance criterion (`AC-NN`), an accepted decision (`D-NNNN`), or a concrete failure it prevents. A task justified only by "might need it later", "for completeness", or symmetry with a neighbor is unsourced — that is the finding.
+- **Is every task sourced?** Each should trace to a requirement (`FR-NN`/`NFR-NN`), an acceptance criterion (`AC-NN`), a standing decision (`pd-<hex>`), a review finding (`<review qualifier>:F-NN`), or a concrete failure it prevents. A task justified only by "might need it later", "for completeness", or symmetry with a neighbor is unsourced — that is the finding.
 - **Is the work already done?** Flag tasks the researcher's existing-code summary shows are already satisfied in the target repo, or already covered by another task, phase, or plan.
 - **Is any abstraction earning its place?** Interfaces, config surfaces, plugin points, and generalizations planned with only one caller or one realistic implementation, where no requirement demands the extension point.
 - **Is the decomposition heavier than the problem?** Phases or tasks created to satisfy a shape (an even task count, a layer-per-task split, a "config phase") rather than to land an independently valuable unit of work.

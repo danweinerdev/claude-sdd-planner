@@ -24,7 +24,7 @@ You are invoked by planning skills (`sdd-research`, `sdd-brainstorm`, `sdd-speci
    - `Specs/` — existing specifications
    - `Designs/` — existing architecture documents
    - `Plans/` — related or dependent plans (filter by each plan's frontmatter `status`; skip plans with status `complete` or `archived` unless explicitly asked); `notes/` debriefs carry lessons learned that may apply
-   - Decision authority — inspect `decisionLog` first. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then use `sdd decide effective --json`, `history`, and qualified `lookup`, preserving every diagnostic and provenance. With no `decisionLog`, use `sdd decide list --status accepted --json`, `sdd decide search <term> --json`, and conventional live/archive reads. Fork commands are not legacy aliases
+   - Decision authority — run `sdd decide current` (scoped `--plan <Name>` when the topic names one plan) for standing decisions; `sdd decide lookup <id>` for one entry's supersession chain
 
 2. **Search the codebase** for relevant code:
    - Use Grep to find implementations related to the topic
@@ -52,8 +52,8 @@ Return a structured context summary:
 - [artifact path]: brief summary of relevant content
 
 ### Recorded Decisions
-- [D-NNNN] (status): statement — why it bears on this topic
-- Omit the section only when the ledger is absent or nothing matches (say which, per absence-claim discipline). Flag any tension between a recorded decision and another artifact or the requested work — that is a collision the caller must surface, not smooth over.
+- [pd-<hex>] (plan): statement — why it bears on this topic
+- Populate this from `sdd decide current` (scoped `--plan` when the topic names one plan). Omit the section only when no plan's decisions file exists or nothing matches (say which, per absence-claim discipline). Flag any tension between a standing decision and another artifact or the requested work — that is a collision the caller must surface, not smooth over.
 
 ### Codebase Findings
 - [file path]: what was found and why it's relevant
@@ -92,7 +92,7 @@ These rules bind every sdd-planner context, whatever model is running. They comp
 ## Guidelines
 
 - Be thorough but concise — the calling skill needs actionable context, not exhaustive detail
-- Flag conflicts between artifacts (e.g., a spec that contradicts a design, or either contradicting an `accepted` decision-ledger entry)
+- Flag conflicts between artifacts (e.g., a spec that contradicts a design, or either contradicting a standing plan decision)
 - Highlight dependencies that might affect the current work
 - Note any gaps in existing documentation that should be filled
 - **You are read-only.** Never modify files, never run `git commit`/`git push`, never create or delete anything. Your output is a structured context summary, nothing else. (Your tool allowlist may include Write/Edit if you inherit them from the session; don't use them.)

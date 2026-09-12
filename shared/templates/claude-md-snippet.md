@@ -1,8 +1,8 @@
 ## Planning
 
-Planning artifacts live at the planning root defined by `planning-config.json` (`planningRoot`, here `{{PLANNING_ROOT}}/`) — managed by the `sdd-planner` Claude Code plugin. Artifact directories: `Research/`, `Brainstorm/`, `Specs/<feature>/`, `Designs/<component>/`, `Plans/<PlanName>/`, `Decisions/`.
+Planning artifacts live at the planning root defined by `planning-config.json` (`planningRoot`, here `{{PLANNING_ROOT}}/`) — managed by the `sdd-planner` Claude Code plugin. Artifact directories: `Research/`, `Brainstorm/`, `Specs/<feature>/`, `Designs/<component>/`, `Plans/<PlanName>/` (each plan's decisions live alongside it at `Plans/<PlanName>/<PlanName>-Decisions.json`).
 
-Decision authority branches on this repository's `decisionLog`. Explicit `fork`/`detached` selection requires `sdd decide capabilities --json`, canonical `decision_forks`, and `sdd decide effective --json`; no selector uses `sdd decide list --status accepted --json` and conventional legacy reads. `Decisions/decisions.md` is only the legacy default. Never edit inherited ledgers directly.
+Each plan's decisions file is append-only; the only write path is `sdd decide add --plan <Name> --statement "..."`, run only after the user approves the exact statement. Reads (`sdd decide list|current|lookup`) are always derived, never cached. Never hand-edit a `-Decisions.json` file.
 
 ### Planning Skills
 | Skill | Purpose |
@@ -15,11 +15,11 @@ Decision authority branches on this repository's `decisionLog`. Explicit `fork`/
 | `/sdd-planner:implement` | Walk the plan graph — claim → red → green → sync → merge, observation-gated |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
-| `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
+| `/sdd-planner:decide` | Record or look up a plan's decisions → `Plans/<Name>/<Name>-Decisions.json` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
-| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and ledger (read-only) |
+| `/sdd-planner:validate` | Deterministic + semantic validation of artifacts, evidence, and decisions (read-only) |
 | `/sdd-planner:setup` | Set up a repo — generates planning-config.json, bootstraps directories |
 
 Typical lifecycle: `setup → research → brainstorm → specify → design → plan → implement → code-review → debrief` (all `/sdd-planner:*`).
 
-**Commit cadence (D-0024):** planning artifacts are written in flow and committed only at boundaries — one commit at phase open, one at phase close carrying every status, evidence, amendment, decision, review, and debrief, and one at the end of a spec/design/plan session. Never commit per task, per amendment, or per decision; implementation commits carry no planning bytes.
+**Commit cadence (D-0024):** planning artifacts are written in flow and committed only at boundaries — one commit at phase open, one at phase close carrying every status, evidence, graph amendment, decision entry, review, and debrief, and one at the end of a spec/design/plan session. Never commit per task, per amendment, or per decision; implementation commits carry no planning bytes.

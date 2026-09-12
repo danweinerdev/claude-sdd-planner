@@ -30,10 +30,10 @@ tasks: []
   mappings; each task requires nonempty `id`, `title`, `status`,
   `verification`, and `justifies`. Task IDs are unique within the plan and use
   exactly `<phase>.<digits>`; status uses the task status vocabulary.
-- `justifies` states why the task exists — the FR-NN/NFR-NN/AC-NN/D-NNNN ids it
-  serves, or the concrete failure it prevents. It must not restate the task
-  title, and placeholder justifications ("for completeness", "might need it
-  later", "part of the architecture", "TBD") are rejected.
+- `justifies` states why the task exists — the FR-NN/NFR-NN/AC-NN/DD-N/pd-<hex>
+  ids it serves, or the concrete failure it prevents. It must not restate the
+  task title, and placeholder justifications ("for completeness", "might need
+  it later", "part of the architecture", "TBD") are rejected.
 - Optional `depends_on` is a YAML list of task IDs from this plan. It contains
   no unknown IDs, self-dependencies, or dependency cycles.
 - Every task mapping has one matching H2 beginning `## <task-id>:` (a space in
@@ -46,8 +46,8 @@ tasks: []
   behavior/capability delivered at the boundary and excludes unrelated feature
   slices. Clearly labeled Git adapter guidance may call that revision a commit;
   governing workflow language must not assume every SCM has Git commits.
-- FR-NN, NFR-NN, AC-NN, and D-NNNN citations must resolve through the plan's
-  `related` graph and applicable decision ledger. For approved/active/complete
+- FR-NN, NFR-NN, AC-NN, and pd-<hex> citations must resolve through the plan's
+  `related` graph and its own `<Plan>-Decisions.json`. For approved/active/complete
   plans, task verification/detail and phase Acceptance Criteria collectively
   cite every requirement and acceptance criterion from every related spec.
 - A complete phase has only complete tasks, no unchecked `- [ ]` Acceptance

@@ -27,7 +27,7 @@ You are invoked with the path to the document under review (a plan README plus i
 ## Process
 1. Read the document in full, frontmatter first.
 2. Read the artifacts named in its `related` frontmatter.
-3. Inspect `decisionLog`. For explicit `fork`/`detached` mode, run `sdd decide capabilities --json`, require canonical `decision_forks`, then run `sdd decide effective --json`. With no `decisionLog`, run `sdd decide list --status accepted --json` and use conventional reads/search. Preserve diagnostics and cross-check applicable records; never use fork commands as legacy aliases. A contradiction or ignored applicable entry is Major (Critical when one-way); apply confirmations and cite the correct identity.
+3. Run `sdd decide current --plan <Name>` for the spec's plan (or every plan if none is known yet). A contradiction or ignored applicable entry is Major.
 4. Evaluate against the review lenses below.
 5. Emit findings in the output format, then the verdict.
 

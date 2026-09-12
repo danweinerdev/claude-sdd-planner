@@ -131,7 +131,7 @@ Claude Code names shown; in Codex/OpenCode the same skills are `sdd-research`, `
 | `/sdd-planner:code-review` | Four-lane intent-isolated review | Unified report |
 | `/sdd-planner:debrief` | After-action notes | `Plans/<Name>/notes/<phase>.md` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis | Inline findings |
-| `/sdd-planner:decide` | Record / look up / audit decided truths | `Decisions/decisions.md` |
+| `/sdd-planner:decide` | Record / look up a plan's decisions | `Plans/<Name>/<Name>-Decisions.json` |
 | `/sdd-planner:validate` | Deterministic + semantic validation (read-only) | Findings report |
 
 ```mermaid
@@ -157,7 +157,7 @@ Three contracts make the hierarchy trustworthy:
 
 - **Evidence-gated completion** — nothing flips to `complete` without retrospective evidence: exact commands, native-SCM revision identity, a focused diff review, observable results (`shared/completion-evidence.md`). Each plan task lands as one clean, independently bisectable commit; phase completion requires a persisted, frozen, four-lane `Aligned` review.
 - **Sourced necessity** — every task carries a `justifies` field naming the requirement, decision, or concrete failure that demands it, or it is cut. Plans and designs carry `## Non-Goals`.
-- **Decision authority** — inspect `decisionLog`: no selector uses legacy `sdd decide list --status accepted --json`, search, and conventional ledger reads; explicit `fork`/`detached` selection requires canonical `decision_forks` and uses `sdd decide effective --json`. Every fork write requires approval of full exact preview bytes before its digest. Intent-isolated quality/blind lanes receive no ledger context.
+- **Decision authority** — each plan owns a flat, append-only `Plans/<Name>/<Name>-Decisions.json`; `sdd decide add` writes an entry only after the user approves the exact statement shown in full. Intent-isolated quality/blind lanes receive no decision context.
 
 `sdd validate` enforces the mechanically checkable parts of all three.
 

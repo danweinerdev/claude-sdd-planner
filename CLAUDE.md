@@ -15,7 +15,7 @@ claude-sdd-planner/               # Repository root = canonical Claude plugin ro
 │   └── <name>/SKILL.portable.md  #   optional hand-maintained portable variant (code-review, implement, setup)
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
 │   ├── <lang>-specifications/    #   per-language structural verification (cpp, rust, go, python, typescript, java, swift)
-│   ├── decision-log/             #   ad-hoc decision capture outside lifecycle skills
+│   ├── decision-log/             #   ad-hoc plan-decision capture outside lifecycle skills
 │   └── sdd-cli/                  #   how to drive the sdd binary — task→command map + write-path discipline
 ├── agents/                       # Subagent definitions — also the source for the portable role prompts
 ├── hooks/                        # Wrappers that locate the binary; hooks.json is NOT shipped —
@@ -24,7 +24,7 @@ claude-sdd-planner/               # Repository root = canonical Claude plugin ro
 ├── shared/                       # Conventions + templates, shipped to every harness
 │   ├── frontmatter-schema.md     #   single source of truth for artifact metadata
 │   ├── completion-evidence.md    #   evidence-gated completion — what `complete` requires, per level
-│   ├── decision-log.md           #   decision ledger — entry schema, admission test, collision procedure
+│   ├── decision-log.md           #   plan decisions — per-plan JSON file, entry schema, write protocol
 │   ├── decision-framework.md     #   universal decision discipline for all skills and agents
 │   ├── path-resolution.md        #   planning-root / plugin-dir / target-repo resolution (marker-managed)
 │   ├── orchestration.md          #   orchestration model + portable prompt catalog (marker-managed)
@@ -36,13 +36,13 @@ claude-sdd-planner/               # Repository root = canonical Claude plugin ro
 │   ├── agent-runtime.md          #   portable runtime conventions (resolution, delegation, resource boundary)
 │   └── templates/                #   document templates (+ agents-md-*, claude-md-*, custom-reviewer variants)
 ├── cmd/sdd/                      # The `sdd` binary — validation, artifact writes, hooks, plugin sync
-├── internal/                     # Binary internals (rules, dlg, compile, hook, provision, schema, vcs, portable)
+├── internal/                     # Binary internals (rules, decisions, compile, hook, provision, schema, vcs, portable)
 ├── tools/                        # genfixtures + the frozen regression corpus (run by `go test ./...`)
 ├── .codex-plugin/                # GENERATED Codex plugin tree — never hand-edit
 ├── .opencode-plugin/             # GENERATED OpenCode plugin tree (same content) — never hand-edit
 ├── portable-overrides/           # Hand-maintained portable-only sources (the portable README)
 ├── .plans/                       # This repo's own planning artifacts (planning-config.json → ".plans")
-│   └── Decisions/decisions.md    #   the decision ledger — D-NNNN entries are standing constraints
+│   └── Plans/<Name>/<Name>-Decisions.json  #  per-plan decisions — pd-<hex> entries are standing constraints
 ├── Makefile                      # build / test / plugins / bump-*
 └── bump-version.py               # patch|minor|major bumps, `set X.Y.Z`, `set-floor X.Y.Z`
 ```
@@ -79,10 +79,10 @@ The plugin works with git, git worktrees, Perforce, and unversioned directories.
 Every context this plugin runs in — primary-context skills and all agents, on any model — follows the universal decision discipline in `shared/decision-framework.md` (premise checks before complying, run-to-verify for commandable claims, documented searches behind absence claims, verbatim failure reporting, no downscoping by imagined effort). Each agent embeds the framework's canonical digest block verbatim as a `## Decision Framework` section. When editing the framework, re-sync the embedded block in every agent (the portable prompts then follow automatically via generation).
 
 ### Sourced Necessity (the scope counterweight)
-Every gap-detection mechanism in the plugin is additive, so this rule keeps plans from growing monotonically. It is traceability, not size: **every task carries the demand that motivates it, or it is cut**. Task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`D-NNNN` ids it serves, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses unsourced tasks and can retire tasks in Revise mode; `plan-reviewer` carries a Scope lens; plans and designs carry `## Non-Goals`. `sdd validate` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo). The counterweight starts at `/brainstorm`: **Idea 0 is always "do nothing / status quo"**, scored in the same matrix as every other option (SDD078 surfaces a missing baseline as a candidate diagnostic). Two limits bound the rule: necessity is about sourcing, not size, and **correctness is never speculative** — error handling, edge cases, tests, rollback, and observability stay even when no requirement names them.
+Every gap-detection mechanism in the plugin is additive, so this rule keeps plans from growing monotonically. It is traceability, not size: **every task carries the demand that motivates it, or it is cut**. Task frontmatter carries a required `justifies` field (the `FR-NN`/`NFR-NN`/`AC-NN`/`DD-N`/`pd-<hex>` ids it serves, a frozen review finding citation (`<review qualifier>:F-NN`) for an amendment's extended node, or the concrete failure it prevents — never a restatement of the title); `/plan` refuses unsourced tasks and can retire tasks in Revise mode; `plan-reviewer` carries a Scope lens; plans and designs carry `## Non-Goals`. `sdd validate` enforces the mechanically checkable part (SDD063 absent, SDD076 placeholder, SDD077 title-echo). The counterweight starts at `/brainstorm`: **Idea 0 is always "do nothing / status quo"**, scored in the same matrix as every other option (SDD078 surfaces a missing baseline as a candidate diagnostic). Two limits bound the rule: necessity is about sourcing, not size, and **correctness is never speculative** — error handling, edge cases, tests, rollback, and observability stay even when no requirement names them.
 
-### Decision Ledger
-User decisions are durable authority. Consumers inspect `decisionLog`: no selector uses `sdd decide list --status accepted --json`, search, and conventional reads; explicit `fork`/`detached` selection requires canonical `decision_forks` and uses `sdd decide effective --json` with provenance/diagnostics. **No LLM writes fork authority without full exact preview approval before supplying the digest**. Unsupported writes refuse. Intent-aware roles receive the selected branch; quality/blind and curated drift/spec bundles receive none. See `shared/decision-log.md`.
+### Plan Decisions
+User decisions are durable authority, recorded per plan rather than in one global ledger: `Plans/<Name>/<Name>-Decisions.json`, a flat append-only array whose ids (`pd-<hex>`) are a digest of the statement. `sdd compile` copies a related design's `DD-N` bullets in verbatim; every other entry is written by `sdd decide add --plan P --statement "..."` **only after the user approves the exact statement shown in full**. Reads (`sdd decide list|current|lookup`) are derived and read-only; a later plan supersedes an earlier plan's entry by citing it, never by editing it. See `shared/decision-log.md`.
 
 ### Plan Hierarchy
 ```
@@ -126,7 +126,7 @@ Plans: `Plans/<PlanName>/README.md` with zero-padded phase docs (`01-Phase-Name.
 | `/sdd-planner:implement` | Walk the plan graph — claim → red → green → sync → merge, observation-gated (v1 plans keep the wave protocol) |
 | `/sdd-planner:code-review` | Review code against the plan — drift, gaps, blind spots |
 | `/sdd-planner:debrief` | After-action notes for completed phases |
-| `/sdd-planner:decide` | Record, look up, audit, or reconcile decided truths → `Decisions/decisions.md` |
+| `/sdd-planner:decide` | Record or look up a plan's decisions → `Plans/<Name>/<Name>-Decisions.json` |
 | `/sdd-planner:poke-holes` | Adversarial critical analysis of any artifact |
 | `/sdd-planner:validate` | Deterministic + semantic validation (read-only, wraps `sdd validate`) |
 | `/sdd-planner:setup` | Set up a repo — config, directories, binary verification, launcher |
@@ -134,7 +134,7 @@ Plans: `Plans/<PlanName>/README.md` with zero-padded phase docs (`01-Phase-Name.
 In the portable trees the same skills ship as `sdd-research`, `sdd-plan`, …, selected by description matching rather than slash invocation.
 
 ### Model-only reference skills (`skills/`)
-Not user-invocable (`disable-model-invocation: true`); the model auto-loads them by description. `<lang>-specifications` (7 languages) supplies structural-verification tools when planning/implementing/reviewing that language, coordinated by `shared/language-verification.md`; `decision-log` carries the capture + collision discipline for ad-hoc decisions; `sdd-cli` carries the binary's task→command map and write-path discipline (statuses move through transitions, evidence records what ran, exit 1 is a working gate — never hand-edit around it) for `sdd` use outside a lifecycle skill. In the portable trees the language skills flatten to `shared/language-specs/<lang>.md`; `decision-log` and `sdd-cli` ship as skills. Restricted agents read skill bodies as plain files when they need them.
+Not user-invocable (`disable-model-invocation: true`); the model auto-loads them by description. `<lang>-specifications` (7 languages) supplies structural-verification tools when planning/implementing/reviewing that language, coordinated by `shared/language-verification.md`; `decision-log` carries the three-step write protocol for ad-hoc plan decisions; `sdd-cli` carries the binary's task→command map and write-path discipline (statuses move through transitions, evidence records what ran, exit 1 is a working gate — never hand-edit around it) for `sdd` use outside a lifecycle skill. In the portable trees the language skills flatten to `shared/language-specs/<lang>.md`; `decision-log` and `sdd-cli` ship as skills. Restricted agents read skill bodies as plain files when they need them.
 
 ## Agents
 
@@ -184,7 +184,7 @@ Every skill and both hooks drive one cross-platform Go binary. The plugin does n
 go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 ```
 
-`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide`, `review scaffold|evidence set|resolve`, `template` (incl. `graph-proposal`), `hook`, `provision`, `plugin sync|check|status`, `doctor` — plus the graph family: `compile`, `next --claim`, and `graph init|propose|assemble|convert|hazards|sync|reverify|review|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`.
+`/setup` verifies it (floor: `minSddVersion` in `plugin.json` — advanced deliberately via `bump-version.py set-floor`, never by `make bump-*`), copies it to `${CLAUDE_PLUGIN_ROOT}/bin/` for the hooks, and stops with the exact `go install` command when missing or too old (D-0015). Key subcommands: `validate`, `apply`, `section set`, `evidence add`, `task|phase|plan complete`, `plan approve|activate`, `spec|design submit|approve|implement|supersede`, `decide add|list|current|lookup`, `review scaffold|evidence set|resolve`, `template` (incl. `graph-proposal`), `hook`, `provision`, `plugin sync|check|status`, `doctor` — plus the graph family: `compile`, `next --claim`, and `graph init|propose|assemble|convert|hazards|sync|reverify|review|amend|release|split|set-tests|set-inputs|gc|retire|repair-intent|status|show|path|risk|shape|export|audit`.
 
 ## Configuration
 
