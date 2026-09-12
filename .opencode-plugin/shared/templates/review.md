@@ -21,7 +21,8 @@ rev: "{{REV}}"
 # these fields or record their actual non-phase state.
 # review_scope: phase
 # frozen: false            # `sdd review resolve` sets true at resolution
-# verdict: Aligned
+# verdict: Aligned            # Aligned: every finding terminal (completes a phase, greens a review node)
+#                             # Amend: every open finding has action: revise|extend (feeds `sdd graph amend`; never completes a phase)
 # reviewed_planning_revision: "<full40 planning Git commit>"
 # review_mode: independent  # independent | mixed | single-agent
 # lane_results:
