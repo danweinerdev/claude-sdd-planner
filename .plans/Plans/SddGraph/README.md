@@ -6,16 +6,6 @@ created: 2026-08-31
 updated: 2026-09-01
 tags: [graph, execution, tdd, sdd-cli]
 related: [Designs/SddGraph]
-waivers:
-  - code: SDD160
-    reason: "Specs/SDD-Toolchain is reachable only transitively through Designs/SddGraph; its FR/NFR set is implemented and evidence-gated by the complete Plans/SDD-Toolchain. This plan cites only the toolchain requirements its scope actually touches (FR-17, FR-18, FR-28, FR-36, FR-44) and owes no coverage of the rest."
-    accepted: "2026-08-31"
-  - code: SDD161
-    reason: "Designs/SddGraph deliberately cites only the toolchain FRs it amends or extends (FR-17, FR-28, FR-36, FR-44..FR-47); full design-side coverage of Specs/SDD-Toolchain belongs to that spec's own implementation lineage, not to this design."
-    accepted: "2026-08-31"
-  - code: SDD162
-    reason: "Same transitive-reachability situation as the SDD160 waiver: Specs/SDD-Toolchain acceptance criteria are satisfied and evidenced by the complete Plans/SDD-Toolchain; this plan's acceptance criteria trace to Designs/SddGraph DD ids and ledger entries D-0022/D-0023 instead."
-    accepted: "2026-08-31"
 phases:
   - id: 1
     title: "Payload Schema and Templates"
