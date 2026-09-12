@@ -408,6 +408,61 @@ ignores them as proof (`SddGraph:DD-5`).
   boundary is then explicit and mechanical. Historical evidence is preserved;
   only eligibility to count as current proof is withdrawn.
 
+- **DD-10**: A review pass binds to the exact current scope, and a legacy
+  pass without a reviewed set is history once its scope is amended.
+  Context: the first implementation compared only the recorded reviewed
+  entries, so a scope that grew (extend) or a member that was revised under a
+  reviewed-set-less legacy pass left the review GREEN. Options considered:
+  (a) stale every legacy pass immediately; (b) compare the recorded set
+  against the current scope in both directions, and treat a legacy pass as
+  current only while no node in its scope is above revision 1; amendments
+  and splits materialize the pre-change set (`states.LegacyReviewedSet`)
+  so exact comparison applies afterward. Decision: (b). Rationale:
+  completed graphs keep their meaning until something in scope actually
+  changes; the moment it does, the old proof cannot say what it covered.
+
+- **DD-11**: Proof publication is fenced on the evaluated obligation.
+  Context: `sync` evaluated a report against one contract and could publish
+  it after a concurrent amendment changed the contract. Options considered:
+  (a) last write wins; (b) inside the store's CAS, compare a snapshot of the
+  node's owned normative content (role, contract, revision, justifies, deps,
+  gate, hazards, artifacts, inputs, embedded hashes) and workspace against
+  the evaluated one, and refuse on any difference. Decision: (b).
+  Rationale: a report is evidence for the obligation it was folded against;
+  relabeling it with a fresh revision manufactures proof. Unrelated
+  concurrent writes still merge through the CAS retry.
+
+- **DD-12**: Changing a gate is a revise, whichever verb does it.
+  Context: `set-tests` replaced a test list without touching the contract
+  revision, so a GREEN node's gate could be swapped and its pass kept.
+  Options considered: (a) refuse `set-tests` on verified nodes; (b) advance
+  `contract_rev` and clear red bookkeeping when the list changes under an
+  observation; an unchanged list is a no-op. Decision: (b). Rationale: DD-4
+  names the gate as owned normative content; there is no side door.
+
+- **DD-13**: Completion-grade closure requires current full-review coverage.
+  Supersedes DD-8.
+  Context: DD-8 only required acceptance nodes to depend on review nodes; a
+  subset review satisfied it and a GREEN acceptance closed its whole closure.
+  Options considered: (a) keep the structural rule; (b) compile refuses an
+  acceptance node without a full review upstream, and `Closed()` closes an
+  acceptance node only after every upstream member is already covered by a
+  current GREEN full review (or an earlier qualifying acceptance), iterating
+  to a fixed point. Decision: (b). Rationale: only full reviews carry
+  completion-grade closure (`SddGraph:DD-9`); an acceptance that skips one
+  is a completion bypass, not a coverage omission.
+
+- **DD-14**: Amend admits an artifact exactly as Record does, under two
+  independent fences.
+  Context: the direct amend path checked only resolved and frozen, so a
+  foreign plan's review could revise this graph, and the preview fence
+  covered the graph bytes but not the artifact. Options considered: (a) one
+  composite digest; (b) shared admission (plan binding, verdict, lanes,
+  freeze signals) plus `--expect-digest` for the graph and
+  `--expect-report-digest` for the artifact, re-read before publication.
+  Decision: (b). Rationale: the two inputs change independently and the
+  refusal should name which one moved.
+
 ## Error Handling
 | Condition | Detection | Response |
 |---|---|---|

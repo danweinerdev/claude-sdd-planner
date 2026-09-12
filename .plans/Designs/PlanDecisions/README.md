@@ -292,6 +292,48 @@ successor.
   catches the common case and the validator catches the merge case; picking a
   winner by date would silently discard a decision someone made.
 
+- **DD-9**: Authority consumers refuse an incomplete snapshot.
+  Context: a malformed decisions file was skipped by the index, so the hook
+  could inject a superseded predecessor as standing and compile could append
+  against a partial view. Options considered: (a) skip bad files with a
+  diagnostic; (b) `LoadValidatedIndex` fails on any malformed file or same-id
+  statement collision; writes (`decide add`, compile sync) and the
+  session-start hook refuse or inject nothing rather than a partial set.
+  Decision: (b). Rationale: a partial authority set is worse than none; SDD190
+  names the file to fix. Scoping the refusal to the active plan is a possible
+  refinement, not a change of principle.
+
+- **DD-10**: Session-start context is plan-scoped.
+  Context: injecting every plan's standing decisions made archived and
+  completed plans universal session constraints. Options considered:
+  (a) all plans; (b) the active plan's decisions and the entries it cites
+  across plans. Decision: (b). Rationale: cross-plan citation is explicit
+  by design (DD-6); implicit inheritance of every plan's history is the
+  global ledger by another route.
+
+- **DD-11**: Second-successor refusal is best effort at write time; the
+  merge-time net is authoritative.
+  Context: per-file CAS cannot see another plan's file, and a cross-plan
+  index built at command start goes stale. Options considered: (a) a
+  root-wide lock; (b) re-derive the index on every write attempt so the
+  window is the check-to-write gap, and rely on `Conflicts()` / SDD192
+  after a merge. Decision: (b). Rationale: a root-wide lock is a second
+  concurrency primitive across files that other tools do not hold; the
+  conflict report plus one reconciling entry (DD-8) is the designed path.
+  Identical successor copies across plans are one branch, not a conflict,
+  and conflicts clear only when every live branch converges.
+
+- **DD-12**: Retired ledger ids are refused in open work and kept in frozen
+  history.
+  Context: after the ledger's removal a live plan could cite `D-NNNN` and
+  validate clean, while completed plans and frozen reviews still carry those
+  ids as text. Options considered: (a) flag everywhere; (b) SDD193 flags
+  retired ids only where the owning plan is not complete or archived and the
+  phase is not complete; `graph convert` keeps a v1 task's retired citation
+  as a history note instead of a node citation. Decision: (b). Rationale:
+  frozen content keeps the ids it carried (migration step 3); open work must
+  cite a `pd-` id or nothing.
+
 ## Error Handling
 | Condition | Detection | Response |
 |---|---|---|
