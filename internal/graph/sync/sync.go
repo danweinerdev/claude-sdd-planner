@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +35,9 @@ type Options struct {
 	Provider provider.Provider
 	Now      func() time.Time
 	TTL      time.Duration
+	// beforePublish is a deterministic interleaving seam for package tests.
+	// It runs once inside the store mutation before the first CAS attempt.
+	beforePublish func() error
 }
 
 // Buckets is the honest reconciliation report.
@@ -48,14 +52,14 @@ type Buckets struct {
 // reconciliation that found the node unverifiable (unresolved or ambiguous
 // declared tests) — the buckets say exactly why, and nothing was guessed.
 type Result struct {
-	Node         string             `json:"node"`
-	Recorded     bool               `json:"recorded"`
+	Node         string              `json:"node"`
+	Recorded     bool                `json:"recorded"`
 	Observation  *model.Verification `json:"observation,omitempty"`
-	Buckets      Buckets            `json:"buckets"`
-	RedSeqsAdded map[string]int     `json:"red_seqs_added,omitempty"`
-	LeaseRenewed string             `json:"lease_renewed,omitempty"`
-	Refusal      string             `json:"refusal,omitempty"`
-	LogPath      string             `json:"log,omitempty"`
+	Buckets      Buckets             `json:"buckets"`
+	RedSeqsAdded map[string]int      `json:"red_seqs_added,omitempty"`
+	LeaseRenewed string              `json:"lease_renewed,omitempty"`
+	Refusal      string              `json:"refusal,omitempty"`
+	LogPath      string              `json:"log,omitempty"`
 	// Merged: the observation was a clean pass and the claim completed in
 	// the same cycle — claim cleared, workspace released (DD-10's atomic
 	// sequence). A pass that records without merging (shared-dirty
@@ -99,6 +103,11 @@ func Run(o Options) (*Result, error) {
 		if node.Claim.By != o.By {
 			return nil, fmt.Errorf("graph sync: %q is claimed by %q, not %q; a stale claim cannot sync (its lease was taken over)", o.Node, node.Claim.By, o.By)
 		}
+	}
+	evaluatedSnapshot := proofSnapshot(node)
+	evaluatedWorkspace := ""
+	if node.Claim != nil {
+		evaluatedWorkspace = node.Claim.Workspace
 	}
 
 	res := &Result{Node: o.Node}
@@ -251,6 +260,7 @@ func Run(o Options) (*Result, error) {
 	var recorded *model.Verification
 	redAdded := map[string]int{}
 	merged := false
+	hookRan := false
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 		n := fresh.NodeByID(o.Node)
 		if n == nil {
@@ -259,12 +269,25 @@ func Run(o Options) (*Result, error) {
 		if n.Claim != nil && n.Claim.By != o.By {
 			return fmt.Errorf("graph sync: %q was claimed by %q while this sync ran", o.Node, n.Claim.By)
 		}
+		workspace := ""
+		if n.Claim != nil {
+			workspace = n.Claim.Workspace
+		}
+		if proofSnapshot(n) != evaluatedSnapshot || workspace != evaluatedWorkspace {
+			return fmt.Errorf("graph sync: %q's contract changed while its report was evaluated; re-run the current gate and sync that report", o.Node)
+		}
+		if !hookRan && o.beforePublish != nil {
+			hookRan = true
+			if err := o.beforePublish(); err != nil {
+				return err
+			}
+		}
 		fresh.SeqCounter++
 		seq := fresh.SeqCounter
 		v := &model.Verification{
 			Result:          result,
 			Seq:             seq,
-			ContractRev:     n.EffectiveContractRev(),
+			ContractRev:     node.EffectiveContractRev(),
 			ArtifactDigests: artifactDigests,
 			ReportDigest:    reportDigest,
 			Isolation:       isolation,
@@ -315,6 +338,30 @@ func Run(o Options) (*Result, error) {
 		res.WorkspaceReleased = handle
 	}
 	return res, nil
+}
+
+// proofSnapshot fingerprints every graph-owned field that determines what a
+// sync report means. Observation/claim bookkeeping and presentation metadata
+// are excluded so the CAS retry may preserve unrelated concurrent writes.
+func proofSnapshot(n *model.Node) string {
+	if n == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(struct {
+		Role         string
+		Contract     string
+		ContractRev  int
+		Justifies    []string
+		Deps         []string
+		Gate         model.Gate
+		Hazards      model.Hazards
+		Artifacts    []string
+		Inputs       []model.Input
+		IntentHashes map[string]string
+		InputHashes  map[string]string
+	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
+		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
+	return digest.Bytes(raw)
 }
 
 // untracked lists report ids no node in the graph declares, directly or as

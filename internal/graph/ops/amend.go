@@ -31,6 +31,10 @@ type AmendOptions struct {
 	// ExpectDigest is the graph file digest the preview was computed
 	// against (`sdd graph review` prints it). Required unless DryRun.
 	ExpectDigest string
+	// ExpectReportDigest is the review artifact digest the preview evaluated.
+	// It is an independent fence: graph bytes can stay fixed while the report
+	// path is substituted. Required unless DryRun.
+	ExpectReportDigest string
 	// By identifies the caller; a revised node claimed by someone else
 	// refuses.
 	By     string
@@ -39,15 +43,19 @@ type AmendOptions struct {
 
 // AmendResult reports what was (or would be) applied.
 type AmendResult struct {
-	Plan         *review.Plan `json:"plan"`
-	Applied      bool         `json:"applied"`
-	Seq          int          `json:"seq,omitempty"`
-	ExpectDigest string       `json:"expect_digest,omitempty"`
-	NewDigest    string       `json:"new_digest,omitempty"`
+	Plan               *review.Plan `json:"plan"`
+	Applied            bool         `json:"applied"`
+	Seq                int          `json:"seq,omitempty"`
+	ExpectDigest       string       `json:"expect_digest,omitempty"`
+	ExpectReportDigest string       `json:"expect_report_digest,omitempty"`
+	NewDigest          string       `json:"new_digest,omitempty"`
 }
 
 // AmendFromReview plans and applies the artifact's open findings.
 func AmendFromReview(o AmendOptions) (*AmendResult, error) {
+	if err := review.ValidatePlanName(o.Plan); err != nil {
+		return nil, fmt.Errorf("graph amend: %w", err)
+	}
 	planDir := filepath.Join(o.Root, "Plans", o.Plan)
 	graphPath := gstore.PathFor(planDir)
 	art, err := istore.Read(graphPath)
@@ -65,23 +73,21 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("graph amend: %w", err)
 	}
-	f := artifact.Facts
-	if f.Status != "resolved" || !f.Frozen {
-		return nil, fmt.Errorf("graph amend: %s is not a resolved, frozen review; only frozen findings are applied", o.Artifact)
+	if err := review.AdmitArtifact(g, o.Plan, o.Node, artifact); err != nil {
+		return nil, fmt.Errorf("graph amend: %w", err)
 	}
-	for _, a := range g.Amendments {
-		if a.ReportDigest == artifact.ReportDigest {
-			return nil, fmt.Errorf("graph amend: %s was already applied (seq %d); one artifact amends the graph once", o.Artifact, a.Seq)
-		}
+	scope, err := review.CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
+	if err != nil {
+		return nil, fmt.Errorf("graph amend: %w", err)
 	}
-	plan, err := review.PlanAmendments(g, o.Node, artifact)
+	plan, err := review.PlanAmendmentsInScope(g, o.Node, artifact, scope)
 	if err != nil {
 		return nil, err
 	}
 	if len(plan.Amendments) == 0 {
 		return nil, fmt.Errorf("graph amend: %s has no open findings; record it with `sdd graph review` instead", o.Artifact)
 	}
-	res := &AmendResult{Plan: plan, ExpectDigest: art.Digest}
+	res := &AmendResult{Plan: plan, ExpectDigest: art.Digest, ExpectReportDigest: artifact.ReportDigest}
 
 	// One citation snapshot: new and revised nodes are anchored against
 	// it, and the before/after gate re-derives from it. The gate runs on a
@@ -110,8 +116,21 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 	if o.ExpectDigest == "" {
 		return nil, fmt.Errorf("graph amend: --expect-digest is required; preview with `sdd graph review` or `--dry-run` and pass the digest it prints (%s)", art.Digest)
 	}
+	if o.ExpectReportDigest == "" {
+		return nil, fmt.Errorf("graph amend: --expect-report-digest is required; preview with `sdd graph review` or `--dry-run` and pass the review artifact digest it prints (%s)", artifact.ReportDigest)
+	}
 	if !digestMatches(o.ExpectDigest, art.Digest) {
 		return nil, fmt.Errorf("graph amend: the graph changed since the preview (expected %s, now %s); re-preview against the current graph, never blind-retry", short(o.ExpectDigest), short(art.Digest))
+	}
+	if !digestMatches(o.ExpectReportDigest, artifact.ReportDigest) {
+		return nil, fmt.Errorf("graph amend: the review artifact changed since the preview (expected %s, now %s); re-preview the current artifact, never blind-retry", short(o.ExpectReportDigest), short(artifact.ReportDigest))
+	}
+	latestArtifact, err := review.ReadArtifact(o.Root, o.Artifact)
+	if err != nil {
+		return nil, fmt.Errorf("graph amend: re-reading review artifact before publication: %w", err)
+	}
+	if latestArtifact.ReportDigest != artifact.ReportDigest {
+		return nil, fmt.Errorf("graph amend: the review artifact changed while the amendment was evaluated (expected %s, now %s); re-preview the current artifact", short(artifact.ReportDigest), short(latestArtifact.ReportDigest))
 	}
 	out, err := rebuilt.Encode()
 	if err != nil {
@@ -187,6 +206,35 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 				r.Deps = append(r.Deps, n.ID)
 			}
 			record.Extended = append(record.Extended, n.ID)
+		}
+	}
+	if len(record.Extended) > 0 {
+		r := &out.Nodes[reviewIdx]
+		// A pre-reviewed-set graph encoded a passing review with Reviewed absent.
+		// Existing graphs retain that historical meaning until their scope grows.
+		// Materialize the scope assumed immediately before this amend so the new
+		// dependency is mechanically absent and the old proof becomes
+		// REVIEW-STALE without misusing contract_rev (deps are structural) or
+		// deleting the historical observation.
+		if r.Verification != nil && r.Verification.Reviewed == nil {
+			v := *r.Verification
+			legacyScope := append([]string(nil), plan.Scope...)
+			if len(legacyScope) == 0 {
+				// Empty maps are omitted on the wire and would decode back to the
+				// legacy nil shape. A valid review has at least one old dep; retain
+				// that pre-extension boundary as the compatibility assumption so
+				// the new exact-scope comparison remains fail-closed after reload.
+				if priorReview := g.NodeByID(plan.Review); priorReview != nil && len(priorReview.Deps) > 0 {
+					legacyScope = append(legacyScope, priorReview.Deps[0])
+				}
+			}
+			v.Reviewed = make(map[string]model.ReviewedRef, len(legacyScope))
+			for _, id := range legacyScope {
+				if prior := g.NodeByID(id); prior != nil {
+					v.Reviewed[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
+				}
+			}
+			r.Verification = &v
 		}
 	}
 	sort.Strings(record.Revised)

@@ -216,17 +216,20 @@ func graphStatusCmd() *cobra.Command {
 			counts := map[string]int{}
 			closedCount := 0
 			type line struct {
-				ID      string `json:"id"`
-				State   string `json:"state"`
-				Closed  bool   `json:"closed"`
-				Claimed string `json:"claimed_by,omitempty"`
+				ID          string `json:"id"`
+				State       string `json:"state"`
+				Closed      bool   `json:"closed"`
+				Role        string `json:"role"`
+				ContractRev int    `json:"contract_rev"`
+				Claimed     string `json:"claimed_by,omitempty"`
 			}
 			lines := make([]line, 0, len(ctx.g.Nodes))
 			for i := range ctx.g.Nodes {
 				n := &ctx.g.Nodes[i]
 				ns := ctx.st[n.ID]
 				counts[string(ns.State)]++
-				l := line{ID: n.ID, State: string(ns.State), Closed: ctx.closed[n.ID]}
+				l := line{ID: n.ID, State: string(ns.State), Closed: ctx.closed[n.ID],
+					Role: n.EffectiveRole(), ContractRev: n.EffectiveContractRev()}
 				if l.Closed {
 					closedCount++
 				}
@@ -261,7 +264,7 @@ func graphStatusCmd() *cobra.Command {
 				if l.Claimed != "" {
 					mark += "  [claimed by " + l.Claimed + "]"
 				}
-				fmt.Fprintf(c.OutOrStdout(), "  %-24s %s%s\n", l.ID, l.State, mark)
+				fmt.Fprintf(c.OutOrStdout(), "  %-24s %s  role=%s contract_rev=%d%s\n", l.ID, l.State, l.Role, l.ContractRev, mark)
 			}
 			return nil
 		},
@@ -291,14 +294,16 @@ func graphShowCmd() *cobra.Command {
 			ns := ctx.st[n.ID]
 			if asJSON {
 				return writeJSON(struct {
-					OK     bool        `json:"ok"`
-					Node   *model.Node `json:"node"`
-					State  string      `json:"state"`
-					Closed bool        `json:"closed"`
-					Stale  []string    `json:"stale_artifacts,omitempty"`
-					Intent []string    `json:"stale_intent,omitempty"`
-					Inputs []string    `json:"stale_inputs,omitempty"`
-				}{true, n, string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale})
+					OK          bool        `json:"ok"`
+					Node        *model.Node `json:"node"`
+					Role        string      `json:"role"`
+					ContractRev int         `json:"contract_rev"`
+					State       string      `json:"state"`
+					Closed      bool        `json:"closed"`
+					Stale       []string    `json:"stale_artifacts,omitempty"`
+					Intent      []string    `json:"stale_intent,omitempty"`
+					Inputs      []string    `json:"stale_inputs,omitempty"`
+				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale})
 			}
 			w := c.OutOrStdout()
 			if brief {
@@ -488,7 +493,7 @@ func printBrief(w io.Writer, g *model.Graph, n *model.Node, st map[string]states
 		lanes = model.ReviewLanes
 	}
 	fmt.Fprintf(w, "lanes: %s\n", strings.Join(lanes, ", "))
-	scope, err := greview.Scope(g, n.ID)
+	scope, err := states.ReviewScopeFromStates(g, n.ID, st)
 	if err != nil {
 		fmt.Fprintf(w, "scope: %v\n", err)
 		return

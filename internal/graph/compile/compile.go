@@ -30,7 +30,6 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
@@ -52,7 +51,7 @@ func deriveClosure(repoRoot string, sources *sourceSet, inRes *InputResolver) fu
 			CurrentIntentHashes: snap.Hashes(),
 			CurrentInputHashes:  inRes.GraphHashes(g),
 		})
-		return st, review.Closed(g, st)
+		return st, states.Closed(g, st)
 	}
 }
 
@@ -588,6 +587,45 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 	// Cycles over the merged graph.
 	for _, cycle := range algorithms.Cycles(adjacency) {
 		add("graph", "dependency cycle: %s", strings.Join(append(append([]string{}, cycle...), cycle[0]), " -> "))
+	}
+
+	// Acceptance may confer completion closure only over work with a full
+	// review upstream. A terminal full gate downstream remains a plan-wide
+	// backstop, but cannot authorize an earlier acceptance node.
+	for _, id := range ids {
+		acceptance := merged[id]
+		if acceptance.EffectiveRole() != model.RoleIntegrationAcceptance {
+			continue
+		}
+		upstream := algorithms.DependencyClosure(adjacency, id)
+		fullCovered := map[string]bool{}
+		for candidateID := range upstream {
+			candidate, present := merged[candidateID]
+			if !present || candidate.Gate.Type != model.GateReview || candidate.Gate.Lanes != nil {
+				continue
+			}
+			fullCovered[candidateID] = true
+			for dep := range algorithms.DependencyClosure(adjacency, candidateID) {
+				fullCovered[dep] = true
+			}
+		}
+		var uncovered []string
+		for upstreamID := range upstream {
+			upstreamNode, present := merged[upstreamID]
+			if !present {
+				continue // the missing-dependency finding already names this
+			}
+			if upstreamNode.EffectiveRole() == model.RoleIntegrationAcceptance {
+				continue // checked independently; supports acceptance chains
+			}
+			if !fullCovered[upstreamID] {
+				uncovered = append(uncovered, upstreamID)
+			}
+		}
+		if len(uncovered) > 0 {
+			sort.Strings(uncovered)
+			add(id, "cannot confer closure: no full review upstream covers %s; subset reviews and downstream full gates do not authorize acceptance", strings.Join(uncovered, ", "))
+		}
 	}
 
 	// AC coverage: every AC of every DIRECTLY related spec has a covering

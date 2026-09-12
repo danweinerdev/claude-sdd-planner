@@ -747,7 +747,7 @@ func printAmendmentPlan(w io.Writer, p *greview.Plan) {
 // graphAmendCmd applies a frozen review artifact's open findings as one
 // fenced amendment (ReviewDrivenAmendment DD-2, DD-8). Mutating.
 func graphAmendCmd() *cobra.Command {
-	var plan, node, artifact, expect, by string
+	var plan, node, artifact, expect, expectReport, by string
 	var dryRun, asJSON bool
 	c := &cobra.Command{
 		Use:   "amend",
@@ -767,7 +767,7 @@ func graphAmendCmd() *cobra.Command {
 			}
 			res, err := ops.AmendFromReview(ops.AmendOptions{
 				Root: root, RepoRoot: repoRoot, Plan: plan, Node: node, Artifact: artifact,
-				ExpectDigest: expect, By: by, DryRun: dryRun,
+				ExpectDigest: expect, ExpectReportDigest: expectReport, By: by, DryRun: dryRun,
 			})
 			if err != nil {
 				return err
@@ -780,6 +780,7 @@ func graphAmendCmd() *cobra.Command {
 				fmt.Fprintf(w, "dry run: %d amendment(s) would apply to %s\n", len(res.Plan.Amendments), plan)
 				printAmendmentPlan(w, res.Plan)
 				fmt.Fprintf(w, "expect-digest: %s\n", res.ExpectDigest)
+				fmt.Fprintf(w, "expect-report-digest: %s\n", res.ExpectReportDigest)
 				return nil
 			}
 			fmt.Fprintf(w, "applied %d amendment(s) at seq %d\n", len(res.Plan.Amendments), res.Seq)
@@ -792,8 +793,9 @@ func graphAmendCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "the review node whose artifact is applied")
 	c.Flags().StringVar(&artifact, "from-review", "", "path to the frozen review artifact carrying the findings")
 	c.Flags().StringVar(&expect, "expect-digest", "", "graph digest the preview was computed against (printed by `sdd graph review`)")
+	c.Flags().StringVar(&expectReport, "expect-report-digest", "", "review artifact digest the preview evaluated (printed by `sdd graph review`)")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required to revise a node you hold)")
-	c.Flags().BoolVar(&dryRun, "dry-run", false, "print the amendment plan and expect-digest without writing")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "print the amendment plan and expected graph/report digests without writing")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
@@ -837,7 +839,7 @@ func graphReviewCmd() *cobra.Command {
 				w := c.OutOrStdout()
 				fmt.Fprintf(w, "not recorded: %s carries %d open finding(s); nothing was written\n", res.Artifact, len(res.Plan.Amendments))
 				printAmendmentPlan(w, res.Plan)
-				fmt.Fprintf(w, "apply with:\n  sdd graph amend --plan %s --node %s --from-review %s --expect-digest %s\n", plan, node, artifact, res.ExpectDigest)
+				fmt.Fprintf(w, "apply with:\n  sdd graph amend --plan %s --node %s --from-review %s --expect-digest %s --expect-report-digest %s\n", plan, node, artifact, res.ExpectDigest, res.ExpectReportDigest)
 				return &refusedError{n: len(res.Plan.Amendments)}
 			}
 			fmt.Fprintf(c.OutOrStdout(), "recorded review node %s: pass at seq %d (contract_rev %d, %d reviewed node(s))\n", res.Node, res.Observation.Seq, res.Observation.ContractRev, len(res.Observation.Reviewed))

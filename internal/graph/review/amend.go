@@ -60,12 +60,42 @@ type Artifact struct {
 	Facts        *facts
 }
 
-// ReadArtifact reads and decodes a review artifact, resolving a relative
-// path against the planning root.
+// ValidatePlanName keeps graph operations inside root/Plans. Plan-taking CLI
+// routes accept one directory name, never a path or volume-qualified name.
+func ValidatePlanName(plan string) error {
+	if plan == "" || plan == "." || plan == ".." || filepath.IsAbs(plan) || filepath.VolumeName(plan) != "" || strings.ContainsAny(plan, `/\`) {
+		return fmt.Errorf("plan %q is not a single safe directory name under Plans/", plan)
+	}
+	return nil
+}
+
+// ReadArtifact reads and decodes a review artifact. Relative paths resolve
+// against the planning root, and both lexical traversal and symlink escape are
+// refused: a review outside the planning root is not admissible evidence.
 func ReadArtifact(root, artifact string) (*Artifact, error) {
-	path := artifact
-	if _, statErr := os.Stat(path); statErr != nil && !filepath.IsAbs(path) {
-		path = filepath.Join(root, filepath.FromSlash(artifact))
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the planning root: %w", err)
+	}
+	rootReal, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the planning root: %w", err)
+	}
+	path := filepath.FromSlash(artifact)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(rootReal, path)
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the review artifact: %w", err)
+	}
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading the review artifact: %w", err)
+	}
+	rel, err := filepath.Rel(rootReal, path)
+	if err != nil || relEscapes(rel) {
+		return nil, fmt.Errorf("review artifact %q is outside the planning root %s", artifact, rootReal)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -75,13 +105,12 @@ func ReadArtifact(root, artifact string) (*Artifact, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", artifact, err)
 	}
-	rel := artifact
-	if abs, err := filepath.Abs(path); err == nil {
-		if r, err := filepath.Rel(root, abs); err == nil && !strings.HasPrefix(r, "..") {
-			rel = filepath.ToSlash(r)
-		}
-	}
+	rel = filepath.ToSlash(rel)
 	return &Artifact{Path: path, Rel: rel, Qualifier: rules.SourceQualifier(rel), ReportDigest: digest.Bytes(raw), Facts: f}, nil
+}
+
+func relEscapes(rel string) bool {
+	return rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // OpenFindings returns the artifact's findings with status open.
@@ -122,16 +151,23 @@ type Plan struct {
 // PlanAmendments validates every open finding and returns the amendments
 // they demand, or refuses with every problem named. It does not write.
 func PlanAmendments(g *model.Graph, reviewNode string, a *Artifact) (*Plan, error) {
+	scope, err := Scope(g, reviewNode)
+	if err != nil {
+		return nil, err
+	}
+	return PlanAmendmentsInScope(g, reviewNode, a, scope)
+}
+
+// PlanAmendmentsInScope validates findings against an already-derived current
+// scope. Publication paths use this form so artifact/intent/input-stale inner
+// reviews cannot disappear behind graph-only GREEN.
+func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope []string) (*Plan, error) {
 	node := g.NodeByID(reviewNode)
 	if node == nil {
 		return nil, fmt.Errorf("graph amend: node %q does not exist", reviewNode)
 	}
 	if node.EffectiveRole() != model.RoleReview {
 		return nil, fmt.Errorf("graph amend: %q has role %q; amendments come from a review node's findings", reviewNode, node.EffectiveRole())
-	}
-	scope, err := Scope(g, reviewNode)
-	if err != nil {
-		return nil, err
 	}
 	inScope := map[string]bool{}
 	for _, id := range scope {

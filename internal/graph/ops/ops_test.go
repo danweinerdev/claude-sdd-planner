@@ -148,6 +148,36 @@ func TestSplitRetiresRewiresAndInherits(t *testing.T) {
 	}
 }
 
+func TestSplitPreservesAmendmentsAndInvalidatesLegacyReview(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Amendments = []model.AmendmentRecord{{Seq: 1, Review: "feature-gate", ReportDigest: "prior-report", Extended: []string{"helper"}}}
+	g.SeqCounter = 4
+	g.NodeByID("helper").Verification = passAt(2)
+	g.NodeByID("big").Verification = passAt(3)
+	g.NodeByID("feature-gate").Verification = passAt(4) // legacy: no reviewed set
+	p, err := model.DecodeProposal([]byte(splitChildren))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := applySplit(g, "big", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(out.Amendments, g.Amendments) {
+		t.Error("split discarded amendment replay-protection history")
+	}
+	if got := states.Derive(states.Inputs{Graph: out})["feature-gate"].State; got == states.Green {
+		t.Error("legacy review remained GREEN after its reviewed node was split")
+	}
+	if g.NodeByID("feature-gate").Verification.Reviewed != nil {
+		t.Error("candidate computation mutated the original observation")
+	}
+}
+
 func TestSplitGatesOnIntroducedFindings(t *testing.T) {
 	root, _ := fixtureRoot(t)
 	// Children that drop the hazard-satisfying test would introduce an

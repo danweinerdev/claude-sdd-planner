@@ -151,8 +151,10 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 		States map[string]int `json:"states"`
 		Closed int            `json:"closed"`
 		Nodes  []struct {
-			ID    string `json:"id"`
-			State string `json:"state"`
+			ID          string `json:"id"`
+			State       string `json:"state"`
+			Role        string `json:"role"`
+			ContractRev int    `json:"contract_rev"`
 		} `json:"nodes"`
 	}
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "graph", "status", "--plan", "Demo", "--json")), &status); err != nil {
@@ -164,15 +166,24 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 	if len(status.Nodes) != 5 || status.Nodes[0].ID != "a" {
 		t.Fatalf("status nodes: %+v", status.Nodes)
 	}
+	if status.Nodes[0].Role != model.RoleImplementation || status.Nodes[0].ContractRev != 1 {
+		t.Fatalf("status JSON must expose effective role and contract revision: %+v", status.Nodes[0])
+	}
+	if human := runGraphVerb(t, "graph", "status", "--plan", "Demo"); !strings.Contains(human, "role=implementation contract_rev=1") {
+		t.Fatalf("human status must expose effective role and contract revision:\n%s", human)
+	}
 
 	var show struct {
-		Node  *model.Node `json:"node"`
-		State string      `json:"state"`
+		Node        *model.Node `json:"node"`
+		Role        string      `json:"role"`
+		ContractRev int         `json:"contract_rev"`
+		State       string      `json:"state"`
 	}
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "graph", "show", "m", "--plan", "Demo", "--json")), &show); err != nil {
 		t.Fatal(err)
 	}
-	if show.Node == nil || show.Node.ID != "m" || show.State != "BLOCKED" {
+	if show.Node == nil || show.Node.ID != "m" || show.State != "BLOCKED" ||
+		show.Role != model.RoleImplementation || show.ContractRev != 1 {
 		t.Fatalf("show: %+v", show)
 	}
 	if human := runGraphVerb(t, "graph", "show", "m", "--plan", "Demo"); !strings.Contains(human, "m  [BLOCKED]") ||

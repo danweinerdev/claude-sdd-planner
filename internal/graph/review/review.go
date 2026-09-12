@@ -14,15 +14,16 @@
 package review
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
@@ -31,53 +32,39 @@ import (
 )
 
 // Scope derives what a review gate reviews: the gate's dependency closure
-// minus, for every inner full review gate that already carries a recorded
-// passing observation (its review is frozen history), that gate and
-// everything at or below it. Nested gates therefore review DISJOINT
-// increments whose union covers the closure — no diff is reviewed twice.
-// An inner full gate that has NOT been recorded yet does not subtract: its
-// region is unreviewed work, and someone must review it.
+// minus, for every inner full review gate that is currently GREEN, that gate
+// and everything at or below it. Nested current gates therefore review
+// DISJOINT increments whose union covers the closure — no diff is reviewed
+// twice. An unrecorded or STALE inner gate does not subtract: its region is
+// unreviewed work, and someone must review it.
 func Scope(g *model.Graph, gateID string) ([]string, error) {
-	gate := g.NodeByID(gateID)
-	if gate == nil {
-		return nil, fmt.Errorf("graph review: node %q does not exist", gateID)
-	}
-	if gate.Gate.Type != model.GateReview {
-		return nil, fmt.Errorf("graph review: %q has gate type %q; scope derives for review gates only", gateID, gate.Gate.Type)
-	}
+	return states.ReviewScope(g, gateID)
+}
 
-	adjacency := algorithms.Graph{}
-	for i := range g.Nodes {
-		adjacency[g.Nodes[i].ID] = g.Nodes[i].Deps
+// CurrentScope derives scope with every staleness axis wired against the
+// shared tree. This is the publication-grade scope used by review recording
+// and review-driven amendment; Scope remains the graph-only compatibility
+// surface for callers that have no roots.
+func CurrentScope(root, repoRoot, plan string, g *model.Graph, gateID string) ([]string, error) {
+	sources, err := gcompile.NewSources(root, repoRoot, plan)
+	if err != nil {
+		// Pre-fingerprint graphs may have no related source surface. Preserve
+		// that shape only when no node carries an intent/input promise that
+		// would otherwise be silently disabled.
+		for i := range g.Nodes {
+			n := &g.Nodes[i]
+			if len(n.IntentHashes) > 0 || len(n.InputHashes) > 0 || len(n.Inputs) > 0 {
+				return nil, fmt.Errorf("loading current proof inputs: %w", err)
+			}
+		}
+		sources = nil
 	}
-	closure := algorithms.DependencyClosure(adjacency, gateID)
-
-	covered := map[string]bool{}
-	for i := range g.Nodes {
-		b := &g.Nodes[i]
-		if b.ID == gateID || !closure[b.ID] {
-			continue
-		}
-		if b.Gate.Type != model.GateReview || b.Gate.Lanes != nil {
-			continue // only FULL gates cover; subsets are lighter checkpoints
-		}
-		if b.Verification == nil || b.Verification.Result != model.ResultPass {
-			continue // not yet frozen: its region is this gate's to review
-		}
-		covered[b.ID] = true
-		for id := range algorithms.DependencyClosure(adjacency, b.ID) {
-			covered[id] = true
-		}
+	in := states.Inputs{Graph: g, ArtifactDigest: digest.New(repoRoot).Artifact}
+	if sources != nil {
+		in.CurrentIntentHashes = sources.IntentSnapshot().Hashes()
+		in.CurrentInputHashes = sources.InputResolver().GraphHashes(g)
 	}
-
-	var out []string
-	for id := range closure {
-		if !covered[id] {
-			out = append(out, id)
-		}
-	}
-	sort.Strings(out)
-	return out, nil
+	return states.ReviewScopeFromStates(g, gateID, states.Derive(in))
 }
 
 // Closed derives the completion-grade predicate (D-0022): a node is closed
@@ -89,73 +76,7 @@ func Scope(g *model.Graph, gateID string) ([]string, error) {
 // such coverage is assumed-closed: sufficient to build on, never
 // completion-grade.
 func Closed(g *model.Graph, statesByID map[string]states.NodeState) map[string]bool {
-	closed := map[string]bool{}
-	// Acceptance nodes (ReviewDrivenAmendment DD-8): a GREEN
-	// integration-acceptance node closes its whole dependency closure —
-	// scrutiny is on the path by construction, so no coverage subtraction
-	// is needed.
-	for i := range g.Nodes {
-		acc := &g.Nodes[i]
-		if acc.EffectiveRole() != model.RoleIntegrationAcceptance || statesByID[acc.ID].State != states.Green {
-			continue
-		}
-		closed[acc.ID] = true
-		for _, m := range closureOf(g, acc.ID) {
-			if statesByID[m].State == states.Green {
-				closed[m] = true
-			}
-		}
-	}
-	for i := range g.Nodes {
-		b := &g.Nodes[i]
-		if b.Gate.Type != model.GateReview || b.Gate.Lanes != nil {
-			continue
-		}
-		if b.Verification == nil || b.Verification.Result != model.ResultPass {
-			continue
-		}
-		if statesByID[b.ID].State != states.Green {
-			continue
-		}
-		// The gate itself is closed too: its completion-grade evidence IS
-		// its own frozen Aligned review — without this, a view containing
-		// its own gate could never freeze.
-		closed[b.ID] = true
-		scope, err := Scope(g, b.ID)
-		if err != nil {
-			continue
-		}
-		for _, m := range scope {
-			if statesByID[m].State == states.Green {
-				closed[m] = true
-			}
-		}
-	}
-	return closed
-}
-
-// closureOf returns every transitive dependency of id (excluding id).
-func closureOf(g *model.Graph, id string) []string {
-	seen := map[string]bool{}
-	var out []string
-	var walk func(string)
-	walk = func(cur string) {
-		n := g.NodeByID(cur)
-		if n == nil {
-			return
-		}
-		for _, dep := range n.Deps {
-			if seen[dep] {
-				continue
-			}
-			seen[dep] = true
-			out = append(out, dep)
-			walk(dep)
-		}
-	}
-	walk(id)
-	sort.Strings(out)
-	return out
+	return states.Closed(g, statesByID)
 }
 
 // facts is what the gate reads from a review artifact's frontmatter: the
@@ -204,6 +125,9 @@ type Options struct {
 	By       string
 	Provider provider.Provider
 	Now      func() time.Time
+	// beforePublish is a deterministic interleaving seam for package tests.
+	// It runs once inside the store mutation before the first CAS attempt.
+	beforePublish func() error
 }
 
 // Result is one recording's outcome. Exactly one of Observation (the
@@ -211,14 +135,129 @@ type Options struct {
 // findings: nothing was written, and Plan is the amendment preview to apply
 // with `sdd graph amend --from-review`) is set.
 type Result struct {
-	Node              string              `json:"node"`
-	Artifact          string              `json:"artifact"`
-	Scope             []string            `json:"scope"`
-	Observation       *model.Verification `json:"observation,omitempty"`
-	Plan              *Plan               `json:"plan,omitempty"`
-	ExpectDigest      string              `json:"expect_digest,omitempty"`
-	Merged            bool                `json:"merged,omitempty"`
-	WorkspaceReleased string              `json:"workspace_released,omitempty"`
+	Node               string              `json:"node"`
+	Artifact           string              `json:"artifact"`
+	Scope              []string            `json:"scope"`
+	Observation        *model.Verification `json:"observation,omitempty"`
+	Plan               *Plan               `json:"plan,omitempty"`
+	ExpectDigest       string              `json:"expect_digest,omitempty"`
+	ExpectReportDigest string              `json:"expect_report_digest,omitempty"`
+	Merged             bool                `json:"merged,omitempty"`
+	WorkspaceReleased  string              `json:"workspace_released,omitempty"`
+}
+
+// AdmitArtifact applies the provenance/admissibility policy shared by review
+// recording and review-driven amendment. A frozen artifact is evidence, not a
+// bearer token: it must bind to this plan, satisfy this gate's lane contract,
+// and be unused by every prior observation or amendment.
+func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
+	if err := ValidatePlanName(plan); err != nil {
+		return err
+	}
+	node := g.NodeByID(nodeID)
+	if node == nil {
+		return fmt.Errorf("node %q does not exist", nodeID)
+	}
+	if node.Gate.Type != model.GateReview {
+		return fmt.Errorf("%q has gate type %q; review evidence applies to review gates only", nodeID, node.Gate.Type)
+	}
+	if role := node.EffectiveRole(); role != model.RoleReview {
+		return fmt.Errorf("%q has role %q; review evidence applies to review nodes only", nodeID, role)
+	}
+	for _, lane := range node.Gate.Lanes {
+		if !model.KnownReviewLane(lane) {
+			return fmt.Errorf("%q names unknown lane %q; the lanes are %s", nodeID, lane, strings.Join(model.ReviewLanes, ", "))
+		}
+	}
+
+	f := art.Facts
+	var missing []string
+	if f.Status != "resolved" {
+		missing = append(missing, fmt.Sprintf("status is %q, need \"resolved\"", f.Status))
+	}
+	if !f.Frozen {
+		missing = append(missing, "frozen is not true (a reopened or in-progress review is not evidence)")
+	}
+	if f.Verdict != "Aligned" {
+		missing = append(missing, fmt.Sprintf("verdict is %q, need \"Aligned\"", f.Verdict))
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%s is not a frozen Aligned review — %s; run `sdd review resolve` on it first", art.Rel, strings.Join(missing, "; "))
+	}
+
+	if strings.TrimSpace(f.ReviewOf) == "" {
+		return fmt.Errorf("%s carries no review_of; a review must bind to this plan's reviewed document", art.Rel)
+	}
+	reviewOf := filepath.Clean(filepath.FromSlash(f.ReviewOf))
+	planDir := filepath.Join("Plans", plan)
+	relToPlan, err := filepath.Rel(planDir, reviewOf)
+	if err != nil || filepath.IsAbs(reviewOf) || relEscapes(relToPlan) || relToPlan == "." {
+		return fmt.Errorf("%s reviews %q, which is not under %s/ — a review of another plan is not evidence for this gate", art.Rel, f.ReviewOf, filepath.ToSlash(planDir))
+	}
+
+	for i := range g.Nodes {
+		if v := g.Nodes[i].Verification; v != nil && v.ReportDigest == art.ReportDigest {
+			return fmt.Errorf("%s is already recorded on gate %q; one review artifact supplies evidence once", art.Rel, g.Nodes[i].ID)
+		}
+	}
+	for _, amendment := range g.Amendments {
+		if amendment.ReportDigest == art.ReportDigest {
+			return fmt.Errorf("%s was already applied as an amendment (seq %d); one review artifact supplies evidence once", art.Rel, amendment.Seq)
+		}
+	}
+
+	laneResults := map[string]string{}
+	duplicates := map[string]bool{}
+	for _, lr := range f.LaneResults {
+		if _, exists := laneResults[lr.Lane]; exists {
+			duplicates[lr.Lane] = true
+		}
+		laneResults[lr.Lane] = lr.Result
+	}
+	required := node.Gate.Lanes
+	if required == nil {
+		required = model.ReviewLanes
+	}
+	var laneProblems []string
+	for _, lane := range required {
+		res, ok := laneResults[lane]
+		switch {
+		case duplicates[lane]:
+			laneProblems = append(laneProblems, fmt.Sprintf("lane %s appears more than once", lane))
+		case !ok:
+			laneProblems = append(laneProblems, fmt.Sprintf("lane %s is absent from the artifact", lane))
+		case !strings.HasPrefix(res, "PASS"):
+			laneProblems = append(laneProblems, fmt.Sprintf("lane %s reports %q, not a pass", lane, res))
+		}
+	}
+	if len(laneProblems) > 0 {
+		return fmt.Errorf("%s does not satisfy %q's lane set — %s", art.Rel, nodeID, strings.Join(laneProblems, "; "))
+	}
+	return nil
+}
+
+// proofSnapshot fingerprints the graph-owned obligation fields evaluated by a
+// review. Observations, claims, estimates, phases, and history are not
+// part of the promise and therefore do not cause false contention failures.
+func proofSnapshot(n *model.Node) string {
+	if n == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(struct {
+		Role         string
+		Contract     string
+		ContractRev  int
+		Justifies    []string
+		Deps         []string
+		Gate         model.Gate
+		Hazards      model.Hazards
+		Artifacts    []string
+		Inputs       []model.Input
+		IntentHashes map[string]string
+		InputHashes  map[string]string
+	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
+		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
+	return digest.Bytes(raw)
 }
 
 // Record wires a frozen review artifact into a review node's observation.
@@ -235,6 +274,9 @@ type Result struct {
 func Record(o Options) (*Result, error) {
 	if o.Now == nil {
 		o.Now = time.Now
+	}
+	if err := ValidatePlanName(o.Plan); err != nil {
+		return nil, fmt.Errorf("graph review: %w", err)
 	}
 	planDir := filepath.Join(o.Root, "Plans", o.Plan)
 	graphPath := gstore.PathFor(planDir)
@@ -270,84 +312,25 @@ func Record(o Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("graph review: %w", err)
 	}
-	f := art.Facts
+	if err := AdmitArtifact(g, o.Plan, o.Node, art); err != nil {
+		return nil, fmt.Errorf("graph review: %w", err)
+	}
 	reportDigest := art.ReportDigest
 
-	// The three freeze signals, refused together (batched, naming each).
-	var missing []string
-	if f.Status != "resolved" {
-		missing = append(missing, fmt.Sprintf("status is %q, need \"resolved\"", f.Status))
-	}
-	if !f.Frozen {
-		missing = append(missing, "frozen is not true (a reopened or in-progress review is not evidence)")
-	}
-	if f.Verdict != "Aligned" {
-		missing = append(missing, fmt.Sprintf("verdict is %q, need \"Aligned\"", f.Verdict))
-	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("graph review: %s is not a frozen Aligned review — %s; run `sdd review resolve` on it first (D-0020 freezes all three signals atomically)", o.Artifact, strings.Join(missing, "; "))
-	}
-
-	// Gate-to-artifact binding (review-07 F-01): a frozen Aligned artifact
-	// is evidence for the plan it reviewed, not a bearer token. review_of
-	// must name a document under THIS plan, and an artifact already
-	// recorded on another gate refuses — pointing gate B at gate A's
-	// artifact would green B with A's evidence.
-	planPrefix := "Plans/" + o.Plan + "/"
-	if f.ReviewOf == "" {
-		return nil, fmt.Errorf("graph review: %s carries no review_of; a gate observation binds to the artifact's reviewed document, and an artifact that names none cannot be bound", o.Artifact)
-	}
-	if !strings.HasPrefix(filepath.ToSlash(f.ReviewOf), planPrefix) {
-		return nil, fmt.Errorf("graph review: %s reviews %q, which is not under %s — a review of another plan is not evidence for this gate", o.Artifact, f.ReviewOf, planPrefix)
-	}
-	for i := range g.Nodes {
-		other := &g.Nodes[i]
-		if other.ID == o.Node || other.Gate.Type != model.GateReview {
-			continue
-		}
-		if v := other.Verification; v != nil && v.ReportDigest == reportDigest {
-			return nil, fmt.Errorf("graph review: %s is already recorded on gate %q; one review artifact greens one gate — scaffold and resolve a review of THIS gate's scope", o.Artifact, other.ID)
-		}
-	}
-
-	// Lane conformance: a full gate needs all four lanes, a subset gate
-	// needs exactly the lanes it names; each must carry a passing result.
-	laneResult := map[string]string{}
-	for _, lr := range f.LaneResults {
-		laneResult[lr.Lane] = lr.Result
-	}
-	required := node.Gate.Lanes
-	if required == nil {
-		required = model.ReviewLanes
-	}
-	var laneProblems []string
-	for _, lane := range required {
-		res, ok := laneResult[lane]
-		switch {
-		case !ok:
-			laneProblems = append(laneProblems, fmt.Sprintf("lane %s is absent from the artifact", lane))
-		case !strings.HasPrefix(res, "PASS"):
-			laneProblems = append(laneProblems, fmt.Sprintf("lane %s reports %q, not a pass", lane, res))
-		}
-	}
-	if len(laneProblems) > 0 {
-		return nil, fmt.Errorf("graph review: %s does not satisfy %q's lane set — %s", o.Artifact, o.Node, strings.Join(laneProblems, "; "))
-	}
-
-	scope, err := Scope(g, o.Node)
+	// Scope subtraction is based on fully current inner reviews. Graph-only
+	// GREEN is insufficient: artifact, requirement, or declared-input drift
+	// makes an inner gate stale and puts its region back into this increment.
+	scope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("graph review: %w", err)
 	}
-	inScope := map[string]bool{}
-	for _, id := range scope {
-		inScope[id] = true
-	}
+	digester := digest.New(o.RepoRoot)
 
 	// Open findings are amendments, not demotions. Plan them now so a
 	// malformed finding refuses here, then hand the preview back unwritten:
 	// the node cannot green from an artifact that still demands change.
 	if open := art.OpenFindings(); len(open) > 0 {
-		plan, err := PlanAmendments(g, o.Node, art)
+		plan, err := PlanAmendmentsInScope(g, o.Node, art, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -355,26 +338,14 @@ func Record(o Options) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Plan: plan, ExpectDigest: expect}, nil
+		return &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Plan: plan,
+			ExpectDigest: expect, ExpectReportDigest: reportDigest}, nil
 	}
-	for i := range g.Nodes {
-		if g.Nodes[i].Verification == nil {
-			continue
-		}
-		for _, a := range g.Amendments {
-			if a.ReportDigest == reportDigest {
-				return nil, fmt.Errorf("graph review: %s was already applied as an amendment (seq %d); a re-review needs a fresh artifact", o.Artifact, a.Seq)
-			}
-		}
-		break
-	}
-
 	// The reviewed set (DD-9): every scope node's contract revision and
 	// artifact digests, digested from the shared tree (a review is of
 	// merged, committed state). The aggregate artifact digests are also
 	// recorded on the observation so drift in any of them derives the node
 	// STALE via ordinary digest staleness (DD-6).
-	digester := digest.New(o.RepoRoot)
 	agg := map[string]string{}
 	reviewed := map[string]model.ReviewedRef{}
 	for _, id := range scope {
@@ -395,6 +366,11 @@ func Record(o Options) (*Result, error) {
 		}
 		reviewed[id] = ref
 	}
+	evaluatedGate := proofSnapshot(node)
+	evaluatedScope := make(map[string]string, len(scope))
+	for _, id := range scope {
+		evaluatedScope[id] = proofSnapshot(g.NodeByID(id))
+	}
 
 	prov := o.Provider
 	if prov == nil {
@@ -409,6 +385,7 @@ func Record(o Options) (*Result, error) {
 
 	res := &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope}
 	handle := ""
+	hookRan := false
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 		n := fresh.NodeByID(o.Node)
 		if n == nil {
@@ -417,11 +394,39 @@ func Record(o Options) (*Result, error) {
 		if n.Claim != nil && n.Claim.By != o.By {
 			return fmt.Errorf("graph review: %q was claimed by %q while this record ran", o.Node, n.Claim.By)
 		}
+		currentScope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, fresh, o.Node)
+		if err != nil {
+			return err
+		}
+		if proofSnapshot(n) != evaluatedGate || !slices.Equal(currentScope, scope) {
+			return fmt.Errorf("graph review: %q's gate or scope changed while the artifact was evaluated; re-review the current graph", o.Node)
+		}
+		for _, id := range scope {
+			if proofSnapshot(fresh.NodeByID(id)) != evaluatedScope[id] {
+				return fmt.Errorf("graph review: scope changed while the artifact was evaluated: %q has a different contract snapshot; re-review the current graph", id)
+			}
+		}
+		currentArtifact, err := ReadArtifact(o.Root, o.Artifact)
+		if err != nil {
+			return fmt.Errorf("graph review: re-reading artifact before publication: %w", err)
+		}
+		if currentArtifact.ReportDigest != reportDigest {
+			return fmt.Errorf("graph review: %s changed while its evidence was being recorded; re-review the current artifact", art.Rel)
+		}
+		if err := AdmitArtifact(fresh, o.Plan, o.Node, currentArtifact); err != nil {
+			return fmt.Errorf("graph review: %w", err)
+		}
+		if !hookRan && o.beforePublish != nil {
+			hookRan = true
+			if err := o.beforePublish(); err != nil {
+				return err
+			}
+		}
 		fresh.SeqCounter++
 		n.Verification = &model.Verification{
 			Result:          model.ResultPass,
 			Seq:             fresh.SeqCounter,
-			ContractRev:     n.EffectiveContractRev(),
+			ContractRev:     node.EffectiveContractRev(),
 			ArtifactDigests: agg,
 			Reviewed:        reviewed,
 			ReportDigest:    reportDigest,

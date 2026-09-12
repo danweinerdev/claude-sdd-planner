@@ -309,15 +309,15 @@ func TestRedBeforeGreenGatesHazardTests(t *testing.T) {
 // acceptance: recorded, never merged.
 type dirtyProvider struct{}
 
-func (dirtyProvider) Kind() string                    { return "plain" }
-func (dirtyProvider) Capacity() int                   { return 2 }
+func (dirtyProvider) Kind() string  { return "plain" }
+func (dirtyProvider) Capacity() int { return 2 }
 func (dirtyProvider) Allocate(string) (provider.Workspace, error) {
 	return provider.Workspace{}, nil
 }
-func (dirtyProvider) HandleFor(string) string               { return "" }
-func (dirtyProvider) Release(string) error                  { return nil }
-func (dirtyProvider) PruneMergedBranches() ([]string, error) { return nil, nil }
-func (dirtyProvider) Isolation(string, int) string          { return model.IsolationSharedDirty }
+func (dirtyProvider) HandleFor(string) string                      { return "" }
+func (dirtyProvider) Release(string) error                         { return nil }
+func (dirtyProvider) PruneMergedBranches() ([]string, error)       { return nil, nil }
+func (dirtyProvider) Isolation(string, int) string                 { return model.IsolationSharedDirty }
 func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
 
 func TestSharedDirtyPassRecordsProvisionally(t *testing.T) {
@@ -399,5 +399,117 @@ func TestSyncGateRouting(t *testing.T) {
 	}
 	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "t"}); err == nil {
 		t.Fatal("a tests gate requires --report")
+	}
+}
+
+type graphMutatingProvider struct {
+	provider.Provider
+	mutate func() error
+}
+
+func (p graphMutatingProvider) Provenance(string) (*model.Provenance, error) {
+	return nil, p.mutate()
+}
+
+func (p graphMutatingProvider) Isolation(string, int) string { return model.IsolationClean }
+
+// A report is evidence for the exact contract snapshot it was folded against.
+// A concurrent amendment must be refused rather than relabeling the old report
+// with the fresh contract revision.
+func TestSyncRefusesPublicationAcrossContractRevision(t *testing.T) {
+	n := testsNode("a", "test_old")
+	n.Hazards = model.Hazards{"external-format"}
+	n.Gate.Tests[0].Satisfies = []string{"external-format"}
+	planDir, repoRoot := fixture(t, n)
+	failing := `<testsuite><testcase name="test_old"><failure/></testcase></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+		t.Fatal(err)
+	}
+
+	prov := graphMutatingProvider{mutate: func() error {
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			a := g.NodeByID("a")
+			a.ContractRev = 2
+			a.Contract = "revised promise"
+			a.Gate.Tests[0].ID = "test_new"
+			a.RedSeqs = nil
+			return nil
+		})
+		return err
+	}}
+	passingOldReport := `<testsuite><testcase name="test_old"/></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green.xml", ReportBytes: []byte(passingOldReport), Provider: prov}); err == nil ||
+		!strings.Contains(err.Error(), "contract changed") {
+		t.Fatalf("an old report must refuse when the evaluated contract changes: %v", err)
+	}
+
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := g.NodeByID("a"); got.Verification != nil && got.Verification.Result == model.ResultPass {
+		t.Fatalf("old report was published as proof of revision %d: %+v", got.EffectiveContractRev(), got.Verification)
+	}
+}
+
+// Publication is fenced to the evaluated node, not to an unrelated graph
+// byte. A concurrent write elsewhere must survive and the store may retry the
+// observation against the fresh graph without changing its meaning.
+func TestSyncAllowsConcurrentUnrelatedGraphWrite(t *testing.T) {
+	a := testsNode("a", "test_a")
+	b := testsNode("b", "test_b")
+	planDir, repoRoot := fixture(t, a, b)
+	prov := graphMutatingProvider{mutate: func() error {
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			g.NodeByID("b").Contract = "unrelated edit"
+			return nil
+		})
+		return err
+	}}
+	report := `<testsuite><testcase name="test_a"/></testsuite>`
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green.xml", ReportBytes: []byte(report), Provider: prov})
+	if err != nil || !res.Recorded {
+		t.Fatalf("unrelated graph write should not invalidate the evaluated node: %+v %v", res, err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("b").Contract != "unrelated edit" || g.NodeByID("a").Verification == nil {
+		t.Fatalf("both writes must survive: %+v", g.Nodes)
+	}
+}
+
+func TestSyncRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
+	a := testsNode("a", "test_a")
+	b := testsNode("b", "test_b")
+	planDir, repoRoot := fixture(t, a, b)
+	hookCalls := 0
+	report := `<testsuite><testcase name="test_a"/></testsuite>`
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green.xml", ReportBytes: []byte(report),
+		beforePublish: func() error {
+			hookCalls++
+			_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				g.NodeByID("b").Contract = "landed between read and CAS"
+				return nil
+			})
+			return err
+		}})
+	if err != nil || !res.Recorded {
+		t.Fatalf("the observation should retry after unrelated contention: %+v %v", res, err)
+	}
+	if hookCalls != 1 {
+		t.Fatalf("publication hook ran %d times; it must run only on the first CAS attempt", hookCalls)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("b").Contract != "landed between read and CAS" || g.NodeByID("a").Verification == nil {
+		t.Fatalf("CAS retry lost one of the writes: %+v", g.Nodes)
 	}
 }

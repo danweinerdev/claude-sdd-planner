@@ -127,6 +127,34 @@ func fixtureRoot(t *testing.T, spec string) string {
 	return root
 }
 
+func TestCompileRejectsAcceptanceWithoutFullReviewUpstream(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	p, err := model.DecodeProposal([]byte(strings.Replace(happyProposal, `"FR-01", "D-0001"`, `"FR-01"`, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Nodes[3].Gate.Lanes = []string{model.ReviewLanes[0]}
+	p.Nodes = append(p.Nodes,
+		model.Node{ID: "accept", Role: model.RoleIntegrationAcceptance, Contract: "accept", Justifies: []string{"AC-01"}, Deps: []string{"feature-gate"}, Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1},
+		model.Node{ID: "final-review", Role: model.RoleReview, Contract: "full review", Justifies: []string{"AC-01"}, Deps: []string{"accept"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1},
+	)
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage(t, root, string(raw))
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if f.Where == "accept" && strings.Contains(f.Msg, "full review upstream") {
+			return
+		}
+	}
+	t.Fatalf("acceptance with only subset review upstream must be refused: %v", findings)
+}
+
 // recordFixtureDecision writes fixtureRoot's plan a decisions file with the
 // one entry happyProposalCiting resolves against — kept separate from
 // fixtureRoot itself so decisions_test.go's own SyncDesignDecisions

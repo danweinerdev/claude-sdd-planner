@@ -375,3 +375,75 @@ func TestThousandNodePassIsFast(t *testing.T) {
 		t.Fatalf("derived %d states", len(s))
 	}
 }
+
+func TestReviewCoverageMustMatchCurrentScope(t *testing.T) {
+	a := node("a", nil, pass(1))
+	b := node("b", nil, pass(1))
+	gate := node("review", []string{"a", "b"}, pass(1))
+	gate.Gate = model.Gate{Type: model.GateReview}
+	gate.Verification.Reviewed = map[string]model.ReviewedRef{
+		"a": {ContractRev: 1},
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, b, gate}}
+
+	got := Derive(Inputs{Graph: g})["review"]
+	if got.State != Stale || len(got.ReviewStale) != 1 || got.ReviewStale[0] != "b" {
+		t.Fatalf("review evidence that omits current scope must be stale: %+v", got)
+	}
+}
+
+func TestLegacyReviewObservationRetainsPreReviewedSetMeaning(t *testing.T) {
+	a := node("a", nil, pass(1))
+	gate := node("review", []string{"a"}, pass(1))
+	gate.Gate = model.Gate{Type: model.GateReview}
+	// Reviewed absent is the legacy wire shape. Existing graphs decode and
+	// derive as before; amendment materializes the assumed set before extending
+	// such a gate so compatibility cannot hide later scope growth.
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, gate}}
+
+	got := Derive(Inputs{Graph: g})["review"]
+	if got.State != Green || len(got.ReviewStale) != 0 {
+		t.Fatalf("legacy review evidence must retain its pre-reviewed-set meaning: %+v", got)
+	}
+}
+
+func TestReviewScopeSubtractsOnlyCurrentGreenInnerReview(t *testing.T) {
+	a := node("a", nil, pass(1))
+	inner := node("inner", []string{"a"}, pass(2))
+	inner.Gate = model.Gate{Type: model.GateReview}
+	inner.Verification.Reviewed = map[string]model.ReviewedRef{"a": {ContractRev: 1}}
+	outer := node("outer", []string{"inner"}, nil)
+	outer.Gate = model.Gate{Type: model.GateReview}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, inner, outer}}
+
+	scope, err := ReviewScope(g, "outer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope) != 0 {
+		t.Fatalf("a current GREEN inner full review should subtract its region: %v", scope)
+	}
+
+	g.NodeByID("a").ContractRev = 2
+	scope, err = ReviewScope(g, "outer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope) != 2 || scope[0] != "a" || scope[1] != "inner" {
+		t.Fatalf("a stale inner review must not hide unreviewed scope: %v", scope)
+	}
+}
+
+func TestReviewScopeIsCycleSafeAndExcludesGate(t *testing.T) {
+	a := node("a", []string{"review"}, nil)
+	gate := node("review", []string{"a"}, nil)
+	gate.Gate = model.Gate{Type: model.GateReview}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, gate}}
+	scope, err := ReviewScope(g, "review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope) != 1 || scope[0] != "a" {
+		t.Fatalf("cycle-safe scope must exclude its own gate: %v", scope)
+	}
+}

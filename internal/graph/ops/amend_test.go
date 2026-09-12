@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -54,12 +55,12 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Plan == nil || res.ExpectDigest == "" {
+	if res.Plan == nil || res.ExpectDigest == "" || res.Plan.ReportDigest == "" {
 		t.Fatalf("expected a preview: %+v", res)
 	}
 
 	// Wrong fence refuses, writes nothing.
-	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: "0000000000000000"}); err == nil || !strings.Contains(err.Error(), "changed since the preview") {
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: "0000000000000000", ExpectReportDigest: res.Plan.ReportDigest}); err == nil || !strings.Contains(err.Error(), "changed since the preview") {
 		t.Fatalf("stale digest must refuse: %v", err)
 	}
 	// Dry run writes nothing.
@@ -71,8 +72,12 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	if after, _ := os.ReadFile(gstore.PathFor(planDir)); string(after) != string(before) {
 		t.Fatal("dry run wrote the graph")
 	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest}); err == nil ||
+		!strings.Contains(err.Error(), "--expect-report-digest is required") {
+		t.Fatalf("apply must require the independent artifact fence: %v", err)
+	}
 
-	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest})
+	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest, ExpectReportDigest: res.Plan.ReportDigest})
 	if err != nil {
 		t.Fatalf("amend: %v", err)
 	}
@@ -98,7 +103,7 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 		t.Fatalf("unrelated node untouched: %+v", st["helper"])
 	}
 	// The same artifact cannot amend twice.
-	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: out.NewDigest}); err == nil || !strings.Contains(err.Error(), "already applied") {
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: out.NewDigest, ExpectReportDigest: res.Plan.ReportDigest}); err == nil || !strings.Contains(err.Error(), "already applied") {
 		t.Fatalf("second application must refuse: %v", err)
 	}
 }
@@ -110,7 +115,7 @@ func TestAmendExtendAddsSourcedNodeAndGrowsReviewDeps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest})
+	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest, ExpectReportDigest: res.Plan.ReportDigest})
 	if err != nil {
 		t.Fatalf("amend: %v", err)
 	}
@@ -154,5 +159,221 @@ func TestAmendRefusesUnclassifiedNoOpAndOutOfScope(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestAmendRefusesForeignOrInadmissibleReviewArtifacts(t *testing.T) {
+	tests := []struct {
+		name       string
+		replaceOld string
+		replaceNew string
+		want       string
+	}{
+		{"foreign plan", `review_of: "Plans/SamplePlan/README.md"`, `review_of: "Plans/Foreign/README.md"`, "not under Plans/SamplePlan/"},
+		{"unaligned verdict", "verdict: Aligned", "verdict: Misaligned", "verdict is"},
+		{"missing lane", "  - lane: review_quality\n    result: PASS/Aligned\n    evidence: \"looked\"\n", "", "review_quality is absent"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, planDir := fixtureRoot(t)
+			rel := frozenReview(t, root, "  - id: F-01\n    severity: major\n    title: bad evidence\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: replacement\n")
+			path := filepath.Join(root, filepath.FromSlash(rel))
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(strings.Replace(string(raw), tc.replaceOld, tc.replaceNew, 1)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			d, err := gstore.Digest(gstore.PathFor(planDir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: d}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("inadmissible artifact must refuse with %q: %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestAmendArtifactDigestFenceRejectsSubstitution(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	rel := frozenReview(t, root, "  - id: F-01\n    severity: major\n    title: original finding\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: original replacement\n")
+	preview, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(raw), "original replacement", "substituted replacement", 1)
+	if err := os.WriteFile(path, []byte(changed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: preview.ExpectDigest, ExpectReportDigest: preview.Plan.ReportDigest}); err == nil ||
+		!strings.Contains(err.Error(), "review artifact changed since the preview") {
+		t.Fatalf("substituted report must refuse under its own digest fence: %v", err)
+	}
+	after, err := os.ReadFile(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("a substituted review artifact must leave the graph unchanged")
+	}
+}
+
+func TestAmendRejectsArtifactAlreadyUsedAsEvidence(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	rel := frozenReview(t, root, "  - id: F-01\n    severity: major\n    title: duplicate evidence\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: duplicate replacement\n")
+	artifact, err := greview.ReadArtifact(root, rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("feature-gate").Verification = &model.Verification{
+			Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			ReportDigest: artifact.ReportDigest,
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, DryRun: true}); err == nil ||
+		!strings.Contains(err.Error(), "already recorded on gate") {
+		t.Fatalf("evidence already consumed by Record must not be reusable by Amend: %v", err)
+	}
+}
+
+func TestAmendExtendInvalidatesAlreadyGreenReview(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("helper").Verification = passAt(1)
+		g.NodeByID("big").Verification = passAt(1)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cleanRel := frozenReview(t, root, "")
+	if _, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: cleanRel}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a pre-Reviewed-map observation. It remains compatible until
+	// this extension changes the scope; amend must materialize the old scope.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("feature-gate").Verification.Reviewed = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	extendRel := "Plans/SamplePlan/reviews/02-extend.md"
+	original := filepath.Join(root, filepath.FromSlash(cleanRel))
+	raw, err := os.ReadFile(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := "  - id: F-02\n    severity: minor\n    title: extend scope\n    status: open\n    action: extend\n    node:\n      id: big-audit\n      contract: emits audit\n      deps: [big]\n      gate:\n        type: tests\n        tests: [{id: test_big_audit, file: t.ext}]\n      hazards: []\n"
+	extendText := strings.Replace(string(raw), "findings:\n---", "findings:\n"+findings+"---", 1)
+	extendPath := filepath.Join(root, filepath.FromSlash(extendRel))
+	if err := os.WriteFile(extendPath, []byte(extendText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: extendRel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: extendRel, ExpectDigest: preview.ExpectDigest, ExpectReportDigest: preview.Plan.ReportDigest}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := states.Derive(states.Inputs{Graph: g})
+	if ns := st["feature-gate"]; ns.State == states.Green || ns.RevIncompatible || len(ns.ReviewStale) == 0 {
+		t.Fatalf("scope extension must stale prior coverage without pretending owned contract fields changed: %+v", ns)
+	}
+}
+
+func TestAmendMaterializesEmptyLegacyScopeAcrossEncoding(t *testing.T) {
+	root, _ := fixtureRoot(t)
+	a := model.Node{ID: "a", Contract: "a", Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1, Verification: passAt(1)}
+	inner := model.Node{ID: "inner", Role: model.RoleReview, Contract: "inner", Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1, Verification: passAt(2)}
+	inner.Verification.Reviewed = map[string]model.ReviewedRef{"a": {ContractRev: 1}}
+	outer := model.Node{ID: "outer", Role: model.RoleReview, Contract: "outer", Deps: []string{"inner"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1, Verification: passAt(3)}
+	// nil Reviewed is the legacy shape; inner currently covers the whole
+	// incremental scope, so the materialized pre-extension scope is empty.
+	g := &model.Graph{Version: model.SchemaVersion, SeqCounter: 3, Nodes: []model.Node{a, inner, outer}}
+	sources, err := gcompile.NewSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := &greview.Plan{
+		Review: "outer", Scope: nil, Artifact: "reviews/legacy.md", ReportDigest: "legacy-report",
+		Amendments: []greview.Amendment{{
+			Finding: "F-01", Action: greview.ActionExtend, Node: "new", New: &model.Node{
+				ID: "new", Contract: "new work", Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1,
+			},
+		}},
+	}
+	rebuilt, _, err := applyAmendments(g, plan, "", sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := rebuilt.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := model.DecodeGraph(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ns := states.Derive(states.Inputs{Graph: reloaded})["outer"]
+	if ns.State == states.Green || len(ns.ReviewStale) == 0 {
+		t.Fatalf("empty legacy scope must not round-trip back to nil compatibility after extend: %+v", ns)
+	}
+}
+
+func TestAmendExtendInvalidatesLegacyReviewWithoutChangingContractRevision(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("helper").Verification = passAt(1)
+		g.NodeByID("big").Verification = passAt(1)
+		gate := g.NodeByID("feature-gate")
+		gate.Verification = passAt(2) // legacy wire shape: Reviewed remains nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rel := frozenReview(t, root, "  - id: F-legacy\n    severity: minor\n    title: extend legacy scope\n    status: open\n    action: extend\n    node:\n      id: legacy-audit\n      contract: audits legacy work\n      deps: [big]\n      gate:\n        type: tests\n        tests: [{id: test_legacy_audit, file: t.ext}]\n      hazards: []\n")
+	preview, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel,
+		ExpectDigest: preview.ExpectDigest, ExpectReportDigest: preview.Plan.ReportDigest}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := g.NodeByID("feature-gate")
+	ns := states.Derive(states.Inputs{Graph: g})["feature-gate"]
+	if gate.EffectiveContractRev() != gate.Verification.EffectiveContractRev() || ns.State == states.Green || len(ns.ReviewStale) == 0 {
+		t.Fatalf("legacy scope growth must stale coverage without changing contract identity: gate=%+v state=%+v", gate, ns)
+	}
+}
+
+func TestAmendRefusesUnsafePlanNameBeforePathResolution(t *testing.T) {
+	if _, err := AmendFromReview(AmendOptions{Root: t.TempDir(), RepoRoot: t.TempDir(), Plan: "../Foreign", Node: "gate", Artifact: "review.md", DryRun: true}); err == nil ||
+		!strings.Contains(err.Error(), "single safe directory name") {
+		t.Fatalf("plan traversal must refuse before graph or artifact access: %v", err)
 	}
 }

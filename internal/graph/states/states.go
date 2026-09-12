@@ -23,6 +23,7 @@
 package states
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
@@ -107,6 +108,126 @@ type Inputs struct {
 	// "" / absent when the input no longer resolves. nil disables the input
 	// axis entirely.
 	CurrentInputHashes map[string]string
+}
+
+// ReviewScope derives the current increment a review gate is responsible for.
+// Only a currently GREEN inner full review subtracts its region. The graph-only
+// derive intentionally disables external digest/intent/input axes; callers that
+// already have a complete state snapshot should use ReviewScopeFromStates.
+func ReviewScope(g *model.Graph, gateID string) ([]string, error) {
+	return ReviewScopeFromStates(g, gateID, Derive(Inputs{Graph: g}))
+}
+
+// ReviewScopeFromStates derives review scope from an already-computed state
+// snapshot. Keeping this below package review lets Derive and completion
+// closure use the same current-GREEN subtraction rule without an import cycle.
+func ReviewScopeFromStates(g *model.Graph, gateID string, current map[string]NodeState) ([]string, error) {
+	return reviewScope(g, gateID, func(id string) bool { return current[id].State == Green })
+}
+
+func reviewScope(g *model.Graph, gateID string, current func(string) bool) ([]string, error) {
+	gate := g.NodeByID(gateID)
+	if gate == nil {
+		return nil, fmt.Errorf("graph review: node %q does not exist", gateID)
+	}
+	if gate.Gate.Type != model.GateReview {
+		return nil, fmt.Errorf("graph review: %q has gate type %q; scope derives for review gates only", gateID, gate.Gate.Type)
+	}
+
+	adjacency := algorithms.Graph{}
+	for i := range g.Nodes {
+		adjacency[g.Nodes[i].ID] = g.Nodes[i].Deps
+	}
+	closure := algorithms.DependencyClosure(adjacency, gateID)
+	delete(closure, gateID) // preserve start-excluded semantics even in a cycle
+	covered := map[string]bool{}
+	for i := range g.Nodes {
+		inner := &g.Nodes[i]
+		if inner.ID == gateID || !closure[inner.ID] || inner.Gate.Type != model.GateReview || inner.Gate.Lanes != nil {
+			continue
+		}
+		if !current(inner.ID) {
+			continue
+		}
+		covered[inner.ID] = true
+		for id := range algorithms.DependencyClosure(adjacency, inner.ID) {
+			covered[id] = true
+		}
+	}
+
+	var out []string
+	for id := range closure {
+		if !covered[id] {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// Closed derives completion-grade coverage from current node states. Full
+// reviews close only their exact current increments; integration acceptance
+// closes only after all of its upstream work is already covered by current
+// full-review evidence (or an earlier qualifying acceptance).
+func Closed(g *model.Graph, statesByID map[string]NodeState) map[string]bool {
+	closed := map[string]bool{}
+	for i := range g.Nodes {
+		review := &g.Nodes[i]
+		if review.Gate.Type != model.GateReview || review.Gate.Lanes != nil || review.Verification == nil || review.Verification.Result != model.ResultPass || statesByID[review.ID].State != Green {
+			continue
+		}
+		closed[review.ID] = true
+		scope, err := ReviewScopeFromStates(g, review.ID, statesByID)
+		if err != nil {
+			continue
+		}
+		for _, id := range scope {
+			if statesByID[id].State == Green {
+				closed[id] = true
+			}
+		}
+	}
+
+	// Iterate to a fixed point so acceptance chains do not depend on storage
+	// order. dependencyClosure excludes its start node.
+	changed := true
+	for changed {
+		changed = false
+		for i := range g.Nodes {
+			acceptance := &g.Nodes[i]
+			if closed[acceptance.ID] || acceptance.EffectiveRole() != model.RoleIntegrationAcceptance || statesByID[acceptance.ID].State != Green {
+				continue
+			}
+			upstream := dependencyClosure(g, acceptance.ID)
+			covered := len(upstream) > 0
+			for _, id := range upstream {
+				if !closed[id] {
+					covered = false
+					break
+				}
+			}
+			if covered {
+				closed[acceptance.ID] = true
+				changed = true
+			}
+		}
+	}
+	return closed
+}
+
+func dependencyClosure(g *model.Graph, nodeID string) []string {
+	adjacency := algorithms.Graph{}
+	for i := range g.Nodes {
+		adjacency[g.Nodes[i].ID] = g.Nodes[i].Deps
+	}
+	set := algorithms.DependencyClosure(adjacency, nodeID)
+	delete(set, nodeID)
+	out := make([]string, 0, len(set))
+	for id := range set {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Derive computes every node's state in one topological pass.
@@ -256,24 +377,51 @@ func Derive(in Inputs) map[string]NodeState {
 			if v.Isolation != model.IsolationClean {
 				ns.IsolationStale = true
 			}
-			// A review node's evidence binds to the reviewed set: each
-			// reviewed node's contract revision (always) and artifact
-			// digests (when a digester is available). A node that left
-			// the graph is drift too.
+			// A review node's evidence binds to the exact current scope, not
+			// merely to whichever recorded entries still happen to match.
+			// This catches scope growth (including a direct dep appended by an
+			// extend amendment) and scope shrinkage before old evidence can
+			// remain GREEN. A nil Reviewed map is the pre-reviewed-set wire
+			// shape. Preserve its historical meaning for existing graphs;
+			// amendment code materializes that assumed legacy scope before an
+			// extension, so later scope growth still invalidates the old proof.
+			// A non-nil set must match exactly.
+			reviewStale := map[string]bool{}
+			if n.Gate.Type == model.GateReview && v.Reviewed != nil {
+				if currentScope, err := reviewScope(g, n.ID, func(id string) bool { return out[id].State == Green }); err == nil {
+					current := map[string]bool{}
+					for _, reviewedID := range currentScope {
+						current[reviewedID] = true
+						if _, present := v.Reviewed[reviewedID]; !present {
+							reviewStale[reviewedID] = true
+						}
+					}
+					for reviewedID := range v.Reviewed {
+						if !current[reviewedID] {
+							reviewStale[reviewedID] = true
+						}
+					}
+				}
+			}
+			// Every recorded member must still name the same contract revision
+			// and artifact bytes. A node that left the graph is drift too.
 			for reviewedID, ref := range v.Reviewed {
 				reviewed, present := byID[reviewedID]
 				if !present || reviewed.EffectiveContractRev() != ref.ContractRev {
-					ns.ReviewStale = append(ns.ReviewStale, reviewedID)
+					reviewStale[reviewedID] = true
 					continue
 				}
 				if in.ArtifactDigest != nil {
 					for artifact, recorded := range ref.ArtifactDigests {
 						if in.ArtifactDigest(artifact) != recorded {
-							ns.ReviewStale = append(ns.ReviewStale, reviewedID)
+							reviewStale[reviewedID] = true
 							break
 						}
 					}
 				}
+			}
+			for reviewedID := range reviewStale {
+				ns.ReviewStale = append(ns.ReviewStale, reviewedID)
 			}
 			sort.Strings(ns.ReviewStale)
 			if ns.SeqStale || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || len(ns.ReviewStale) > 0 {

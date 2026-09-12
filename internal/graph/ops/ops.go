@@ -13,12 +13,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
@@ -156,7 +158,12 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 		}
 	}
 
-	out := &model.Graph{Version: g.Version, SeqCounter: g.SeqCounter, RetirementSources: g.RetirementSources}
+	// Preserve all graph-level history, especially amendment digests used to
+	// prevent replay. Splitting nodes does not reset the graph's audit trail.
+	clone := *g
+	out := &clone
+	out.Nodes = nil
+	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
 	out.Retired = append(append([]string(nil), g.Retired...), nodeID)
 	sort.Strings(out.Retired)
 
@@ -167,10 +174,34 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 	sort.Strings(sortedChildren)
 
 	var rewired []string
+	adjacency := algorithms.Graph{}
+	for _, n := range g.Nodes {
+		adjacency[n.ID] = n.Deps
+	}
 	for i := range g.Nodes {
 		n := g.Nodes[i] // copy
 		if n.ID == nodeID {
 			continue
+		}
+		if n.Gate.Type == model.GateReview && n.Verification != nil && n.Verification.Reviewed == nil && algorithms.DependencyClosure(adjacency, n.ID)[nodeID] {
+			// Legacy observations assumed the old scope. Preserve that assumption
+			// explicitly before rewiring, so the replacement children cannot
+			// inherit proof belonging to their retired parent.
+			priorScope, err := states.ReviewScope(g, n.ID)
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(priorScope) == 0 {
+				priorScope = append([]string(nil), n.Deps...)
+			}
+			v := *n.Verification
+			v.Reviewed = make(map[string]model.ReviewedRef, len(priorScope))
+			for _, id := range priorScope {
+				if prior := g.NodeByID(id); prior != nil {
+					v.Reviewed[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
+				}
+			}
+			n.Verification = &v
 		}
 		var deps []string
 		replaced := false

@@ -10,6 +10,7 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
@@ -320,8 +321,11 @@ func TestRecordOpenFindingsPreviewWithoutWriting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
-	if res.Observation != nil || res.Plan == nil || res.ExpectDigest == "" {
+	if res.Observation != nil || res.Plan == nil || res.ExpectDigest == "" || res.ExpectReportDigest == "" {
 		t.Fatalf("open findings must preview, not record: %+v", res)
+	}
+	if res.ExpectReportDigest != res.Plan.ReportDigest {
+		t.Fatalf("preview report fence must name the artifact used to plan amendments: %+v", res)
 	}
 	if len(res.Plan.Amendments) != 1 || res.Plan.Amendments[0].Action != ActionRevise || res.Plan.Amendments[0].Node != "a" || !reflect.DeepEqual(res.Plan.Amendments[0].Changed, []string{"contract"}) {
 		t.Fatalf("plan = %+v", res.Plan.Amendments)
@@ -524,4 +528,285 @@ func TestRecordBindsArtifactToGate(t *testing.T) {
 		t.Fatalf("cross-gate reuse must refuse naming the prior gate: %v", err)
 	}
 	_ = planDir
+}
+
+func TestClosedAcceptanceRequiresCurrentFullReviewUpstream(t *testing.T) {
+	a := work("a", nil)
+	a.Verification = pass(1)
+	subset := subsetGate("subset", []string{"a"}, "review_quality")
+	subset.Verification = pass(1)
+	subset.Verification.Reviewed = map[string]model.ReviewedRef{"a": {ContractRev: 1}}
+	accept := work("accept", []string{"subset"})
+	accept.Role = model.RoleIntegrationAcceptance
+	accept.Gate = model.Gate{Type: model.GateCommand, Command: "true"}
+	accept.Verification = pass(1)
+	final := fullGate("final", []string{"accept"}) // structurally downstream, not run
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, subset, accept, final}}
+	st := states.Derive(states.Inputs{Graph: g})
+	closed := Closed(g, st)
+	if closed["accept"] || closed["subset"] || closed["a"] {
+		t.Fatalf("subset-only acceptance must not confer completion closure before the full review runs: %v", closed)
+	}
+
+	// Existing graphs that place the full backstop after acceptance remain
+	// executable: they simply do not close until that full review is current.
+	final.Verification = pass(2)
+	final.Verification.Reviewed = map[string]model.ReviewedRef{
+		"a": {ContractRev: 1}, "subset": {ContractRev: 1}, "accept": {ContractRev: 1},
+	}
+	g = &model.Graph{Version: 1, Nodes: []model.Node{a, subset, accept, final}}
+	st = states.Derive(states.Inputs{Graph: g})
+	closed = Closed(g, st)
+	for _, id := range []string{"a", "subset", "accept", "final"} {
+		if !closed[id] {
+			t.Fatalf("a current downstream full review should close existing graph member %s: %v", id, closed)
+		}
+	}
+
+	full := fullGate("full", []string{"a"})
+	full.Verification = pass(1)
+	full.Verification.Reviewed = map[string]model.ReviewedRef{"a": {ContractRev: 1}}
+	accept.Deps = []string{"full"}
+	g = &model.Graph{Version: 1, Nodes: []model.Node{a, full, accept}}
+	st = states.Derive(states.Inputs{Graph: g})
+	closed = Closed(g, st)
+	for _, id := range []string{"a", "full", "accept"} {
+		if !closed[id] {
+			t.Fatalf("current full review upstream should permit acceptance closure for %s: %v", id, closed)
+		}
+	}
+}
+
+func TestClosedDoesNotSubtractAStaleInnerFullReview(t *testing.T) {
+	a := work("a", nil)
+	inner := fullGate("inner", []string{"a"})
+	inner.Verification = pass(1)
+	outer := fullGate("outer", []string{"inner"})
+	outer.Verification = pass(2)
+	g := &model.Graph{Version: 1, Nodes: []model.Node{a, inner, outer}}
+	derived := map[string]states.NodeState{
+		"a":     {ID: "a", State: states.Green},
+		"inner": {ID: "inner", State: states.Stale},
+		"outer": {ID: "outer", State: states.Green},
+	}
+	closed := Closed(g, derived)
+	if !closed["a"] || !closed["outer"] || closed["inner"] {
+		t.Fatalf("outer current review must absorb the stale inner region without closing the stale gate: %v", closed)
+	}
+}
+
+func TestRecordScopeDoesNotSubtractArtifactStaleInnerReview(t *testing.T) {
+	a := work("a", nil, "src/a.ext")
+	inner := fullGate("inner", []string{"a"})
+	outer := fullGate("outer", []string{"inner"})
+	root, _ := fixture(t, 2, a, inner, outer)
+	writeFile(t, root, "src/a.ext", "current\n")
+	current := digest.New(root).Artifact("src/a.ext")
+
+	planDir := filepath.Join(root, "Plans", "P")
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("a").Verification = &model.Verification{
+			Result: model.ResultPass, Seq: 1, ContractRev: 1,
+			ArtifactDigests: map[string]string{"src/a.ext": current}, Isolation: model.IsolationClean,
+		}
+		g.NodeByID("inner").Verification = &model.Verification{
+			Result: model.ResultPass, Seq: 2, ContractRev: 1,
+			ArtifactDigests: map[string]string{"src/a.ext": "sha256:stale"},
+			Reviewed: map[string]model.ReviewedRef{"a": {
+				ContractRev: 1, ArtifactDigests: map[string]string{"src/a.ext": current},
+			}},
+			Isolation: model.IsolationClean,
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "reviews/outer.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+
+	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "outer", Artifact: "reviews/outer.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a", "inner"}; !reflect.DeepEqual(res.Scope, want) {
+		t.Fatalf("artifact-stale inner review must not subtract its region: got %v want %v", res.Scope, want)
+	}
+}
+
+func TestRecordRefusesArtifactOutsidePlanningRoot(t *testing.T) {
+	a := work("a", nil)
+	gate := fullGate("g1", []string{"a"})
+	root, _ := fixture(t, 0, a, gate)
+	outside := filepath.Join(t.TempDir(), "foreign.md")
+	if err := os.WriteFile(outside, []byte(artifactText("resolved", true, "Aligned", allPass(), "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: outside}); err == nil ||
+		!strings.Contains(err.Error(), "outside the planning root") {
+		t.Fatalf("an out-of-root review artifact must refuse: %v", err)
+	}
+}
+
+func TestReadArtifactRefusesLexicalAndSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "foreign.md")
+	if err := os.WriteFile(outside, []byte(artifactText("resolved", true, "Aligned", allPass(), "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	parentEscape := filepath.Join(root, "..", "foreign.md")
+	if err := os.WriteFile(parentEscape, []byte(artifactText("resolved", true, "Aligned", allPass(), "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(parentEscape) })
+	if _, err := ReadArtifact(root, "../foreign.md"); err == nil || !strings.Contains(err.Error(), "outside the planning root") {
+		t.Fatalf("lexical parent escape must refuse: %v", err)
+	}
+
+	linkDir := filepath.Join(root, "reviews")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(linkDir, "foreign.md")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	if _, err := ReadArtifact(root, "reviews/foreign.md"); err == nil || !strings.Contains(err.Error(), "outside the planning root") {
+		t.Fatalf("symlink escape must refuse: %v", err)
+	}
+}
+
+func TestRecordRefusesUnsafePlanNameBeforePathResolution(t *testing.T) {
+	if _, err := Record(Options{Root: t.TempDir(), RepoRoot: t.TempDir(), Plan: "../Foreign", Node: "gate", Artifact: "review.md"}); err == nil ||
+		!strings.Contains(err.Error(), "single safe directory name") {
+		t.Fatalf("plan traversal must refuse before graph or artifact access: %v", err)
+	}
+}
+
+func TestRecordRefusesArtifactSymlinkEscapingPlanningRoot(t *testing.T) {
+	a := work("a", nil)
+	gate := fullGate("g1", []string{"a"})
+	root, _ := fixture(t, 0, a, gate)
+	outside := filepath.Join(t.TempDir(), "foreign.md")
+	if err := os.WriteFile(outside, []byte(artifactText("resolved", true, "Aligned", allPass(), "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "reviews", "escape.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: link}); err == nil ||
+		!strings.Contains(err.Error(), "outside the planning root") {
+		t.Fatalf("an escaping artifact symlink must refuse: %v", err)
+	}
+}
+
+type mutatingReviewProvider struct {
+	mutate func() error
+}
+
+func (mutatingReviewProvider) Kind() string  { return "plain" }
+func (mutatingReviewProvider) Capacity() int { return 1 }
+func (mutatingReviewProvider) Allocate(string) (provider.Workspace, error) {
+	return provider.Workspace{}, nil
+}
+func (mutatingReviewProvider) HandleFor(string) string                { return "" }
+func (mutatingReviewProvider) Release(string) error                   { return nil }
+func (mutatingReviewProvider) PruneMergedBranches() ([]string, error) { return nil, nil }
+func (mutatingReviewProvider) Isolation(string, int) string           { return model.IsolationClean }
+func (p mutatingReviewProvider) Provenance(string) (*model.Provenance, error) {
+	return nil, p.mutate()
+}
+
+func TestRecordRefusesPublicationAcrossReviewedContractRevision(t *testing.T) {
+	a := work("a", nil)
+	a.Verification = pass(1)
+	gate := fullGate("g1", []string{"a"})
+	root, planDir := fixture(t, 1, a, gate)
+	writeFile(t, root, "reviews/race.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+	prov := mutatingReviewProvider{mutate: func() error {
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			g.NodeByID("a").ContractRev = 2
+			g.NodeByID("a").Contract = "changed during review publication"
+			return nil
+		})
+		return err
+	}}
+	if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "race.md"), Provider: prov}); err == nil ||
+		!strings.Contains(err.Error(), "scope changed") {
+		t.Fatalf("review must publish only against the evaluated scope snapshot: %v", err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("g1").Verification != nil {
+		t.Fatal("stale review evidence must not be published")
+	}
+}
+
+func TestRecordRefusesPublicationAcrossScopeGrowth(t *testing.T) {
+	a := work("a", nil)
+	a.Verification = pass(1)
+	b := work("b", nil)
+	b.Verification = pass(1)
+	gate := fullGate("g1", []string{"a"})
+	root, planDir := fixture(t, 1, a, b, gate)
+	writeFile(t, root, "reviews/scope-race.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+	prov := mutatingReviewProvider{mutate: func() error {
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			g.NodeByID("g1").Deps = append(g.NodeByID("g1").Deps, "b")
+			return nil
+		})
+		return err
+	}}
+	if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "scope-race.md"), Provider: prov}); err == nil ||
+		!strings.Contains(err.Error(), "gate or scope changed") {
+		t.Fatalf("review must publish only against the evaluated scope set: %v", err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("g1").Verification != nil {
+		t.Fatal("review evidence evaluated before scope growth must not be published")
+	}
+}
+
+func TestRecordRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
+	a := work("a", nil)
+	a.Verification = pass(1)
+	b := work("b", nil)
+	gate := fullGate("g1", []string{"a"})
+	root, planDir := fixture(t, 1, a, b, gate)
+	writeFile(t, root, "reviews/retry.md", artifactText("resolved", true, "Aligned", allPass(), ""))
+	hookCalls := 0
+	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "retry.md"),
+		beforePublish: func() error {
+			hookCalls++
+			_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				g.NodeByID("b").Contract = "unrelated concurrent edit"
+				return nil
+			})
+			return err
+		}})
+	if err != nil || res.Observation == nil {
+		t.Fatalf("review publication should retry unrelated contention: %+v %v", res, err)
+	}
+	if hookCalls != 1 {
+		t.Fatalf("publication hook ran %d times, want once", hookCalls)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("b").Contract != "unrelated concurrent edit" || g.NodeByID("g1").Verification == nil {
+		t.Fatalf("CAS retry lost one of the writes: %+v", g.Nodes)
+	}
 }
