@@ -40,6 +40,12 @@ var statusValues = map[string][]string{
 // be an error source either.
 var retiredTypes = map[string]bool{"retro": true, "diagram": true}
 
+// generatedTypes are tool-rendered, disposable views that carry frontmatter
+// only so discovery can identify them: `decisions-view` is the per-plan
+// Design.md `sdd decide render` writes from the decisions file and graph
+// (Designs/PlanDecisions DD-7). Never validated — regenerate, never edit.
+var generatedTypes = map[string]bool{"decisions-view": true}
+
 var taskStatusValues = []string{"blocked", "complete", "deferred", "in-progress", "planned"}
 
 var commonFields = []string{"title", "type", "status", "created", "updated"}

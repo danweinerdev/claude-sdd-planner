@@ -246,7 +246,7 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 		// resolvable as a `related:` reference target, but no rule ever sees
 		// it — legacy artifacts nobody can create or edit must not be error
 		// sources.
-		if retiredTypes[a.Kind()] {
+		if retiredTypes[a.Kind()] || generatedTypes[a.Kind()] {
 			if a.ParseStage == "" || a.ParseStage == "SDD003" {
 				r.ByPath[rel] = a
 			}

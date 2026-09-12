@@ -126,13 +126,13 @@ graph TD
   plan retires the id everywhere. `sdd decide lookup <id>` prints one entry and its chain in both
   directions. All three are read-only and computed on every call; nothing is
   cached or stored.
-- **Generated design at close.** When a plan completes, the compiler renders
+- **Generated design at close.** `sdd decide render --plan P` writes
   `Plans/<Name>/Design.md` from the decisions file and the graph: every
   current decision, every superseded one struck with a pointer to its
-  successor, and for each decision the node contracts that cite it. The file is
-  a disposable view (`SddGraph:DD-2`); regenerating it is byte-identical for
-  the same inputs. It is the "how this plan works" document a later reader
-  opens first.
+  successor, and for each decision the node contracts that cite it. The
+  driver runs it when the plan closes. The file is a disposable view
+  (`SddGraph:DD-2`); regenerating it is byte-identical for the same inputs.
+  It is the "how this plan works" document a later reader opens first.
 
 ### Data Flow
 
@@ -305,10 +305,10 @@ successor.
 | Second successor for an id | `decide add` sees a successor in any plan's file | refuse; name the existing successor |
 | Competing successors after a merge | `Conflicts()` over every plan file (validator SDD192, `decide current`) | error naming the contested id and every successor; reconcile with one entry superseding all of them |
 | Node cites unknown `pd-` id | citation index at compile | refuse the compile (unchanged posture for unresolved citations) |
-| Node cites a superseded id | citation index at validate | warning naming the successor |
+| Node cites a superseded id | citation index at validate (SDD191, advisory) | names the successor |
+| Decisions file malformed | strict decode (SDD190) | error naming the file; entries are immutable, supersede rather than edit |
 | Decisions file has unknown fields or wrong types | strict decode | refuse every read and write; name the field |
 | Design DD bullet unparseable as a top-level bold bullet at compile | compile | skip with a diagnostic naming the design and line; never emit an empty statement |
-| Legacy `D-NNNN` citation in a live artifact after migration | validator | error; the migration table gives the replacement id |
 
 ## Testing Strategy
 Scenario tests under `internal/decisions` (new package replacing
@@ -330,7 +330,6 @@ Scenario tests under `internal/decisions` (new package replacing
 | Branch convergence | two files with the same appended entry merge to one copy | two different entries both survive |
 | Strict decode | canonical file round-trips byte-identical | extra field refuses |
 | Generated design | regeneration is byte-identical | hand edit is overwritten |
-| Legacy citation | migrated artifact cites `pd-` ids | a leftover `D-00NN` is an error with its mapping |
 
 ### Structural Verification
 Per `shared/language-verification.md` for Go:
@@ -359,7 +358,10 @@ Per `shared/language-verification.md` for Go:
    `Decisions/decisions.md:D-NNNN`. Superseded entries are appended too, with
    `supersedes` wired from the ledger's `supersedes` field, so history is kept.
    The command prints an old-id to new-id table. It is run once, its output
-   committed, and it is then deleted.
+   committed, and it is then deleted. Content under a frozen review (completed
+   plans, their phases, the reviews themselves) keeps its historical `D-NNNN`
+   text: rewriting it would break the freeze identity, and those ids are
+   provenance there, not live citations.
 4. **Rewrite citations.** Every `D-NNNN` in live artifacts under `.plans/` is
    replaced by the mapped id. The count is small enough to do in one commit.
 5. **Remove the ledger.** Delete `internal/dlg`, `internal/decisionview`, the

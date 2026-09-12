@@ -116,7 +116,7 @@ var SddVerbReadOnly = map[string]bool{
 
 // sddDecideReadOnly are the `sdd decide` subcommands that only read.
 var sddDecideReadOnly = map[string]bool{
-	"list": true, "current": true, "lookup": true, "add": false,
+	"list": true, "current": true, "lookup": true, "add": false, "render": false,
 }
 
 // SddGraphVerbReadOnly classifies every `sdd graph` subcommand, current and

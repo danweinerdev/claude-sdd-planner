@@ -279,6 +279,7 @@ func handlerFlagSets() []struct {
 		{"sdd decide list", []string{"plan", "json"}},
 		{"sdd decide current", []string{"plan", "json"}},
 		{"sdd decide lookup", []string{"plan", "json"}},
+		{"sdd decide render", []string{"plan", "json"}},
 		{"sdd doctor", []string{"json", "check"}},
 		{"sdd provision", []string{"plugin-root", "json", "check"}},
 		{"sdd plugin sync", []string{"root", "json"}},

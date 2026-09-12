@@ -177,8 +177,9 @@ tool-owned and refused in payloads, matching the existing posture on
 
 Roles: `implementation` (default), `shared-mechanism`, `review`,
 `integration-acceptance`. The compiler refuses a `review` node whose gate type
-is not `review`, and refuses a `review` gate on a node whose role is not
-`review`. A node created by `extend` carries `origin: { review: <artifact
+is not `review`, a `review` gate on a node whose role is not `review`, a
+review node with no deps, and an `integration-acceptance` node that depends
+on a work node directly rather than on review nodes. A node created by `extend` carries `origin: { review: <artifact
 path>, finding: <id> }` as provenance; it is not a normative reference.
 
 **Finding schema additions** in the review artifact frontmatter. Existing fields
@@ -233,9 +234,9 @@ Rules enforced when the artifact is consumed:
 
 | Command | Change |
 |---|---|
-| `sdd graph review --plan P --node R --artifact A` | Existing. Now targets a `review`-role node. With open findings, records nothing and prints the preview plus `expect_digest`. Never demotes. |
-| `sdd graph amend --plan P --from-review A --expect-digest D` | New. Applies every open finding of `A` in one CAS-fenced `Update`. Refuses on digest mismatch, on any rule above, or if any affected node is claimed by someone else. `--dry-run` prints the preview only. |
-| `sdd graph show --plan P --node R --brief` | New flag. Renders the self-contained review brief: reviewed contracts, artifact digests, lanes, prior deferred findings. |
+| `sdd graph review --plan P --node R --artifact A` | Existing. Targets a review node. With open findings it records nothing, prints the amendment preview and the graph digest to expect, and exits 1. Never demotes. |
+| `sdd graph amend --plan P --node R --from-review A --expect-digest D [--by W] [--dry-run]` | New. Plans every open finding of `A`, runs the compile gate on the result (dry run included), then writes once fenced on `D`. Refuses on digest mismatch, on any rule above, if a revised node is claimed by someone other than `--by`, or if `A` was already applied (the graph's `amendments` register). |
+| `sdd graph show <node> --plan P --brief` | New flag. Renders the self-contained brief; for a review node: lanes, the reviewed set with each node's contract, contract revision, and artifacts, the last review, and any REVIEW-STALE entries. |
 | `sdd graph status --json` | Unchanged shape; `role` and `contract_rev` appear per node. |
 | `sdd graph split` | Unchanged; children start at `contract_rev: 1` with no proof, which `SddGraph` already mandates. |
 
@@ -279,12 +280,14 @@ addition, every node in its recorded reviewed set still has the recorded
 `contract_rev` and artifact digests.
 
 **Proof compatibility boundary.** A revise resets the node's red bookkeeping
-(`red_seqs`) as part of the same transaction. RED must then be re-observed at
-the new `contract_rev` for every test in the gate, whether or not a test kept
-its name: a retained runner name can carry new assertions or protect a
-materially revised contract, so the name is not evidence that the proof
-obligation is unchanged. Historical observations are kept; only the
-red-before-green bookkeeping restarts (`SddGraph:DD-5`).
+(`red_seqs`) as part of the same transaction, so the node carries exactly the
+red-before-green obligation a fresh node carries: every hazard-discharging
+test must be observed failing again at the new `contract_rev` before a pass
+records, whether or not the test kept its name. A retained runner name can
+carry new assertions or protect a materially revised contract, so the name is
+not evidence that the proof obligation is unchanged. Historical observations
+are kept and stamped with the revision they were taken against; `Derive`
+ignores them as proof (`SddGraph:DD-5`).
 
 ## Design Decisions
 
@@ -360,8 +363,9 @@ red-before-green bookkeeping restarts (`SddGraph:DD-5`).
   `origin` kind exempt from `justifies`; (b) require `extend.node.justifies` to
   cite an underlying AC/FR/DD and carry the finding only in `origin`; (c) add
   frozen review artifacts under the plan as citation sources, so `justifies:
-  [Reviews/<file>:F-04]` resolves the same way `Specs/M1:AC-01` does, and carry
-  the artifact path in `origin` as well. Decision: (c). Rationale: (a) exempts
+  [Plans/P/reviews/01-x:F-04]` (the artifact's path qualifier, like
+  `Specs/M1:AC-01`) resolves through the same index, and carry the artifact
+  path in `origin` as well. Decision: (c). Rationale: (a) exempts
   a class of nodes from the counterweight; (b) is often a lie, since the whole
   point of a finding is that no requirement named the gap. Option (c) is a
   **new citation source, not a new rule**: `CitationIndex` gains frozen review
@@ -420,7 +424,7 @@ red-before-green bookkeeping restarts (`SddGraph:DD-5`).
 | Artifact `report_digest` already recorded | uniqueness scan | refuse (unchanged) |
 | Old `Verification` with prior `contract_rev` | `Derive` compatibility rule | treated as absent for GREEN; kept in history; the node is `READY` until a RED at the new revision is observed |
 | Review node's reviewed set drifted | any reviewed node's `contract_rev` or artifact digests differ from the recorded set | review node is STALE; re-review required even when implementation bytes are unchanged |
-| Graph decoded with nodes lacking `contract_rev` | strict decode | `sdd graph convert`-style upgrade assigns 1 and stamps existing observations with 1; refuse to operate on an un-upgraded graph |
+| Graph decoded with nodes or observations lacking `contract_rev` | strict decode | absent means 1, on both the node and the observation, so a pre-revision graph derives exactly as before; no upgrade step |
 
 Every refusal names the finding id, the node id, and the rule. Partial
 application is never observed: one artifact is one `Update` closure.
@@ -446,7 +450,7 @@ positive and a negative control, run under `go test ./...` as part of
 | Role validation | `review` role with `review` gate compiles | `review` gate on `implementation` role refused; `review` role with `tests` gate refused |
 | Deferred finding | recorded in review node `history`, no amendment | `open` without action refused |
 | Revise keeps hazards | revise that swaps a test for one still discharging the hazard compiles | revise that removes the only hazard test is refused |
-| Finding citation resolves | `justifies: [Reviews/<file>:F-04]` on an extend node compiles against a frozen artifact | same citation against an unfrozen artifact is refused |
+| Finding citation resolves | `justifies: [Plans/P/reviews/01-x:F-04]` on an extend node compiles against a frozen artifact | same citation against an unfrozen artifact is refused |
 
 Frozen regression corpus: add fixtures for each new refusal through
 `make gen-fixtures` so `tools/parity` covers the new rules. Do not touch
@@ -479,11 +483,10 @@ Per `shared/language-verification.md` for Go:
    `sdd graph convert` learns to stamp `contract_rev: 1` on every node and every
    existing `Verification`, and to set `role: implementation` where absent. No
    retroactive observations are created.
-4. **Existing review gates.** A graph with a `review` gate on a non-review node
-   is refused after upgrade with a message naming the node. The fix is a split:
-   retire the feature node into its work node plus a review node. This is
-   deliberate; silently rewriting gates would change what a recorded GREEN
-   meant.
+4. **Existing review gates.** A node with a `review` gate and no `role` is a
+   review node: the pre-role feature gate already sat on its own node with the
+   reviewed work as its deps, which is exactly the review-node shape. Nothing
+   is rewritten and no split is forced; a recorded GREEN keeps its meaning.
 5. **Docs and skills in the same change.** `shared/review-artifacts.md` gains
    the finding `action` fields; `commands/implement/SKILL.md` replaces the
    "findings demote to RED" paragraphs with the amend flow; `shared/
