@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,12 +9,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
+
+// fixtureDecisionStatement is the one plan decision fixtureRoot records —
+// content-addressed, so its id is derived via decisions.IDFor rather than
+// hardcoded.
+const fixtureDecisionStatement = "An accepted truth."
 
 const fixtureSpec = `---
 title: "Sample Spec"
@@ -94,37 +101,8 @@ None.
 Pending — not complete.
 `
 
-const fixtureDecisions = `---
-title: "Decisions"
-type: decision-log
-status: active
-created: 2026-08-01
-updated: 2026-08-01
-tags: []
-related: []
-decisions:
-  - id: D-0001
-    kind: decision
-    status: accepted
-    date: 2026-08-01
-    decided_by: user
-    statement: "An accepted truth."
-    scope: []
-  - id: D-0002
-    kind: decision
-    status: superseded
-    date: 2026-08-01
-    decided_by: user
-    statement: "A retired truth."
-    scope: []
----
-
-# Decisions
-`
-
 // fixtureRoot builds a minimal planning root: spec + design + plan README +
-// ledger + initialized graph. Returns the root (== repo root: planningRoot
-// is ".").
+// initialized graph. Returns the root (== repo root: planningRoot is ".").
 func fixtureRoot(t *testing.T, spec string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -142,12 +120,33 @@ func fixtureRoot(t *testing.T, spec string) string {
 	write("Specs/Sample/README.md", spec)
 	write("Designs/Sample/README.md", fixtureDesign)
 	write("Plans/SamplePlan/README.md", fixturePlan)
-	write("Decisions/decisions.md", fixtureDecisions)
-	if _, err := gstore.Init(filepath.Join(root, "Plans", "SamplePlan")); err != nil {
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	if _, err := gstore.Init(planDir); err != nil {
 		t.Fatal(err)
 	}
 	return root
 }
+
+// recordFixtureDecision writes fixtureRoot's plan a decisions file with the
+// one entry happyProposalCiting resolves against — kept separate from
+// fixtureRoot itself so decisions_test.go's own SyncDesignDecisions
+// assertions (which count entries the sync APPENDS) see an empty file to
+// start from.
+func recordFixtureDecision(t *testing.T, root string) {
+	t.Helper()
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	entries := []decisions.Entry{{ID: fixtureDecisionID(), Date: "2026-08-01", Statement: fixtureDecisionStatement}}
+	raw, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisions.PathFor(planDir), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// fixtureDecisionID is fixtureDecisionStatement's content-addressed id.
+func fixtureDecisionID() string { return decisions.IDFor(fixtureDecisionStatement) }
 
 func stage(t *testing.T, root, payload string) {
 	t.Helper()
@@ -156,6 +155,12 @@ func stage(t *testing.T, root, payload string) {
 	}
 }
 
+// happyProposal's citation "D-0001" is a literal marker, not a resolvable
+// id: decisions_test.go (Designs/PlanDecisions' own tests) pattern-matches
+// the exact substring `"justifies": ["FR-01", "D-0001"]` to substitute a
+// real recorded plan-decision id via strings.Replace, so this text must stay
+// byte-for-byte stable. Tests in THIS file that need it to actually resolve
+// perform the same substitution themselves (see happyProposalCiting).
 const happyProposal = `{
   "version": 1,
   "nodes": [
@@ -172,9 +177,16 @@ const happyProposal = `{
 }
 `
 
+// happyProposalCiting returns happyProposal with its "D-0001" marker
+// resolved to id — the same substitution decisions_test.go performs inline.
+func happyProposalCiting(id string) string {
+	return strings.Replace(happyProposal, `"justifies": ["FR-01", "D-0001"]`, `"justifies": ["FR-01", "`+id+`"]`, 1)
+}
+
 func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
-	stage(t, root, happyProposal)
+	recordFixtureDecision(t, root)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 
 	res, findings, err := Run(root, root, "SamplePlan")
 	if err != nil {
@@ -195,8 +207,8 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 		!strings.HasPrefix(implFR.IntentHashes["FR-01"], "sha256:") {
 		t.Fatalf("FR-01 fingerprint not embedded: %+v", implFR)
 	}
-	if _, hashed := implFR.IntentHashes["D-0001"]; hashed {
-		t.Fatal("ledger citations resolve but are not fingerprinted (the ledger has its own supersession machinery)")
+	if h := implFR.IntentHashes[fixtureDecisionID()]; h == "" || !strings.HasPrefix(h, "sha256:") {
+		t.Fatal("plan-decision citations resolve and are fingerprinted like any other requirement")
 	}
 	if g.NodeByID("impl-ac2").IntentHashes["DD-1"] == "" {
 		t.Fatal("DD fingerprints must embed from the related design")
@@ -259,12 +271,13 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 // compile BEFORE the graph write.
 func TestRenderRefusalLeavesGraphAndPayloadUntouched(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
+	recordFixtureDecision(t, root)
 	planDir := filepath.Join(root, "Plans", "SamplePlan")
 	if err := os.WriteFile(filepath.Join(planDir, "01-Ungrouped.md"),
 		[]byte("---\ntitle: \"Hand-authored\"\ntype: phase\n---\n\n# Not a view\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stage(t, root, happyProposal)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 	graphBefore, _ := os.ReadFile(gstore.PathFor(planDir))
 
 	_, findings, err := Run(root, root, "SamplePlan")
@@ -364,7 +377,8 @@ func readAsString(t *testing.T, path string) string {
 // zero Error-severity findings under the real validator.
 func TestRenderedViewsValidateStructurally(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
-	stage(t, root, happyProposal)
+	recordFixtureDecision(t, root)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
 		t.Fatalf("compile: %v %v", err, findings)
 	}
@@ -388,7 +402,8 @@ func TestRenderedViewsValidateStructurally(t *testing.T) {
 // compile level: a whitespace-only spec rewrap must embed the same hash.
 func TestRewrapDoesNotChangeFingerprints(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
-	stage(t, root, happyProposal)
+	recordFixtureDecision(t, root)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
 		t.Fatalf("first compile: %v %v", err, findings)
 	}
@@ -464,7 +479,7 @@ func TestCompileBatchesEveryFinding(t *testing.T) {
      "gate": {"type": "tests", "tests": [{"id": "t1", "file": "f.ext", "satisfies": ["order-sensitive"]}]},
      "hazards": ["race-condition", "external-format"]},
     {"id": "no-source", "contract": "c", "gate": {"type": "tests"}, "hazards": []},
-    {"id": "bad-cites", "contract": "c", "justifies": ["AC-99", "D-0002", "D-0099"],
+    {"id": "bad-cites", "contract": "c", "justifies": ["AC-99", "pd-deadbeef"],
      "gate": {"type": "tests"}, "hazards": []}
   ]
 }
@@ -491,9 +506,8 @@ func TestCompileBatchesEveryFinding(t *testing.T) {
 		`test "t1" satisfies "order-sensitive", which the node does not declare`,
 		`hazard "external-format" is discharged by no test`,
 		`no-source: cites nothing`,
-		`bad-cites: cites "AC-99", which resolves in no related spec, design, or decision ledger`,
-		`bad-cites: cites decision D-0002 with status "superseded"`,
-		`bad-cites: cites "D-0099", which resolves in no related spec`,
+		`bad-cites: cites "AC-99", which resolves in no related spec, design`,
+		`bad-cites: cites "pd-deadbeef", which no plan under the planning root records`,
 		`graph: AC-02 has no covering node`,
 		`covered by no full review gate`,
 		`graph: claimed-artifact overlap: src/shared.ext is claimed by claimed-a and claimed-b`,
@@ -554,6 +568,7 @@ func TestFilledExemplarCompilesClean(t *testing.T) {
 
 func TestCompileInputSelection(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
+	recordFixtureDecision(t, root)
 	planDir := filepath.Join(root, "Plans", "SamplePlan")
 
 	// Nothing staged: could-not-run, pointing at the authoring flow.
@@ -563,7 +578,7 @@ func TestCompileInputSelection(t *testing.T) {
 	}
 
 	// Two fragments: points at assemble.
-	stage(t, root, happyProposal)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
 	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests"}, "hazards": []}]}`)
 	_, _, err = Run(root, root, "SamplePlan")
 	if err == nil || !strings.Contains(err.Error(), "sdd graph assemble") {
@@ -578,7 +593,7 @@ func TestCompileInputSelection(t *testing.T) {
 			os.Remove(filepath.Join(proposal.FragmentsDir(planDir), e.Name()))
 		}
 	}
-	stage(t, root, strings.Replace(happyProposal,
+	stage(t, root, strings.Replace(happyProposalCiting(fixtureDecisionID()),
 		`"deps": ["impl-ac1", "impl-ac2"]`,
 		`"deps": ["impl-ac1", "impl-ac2", "extra"]`, 1))
 	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests"}, "hazards": []}]}`)
@@ -594,9 +609,11 @@ func TestCompileInputSelection(t *testing.T) {
 // TestValidateFlagsMissingAndPartialFingerprints: the transition gate flags a
 // stored node that cites a currently fingerprintable requirement with no
 // embedded hash (missing entirely, or present-but-empty) and names the source
-// plus the repair path — while a D-only node stays valid.
+// plus the repair path — a plan-decision citation is no exception, since a
+// recorded decision is just as fingerprintable as an AC/FR.
 func TestValidateFlagsMissingAndPartialFingerprints(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
+	recordFixtureDecision(t, root)
 	planDir := filepath.Join(root, "Plans", "SamplePlan")
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		g.Nodes = append(g.Nodes,
@@ -608,7 +625,7 @@ func TestValidateFlagsMissingAndPartialFingerprints(t *testing.T) {
 			model.Node{ID: "empty", Contract: "c", Justifies: []string{"AC-01"},
 				IntentHashes: map[string]string{"AC-01": ""},
 				Gate:         model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
-			model.Node{ID: "d-only", Contract: "c", Justifies: []string{"D-0001"},
+			model.Node{ID: "pd-only", Contract: "c", Justifies: []string{fixtureDecisionID()},
 				Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
 		)
 		return nil
@@ -631,18 +648,15 @@ func TestValidateFlagsMissingAndPartialFingerprints(t *testing.T) {
 		`missing: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
 		`partial: cites "FR-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
 		`empty: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
+		`pd-only: cites "` + fixtureDecisionID() + `" (defined in Plans/SamplePlan/SamplePlan-Decisions.json) with no embedded intent fingerprint`,
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing finding %q in:\n%s", want, joined)
 		}
 	}
-	// The already-hashed citation must NOT be flagged, and a D-only node
-	// must not be flagged (decisions are never fingerprinted).
+	// The already-hashed citation must NOT be flagged.
 	if strings.Contains(joined, `partial: cites "AC-01"`) {
 		t.Errorf("a present hash must not be flagged:\n%s", joined)
-	}
-	if strings.Contains(joined, "d-only: cites") {
-		t.Errorf("a D-only node must not be flagged for fingerprints:\n%s", joined)
 	}
 	// The finding names the supported repair path.
 	if !strings.Contains(joined, "sdd graph repair-intent") {
@@ -1155,8 +1169,8 @@ func TestDesignDiscoveryIsDirectNotViaSpecBacklink(t *testing.T) {
 		stage(t, root, proposalJSON)
 		joined := compile(t, root)
 		for _, want := range []string{
-			`w1: cites "Designs/Sample:DD-1", which resolves in no related spec, design, or decision ledger; Designs/Sample/README.md defines it but is not reachable through the plan's ` + "`related`" + ` graph — relate it directly from Plans/SamplePlan/README.md`,
-			`w2: cites "Sample:DD-1", which resolves in no related spec, design, or decision ledger; Designs/Sample/README.md defines it`,
+			`w1: cites "Designs/Sample:DD-1", which resolves in no related spec, design; Designs/Sample/README.md defines it but is not reachable through the plan's ` + "`related`" + ` graph — relate it directly from Plans/SamplePlan/README.md`,
+			`w2: cites "Sample:DD-1", which resolves in no related spec, design; Designs/Sample/README.md defines it`,
 		} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("missing %q in:\n%s", want, joined)
@@ -1177,8 +1191,8 @@ func TestDesignDiscoveryIsDirectNotViaSpecBacklink(t *testing.T) {
 		stage(t, root, bad)
 		joined := compile(t, root)
 		for _, want := range []string{
-			`w1: cites "Designs/Sample:DD-9", which resolves in no related spec, design, or decision ledger` + "\n",
-			`w2: cites "Designs/Ghost:DD-1", which resolves in no related spec, design, or decision ledger` + "\n",
+			`w1: cites "Designs/Sample:DD-9", which resolves in no related spec, design` + "\n",
+			`w2: cites "Designs/Ghost:DD-1", which resolves in no related spec, design` + "\n",
 		} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("missing %q in:\n%s", want, joined)

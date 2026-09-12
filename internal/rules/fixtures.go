@@ -375,22 +375,6 @@ func checkedPhase(status, phaseID, planName, tasksBlock string) string {
 	return s
 }
 
-// decisionLog returns a minimal, structurally valid decision-log document
-// whose `decisions:` block is the caller-supplied raw YAML.
-func decisionLog(decisionsBlock string) string {
-	return `---
-title: Decision Log
-type: decision-log
-status: active
-created: 2024-01-01
-updated: 2024-01-01
-decisions:` + decisionsBlock + `
----
-
-Ledger body.
-`
-}
-
 // validPhase returns a minimal, structurally valid phase document.
 func validPhase() string {
 	return `---

@@ -1,130 +1,23 @@
 package rules
 
 import (
-	"path/filepath"
 	"regexp"
-	"strings"
-
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 )
 
-// Family (h): Validator._citations — SDD120 through SDD122. Decision
-// citations (`D-NNNN`) resolve against the whole ledger; FR/NFR/AC citations
-// resolve against the specs related (transitively, through plan/design/
-// review) to the citing artifact.
+// Family (h): Validator._citations — SDD122 (FR/NFR/AC/DD citations resolve
+// against the specs/designs related, transitively through plan/design/
+// review, to the citing artifact). Plan-decision (`pd-…`) citations are
+// resolved separately through BuildCitationIndex / PlanDecisions.
 
 var (
-	citeDRe     = regexp.MustCompile(`\bD-(\d{4,})\b`)
-	citeForkDRe = regexp.MustCompile(`ledger:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:D-[0-9]{4,}|\bD-[0-9]{4,}\b`)
-	citeFRRe    = regexp.MustCompile(`\bFR-(\d{2,})\b`)
-	citeNFRRe   = regexp.MustCompile(`\bNFR-(\d{2,})\b`)
-	citeACRe    = regexp.MustCompile(`\bAC-(\d{2,})\b`)
+	citeFRRe  = regexp.MustCompile(`\bFR-(\d{2,})\b`)
+	citeNFRRe = regexp.MustCompile(`\bNFR-(\d{2,})\b`)
+	citeACRe  = regexp.MustCompile(`\bAC-(\d{2,})\b`)
 	// Design Decisions are numbered from 1 without zero-padding (`DD-9`), so
 	// unlike the spec families this accepts a single digit, plus the `DD-6a`
 	// sub-decision suffix that appears in practice.
 	citeDDRe = regexp.MustCompile(`\bDD-(\d{1,4}[a-z]?)\b`)
 )
-
-// decisionEntry is one decision-log entry with the fields citation checks need.
-type decisionEntry struct {
-	id        string
-	qualified string
-	status    string
-}
-
-func allDecisions(r *Root) map[string]decisionEntry {
-	out := map[string]decisionEntry{}
-	if r.DecisionView != nil {
-		if r.DecisionView.View == nil {
-			return out
-		}
-		for _, resolved := range r.DecisionView.View.Records {
-			_, id, ok := decisionview.ParseQualifiedID(string(resolved.ID))
-			if !ok {
-				continue
-			}
-			qid := string(resolved.ID)
-			out[qid] = decisionEntry{id: id, qualified: qid, status: resolved.OriginalStatus}
-		}
-		return out
-	}
-	for _, a := range r.Artifacts {
-		if a.Meta == nil || a.Kind() != "decision-log" {
-			continue
-		}
-		for _, e := range asAnyList(a.Meta["decisions"]) {
-			m := planEntry(e)
-			if m == nil {
-				continue
-			}
-			id, ok := m["id"].(string)
-			if !ok {
-				continue
-			}
-			if _, exists := out[id]; exists {
-				continue // SDD032 already flags the duplicate; first wins here.
-			}
-			out[id] = decisionEntry{id: id, qualified: id, status: metaStr(m, "status")}
-		}
-	}
-	return out
-}
-
-func resolveDecisionCitation(r *Root, a *Artifact, citation string, decisions map[string]decisionEntry) (decisionEntry, bool) {
-	if r.DecisionView == nil || r.DecisionView.View == nil {
-		d, ok := decisions[citation]
-		return d, ok
-	}
-	if _, _, qualified := decisionview.ParseQualifiedID(citation); qualified {
-		d, ok := decisions[citation]
-		return d, ok
-	}
-	for _, context := range r.DecisionView.LegacyContexts {
-		if !legacyContextMatchesArtifact(r, a, context) {
-			continue
-		}
-		for _, id := range context.LocalIDs {
-			if id == citation {
-				qid := "ledger:" + string(context.Namespace) + ":" + citation
-				d, ok := decisions[qid]
-				return d, ok
-			}
-		}
-	}
-	return decisionEntry{}, false
-}
-
-func legacyContextMatchesArtifact(r *Root, a *Artifact, context decisionview.LegacyContext) bool {
-	base := ""
-	switch context.Root {
-	case decisionview.SourceRootPlanning:
-		base = r.Dir
-	case decisionview.SourceRootRepository:
-		base = r.RepoRoot
-	default:
-		return false
-	}
-	if a.AbsPath == "" {
-		return false
-	}
-	rel, err := filepath.Rel(base, a.AbsPath)
-	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return false
-	}
-	return filepath.ToSlash(rel) == filepath.ToSlash(context.Path)
-}
-
-func decisionCitations(r *Root, body string) []string {
-	if r.DecisionView != nil {
-		return citeForkDRe.FindAllString(body, -1)
-	}
-	matches := citeDRe.FindAllStringSubmatch(body, -1)
-	out := make([]string, 0, len(matches))
-	for _, match := range matches {
-		out = append(out, "D-"+match[1])
-	}
-	return out
-}
 
 // isLiveArtifact mirrors Validator._is_live.
 func isLiveArtifact(a *Artifact) bool {
@@ -274,70 +167,6 @@ func containsStr(s, sub string) bool {
 }
 
 func init() {
-	Register(&Rule{
-		Code: "SDD120", Severity: Error, PyFunc: "_citations",
-		What: "a `D-NNNN` citation does not resolve to a known decision",
-		CheckRoot: func(r *Root, emit func(Diagnostic)) {
-			decisions := allDecisions(r)
-			for _, a := range r.Artifacts {
-				if a.Meta == nil || a.Kind() == "decision-log" {
-					continue
-				}
-				body := citationBody(a)
-				for _, id := range decisionCitations(r, body) {
-					if _, ok := resolveDecisionCitation(r, a, id, decisions); ok {
-						continue
-					}
-					emit(Diagnostic{
-						Code: "SDD120", Severity: Error, Path: a.Rel, Line: citationLine(a, id),
-						Message:    "Citation `" + id + "` does not resolve.",
-						Correction: "Correct it or restore the decision.",
-					})
-				}
-			}
-		},
-		Bad: []Example{{Name: "unresolved-decision", Files: map[string]string{
-			"Research/bad.md": strReplace(validResearch, "## Context\n\nText.", "## Context\n\nSee D-0099."),
-		}}},
-		Good: []Example{{Name: "resolved-decision", Files: map[string]string{
-			"Research/ok.md":         strReplace(validResearch, "## Context\n\nText.", "## Context\n\nSee D-0001."),
-			"Decisions/decisions.md": decisionLog("\n  - id: D-0001\n    status: accepted\n    question: Q\n    statement: S\n    scope: []\n"),
-		}}},
-	})
-
-	Register(&Rule{
-		Code: "SDD121", Severity: Error, PyFunc: "_citations",
-		What: "a live artifact cites a rejected/superseded decision",
-		CheckRoot: func(r *Root, emit func(Diagnostic)) {
-			decisions := allDecisions(r)
-			for _, a := range r.Artifacts {
-				if a.Meta == nil || a.Kind() == "decision-log" || !isLiveArtifact(a) {
-					continue
-				}
-				body := citationBody(a)
-				for _, id := range decisionCitations(r, body) {
-					d, ok := resolveDecisionCitation(r, a, id, decisions)
-					if !ok || (d.status != "rejected" && d.status != "superseded") {
-						continue
-					}
-					emit(Diagnostic{
-						Code: "SDD121", Severity: Error, Path: a.Rel, Line: citationLine(a, id),
-						Message:    "Live artifact cites `" + id + "` with status `" + d.status + "`.",
-						Correction: "Cite the accepted replacement or reconcile content.",
-					})
-				}
-			}
-		},
-		Bad: []Example{{Name: "cites-rejected", Files: map[string]string{
-			"Research/bad.md":        strReplace(validResearch, "## Context\n\nText.", "## Context\n\nSee D-0001."),
-			"Decisions/decisions.md": decisionLog("\n  - id: D-0001\n    status: rejected\n    question: Q\n    statement: S\n    scope: []\n"),
-		}}},
-		Good: []Example{{Name: "cites-accepted", Files: map[string]string{
-			"Research/ok.md":         strReplace(validResearch, "## Context\n\nText.", "## Context\n\nSee D-0001."),
-			"Decisions/decisions.md": decisionLog("\n  - id: D-0001\n    status: accepted\n    question: Q\n    statement: S\n    scope: []\n"),
-		}}},
-	})
-
 	Register(&Rule{
 		Code: "SDD122", Severity: Error, PyFunc: "_citations",
 		What: "an FR/NFR/AC/DD citation does not resolve in a related spec or design",

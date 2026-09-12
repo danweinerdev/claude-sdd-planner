@@ -368,18 +368,6 @@ func DefinitionPattern(family string) *regexp.Regexp {
 	return specDefinitionRe[family]
 }
 
-// DecisionStatuses returns every decision-ledger entry's citation identity ->
-// status. Fork repositories expose only qualified identities; deliberately not
-// manufacturing a flattened D-NNNN key makes graph-intent consumers fail
-// closed until they support collection-aware decisions.
-func DecisionStatuses(r *Root) map[string]string {
-	out := map[string]string{}
-	for id, d := range allDecisions(r) {
-		out[id] = d.status
-	}
-	return out
-}
-
 // CommentStripped returns an artifact body with HTML comments removed — the
 // same preprocessing every citation and definition scan applies, so span
 // extraction over the returned text agrees with DefinedIdentifiers.

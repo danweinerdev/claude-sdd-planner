@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
@@ -215,7 +214,7 @@ func selectProposal(planDir string) (string, []byte, error) {
 }
 
 // sourceSet is the resolution context: which ids exist (per the validator's
-// own reachability), their fingerprints, and the decision ledger's statuses.
+// own reachability) and their fingerprints.
 // acPair is one direct spec's acceptance criterion — the unit of the
 // per-spec coverage demand (DD-4: the plan's OWN requirement surface, per
 // spec; a citation resolving to one spec never satisfies another spec's
@@ -234,10 +233,8 @@ type sourceSet struct {
 	index *rules.CitationIndex
 	// items carries each reachable source's fingerprintable requirement
 	// text: sourceRel -> bare id -> item.
-	items     map[string]map[string]intent.Item
-	acPairs   []acPair          // direct specs x defined ACs, sorted
-	decisions map[string]string // D-NNNN -> status
-	fork      *forkDecisionIntent
+	items   map[string]map[string]intent.Item
+	acPairs []acPair // direct specs x defined ACs, sorted
 	// loaded and planRel let refusals explain a qualified citation whose
 	// source exists but is not on the plan's related graph.
 	loaded  *rules.Root
@@ -275,9 +272,8 @@ func (s *sourceSet) unrelatedHint(cited string) string {
 
 // intentSnapshot resolves the plan's citation dispositions from this source
 // set: every unambiguous citation spelling that resolves to a fingerprintable
-// item, plus every accepted decision (the legitimate exemptions). A citation
-// that is deleted, unlinked, or ambiguous lands in neither half — the
-// fail-closed signal states.Derive reads.
+// item. A citation that is deleted, unlinked, or ambiguous lands in neither
+// half — the fail-closed signal states.Derive reads.
 func (s *sourceSet) intentSnapshot() IntentSnapshot {
 	snap := IntentSnapshot{Items: map[string]intent.Item{}, Exemptions: map[string]bool{}}
 	for _, key := range s.index.Keys() {
@@ -285,24 +281,20 @@ func (s *sourceSet) intentSnapshot() IntentSnapshot {
 			snap.Items[key] = item
 		}
 	}
-	if s.fork != nil {
-		for _, record := range s.fork.capture.View.Records {
-			id := string(record.ID)
-			if s.fork.accepted(id) {
-				snap.Exemptions[id] = true
-			}
+	// Plan-decision ids (Designs/PlanDecisions) are citable and
+	// fingerprintable like any requirement, but Keys() only enumerates the
+	// spec/design index — the bare and plan-qualified decision spellings
+	// resolve dynamically through the decisions index instead, so they are
+	// walked here from the loaded files.
+	for _, file := range s.index.PlanDecisions() {
+		if file.Err != nil {
+			continue
 		}
-		if s.fork.legacy != nil {
-			for _, id := range s.fork.legacy.LocalIDs {
-				if s.fork.accepted(id) {
-					snap.Exemptions[id] = true
+		for _, e := range file.Entries {
+			for _, key := range []string{e.ID, file.Plan + ":" + e.ID} {
+				if _, item, ok := s.resolveItem(key); ok {
+					snap.Items[key] = item
 				}
-			}
-		}
-	} else {
-		for id, status := range s.decisions {
-			if status == "accepted" {
-				snap.Exemptions[id] = true
 			}
 		}
 	}
@@ -325,13 +317,9 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	if !ok {
 		return nil, fmt.Errorf("compile: %s does not exist; the plan's README carries the `related` graph citations resolve through", planRel)
 	}
-	out := &sourceSet{items: map[string]map[string]intent.Item{}, decisions: rules.DecisionStatuses(loaded), loaded: loaded, planRel: planRel}
+	out := &sourceSet{items: map[string]map[string]intent.Item{}, loaded: loaded, planRel: planRel}
 	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
 	out.planDir = filepath.Dir(planArt.AbsPath)
-	out.fork, err = newForkDecisionIntent(loaded, planRel)
-	if err != nil {
-		return nil, fmt.Errorf("compile: %w", err)
-	}
 	out.index = rules.BuildCitationIndex(loaded, planArt)
 	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
@@ -530,41 +518,11 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				add(id, "cites %q, which is defined by more than one related source; qualify it (%s)", cited, strings.Join(suggestions, ", "))
 				continue
 			}
-			if sources.fork != nil {
-				if _, _, qualified := decisionview.ParseQualifiedID(cited); !stored[id] && !qualified && strings.HasPrefix(cited, "D-") {
-					suggestions := sources.fork.ambiguous(cited)
-					detail := ""
-					if len(suggestions) > 0 {
-						detail = " (" + strings.Join(suggestions, ", ") + ")"
-					}
-					add(id, "new graph citation %q must be qualified%s; captured legacy context preserves existing committed references only", cited, detail)
-					continue
-				}
-				if status, effective, found := sources.fork.disposition(cited); found {
-					if status == "accepted" && !effective {
-						add(id, "cites decision %s, which has no current binding effective decision; restored or inactive overrides cannot justify graph reliance", cited)
-						continue
-					}
-					if status != "accepted" {
-						add(id, "cites decision %s with status %q; live work cites accepted decisions", cited, status)
-					}
-					continue
-				}
-				if suggestions := sources.fork.ambiguous(cited); len(suggestions) > 0 {
-					add(id, "cites %q, which is ambiguous across decision collections; qualify it (%s)", cited, strings.Join(suggestions, ", "))
-					continue
-				}
-			} else if status, ok := sources.decisions[cited]; ok {
-				if status != "accepted" {
-					add(id, "cites decision %s with status %q; live work cites accepted decisions", cited, status)
-				}
-				continue
-			}
 			if _, _, isRef := decisions.ParseRef(cited); isRef {
 				add(id, "cites %q, which no plan under the planning root records; record it with `sdd decide add --plan <plan> --statement ...` or cite the recorded id", cited)
 				continue
 			}
-			add(id, "cites %q, which resolves in no related spec, design, or decision ledger%s", cited, sources.unrelatedHint(cited))
+			add(id, "cites %q, which resolves in no related spec, design%s", cited, sources.unrelatedHint(cited))
 		}
 
 		seenTests := map[[2]string]bool{}

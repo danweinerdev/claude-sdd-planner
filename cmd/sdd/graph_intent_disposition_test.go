@@ -6,19 +6,26 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
+// dispositionDecisionStatement is the plan decision the fixture's "decision"
+// node cites; its id is content-addressed from this text (decisions.IDFor).
+const dispositionDecisionStatement = "An accepted truth."
+
 // dispositionFixture builds a root where every citation disposition is known:
 // Sample defines AC-01/AC-02/FR-01, Other also defines AC-01 (so bare AC-01
-// is ambiguous), and the ledger accepts D-0001. The committed graph carries
-// PASS nodes covering each disposition a derive pass must distinguish:
+// is ambiguous), and the plan's decisions file records one entry. The
+// committed graph carries PASS nodes covering each disposition a derive pass
+// must distinguish:
 //
 //	deleted          AC-99   (resolves nowhere — a requirement deleted since)
 //	ambiguous        AC-01   (bare, defined by both Sample and Other)
-//	decision         D-0001  (accepted decision — legitimately exempt)
-//	unknown-decision D-9999  (D-shaped but not in the ledger)
+//	decision         pd-…    (a recorded plan decision — legitimately exempt)
+//	unknown-decision pd-…    (pd-shaped but not recorded)
 //	unanchored       AC-02   (resolvable but never fingerprinted — split bug)
 func dispositionFixture(t *testing.T) string {
 	t.Helper()
@@ -60,26 +67,6 @@ related: []
 
 - [ ] **AC-01**: The other spec's criterion one.
 `)
-	writeArtifact(t, root, "Decisions", "decisions.md", `---
-title: "Decisions"
-type: decision-log
-status: active
-created: 2026-08-01
-updated: 2026-08-01
-tags: []
-related: []
-decisions:
-  - id: D-0001
-    kind: decision
-    status: accepted
-    date: 2026-08-01
-    decided_by: user
-    statement: "An accepted truth."
-    scope: []
----
-
-# Decisions
-`)
 	writeArtifact(t, root, "Plans/Demo", "README.md", `---
 title: "Demo"
 type: plan
@@ -97,6 +84,16 @@ phases: []
 	if err := os.MkdirAll(planDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	decisionID := decisions.IDFor(dispositionDecisionStatement)
+	entries := []decisions.Entry{{ID: decisionID, Date: "2026-08-01", Statement: dispositionDecisionStatement}}
+	raw, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisions.PathFor(planDir), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unknownDecisionID := decisions.IDFor("An unrecorded truth.")
 	passNode := func(id string, justifies []string) model.Node {
 		return model.Node{ID: id, Contract: "does " + id, Justifies: justifies,
 			Gate: model.Gate{Type: model.GateTests,
@@ -106,11 +103,19 @@ phases: []
 			Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean},
 		}
 	}
+	// The "decision" node is anchored with the recorded entry's own
+	// fingerprint — a plan decision is citable and fingerprintable like any
+	// requirement (Designs/PlanDecisions), so it stays GREEN through the same
+	// hash-matching path as an AC/FR citation, not through an exemption.
+	decisionNode := passNode("decision", []string{decisionID})
+	decisionNode.IntentHashes = map[string]string{
+		decisionID: intent.Hash(intent.Normalize(dispositionDecisionStatement)),
+	}
 	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{
 		passNode("deleted", []string{"AC-99"}),
 		passNode("ambiguous", []string{"AC-01"}),
-		passNode("decision", []string{"D-0001"}),
-		passNode("unknown-decision", []string{"D-9999"}),
+		decisionNode,
+		passNode("unknown-decision", []string{unknownDecisionID}),
 		passNode("unanchored", []string{"AC-02"}),
 	}}
 	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {

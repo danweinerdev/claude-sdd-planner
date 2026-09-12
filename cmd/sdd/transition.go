@@ -232,22 +232,17 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 			}
 		}
 	}
-	forkAuthority := false
 	run := func() ([]rules.Diagnostic, error) {
 		loaded, err := rules.LoadRootRepo(root, repoRoot)
 		if err != nil {
 			return nil, err
 		}
-		base := loaded
 		switch {
 		case planRel != "":
 			loaded = rules.ScopeToPlan(loaded, planRel)
 		case docRel != "":
 			loaded = rules.ScopeToDoc(loaded, docRel)
 		}
-		loaded.DecisionView = base.DecisionView
-		loaded.DecisionDiagnostics = base.DecisionDiagnostics
-		forkAuthority = loaded.DecisionView != nil
 		// RunWithWaivers, not Run: the gate's criterion must be the same one
 		// `sdd validate` applies by default, where an accepted exception
 		// re-tags its finding Waived (reported, not invalidating). Plain Run
@@ -295,8 +290,7 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		if !d.Severity.Invalidating() {
 			continue
 		}
-		globalForkAuthority := forkAuthority && (strings.HasPrefix(d.Code, "FDL") || strings.HasPrefix(d.Code, "DLG"))
-		if globalForkAuthority || !existing[diagKey(d)] {
+		if !existing[diagKey(d)] {
 			introduced = append(introduced, d)
 		}
 	}
@@ -340,18 +334,14 @@ func candidateArtifactErrors(path, candidate string) ([]rules.Diagnostic, error)
 	if err != nil {
 		return nil, err
 	}
-	base := loaded
 	if planRel := rules.PlanRelOf(rel); planRel != "" {
 		loaded = rules.ScopeToPlan(loaded, planRel)
 	} else if rel != "" {
 		loaded = rules.ScopeToDoc(loaded, rel)
 	}
-	loaded.DecisionView = base.DecisionView
-	loaded.DecisionDiagnostics = base.DecisionDiagnostics
 	var out []rules.Diagnostic
 	for _, d := range rules.RunWithWaivers(loaded) {
-		globalForkAuthority := loaded.DecisionView != nil && (strings.HasPrefix(d.Code, "FDL") || strings.HasPrefix(d.Code, "DLG"))
-		if d.Severity.Invalidating() && (d.Path == rel || globalForkAuthority) {
+		if d.Severity.Invalidating() && d.Path == rel {
 			out = append(out, d)
 		}
 	}

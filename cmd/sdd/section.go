@@ -10,7 +10,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -71,24 +70,8 @@ func cmdSectionSet(target string, o sectionSetOpts) error {
 
 	out, secRefs := setSection(doc, s, o.Heading, string(payload), time.Now().Format("2006-01-02"))
 	refs = append(refs, secRefs...)
-	capture, artifactPath, contextErr := decisionContextForArtifact(art.Path)
-	if contextErr != nil {
-		return fmt.Errorf("section set: resolving decision authority: %w", contextErr)
-	}
-	if capture != nil && len(secRefs) == 0 {
-		authority := compile.ValidateDecisionAuthority(out, compile.Options{
-			Existing: doc, DecisionView: capture, ArtifactPath: artifactPath, ArtifactRoot: decisionview.SourceRootPlanning,
-		})
-		refs = append(refs, authority.Refusals...)
-	}
 
 	rel := relPath(art.Path)
-	if capture != nil && forkCaptureOperational(capture) {
-		if o.JSON {
-			_ = emitSectionJSON(rel, art, out, refs, o.DryRun)
-		}
-		return fmt.Errorf("section set: decision authority could not be captured")
-	}
 
 	if o.JSON {
 		return emitSectionJSON(rel, art, out, refs, o.DryRun)

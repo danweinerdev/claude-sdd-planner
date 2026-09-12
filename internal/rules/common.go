@@ -16,22 +16,21 @@ import (
 // `diagram` skills' types were dropped outright rather than kept as
 // validator-only legacy entries.
 var statusValues = map[string][]string{
-	"research":     {"draft", "active", "archived"},
-	"brainstorm":   {"draft", "active", "archived"},
-	"spec":         {"draft", "review", "approved", "implemented", "superseded"},
-	"design":       {"draft", "review", "approved", "implemented", "superseded"},
-	"plan":         {"draft", "approved", "active", "complete", "archived"},
-	"phase":        {"planned", "in-progress", "complete", "blocked", "deferred"},
-	"plan-phase":   {"planned", "in-progress", "complete", "blocked", "deferred"},
-	"debrief":      {"draft", "complete"},
-	"decision-log": {"active", "archived"},
-	"review":       {"open", "resolved", "superseded"},
-	"note":         {"draft", "in-progress", "complete"},
-	"notes":        {"draft", "in-progress", "complete"},
-	"notes-index":  {"draft", "in-progress", "complete"},
-	"findings":     {"draft", "in-progress", "complete"},
-	"drift-log":    {"draft", "in-progress", "complete"},
-	"reference":    {"draft", "active", "archived"},
+	"research":    {"draft", "active", "archived"},
+	"brainstorm":  {"draft", "active", "archived"},
+	"spec":        {"draft", "review", "approved", "implemented", "superseded"},
+	"design":      {"draft", "review", "approved", "implemented", "superseded"},
+	"plan":        {"draft", "approved", "active", "complete", "archived"},
+	"phase":       {"planned", "in-progress", "complete", "blocked", "deferred"},
+	"plan-phase":  {"planned", "in-progress", "complete", "blocked", "deferred"},
+	"debrief":     {"draft", "complete"},
+	"review":      {"open", "resolved", "superseded"},
+	"note":        {"draft", "in-progress", "complete"},
+	"notes":       {"draft", "in-progress", "complete"},
+	"notes-index": {"draft", "in-progress", "complete"},
+	"findings":    {"draft", "in-progress", "complete"},
+	"drift-log":   {"draft", "in-progress", "complete"},
+	"reference":   {"draft", "active", "archived"},
 }
 
 // retiredTypes are artifact types whose skills were cut (the compact-core

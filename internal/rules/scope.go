@@ -62,13 +62,13 @@ import (
 func ScopeToPlan(r *Root, planRel string) *Root {
 	planPrefix := strings.TrimSuffix(planRel, "/") + "/"
 	scoped := &Root{
-		Dir:                 r.Dir,
-		RepoRoot:            r.RepoRoot,
-		PlanRepos:           r.PlanRepos,
-		ConfigDiagnostics:   r.ConfigDiagnostics,
-		DecisionView:        r.DecisionView,
-		DecisionDiagnostics: r.DecisionDiagnostics,
-		ByPath:              map[string]*Artifact{},
+		Dir:               r.Dir,
+		RepoRoot:          r.RepoRoot,
+		PlanRepos:         r.PlanRepos,
+		ConfigDiagnostics: r.ConfigDiagnostics,
+		PlanDecisions:     r.PlanDecisions,
+		DecisionIndex:     r.DecisionIndex,
+		ByPath:            map[string]*Artifact{},
 	}
 	for _, a := range r.Artifacts {
 		if !keepForPlanScope(a.Rel, planPrefix) {
@@ -136,13 +136,13 @@ func PlanRelOf(rel string) string {
 // like a hang and to exceed a caller's timeout.
 func ScopeToDoc(r *Root, docRel string) *Root {
 	scoped := &Root{
-		Dir:                 r.Dir,
-		RepoRoot:            r.RepoRoot,
-		PlanRepos:           r.PlanRepos,
-		ConfigDiagnostics:   r.ConfigDiagnostics,
-		DecisionView:        r.DecisionView,
-		DecisionDiagnostics: r.DecisionDiagnostics,
-		ByPath:              map[string]*Artifact{},
+		Dir:               r.Dir,
+		RepoRoot:          r.RepoRoot,
+		PlanRepos:         r.PlanRepos,
+		ConfigDiagnostics: r.ConfigDiagnostics,
+		PlanDecisions:     r.PlanDecisions,
+		DecisionIndex:     r.DecisionIndex,
+		ByPath:            map[string]*Artifact{},
 	}
 	for _, a := range r.Artifacts {
 		if keepForDocScope(a.Rel) {

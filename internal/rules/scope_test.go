@@ -51,7 +51,6 @@ func scopeFixture() map[string]string {
 `),
 		"Specs/Sample/README.md": validSpecTemplate,
 		"Research/topic.md":      validResearch,
-		"Decisions/decisions.md": decisionLog("\n  - id: D-0001\n    status: accepted\n    question: Q\n    statement: S\n    scope: []\n"),
 	}
 }
 
@@ -85,7 +84,7 @@ func TestScopeToPlanFilter(t *testing.T) {
 	for _, want := range []string{
 		"Plans/Alpha/README.md", "Plans/Alpha/01-One.md",
 		"Plans/Beta/README.md", // foreign READMEs stay: ownership + related chains
-		"Specs/Sample/README.md", "Research/topic.md", "Decisions/decisions.md",
+		"Specs/Sample/README.md", "Research/topic.md",
 	} {
 		if !kept[want] {
 			t.Errorf("scoped root should keep %s", want)

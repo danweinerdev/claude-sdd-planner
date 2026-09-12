@@ -97,7 +97,7 @@ full review gates and is never stored or hand-edited here.
 ### renderer-phase-refresh
 
 - Contract: Regenerating graph-owned views refreshes the matching README phase statuses from the same derived state, preserves legacy/mixed-plan entries and unrelated bytes, and remains idempotent and frozen-view safe.
-- Justifies: `D-0022`, `NFR-05`, `AC-15`
+- Justifies: `SddGraph:pd-b9031144`, `NFR-05`, `AC-15`
 - Depends on: `preview-envelope`
 - Gate: tests — `TestGraphReadmeStatusesTrackDerivedPhaseState` in internal/graph/compile/render_status_test.go (satisfies derives-state); `TestGraphReadmePreservesMixedPhaseOwnership` in internal/graph/compile/render_status_test.go; `TestGraphReadmeStatusPreflight` in internal/graph/compile/render_status_test.go
 - Hazards: derives-state
@@ -123,7 +123,7 @@ full review gates and is never stored or hand-edited here.
 ### preview-adoption-completion
 
 - Contract: Adoption and rebinding previews preserve inherited bytes and unrelated config values, explicitly bind owner/source identities and baselines, and enumerate all local/config changes without writing.
-- Justifies: `FR-01`, `FR-02`, `FR-08`, `FR-16`, `FR-18`, `D-0025`, `DD-1`, `DD-5`, `DD-9`, `AC-02`, `AC-09`, `AC-16`
+- Justifies: `FR-01`, `FR-02`, `FR-08`, `FR-16`, `FR-18`, `ForkAwareDecisionLedgers:pd-764da52e`, `DD-1`, `DD-5`, `DD-9`, `AC-02`, `AC-09`, `AC-16`
 - Depends on: `test-gate-fresh-execution`
 - Gate: tests — `TestForkAdoptionIndependentAuthority` in internal/decisionview/adoption_test.go (satisfies derives-state); `TestForkAdoptionHostileEnvelope` in internal/decisionview/adoption_test.go (satisfies external-format)
 - Hazards: derives-state, external-format

@@ -93,8 +93,9 @@ func TestLoadUnknownType(t *testing.T) {
 // artifact types) must load without error.
 func TestAllEmbeddedSchemasLoad(t *testing.T) {
 	types := Types()
-	if len(types) != 16 {
-		t.Fatalf("Types() = %v, want 16 embedded schema types (retro was retired with its skill)", types)
+	if len(types) != 15 {
+		t.Fatalf("Types() = %v, want 15 embedded schema types (retro was retired with its skill; "+
+			"decision-log was retired with the global decision ledger)", types)
 	}
 	for _, ty := range types {
 		t.Run(ty, func(t *testing.T) {
@@ -109,8 +110,6 @@ func TestAllEmbeddedSchemasLoad(t *testing.T) {
 // tasks[], a review's findings[], a debrief's own structured fields — must
 // declare frontmatterMode=preserve. Exactly these four, no more, no fewer.
 func TestFrontmatterModePreserveSet(t *testing.T) {
-	// decision-log joins the set: decisions[] is nested frontmatter, so
-	// regenerating the block from flat fields would destroy every entry.
 	// Every type carrying nested frontmatter or a free-form body preserves its
 	// frontmatter block verbatim. Only the four fully-modeled prose types are
 	// managed.
@@ -144,11 +143,9 @@ func TestEveryTypeHasFreeProseSectionExceptPhase(t *testing.T) {
 				break
 			}
 		}
-		// phase declares only structured sections; decision-log declares no
-		// sections at all (it is frontmatter plus prose). Both are asserted as
-		// their actual state rather than forced to carry a free-prose section.
-		// Types with no declared sections cannot have a free-prose one; phase
-		// declares only structured sections. Both assert actual state.
+		// phase declares only structured sections. Types with no declared
+		// sections cannot have a free-prose one; phase declares only
+		// structured sections. Both assert actual state.
 		if len(s.Headings) == 0 || ty == "phase" {
 			continue
 		}

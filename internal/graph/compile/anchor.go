@@ -18,6 +18,7 @@ package compile
 //     not validate.
 
 import (
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
@@ -31,14 +32,15 @@ type Resolver func(cited string) (rules.CitationHit, intent.Item, bool)
 // Anchor is the single intent-anchor resolver/embedder shared by compile and
 // split. For each of the node's own justifications it resolves the citation
 // and, when the citation is fingerprintable, embeds the requirement's current
-// hash under the citation as written. Decisions (D-NNNN) resolve to no
-// fingerprintable item and are never hashed — their supersession is the
-// ledger's own machinery, not a content fingerprint.
+// hash under the citation as written. A plan-decision citation (`pd-…`,
+// Designs/PlanDecisions) is fingerprintable like any other requirement — its
+// item text is the entry's normalized statement — and entries are immutable,
+// so the hash never goes stale.
 func Anchor(n *model.Node, resolve Resolver) {
 	for _, cited := range n.Justifies {
 		_, item, ok := resolve(cited)
 		if !ok {
-			continue // decision (D-NNNN) or otherwise not fingerprintable
+			continue // ambiguous or unresolved citation
 		}
 		if n.IntentHashes == nil {
 			n.IntentHashes = map[string]string{}
@@ -100,8 +102,9 @@ const (
 	// CitationFingerprintable resolves to a spec/design requirement with
 	// extractable text — a hash can and must be embedded.
 	CitationFingerprintable CitationKind = iota
-	// CitationDecision is a decision-ledger id (D-NNNN): exempt from
-	// fingerprinting by design, never a refusal on its own.
+	// CitationDecision is a plan-decision-shaped id (`pd-…`) that no plan
+	// under the planning root records — refusable, like CitationUnresolved,
+	// but with its own repair-path message.
 	CitationDecision
 	// CitationAmbiguous is a bare id defined by more than one related source.
 	CitationAmbiguous
@@ -135,16 +138,7 @@ func (s *Sources) ClassifyCitation(cited string) CitationDisposition {
 	if sugg := s.set.index.Ambiguous(cited); len(sugg) > 0 {
 		return CitationDisposition{Kind: CitationAmbiguous, Suggestions: sugg}
 	}
-	if s.set.fork != nil {
-		if _, _, found := s.set.fork.disposition(cited); found {
-			return CitationDisposition{Kind: CitationDecision}
-		}
-		if suggestions := s.set.fork.ambiguous(cited); len(suggestions) > 0 {
-			return CitationDisposition{Kind: CitationAmbiguous, Suggestions: suggestions}
-		}
-		return CitationDisposition{Kind: CitationUnresolved, Hint: s.set.unrelatedHint(cited)}
-	}
-	if _, ok := s.set.decisions[cited]; ok {
+	if _, _, isRef := decisions.ParseRef(cited); isRef {
 		return CitationDisposition{Kind: CitationDecision}
 	}
 	return CitationDisposition{Kind: CitationUnresolved, Hint: s.set.unrelatedHint(cited)}

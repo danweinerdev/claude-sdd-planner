@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -448,26 +450,28 @@ related: []
 - [ ] **AC-02**: An unknown key names itself in the refusal.
 `
 
-const hashingDecisions = `---
-title: "Decisions"
-type: decision-log
-status: active
-created: 2026-08-01
-updated: 2026-08-01
-tags: []
-related: []
-decisions:
-  - id: D-0001
-    kind: decision
-    status: accepted
-    date: 2026-08-01
-    decided_by: user
-    statement: "An accepted truth."
-    scope: []
----
+// hashingDecisionStatement is the one plan decision hashingFixture records;
+// its id is content-addressed (decisions.IDFor), spelled hashingDecisionID.
+const hashingDecisionStatement = "An accepted truth."
 
-# Decisions
-`
+func hashingDecisionID() string { return decisions.IDFor(hashingDecisionStatement) }
+
+// writeHashingDecision writes planDir's decisions file with the one entry
+// hashingDecisionID resolves against.
+func writeHashingDecision(t *testing.T, planDir string) {
+	t.Helper()
+	entries := []decisions.Entry{{ID: hashingDecisionID(), Date: "2026-08-01", Statement: hashingDecisionStatement}}
+	raw, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decisions.PathFor(planDir), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
 
 const hashingPlan = `---
 title: "Sample Plan"
@@ -501,9 +505,9 @@ func hashingFixture(t *testing.T) (root, planDir string) {
 	}
 	write("planning-config.json", `{"planningRoot": "."}`)
 	write("Specs/Sample/README.md", hashingSpec)
-	write("Decisions/decisions.md", hashingDecisions)
 	write("Plans/SamplePlan/README.md", hashingPlan)
 	planDir = filepath.Join(root, "Plans", "SamplePlan")
+	writeHashingDecision(t, planDir)
 	if _, err := gstore.Init(planDir); err != nil {
 		t.Fatal(err)
 	}
@@ -532,18 +536,18 @@ func hashingFixture(t *testing.T) (root, planDir string) {
 // parent's map (a citation the child does not carry must not ride along).
 func TestSplitAnchorsChildrenOwnHashes(t *testing.T) {
 	root, planDir := hashingFixture(t)
-	children := `{
+	children := strings.Replace(`{
   "version": 1,
   "nodes": [
     {"id": "big-bare", "contract": "bare", "justifies": ["AC-01"],
      "gate": {"type": "tests", "tests": [{"id": "t1", "file": "t.ext"}]}, "hazards": []},
     {"id": "big-qual", "contract": "qualified", "justifies": ["Sample:AC-02"],
      "gate": {"type": "tests", "tests": [{"id": "t2", "file": "t.ext"}]}, "hazards": []},
-    {"id": "big-d", "contract": "decision", "justifies": ["D-0001"],
+    {"id": "big-pd", "contract": "decision", "justifies": ["{{PD}}"],
      "gate": {"type": "tests", "tests": [{"id": "t3", "file": "t.ext"}]}, "hazards": []}
   ]
 }
-`
+`, "{{PD}}", hashingDecisionID(), 1)
 	if _, err := Split(root, root, "SamplePlan", "big", []byte(children)); err != nil {
 		t.Fatalf("split: %v", err)
 	}
@@ -557,12 +561,15 @@ func TestSplitAnchorsChildrenOwnHashes(t *testing.T) {
 	if !strings.HasPrefix(g.NodeByID("big-qual").IntentHashes["Sample:AC-02"], "sha256:") {
 		t.Fatalf("qualified citation must fingerprint under its written spelling: %+v", g.NodeByID("big-qual").IntentHashes)
 	}
-	if len(g.NodeByID("big-d").IntentHashes) != 0 {
-		t.Fatalf("a D-only child must carry no fingerprints: %+v", g.NodeByID("big-d").IntentHashes)
+	// A plan-decision citation is fingerprintable like any other requirement
+	// (Designs/PlanDecisions), so the decision-only child carries its own
+	// hash too — not none.
+	if !strings.HasPrefix(g.NodeByID("big-pd").IntentHashes[hashingDecisionID()], "sha256:") {
+		t.Fatalf("a plan-decision-only child must fingerprint its citation: %+v", g.NodeByID("big-pd").IntentHashes)
 	}
 	// Non-inheritance: the parent cited FR-01, but no child does — so no
 	// child may carry the parent's FR-01 hash.
-	for _, id := range []string{"big-bare", "big-qual", "big-d"} {
+	for _, id := range []string{"big-bare", "big-qual", "big-pd"} {
 		if g.NodeByID(id).IntentHashes["FR-01"] != "" {
 			t.Fatalf("child %s must not inherit the parent's FR-01 hash", id)
 		}
@@ -573,18 +580,18 @@ func TestSplitAnchorsChildrenOwnHashes(t *testing.T) {
 // so a source edit after the split derives the (verified) child INTENT-STALE.
 func TestSplitChildGoesStaleOnSourceDrift(t *testing.T) {
 	root, planDir := hashingFixture(t)
-	children := `{
+	children := strings.Replace(`{
   "version": 1,
   "nodes": [
     {"id": "big-bare", "contract": "bare", "justifies": ["AC-01"],
      "gate": {"type": "tests", "tests": [{"id": "t1", "file": "t.ext"}]}, "hazards": []},
     {"id": "big-qual", "contract": "qualified", "justifies": ["AC-02"],
      "gate": {"type": "tests", "tests": [{"id": "t2", "file": "t.ext"}]}, "hazards": []},
-    {"id": "big-d", "contract": "decision", "justifies": ["D-0001"],
+    {"id": "big-pd", "contract": "decision", "justifies": ["{{PD}}"],
      "gate": {"type": "tests", "tests": [{"id": "t3", "file": "t.ext"}]}, "hazards": []}
   ]
 }
-`
+`, "{{PD}}", hashingDecisionID(), 1)
 	if _, err := Split(root, root, "SamplePlan", "big", []byte(children)); err != nil {
 		t.Fatalf("split: %v", err)
 	}
@@ -656,10 +663,10 @@ related: []
 	write("planning-config.json", `{"planningRoot": "."}`)
 	write("Specs/Sample/README.md", hashingSpec)
 	write("Specs/Other/README.md", other)
-	write("Decisions/decisions.md", hashingDecisions)
 	plan := strings.Replace(hashingPlan, "related: [Specs/Sample]", "related: [Specs/Sample, Specs/Other]", 1)
 	write("Plans/SamplePlan/README.md", plan)
 	planDir = filepath.Join(root, "Plans", "SamplePlan")
+	writeHashingDecision(t, planDir)
 	if _, err := gstore.Init(planDir); err != nil {
 		t.Fatal(err)
 	}
@@ -812,12 +819,16 @@ func TestRepairIntentDryRunByteIdentical(t *testing.T) {
 	}
 }
 
-func TestRepairIntentPreservesStaleHashAndDOnly(t *testing.T) {
+func TestRepairIntentPreservesStaleHashAndBackfillsPlanDecisions(t *testing.T) {
 	root, planDir := repairRoot(t)
+	writeHashingDecision(t, planDir)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		g.Nodes = append(g.Nodes,
 			repNode("stale", []string{"FR-01"}, map[string]string{"FR-01": "sha256:STALE"}),
-			repNode("d-only", []string{"D-0001"}, nil),
+			// A plan-decision citation is fingerprintable like any other
+			// requirement, so a missing hash here IS repairable — unlike the
+			// old global decision ledger, which carried no fingerprint at all.
+			repNode("pd-only", []string{hashingDecisionID()}, nil),
 		)
 		return nil
 	}); err != nil {
@@ -825,14 +836,17 @@ func TestRepairIntentPreservesStaleHashAndDOnly(t *testing.T) {
 	}
 	res, err := RepairIntent(root, root, "SamplePlan", "", false)
 	if err != nil {
-		t.Fatalf("a stale-but-anchored node and a D-only node must not refuse: %v", err)
+		t.Fatalf("a stale-but-anchored node and a backfillable plan-decision node must not refuse: %v", err)
 	}
-	if len(res.Changes) != 0 {
-		t.Fatalf("nothing is repairable here: %+v", res.Changes)
+	if len(res.Changes) != 1 || res.Changes[0].Node != "pd-only" {
+		t.Fatalf("only the plan-decision citation should be repaired: %+v", res.Changes)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("stale").IntentHashes["FR-01"] != "sha256:STALE" {
 		t.Fatal("a nonempty (stale) hash must be preserved")
+	}
+	if !strings.HasPrefix(g.NodeByID("pd-only").IntentHashes[hashingDecisionID()], "sha256:") {
+		t.Fatalf("the plan-decision citation must be backfilled: %+v", g.NodeByID("pd-only").IntentHashes)
 	}
 }
 
@@ -1225,7 +1239,7 @@ func TestSplitRefusesUnreachableDesignCitationAtomically(t *testing.T) {
 		t.Fatal("a split citing an unreachable design must refuse")
 	}
 	for _, want := range []string{
-		`big-render: cites "Designs/Sample:DD-1", which resolves in no related spec, design, or decision ledger`,
+		`big-render: cites "Designs/Sample:DD-1", which resolves in no related spec, design`,
 		"Designs/Sample/README.md defines it but is not reachable through the plan's `related` graph",
 		"relate it directly from Plans/SamplePlan/README.md",
 	} {

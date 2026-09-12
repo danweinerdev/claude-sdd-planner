@@ -29,7 +29,7 @@ func newRootCmd() *cobra.Command {
 		Short: "SDD toolchain — validation, artifact writes, hooks, provisioning",
 		Long: `sdd is the deterministic half of the sdd-planner workflow: it compiles and
 validates SDD artifacts, records completion evidence, drives lifecycle
-transitions, maintains the decision ledger, and serves the plugin's hooks.
+transitions, maintains plan decisions, and serves the plugin's hooks.
 
 Artifacts are compiled documents. Create and modify them through this binary
 rather than editing frontmatter by hand — a hand edit bypasses schema

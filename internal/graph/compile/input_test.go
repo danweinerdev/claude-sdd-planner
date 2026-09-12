@@ -14,11 +14,12 @@ import (
 
 func TestInputsUseMappedTargetRepository(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
+	recordFixtureDecision(t, root)
 	target := t.TempDir()
 	writeInputFile(t, root, "planning-config.json", fmt.Sprintf(`{"planMapping":{"SamplePlan":"target"},"repositories":{"target":{"path":%q}}}`, target))
 	writeInputFile(t, root, "docs/context.md", "# Wrong repository\n")
 	writeInputFile(t, target, "docs/context.md", "# Context\n## Alpha\nMapped target content.\n")
-	stage(t, root, inputProposal)
+	stage(t, root, stagedInputProposal())
 	_, findings, err := Run(root, root, "SamplePlan")
 	if err != nil || len(findings) != 0 {
 		t.Fatalf("mapped input did not resolve from target repository: %v %v", err, findings)
@@ -52,7 +53,7 @@ func writeInputFile(t *testing.T, root, rel, content string) {
 const inputProposal = `{
   "version": 1,
   "nodes": [
-    {"id": "impl-input", "contract": "reads context", "justifies": ["FR-01", "D-0001"],
+    {"id": "impl-input", "contract": "reads context", "justifies": ["FR-01", "{{PD}}"],
      "gate": {"type": "tests", "tests": [{"id": "test_input", "file": "t.ext"}]},
      "hazards": [],
      "inputs": [
@@ -65,12 +66,19 @@ const inputProposal = `{
 }
 `
 
+// stagedInputProposal returns inputProposal with its plan-decision
+// citation resolved against fixtureRoot's recorded fixture decision.
+func stagedInputProposal() string {
+	return strings.Replace(inputProposal, "{{PD}}", fixtureDecisionID(), 1)
+}
+
 // TestCompileAnchorsInputs: compile embeds a digest per declared input — a
 // whole-file input and a section input key distinctly, both sha256-prefixed.
 func TestCompileAnchorsInputs(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
+	recordFixtureDecision(t, root)
 	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n")
-	stage(t, root, inputProposal)
+	stage(t, root, stagedInputProposal())
 
 	res, findings, err := Run(root, root, "SamplePlan")
 	if err != nil || len(findings) != 0 {
@@ -98,8 +106,9 @@ func TestCompileAnchorsInputs(t *testing.T) {
 // (missing file, ambiguous heading) is a finding, never a silent skip.
 func TestCompileRefusesUnresolvedInput(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
+	recordFixtureDecision(t, root)
 	// Missing file.
-	stage(t, root, inputProposal)
+	stage(t, root, stagedInputProposal())
 	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) == 0 {
 		t.Fatalf("a missing input must be a finding: err=%v findings=%v", err, findings)
 	} else {
@@ -115,6 +124,7 @@ func TestCompileRefusesUnresolvedInput(t *testing.T) {
 // unchanged — the property the staleness axis depends on.
 func TestInputSectionEditsVsUnrelatedEdits(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
+	recordFixtureDecision(t, root)
 	docPath := filepath.Join(root, "docs", "context.md")
 	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n")
 
@@ -157,8 +167,9 @@ func TestInputSectionEditsVsUnrelatedEdits(t *testing.T) {
 // named in InputStale.
 func TestInputStaleDeriveWiring(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
+	recordFixtureDecision(t, root)
 	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n")
-	stage(t, root, inputProposal)
+	stage(t, root, stagedInputProposal())
 	res, findings, err := Run(root, root, "SamplePlan")
 	if err != nil || len(findings) != 0 {
 		t.Fatalf("compile: %v %v", err, findings)

@@ -397,7 +397,6 @@ func validate(root string) (int, []Diagnostic, error) {
 	}
 
 	diags := rules.Run(r)
-	diags = append(diags, rules.FocusedDecisionLogs(r, false)...)
 	rules.SortDiagnostics(diags)
 
 	out := make([]Diagnostic, 0, len(diags))
@@ -417,9 +416,9 @@ func validate(root string) (int, []Diagnostic, error) {
 }
 
 // gitRoot walks up for a .git entry, matching how the CLI resolves the
-// repository a planning root belongs to. The DLG history rules read that
-// repository's log, so a root resolved to the wrong one reports different
-// diagnostics.
+// repository a planning root belongs to. The completion-evidence rules read
+// that repository's log, so a root resolved to the wrong one reports
+// different diagnostics.
 func gitRoot(start string) string {
 	current := start
 	for {

@@ -364,7 +364,7 @@ func checkSdd(tokens []string, segment string) Decision {
 			if len(args) >= 2 {
 				verb = args[1]
 			}
-			return deny("Blocked `" + segment + "`: `sdd decide " + verb + "` writes the decision ledger.")
+			return deny("Blocked `" + segment + "`: `sdd decide " + verb + "` writes a plan's decisions file.")
 		}
 		return Decision{}
 	}

@@ -4,10 +4,6 @@ type: design
 status: approved
 created: 2026-08-28
 updated: 2026-08-31
-waivers:
-  - code: SDD121
-    reason: "Ledger notes cite the superseded completion-model and work-tracking entries as the objects of this design's supersession proposals; the accepted replacements D-0022 and D-0023 are cited alongside."
-    accepted: "2026-08-31"
 tags: [architecture, execution, graph, tdd, sdd-cli]
 related: [Specs/SDD-Toolchain]
 ---
@@ -363,14 +359,14 @@ construction is declarative and batched, mutation is imperative and atomic
   is the failure mode this design exists to remove; (b) guarantees drift —
   two writable sources of the same truth always diverge; under (c) a rendered
   view can be regenerated, so it can never be the constraint.
-  **Ledger note (D-0010):** D-0010's letter says plan/phase/task frontmatter
+  **Ledger note (SDD-Toolchain:pd-d86fd37e):** SDD-Toolchain:pd-d86fd37e's letter says plan/phase/task frontmatter
   is the only work-tracking layer; it rejected an *external issue tracker*.
   The graph is not external — it is a committed SDD artifact inside the plan
   directory, versioned with the plan it schedules — but it is also plainly a
   second tracking layer, so this design **proposes narrowing/superseding
-  D-0010** to "planning-root artifacts are the only work-tracking layer; no
+  SDD-Toolchain:pd-d86fd37e** to "planning-root artifacts are the only work-tracking layer; no
   external tracker" rather than claiming compatibility it does not have.
-  Resolved at approval: recorded as D-0023, superseding D-0010. (D-0023)
+  Resolved at approval: recorded as SddGraph:pd-312da877, superseding SDD-Toolchain:pd-d86fd37e. (SddGraph:pd-312da877)
   **Frozen-view invariant (FR-46/FR-47):** regeneration respects the frozen
   layer. A rendered view all of whose nodes are *closed* (covered by a GREEN
   frozen `full` review gate, DD-9) is byte-stable: `compile` refuses to
@@ -395,7 +391,7 @@ construction is declarative and batched, mutation is imperative and atomic
   moment code is edited outside the tool; deriving state makes the graph
   impossible to lie to. Task-level statuses in rendered plan views become
   projections of derived state.
-  **Ledger note (D-0008):** D-0008 requires evidence-gated completion with a
+  **Ledger note (SDD-Toolchain:pd-cc12eb79):** SDD-Toolchain:pd-cc12eb79 requires evidence-gated completion with a
   populated evidence record before any status flips complete, and a frozen
   four-lane `Aligned` review for phase completion. This design keeps both
   *obligations* while changing their *mechanism*: the observation record
@@ -403,7 +399,7 @@ construction is declarative and batched, mutation is imperative and atomic
   commands are the gate's named tests/command, revision identity is the
   provenance anchor, observable evidence is the parsed report — and the
   frozen `Aligned` review obligation is preserved as the `full` review gate
-  that *truly closes* a node (DD-9). Three parts of D-0008's letter are
+  that *truly closes* a node (DD-9). Three parts of SDD-Toolchain:pd-cc12eb79's letter are
   genuinely modified and are **proposed for supersession**, not glossed:
   (1) "status flips" — there is no stored status to flip; a node's GREEN is
   *assumed closure* (sufficient to build on), and completion-grade closure
@@ -415,7 +411,7 @@ construction is declarative and batched, mutation is imperative and atomic
   heavyweight completion is scoped to **feature gates** rather than phases —
   phase completion evidence becomes "every node in the phase is closed",
   where the closing reviews are the feature gates covering those nodes.
-  Resolved at approval: recorded as D-0022, superseding D-0008. (D-0022)
+  Resolved at approval: recorded as SddGraph:pd-b9031144, superseding SDD-Toolchain:pd-cc12eb79. (SddGraph:pd-b9031144)
 
 - **DD-4**: `compile` enforces intent coverage and embeds intent hashes.
   Context: a graph-only execution model has a known weakness — if node
@@ -452,7 +448,7 @@ construction is declarative and batched, mutation is imperative and atomic
   record `isolation: "asserted"` and are refused by the default merge gate.
   The observation record is this design's successor to the
   `shared/completion-evidence.md` evidence table — same obligations, machine
-  mechanism (see DD-3's ledger note on D-0008). **Red-before-green:** for
+  mechanism (see DD-3's ledger note on SDD-Toolchain:pd-cc12eb79). **Red-before-green:** for
   every test discharging a declared hazard (and encouraged for all tests),
   the merge gate additionally requires a recorded *failing* observation of
   that test id from an earlier report (`red_seq < green_seq`) — a test that
@@ -462,7 +458,7 @@ construction is declarative and batched, mutation is imperative and atomic
   mechanical, the discipline of *how* the failure was produced (unimplemented
   feature, reverted guard) remains a walk-protocol step (DD-13).
   Rationale: there must be no write path by which an LLM concludes; the honesty
-  property is structural, not behavioral. (D-0022)
+  property is structural, not behavioral. (SddGraph:pd-b9031144)
 
 - **DD-6**: Observations anchor to content digests + a monotonic seq; VCS revisions are supplementary provenance.
   Context: git can anchor a verification to a per-node commit; Perforce
@@ -580,7 +576,7 @@ construction is declarative and batched, mutation is imperative and atomic
     nodes is covered by a frozen `Aligned` `full` gate that is GREEN.
   The `review` gate does not introduce a new review mechanism: its
   observation is populated by the existing `sdd review scaffold` →
-  `sdd review resolve` flow, and inherits D-0020's freeze discipline
+  `sdd review resolve` flow, and inherits SDD-Toolchain:pd-f98234fe's freeze discipline
   unchanged — the artifact freezes only at `resolve` time, atomically with
   `status: resolved`, gated on the SDD167 check; the gate node reads GREEN
   only from a review that is both `resolved` and `frozen: true` with verdict
@@ -590,7 +586,7 @@ construction is declarative and batched, mutation is imperative and atomic
   per cut; makes the review a scheduled edge in the same graph rather than
   ceremony beside it; and the closure rule means evidence propagates the way
   dependencies already do — nothing downstream closes on top of unreviewed
-  work. (D-0022)
+  work. (SddGraph:pd-b9031144)
 
 - **DD-10**: Claims and leases, not file locks, are the agent-concurrency mechanism.
   Context: per-node workspace files are single-writer by ownership; the real
@@ -754,7 +750,7 @@ construction is declarative and batched, mutation is imperative and atomic
   or auth error, capacity exhausted by outstanding claims), `next --claim`
   refuses with a named provider error and the node remains unclaimed on the
   frontier; no claim record is written for a workspace that does not exist.
-- **Guard coverage (D-0014 / FR-44).** Every new mutating verb this design
+- **Guard coverage (SDD-Toolchain:pd-27391740 / FR-44).** Every new mutating verb this design
   introduces — `graph propose|assemble|compile|convert|sync|release|split|set-tests|gc`
   and `next --claim` — enters the `sdd hook pretooluse` deny-list for the
   read-only agents by default; the read-only surface
@@ -823,7 +819,7 @@ Feature rollout is phased, each phase independently shippable and useful:
 2. **Graph and compiler** (DD-2/3/4/11): `graph propose` / `assemble` /
    `compile`, rendered plan views, and `graph convert` (DD-15) so v1 plans
    can enter the graph world from day one of this phase. Guard entries
-   (D-0014/FR-44) for the new mutating verbs land in the same revision as
+   (SDD-Toolchain:pd-27391740/FR-44) for the new mutating verbs land in the same revision as
    the verbs.
 3. **Execution loop** (DD-5/6/7/8/10): `next --claim`, `sync`, providers
    (git + p4 + plain), claims/leases, and the full merge gate **including

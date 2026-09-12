@@ -1,9 +1,15 @@
 package rules
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 )
+
+// pdRefRe matches a plan-decision citation (`pd-…` or `<Plan>:pd-…`).
+var pdRefRe = regexp.MustCompile(`\bpd-[0-9a-f]{` + fmt.Sprint(decisions.IDHexLen) + `}\b`)
 
 // Family (f): Validator._phase — SDD061 through SDD069, plus SDD076/SDD077
 // (task justification quality, via _task_justification). SDD051 (required
@@ -637,7 +643,7 @@ func init() {
 					Code: "SDD076", Severity: Error, Path: a.Rel, Line: 1,
 					Message: "Task `" + metaStr(m, "id") + "` justifies itself with a placeholder: " +
 						pyRepr(text) + ".",
-					Correction: "State the demand: cite the FR-NN/NFR-NN/AC-NN/D-NNNN ids the task " +
+					Correction: "State the demand: cite the FR-NN/NFR-NN/AC-NN/pd-… ids the task " +
 						"serves, or name the concrete failure it prevents. A task with no " +
 						"such demand is cut, not annotated.",
 				})
@@ -684,7 +690,7 @@ func init() {
 					continue
 				}
 				if citeFRRe.MatchString(text) || citeNFRRe.MatchString(text) ||
-					citeACRe.MatchString(text) || citeDRe.MatchString(text) {
+					citeACRe.MatchString(text) || pdRefRe.MatchString(text) {
 					continue
 				}
 				title, _ := m["title"].(string)

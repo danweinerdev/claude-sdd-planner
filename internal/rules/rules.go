@@ -165,7 +165,7 @@ func Codes() []string {
 // violate?" wants this. Use RunWithWaivers for the reporting path, where a
 // human's declared exceptions apply.
 func Run(r *Root) []Diagnostic {
-	out := append([]Diagnostic(nil), r.DecisionDiagnostics...)
+	var out []Diagnostic
 	emit := func(d Diagnostic) { out = append(out, d) }
 	for _, rule := range All() {
 		if rule.CheckRoot != nil {
@@ -207,7 +207,6 @@ func RunWithWaivers(r *Root) []Diagnostic {
 	// the same bookkeeping internally, so using it here would report every
 	// waiver problem twice.
 	diags := runBare(r)
-	diags = append(diags, r.DecisionDiagnostics...)
 	diags = append(diags, applyWaivers(r, diags)...)
 	diags = demoteRetiredFindings(r, diags)
 	SortDiagnostics(diags)

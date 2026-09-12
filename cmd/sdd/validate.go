@@ -13,15 +13,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // outDiagnostic's field order matches sdd_validate.py's `json.dumps(...,
@@ -45,12 +42,11 @@ type outDiagnostic struct {
 // outDoc mirrors main()'s successful-run JSON dict, field order alphabetical
 // for the same reason as outDiagnostic.
 type outDoc struct {
-	ArtifactsInScope     []string        `json:"artifacts_in_scope"`
-	ArtifactsInspected   int             `json:"artifacts_inspected"`
-	Diagnostics          []outDiagnostic `json:"diagnostics"`
-	EffectiveDecisionIDs []string        `json:"effective_decision_ids,omitempty"`
-	PlanningRoot         string          `json:"planning_root"`
-	Valid                bool            `json:"valid"`
+	ArtifactsInScope   []string        `json:"artifacts_in_scope"`
+	ArtifactsInspected int             `json:"artifacts_inspected"`
+	Diagnostics        []outDiagnostic `json:"diagnostics"`
+	PlanningRoot       string          `json:"planning_root"`
+	Valid              bool            `json:"valid"`
 	// Waived counts findings excused by accepted exceptions. It is reported
 	// separately from Valid so a green run that rests on waivers is
 	// distinguishable, in one field, from a green run that does not.
@@ -109,9 +105,6 @@ func cmdValidate(o validateOpts) error {
 	if o.NoWaivers {
 		diags = rules.Run(r)
 	}
-	// The decision-ledger validator (DLG*) runs alongside the artifact rules,
-	// as sdd_validate.py folds in _focused_decision_logs.
-	diags = append(diags, rules.FocusedDecisionLogs(r, false)...)
 	rules.SortDiagnostics(diags)
 
 	artifactsInScope := make([]string, 0, len(r.Artifacts))
@@ -120,7 +113,7 @@ func cmdValidate(o validateOpts) error {
 	}
 	if o.Scope != "" {
 		artifactsInScope = filterInScope(artifactsInScope, o.Scope)
-		diags = selectInScope(diags, o.Scope, artifactsInScope, governingDecisions(r, artifactsInScope))
+		diags = selectInScope(diags, o.Scope, artifactsInScope)
 	}
 	sort.Strings(artifactsInScope)
 
@@ -153,15 +146,13 @@ func cmdValidate(o validateOpts) error {
 	}
 
 	if format == "json" {
-		effectiveIDs := effectiveDecisionIDs(r)
 		doc := outDoc{
-			ArtifactsInScope:     artifactsInScope,
-			ArtifactsInspected:   len(r.Artifacts),
-			Diagnostics:          out,
-			EffectiveDecisionIDs: effectiveIDs,
-			PlanningRoot:         resolved,
-			Valid:                valid,
-			Waived:               waived,
+			ArtifactsInScope:   artifactsInScope,
+			ArtifactsInspected: len(r.Artifacts),
+			Diagnostics:        out,
+			PlanningRoot:       resolved,
+			Valid:              valid,
+			Waived:             waived,
 		}
 		if err := printJSON(doc); err != nil {
 			return err
@@ -202,19 +193,6 @@ func countErrorsOut(ds []outDiagnostic) int {
 		}
 	}
 	return n
-}
-
-func effectiveDecisionIDs(r *rules.Root) []string {
-	ids := []string{}
-	if r.DecisionView != nil && r.DecisionView.View != nil {
-		for _, record := range r.DecisionView.View.Records {
-			if record.Applicability == "binding" || record.Applicability == "unresolved" {
-				ids = append(ids, string(record.ID))
-			}
-		}
-	}
-	sort.Strings(ids)
-	return ids
 }
 
 // printValidateReport mirrors main()'s text-format branch exactly: a one-line
@@ -311,9 +289,6 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 			if vcsRoot != "" {
 				repoForConfig = vcsRoot
 			}
-			if configDeclaresDecisionLog(raw) {
-				repoForConfig = current
-			}
 			return filepath.Clean(resolvedRoot), repoForConfig, nil
 		}
 		if (vcsRoot != "" && current == vcsRoot) || filepath.Dir(current) == current {
@@ -324,93 +299,10 @@ func resolveRoots(cwd, explicit string) (root, repoRoot string, err error) {
 }
 
 // repositoryForExplicitRoot preserves validate's legacy explicit-root rule:
-// absent an explicit decision authority declaration, repository scope is the
-// VCS root (or cwd outside VCS), independently of the selected planning root.
-// A decisionLog declaration is different because its config directory is the
-// represented owner. Retain that owner even when the declaration is malformed
-// so LoadRootRepo captures the selector diagnostics instead of silently
-// treating the planning root as unrelated legacy authority.
+// repository scope is the VCS root (or cwd outside VCS), independently of
+// the selected planning root.
 func repositoryForExplicitRoot(cwd, planningRoot, legacyRepo, vcsRoot string) string {
-	current := cwd
-	for {
-		cfgPath := filepath.Join(current, "planning-config.json")
-		if raw, readErr := os.ReadFile(cfgPath); readErr == nil {
-			if configDeclaresDecisionLog(raw) {
-				configured, known := configuredPlanningRoot(raw, current)
-				if !known || vcs.CanonPath(configured) == vcs.CanonPath(planningRoot) {
-					return current
-				}
-				// An explicit selector for another planning root is authority,
-				// but not authority this invocation may borrow. Isolate the
-				// config-less explicit root from that unrelated repository.
-				return planningRoot
-			}
-		}
-		parent := filepath.Dir(current)
-		if parent == current || (vcsRoot != "" && current == vcsRoot) {
-			break
-		}
-		current = parent
-	}
 	return legacyRepo
-}
-
-// configuredPlanningRoot extracts planningRoot even when a later decisionLog
-// value makes the enclosing JSON incomplete. That is enough to associate a
-// malformed selector with its owner without letting a valid selector for a
-// different planning root capture an unrelated explicit --root invocation.
-func configuredPlanningRoot(raw []byte, owner string) (string, bool) {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) == nil {
-		var value string
-		if json.Unmarshal(fields["planningRoot"], &value) != nil {
-			return "", false
-		}
-		return absoluteConfiguredRoot(owner, value)
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	first, err := decoder.Token()
-	if err != nil || first != json.Delim('{') {
-		return "", false
-	}
-	for decoder.More() {
-		key, err := decoder.Token()
-		if err != nil {
-			return "", false
-		}
-		name, ok := key.(string)
-		if !ok {
-			return "", false
-		}
-		if name == "planningRoot" {
-			var value string
-			if decoder.Decode(&value) != nil {
-				return "", false
-			}
-			return absoluteConfiguredRoot(owner, value)
-		}
-		var ignored json.RawMessage
-		if decoder.Decode(&ignored) != nil {
-			return "", false
-		}
-	}
-	return "", false
-}
-
-func absoluteConfiguredRoot(owner, value string) (string, bool) {
-	if !filepath.IsAbs(value) {
-		value = filepath.Join(owner, value)
-	}
-	absolute, err := filepath.Abs(value)
-	if err != nil {
-		return "", false
-	}
-	return filepath.Clean(absolute), true
-}
-
-func configDeclaresDecisionLog(raw []byte) bool {
-	return decisionview.ConfigDeclaresDecisionLog(raw)
 }
 
 // gitRoot walks up from start looking for a `.git` entry (file or directory,
@@ -472,15 +364,8 @@ func splitIdent(id string) (string, int, bool) {
 // selectInScope keeps the diagnostics that bear on the requested scope.
 //
 // A diagnostic qualifies when it is reported against an in-scope artifact, or
-// when it implicates one. The decision ledger is the one cross-cutting case:
-// it lives at a single path but its entries govern artifacts throughout the
-// planning root, so path alone cannot answer whether an entry is relevant.
-// The previous rule admitted every `Decisions/` diagnostic unconditionally,
-// which meant scoping a single spec still printed the whole ledger's findings
-// — the target's own diagnostics buried under errors about unrelated
-// decisions. A ledger entry is now in scope when the decision it describes
-// governs an in-scope artifact, via its `scope` field or a citation from one.
-func selectInScope(diags []rules.Diagnostic, scope string, inScope []string, governing map[string]bool) []rules.Diagnostic {
+// when it implicates one.
+func selectInScope(diags []rules.Diagnostic, scope string, inScope []string) []rules.Diagnostic {
 	scope = strings.Trim(filepath.ToSlash(scope), "/")
 	allowed := map[string]bool{}
 	for _, p := range inScope {
@@ -488,98 +373,14 @@ func selectInScope(diags []rules.Diagnostic, scope string, inScope []string, gov
 	}
 	var out []rules.Diagnostic
 	for _, d := range diags {
-		if strings.HasPrefix(d.Code, "FDL") && d.Severity.Invalidating() {
-			out = append(out, d)
-			continue
-		}
 		if allowed[d.Path] || d.Path == scope || strings.HasPrefix(d.Path, scope+"/") {
 			out = append(out, d)
-			continue
-		}
-		if isLedgerPath(d.Path) {
-			// Keep the entry-specific ones whose decision governs something in
-			// scope, plus the structural ones that describe the ledger as a
-			// whole (no id to attribute), since a malformed ledger invalidates
-			// any conclusion drawn from it.
-			if id := decisionIDIn(d.Message); id == "" || governing[id] {
-				out = append(out, d)
-			}
 			continue
 		}
 		for _, imp := range d.Implicated {
 			if allowed[imp] {
 				out = append(out, d)
 				break
-			}
-		}
-	}
-	return out
-}
-
-func isLedgerPath(p string) bool {
-	return strings.HasPrefix(p, "Decisions/") || strings.HasSuffix(p, "DECISIONS.md")
-}
-
-// decisionIDRe finds the `D-NNNN` a diagnostic message attributes itself to.
-var decisionIDRe = regexp.MustCompile(`\bD-\d{4}\b`)
-
-func decisionIDIn(msg string) string {
-	return decisionIDRe.FindString(msg)
-}
-
-// governingDecisions returns the ids of decisions that govern any in-scope
-// artifact: those whose `scope` names one, and those an in-scope artifact
-// cites. Both directions matter — the ledger points at artifacts via `scope`,
-// and artifacts point back via inline `(D-NNNN)` citations, and either link
-// makes the entry part of the scoped picture.
-func governingDecisions(r *rules.Root, inScope []string) map[string]bool {
-	allowed := map[string]bool{}
-	for _, p := range inScope {
-		allowed[p] = true
-	}
-	out := map[string]bool{}
-	for _, a := range r.Artifacts {
-		// Direction 1: an in-scope artifact cites a decision.
-		if allowed[a.Rel] {
-			for _, id := range decisionIDRe.FindAllString(a.Body, -1) {
-				out[id] = true
-			}
-		}
-		// Direction 2: a ledger entry scopes itself to an in-scope artifact.
-		entries, ok := a.Meta["decisions"].([]any)
-		if !ok {
-			continue
-		}
-		for _, raw := range entries {
-			entry, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			id, _ := entry["id"].(string)
-			if id == "" {
-				continue
-			}
-			scopes, ok := entry["scope"].([]any)
-			if !ok {
-				continue
-			}
-			for _, s := range scopes {
-				ref, ok := s.(string)
-				if !ok {
-					continue
-				}
-				ref = strings.Trim(filepath.ToSlash(ref), "/")
-				for p := range allowed {
-					// Match on path segments, never bare string prefixes: a
-					// decision scoped to `Specs/Foo` must not be pulled into
-					// the scope of `Specs/FooBar`, which a HasPrefix test
-					// treats as a match.
-					dir := strings.TrimSuffix(p, "/README.md")
-					if p == ref || strings.HasPrefix(p, ref+"/") ||
-						ref == dir || strings.HasPrefix(ref, dir+"/") {
-						out[id] = true
-					}
-				}
 			}
 		}
 	}

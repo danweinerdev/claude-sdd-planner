@@ -35,7 +35,7 @@ type hookEvent struct {
 
 var hookEvents = []hookEvent{
 	{Name: "SessionStart", Matcher: "*", Subcommand: "sessionstart",
-		StatusText: "Loading decision ledger..."},
+		StatusText: "Loading standing decisions..."},
 	{Name: "PreToolUse", Matcher: "Bash|Write|Edit|NotebookEdit", Subcommand: "pretooluse"},
 }
 

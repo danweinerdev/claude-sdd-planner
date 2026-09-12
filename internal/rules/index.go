@@ -6,7 +6,7 @@ import (
 )
 
 // Family (d): Validator._index — duplicate-identifier detection across a
-// spec's own body, a plan's phase task ids, and the decision ledger.
+// spec's own body and a plan's phase task ids.
 
 var specDefinitionRe = map[string]*regexp.Regexp{
 	"FR":  regexp.MustCompile(`(?m)^\s*-\s+\*\*(FR-\d{2,})\*\*\s*:`),
@@ -229,87 +229,4 @@ None.
 		}}},
 	})
 
-	Register(&Rule{
-		Code: "SDD032", Severity: Error, PyFunc: "_index",
-		What: "the same decision id is declared more than once in the ledger",
-		CheckRoot: func(r *Root, emit func(Diagnostic)) {
-			if r.DecisionView != nil {
-				for _, collection := range r.DecisionView.Collections {
-					seen := map[string]bool{}
-					for _, file := range collection.Files {
-						a := decisionCollectionFileArtifact(r, collection, file)
-						if a == nil || a.Meta == nil {
-							continue
-						}
-						for _, value := range asAnyList(a.Meta["decisions"]) {
-							entry := planEntry(value)
-							id, _ := entry["id"].(string)
-							if id == "" {
-								continue
-							}
-							if seen[id] {
-								emit(Diagnostic{Code: "SDD032", Severity: Error, Path: a.Rel, Line: 1,
-									Message: "Duplicate decision id `" + id + "`.", Correction: "Renumber the later entry and update all links."})
-							} else {
-								seen[id] = true
-							}
-						}
-					}
-				}
-				return
-			}
-			seen := map[string]bool{}
-			for _, a := range r.Artifacts {
-				if a.Meta == nil || a.Kind() != "decision-log" {
-					continue
-				}
-				entries, ok := a.Meta["decisions"].([]any)
-				if !ok {
-					continue
-				}
-				for _, e := range entries {
-					em, ok := e.(map[string]any)
-					if !ok {
-						continue
-					}
-					id, ok := em["id"].(string)
-					if !ok {
-						continue
-					}
-					if seen[id] {
-						emit(Diagnostic{
-							Code: "SDD032", Severity: Error, Path: a.Rel, Line: 1,
-							Message:    "Duplicate decision id `" + id + "`.",
-							Correction: "Renumber the later entry and update all links.",
-						})
-						continue
-					}
-					seen[id] = true
-				}
-			}
-		},
-		Bad: []Example{{Name: "duplicate-decision-id", Files: map[string]string{
-			"Decisions/decisions.md": decisionLog(`
-  - id: D-0001
-    status: accepted
-    question: Q1
-    statement: S1
-    scope: []
-  - id: D-0001
-    status: accepted
-    question: Q2
-    statement: S2
-    scope: []
-`),
-		}}},
-		Good: []Example{{Name: "unique-decision-ids", Files: map[string]string{
-			"Decisions/decisions.md": decisionLog(`
-  - id: D-0001
-    status: accepted
-    question: Q1
-    statement: S1
-    scope: []
-`),
-		}}},
-	})
 }

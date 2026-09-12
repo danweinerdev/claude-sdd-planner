@@ -53,14 +53,14 @@ flowchart LR
 ```
 
 ## Key Decisions
-- D-0025 records approved config-selected, logically repository-owned authority with internal/external planning-root storage; it supersedes the former physical-location restriction. D-0018 still gates every real ledger/authority write with exact-text approval.
+- ForkAwareDecisionLedgers:pd-764da52e records approved config-selected, logically repository-owned authority with internal/external planning-root storage; it supersedes the former physical-location restriction. SDD-Toolchain:pd-eed0dbed still gates every real ledger/authority write with exact-text approval.
 - User confirmed L/full scope and the six workstream hazard groups. Each implementation node below uses applicable hazards from that confirmed vocabulary; test shapes follow `sdd graph hazards`. Pure review/command gates perform no implementation and are shown separately in graph readback.
-- D-0022 requires actual red/green reports, clean revision anchors, and frozen full four-lane review before closure. D-0024 confines lifecycle commits to boundaries; local plan/task commits are authorized, publishing is not.
+- SddGraph:pd-b9031144 requires actual red/green reports, clean revision anchors, and frozen full four-lane review before closure. SddGraph:pd-2c12dec8 confines lifecycle commits to boundaries; local plan/task commits are authorized, publishing is not.
 - Private helpers may land before public activation, but no intermediate release may advertise fork support while a required consumer can silently use a single-file legacy path. The core review and final consumer agreement tests guard that integration boundary.
 - Named tests are prospective contracts and must be introduced at a compilable seam; an absent package or build error is not hazard-specific red evidence. CLI cases use real subprocesses; concurrency cases fail with a no-op guard; replay cases compare independent same-seed traces; derived-state cases use independent expected sets; prose cases exercise commands and referenced artifacts.
 
 ## Dependencies
-Approved related spec/design and accepted D-0025. Existing Go toolchain, local Git and native Windows/POSIX verification runners; no external SCM service. The feature does not depend on TestSuiteReliability. Existing whole-root stale-waiver findings in Plans/SddGraph are outside this implementation and must not be hidden; report any actual command refusal they cause.
+Approved related spec/design and accepted ForkAwareDecisionLedgers:pd-764da52e. Existing Go toolchain, local Git and native Windows/POSIX verification runners; no external SCM service. The feature does not depend on TestSuiteReliability. Existing whole-root stale-waiver findings in Plans/SddGraph are outside this implementation and must not be hidden; report any actual command refusal they cause.
 
 <!-- graph-view:begin — generated section, do not edit -->
 

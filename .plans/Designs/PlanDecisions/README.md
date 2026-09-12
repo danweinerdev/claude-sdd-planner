@@ -75,7 +75,7 @@ graph TD
   | `id` | yes, tool-set | `pd-` plus the first 8 hex characters of SHA-256 over the normalized statement. Never supplied by the caller. |
   | `date` | yes, tool-set | ISO date the entry was appended. |
   | `statement` | yes | The decision, in one or a few sentences. The only human-authored content. |
-  | `supersedes` | no | One id, in this plan (`pd-…`) or another (`<Plan>:pd-…`). |
+  | `supersedes` | no | One id, in this plan (`pd-…`) or another (`<Plan>:pd-…`). A comma-separated list only when one entry reconciles competing successors (see Concurrency). |
   | `source` | no | Provenance: `Designs/<X>:DD-N` for a compiled decision, `Reviews/<file>:F-NN` for one that came from a review finding, otherwise absent. |
 
   Normalization for the digest is trim, collapse internal whitespace, and
@@ -84,10 +84,14 @@ graph TD
 - **Compile conversion.** `sdd compile` reads every design in the plan's
   `related` frontmatter, takes each top-level `- **DD-N**:` bullet with its
   indented continuation lines as one statement, and appends an entry with
-  `source: Designs/<X>:DD-N`. The copy is verbatim; no field extraction. A DD
-  whose bullet body says `Supersedes DD-3` is not parsed; if the author wants
-  supersession recorded, they record it with `sdd decide add` after compile.
-  Re-running compile on an existing plan appends only DDs whose digest is not
+  `source: Designs/<X>:DD-N`. The copy is verbatim; the one clause compile
+  reads is `Supersedes DD-N` (or `Supersedes: Other:DD-N`) anywhere in the
+  bullet text, which becomes the entry's `supersedes` edge pointing at the
+  entry compiled from that DD. This is the only mechanical parse, and it is
+  necessary: a compiled entry is immutable and re-adding its statement is a
+  no-op, so an edge not recorded at conversion could never be attached later.
+  A `Supersedes` clause naming a DD that no plan has compiled refuses the
+  sync rather than dropping the edge. Re-running compile on an existing plan appends only DDs whose digest is not
   already present, so extending a design and recompiling adds the new
   decisions and touches nothing else.
 - **Write verb.** `sdd decide add --plan P --statement S [--supersedes ID]
@@ -276,6 +280,18 @@ successor.
   generated output cannot drift from the records it is built from, and it can
   be regenerated when the reader's tool version changes the rendering.
 
+- **DD-8**: A decision has at most one successor root-wide; competing
+  successors are surfaced and reconciled, never chosen silently.
+  Context: plans P and R on different branches can each supersede the same
+  decision in Q. Each file's CAS succeeds on its own branch; the merge
+  produces two successors. Options considered: (a) last-writer-wins by date;
+  (b) refuse at write time when the index already shows a successor, report
+  a conflict when one arrives by merge, and reconcile with one new entry
+  whose `supersedes` lists every competing successor. Decision: (b).
+  Rationale: per-file CAS cannot see another branch, so the write-time check
+  catches the common case and the validator catches the merge case; picking a
+  winner by date would silently discard a decision someone made.
+
 ## Error Handling
 | Condition | Detection | Response |
 |---|---|---|
@@ -286,6 +302,8 @@ successor.
 | `supersedes` names an entry already superseded | chain check | refuse; name the current successor |
 | `source` malformed | shape check | refuse; print the two accepted shapes |
 | Concurrent append | whole-file digest CAS | re-read and retry, as the graph store does |
+| Second successor for an id | `decide add` sees a successor in any plan's file | refuse; name the existing successor |
+| Competing successors after a merge | `Conflicts()` over every plan file (validator SDD192, `decide current`) | error naming the contested id and every successor; reconcile with one entry superseding all of them |
 | Node cites unknown `pd-` id | citation index at compile | refuse the compile (unchanged posture for unresolved citations) |
 | Node cites a superseded id | citation index at validate | warning naming the successor |
 | Decisions file has unknown fields or wrong types | strict decode | refuse every read and write; name the field |
@@ -302,6 +320,9 @@ Scenario tests under `internal/decisions` (new package replacing
 | Idempotent add | same statement twice → one entry, second call prints it | different statement with a forced digest collision refused |
 | Supersede in plan | entry with `supersedes` resolves; `current` omits the old one | unknown id refused |
 | Supersede across plans | `Q:pd-…` resolves and `current` omits it root-wide | superseding an already-superseded entry refused |
+| Second successor refused | write with a current index that shows a successor is refused | the same write from a branch that cannot see the successor lands |
+| Conflict surfaces and reconciles | after merge, `Conflicts()` lists the contested id; one entry superseding both clears it | a reconciliation that names only one successor leaves the conflict |
+| Compile-declared supersession | `Supersedes DD-1` in DD-2's text → entry with `supersedes` set to DD-1's entry | `Supersedes DD-9` with no such entry refuses the sync |
 | Compile conversion | every top-level DD bullet of every related design becomes one entry with `source` | recompiling adds nothing when nothing changed |
 | Compile extension | new DD in the design → exactly one new entry on recompile | edited DD text after compile → new entry with no `supersedes`, old entry untouched, validator warns that two entries share a `source` |
 | Citation | node `justifies: [pd-…]` compiles | unknown `pd-` id refused |

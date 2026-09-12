@@ -95,9 +95,12 @@ graph TD
   `implementation`.
 - **Review node** is a node with `role: review`. Its `gate.type` is `review`
   and its `gate.lanes` selects the lanes (nil is all four). Its `deps` are the
-  contract nodes it reviews. Its `inputs` are derived by the compiler from the
-  reviewed nodes' `artifacts` and are refreshed on every amendment that touches
-  them, so staleness is observed, never asserted (`SddGraph:DD-3`). Review scope
+  contract nodes it reviews. Its evidence binds to the **reviewed set**: for
+  every node in its scope, that node's id, `contract_rev`, and artifact
+  digests at the moment the review was recorded. A contract or gate can change
+  while the implementation bytes stay identical, so artifact digests alone
+  would not make an old review ineligible; the reviewed set does. Staleness
+  is observed on read, never asserted (`SddGraph:DD-3`). Review scope
   is the node's `deps` closure minus the closure of inner GREEN review nodes,
   which is the existing `Scope()` rule with the gate moved onto its own node.
 - **Contract revision** is a new tool-owned integer `contract_rev` on every
@@ -258,27 +261,35 @@ ACC: role integration-acceptance, deps [R1, R2]
 - R2 scope when R1 is not GREEN, or is STALE because A was revised after R1
   passed: no subtraction → {C, B, A}. Unreviewed or re-opened work is
   reviewed by whoever reaches it first, which is the same rule today.
-- A revise of B raises `contract_rev` on B, so R1's inputs change and R1 goes
-  STALE; ACC is then BLOCKED until R1 re-greens. R2's prior GREEN is unaffected
-  unless B's artifacts are in R2's derived inputs, which they are only if B is
-  in R2's scope at the time R2 was recorded.
+- A revise of B raises `contract_rev` on B. R1's recorded reviewed set says
+  B was at the previous revision, so R1 goes STALE even if B's files are
+  byte-identical; ACC is then BLOCKED until R1 re-greens. R2's prior GREEN is
+  unaffected unless B was in R2's scope when R2 was recorded.
 
 Disjointness therefore holds by the same subtraction as today. What changes is
 `Closed()`: coverage is now an explicit `deps` edge from the acceptance node,
 so the derived closed predicate is "ACC is GREEN", and the compiler, not
 `Closed()`, checks that every work node lies in some review node's scope.
 
-**Compatibility rule in `states.Derive`.** A node is GREEN only if its latest
-`Verification` has `result: pass`, its recorded `contract_rev` equals the node's
-current `contract_rev`, its artifact digests match, its intent hashes match, and
-its input hashes match. A revise therefore makes the node workable immediately,
-and a fresh RED is required before the next GREEN because the gate's test set
-changed and `red_seqs` for the new tests are absent (`SddGraph:DD-5`).
+**Compatibility rule in `states.Derive`.** A work node is GREEN only if its
+latest `Verification` has `result: pass`, its recorded `contract_rev` equals
+the node's current `contract_rev`, its artifact digests match, its intent
+hashes match, and its input hashes match. A review node is GREEN only if, in
+addition, every node in its recorded reviewed set still has the recorded
+`contract_rev` and artifact digests.
+
+**Proof compatibility boundary.** A revise resets the node's red bookkeeping
+(`red_seqs`) as part of the same transaction. RED must then be re-observed at
+the new `contract_rev` for every test in the gate, whether or not a test kept
+its name: a retained runner name can carry new assertions or protect a
+materially revised contract, so the name is not evidence that the proof
+obligation is unchanged. Historical observations are kept; only the
+red-before-green bookkeeping restarts (`SddGraph:DD-5`).
 
 ## Design Decisions
 
 > **Supersession note.** The demote-to-RED behavior is `SddGraph:DD-9` and
-> was also recorded in the global ledger as D-0022. Under `PlanDecisions` the
+> was also recorded in the global ledger as SddGraph:pd-b9031144. Under `PlanDecisions` the
 > ledger is removed; DD-2 below supersedes `SddGraph:DD-9`, and the record of
 > that supersession is the `pd-` entry compile creates from DD-2.
 
@@ -382,6 +393,17 @@ changed and `red_seqs` for the new tests are absent (`SddGraph:DD-5`).
   compiler refuses an accepted graph whose acceptance node does not depend,
   transitively, on a review node covering every work node.
 
+- **DD-9**: Review evidence binds to the reviewed nodes' contract revisions
+  and artifact digests, and a revise restarts red-before-green.
+  Context: a review recorded against artifact bytes alone stays valid when a
+  contract changes without touching the files, and an old RED under a kept
+  test name says nothing about a revised obligation. Options considered:
+  (a) bind reviews to artifact digests and trust test names; (b) bind reviews
+  to `(node id, contract_rev, artifact digests)` for every node in scope, and
+  clear `red_seqs` on revise. Decision: (b). Rationale: the compatibility
+  boundary is then explicit and mechanical. Historical evidence is preserved;
+  only eligibility to count as current proof is withdrawn.
+
 ## Error Handling
 | Condition | Detection | Response |
 |---|---|---|
@@ -396,7 +418,8 @@ changed and `red_seqs` for the new tests are absent (`SddGraph:DD-5`).
 | Graph digest differs from `--expect-digest` | `WriteAtomicExpecting` | refuse, nothing written; driver re-previews |
 | Review node deps not all GREEN at claim | frontier rule | not claimable; unchanged |
 | Artifact `report_digest` already recorded | uniqueness scan | refuse (unchanged) |
-| Old `Verification` with prior `contract_rev` | `Derive` compatibility rule | treated as absent for GREEN; kept in history; status shows `RED` if new tests have no red yet, else `READY` |
+| Old `Verification` with prior `contract_rev` | `Derive` compatibility rule | treated as absent for GREEN; kept in history; the node is `READY` until a RED at the new revision is observed |
+| Review node's reviewed set drifted | any reviewed node's `contract_rev` or artifact digests differ from the recorded set | review node is STALE; re-review required even when implementation bytes are unchanged |
 | Graph decoded with nodes lacking `contract_rev` | strict decode | `sdd graph convert`-style upgrade assigns 1 and stamps existing observations with 1; refuse to operate on an un-upgraded graph |
 
 Every refusal names the finding id, the node id, and the rule. Partial
@@ -411,7 +434,8 @@ positive and a negative control, run under `go test ./...` as part of
 |---|---|---|
 | Review node greens | frozen Aligned artifact, zero open findings → `Verification` pass with aggregate digest | one open finding → no `Verification`, preview printed |
 | Revise invalidates | after `amend`, node `contract_rev` is 2, `Derive` reports not GREEN, history keeps the rev-1 pass | revise with empty diff is refused |
-| Revise requires new red | changed test set has no `red_seqs`; sync with pass is refused until a fail is observed | old red for an unchanged test still counts |
+| Revise requires new red | after revise, `red_seqs` is empty; a passing sync is refused until a fail is observed at the new revision | a revise that keeps every test name still requires a fresh RED |
+| Contract-only revise stales the review | B's contract changes with byte-identical artifacts → R1 not GREEN | metadata-only change on B leaves R1 GREEN |
 | Extend adds sourced node | new node has `justifies` = artifact#finding, deps include reviewed node, review node deps grew | extend with dep outside scope refused |
 | Review re-runs after rework | new GREEN on revised node changes review node inputs; prior review pass (if any) is STALE | metadata-only change on a work node leaves review GREEN |
 | CAS fence | two `amend` calls with the same `--expect-digest`: one applies, one is refused with nothing written | `amend` without `--expect-digest` is refused |

@@ -1,17 +1,14 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -107,15 +104,6 @@ func cmdApply(target string, o applyOpts) error {
 	}
 
 	opts := compile.Options{Today: time.Now().Format("2006-01-02"), Retire: map[string]bool{}, Supersede: o.Supersede}
-	capture, artifactPath, contextErr := decisionContextForArtifact(art.Path)
-	if contextErr != nil {
-		return fmt.Errorf("apply: resolving decision authority: %w", contextErr)
-	}
-	if capture != nil {
-		opts.DecisionView = capture
-		opts.ArtifactPath = artifactPath
-		opts.ArtifactRoot = decisionview.SourceRootPlanning
-	}
 	for _, id := range strings.Split(o.Retire, ",") {
 		if id = strings.TrimSpace(id); id != "" {
 			opts.Retire[id] = true
@@ -127,14 +115,6 @@ func cmdApply(target string, o applyOpts) error {
 
 	res := compile.Compile(s, string(payload), opts)
 	rel := relPath(art.Path)
-	if opts.DecisionView != nil && forkCaptureOperational(opts.DecisionView) {
-		if o.JSON {
-			_ = emitJSON(rel, art, res, o.DryRun)
-		} else {
-			report(res)
-		}
-		return fmt.Errorf("apply: decision authority could not be captured")
-	}
 
 	if o.JSON {
 		return emitJSON(rel, art, res, o.DryRun)
@@ -188,73 +168,6 @@ func cmdApply(target string, o applyOpts) error {
 	}
 	fmt.Printf("wrote %s; digest %s\n", rel, store.Digest(res.Output)[:12])
 	return nil
-}
-
-func decisionContextForArtifact(target string) (*decisionview.ConsumerCapture, string, error) {
-	absolute, err := filepath.Abs(target)
-	if err != nil {
-		return nil, "", err
-	}
-	absolute = filepath.Clean(absolute)
-	tryRepository := func(repository string) (*decisionview.ConsumerCapture, string, bool, error) {
-		planning, represented, resolveErr := resolveRoots(repository, "")
-		if resolveErr != nil {
-			return nil, "", false, resolveErr
-		}
-		capture := decisionview.CaptureForRepository(represented)
-		rel, relErr := filepath.Rel(planning, absolute)
-		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			if capture.Declared || len(capture.Diagnostics) > 0 {
-				return nil, "", false, fmt.Errorf("target is outside the fork-adopted repository's planning root")
-			}
-			// Existing absolute targets outside the planning root were supported
-			// before fork authority existed. Preserve that legacy write surface;
-			// there is no selected authority context to misapply.
-			return nil, "", true, nil
-		}
-		if !capture.Declared && len(capture.Diagnostics) == 0 {
-			return nil, filepath.ToSlash(rel), true, nil
-		}
-		return capture, filepath.ToSlash(rel), true, nil
-	}
-	if repository, rootErr := decisionRepositoryRootFrom(filepath.Dir(absolute)); rootErr == nil {
-		capture, rel, matched, tryErr := tryRepository(repository)
-		if tryErr != nil {
-			return nil, "", tryErr
-		}
-		if matched {
-			return capture, rel, nil
-		}
-		return nil, "", fmt.Errorf("target is outside its nearest represented repository's planning root")
-	} else if !errors.Is(rootErr, errNoPlanningConfig) {
-		return nil, "", rootErr
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, "", err
-	}
-	if repository, rootErr := decisionRepositoryRootFrom(wd); rootErr == nil {
-		capture, rel, matched, tryErr := tryRepository(repository)
-		if tryErr != nil {
-			return nil, "", tryErr
-		}
-		if matched {
-			return capture, rel, nil
-		}
-	} else if !errors.Is(rootErr, errNoPlanningConfig) {
-		return nil, "", rootErr
-	}
-	if repository := gitRoot(filepath.Dir(absolute)); repository != "" {
-		capture := decisionview.CaptureForRepository(repository)
-		rel, relErr := filepath.Rel(repository, absolute)
-		if relErr == nil {
-			if !capture.Declared && len(capture.Diagnostics) == 0 {
-				capture = nil
-			}
-			return capture, filepath.ToSlash(rel), nil
-		}
-	}
-	return nil, "", fmt.Errorf("target has no represented-repository context and is outside the current repository's planning root")
 }
 
 // digestMatches accepts the full digest or any prefix of at least 12 hex

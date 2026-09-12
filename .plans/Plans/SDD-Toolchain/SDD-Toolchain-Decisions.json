@@ -1,0 +1,134 @@
+[
+  {
+    "id": "pd-234e6074",
+    "date": "2026-07-13",
+    "statement": "User decisions are tracked as durable truth in a single canonical ledger, Decisions/decisions.md, with a machine-readable decisions[] frontmatter array.",
+    "source": "Decisions/decisions.md:D-0001"
+  },
+  {
+    "id": "pd-9dce9845",
+    "date": "2026-07-13",
+    "statement": "The decision log ships as three layers: a shared convention doc (shared/decision-log.md) wired into the lifecycle skills' capture points, a model-only skill (skills/decision-log/) for ad-hoc conversational decisions, and a /sdd-planner:decide command for manual record/lookup/reconcile.",
+    "source": "Decisions/decisions.md:D-0002"
+  },
+  {
+    "id": "pd-bac0b279",
+    "date": "2026-07-13",
+    "statement": "A new decision that contradicts or supersedes an accepted ledger entry always stops for user reconciliation — collisions are never auto-resolved and never settled by recency.",
+    "source": "Decisions/decisions.md:D-0003"
+  },
+  {
+    "id": "pd-f5c57caf",
+    "date": "2026-07-13",
+    "statement": "Decisions live with the repo they represent: the ledger is \u003cplanning-root\u003e/Decisions/decisions.md when the planning root is inside the repo, and \u003crepo-root\u003e/DECISIONS.md when the planning root is external — there is no cross-repo global ledger.",
+    "supersedes": "SDD-Toolchain:pd-234e6074",
+    "source": "Decisions/decisions.md:D-0004"
+  },
+  {
+    "id": "pd-7eeabcb9",
+    "date": "2026-07-13",
+    "statement": "The plugin ships a SessionStart hook in v1 (hooks/hooks.json + hooks/load-decisions.sh) that injects accepted ledger entries as additionalContext at session start.",
+    "source": "Decisions/decisions.md:D-0005"
+  },
+  {
+    "id": "pd-f9809b47",
+    "date": "2026-07-13",
+    "statement": "The sdd-dashboard companion plugin gets no decisions view for now; /decide list and search cover lookup needs.",
+    "source": "Decisions/decisions.md:D-0006"
+  },
+  {
+    "id": "pd-05a0a073",
+    "date": "2026-07-23",
+    "statement": "The plugin carries a compact core of 12 lifecycle skills; /diagram, /excavate, /retro, /simplify, and /tend are cut, retro and diagram artifact types are read-only legacy, and /tend's decision hygiene lives in /decide check.",
+    "source": "Decisions/decisions.md:D-0007"
+  },
+  {
+    "id": "pd-cc12eb79",
+    "date": "2026-07-24",
+    "statement": "Completion is evidence-gated at task, phase, and plan level per shared/completion-evidence.md: each plan task is one clean, independently bisectable native-SCM revision; retrospective evidence with exact commands and revision identity must be populated before any status flips to complete; phase completion requires a persisted frozen four-lane Aligned review; lifecycle bookkeeping lands in separate scoped commits.",
+    "source": "Decisions/decisions.md:D-0008"
+  },
+  {
+    "id": "pd-c2b384ac",
+    "date": "2026-07-24",
+    "statement": "Deterministic validation ships as scripts/sdd_validate.py and scripts/sdd_decision_validate.py, copied verbatim from the sharpened fork and surfaced as /validate; review-artifact frontmatter uses the stable lane identifiers (review_plan_drift, review_quality, review_spec_compliance, review_blind_spots) mapped to the four reviewer agents, so the validator runs unmodified.",
+    "source": "Decisions/decisions.md:D-0009"
+  },
+  {
+    "id": "pd-d86fd37e",
+    "date": "2026-07-24",
+    "statement": "sdd-planner does not integrate beads (sdd-beads) for issue tracking; plan/phase/task frontmatter remains the only work-tracking layer.",
+    "source": "Decisions/decisions.md:D-0010"
+  },
+  {
+    "id": "pd-7dd66498",
+    "date": "2026-07-24",
+    "statement": "The read-only guarantee of the seven reviewer/researcher agents is enforced mechanically by a PreToolUse hook (hooks/reviewer-bash-guard.py) that allowlists read-only git/p4 subcommands and denies write- or network-shaped Bash; it fails open for all other agents and covers only plugin-owned agents, not project review lanes.",
+    "source": "Decisions/decisions.md:D-0011"
+  },
+  {
+    "id": "pd-ddb1f0bb",
+    "date": "2026-08-03",
+    "statement": "Deterministic validation moves to the Go sdd tool. scripts/sdd_validate.py and scripts/sdd_decision_validate.py are deprecated on arrival of the port, retained only as the parity oracle, and deleted once sdd reaches proven parity. The stable review lane identifiers (review_plan_drift, review_quality, review_spec_compliance, review_blind_spots) from D-0009 remain in force unchanged.",
+    "supersedes": "SDD-Toolchain:pd-c2b384ac",
+    "source": "Decisions/decisions.md:D-0012"
+  },
+  {
+    "id": "pd-515fccc1",
+    "date": "2026-08-03",
+    "statement": "SessionStart ledger injection moves from hooks/load-decisions.sh into the Go binary as `sdd hook sessionstart`, removing the plugin's POSIX-shell dependency. It is a silent no-op in two cases: when no ledger exists, and when no sdd binary is yet provisioned.",
+    "supersedes": "SDD-Toolchain:pd-7eeabcb9",
+    "source": "Decisions/decisions.md:D-0013"
+  },
+  {
+    "id": "pd-27391740",
+    "date": "2026-08-03",
+    "statement": "The reviewer read-only guard moves into the Go binary as `sdd hook pretooluse`, keeping the git/p4 read-only allowlist and fail-open-for-everyone-else behavior, and gains two duties: denying Write/Edit on schema-recognized artifact paths, and allowlisting sdd's own subcommands so the read-only agents may run sdd validate/show/list/next/version/doctor but never apply, section set, decide add, evidence add, or any lifecycle transition.",
+    "supersedes": "SDD-Toolchain:pd-7dd66498",
+    "source": "Decisions/decisions.md:D-0014"
+  },
+  {
+    "id": "pd-a0fd22ba",
+    "date": "2026-08-03",
+    "statement": "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/cmd/sdd@v\u003cversion\u003e` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`.",
+    "source": "Decisions/decisions.md:D-0015"
+  },
+  {
+    "id": "pd-f2a1d1b0",
+    "date": "2026-08-12",
+    "statement": "The plugin ships from one repository: the repo root is the canonical hand-edited Claude plugin, and portable/ is a generated OpenCode/Codex tree produced by 'sdd plugin sync' (transforms + .portable.md variants + portable-overrides/), drift- and leak-gated by make test, with version/minSddVersion synced from .claude-plugin/plugin.json. The standalone sdd-planner repo is retired.",
+    "source": "Decisions/decisions.md:D-0016"
+  },
+  {
+    "id": "pd-5ea9a4ae",
+    "date": "2026-08-13",
+    "statement": "The plugin ships from one repository: the repo root is the canonical hand-edited Claude plugin, and .codex-plugin/ and .opencode-plugin/ are generated per-harness install trees produced by 'sdd plugin sync' (transforms + markers + .portable.md variants + portable-overrides/), drift- and leak-gated by make test, with version/minSddVersion synced from .claude-plugin/plugin.json. The standalone sdd-planner repo is retired.",
+    "supersedes": "SDD-Toolchain:pd-f2a1d1b0",
+    "source": "Decisions/decisions.md:D-0017"
+  },
+  {
+    "id": "pd-eed0dbed",
+    "date": "2026-08-13",
+    "statement": "No LLM edits a decision ledger, for any reason, without the user's explicit approval of the exact, unmodified text of the change, shown in full beforehand — writes on assumption or non-objection are forbidden.",
+    "source": "Decisions/decisions.md:D-0018"
+  },
+  {
+    "id": "pd-b697da19",
+    "date": "2026-08-16",
+    "statement": "SDD lifecycle records commit once per affected root at closeout boundaries: commit the verified feature slice first, then record planning artifacts and ledgers in one boundary commit per root at task closeout, at the end of a contiguous spec/design/plan session, or at phase/plan close — never per edit and never as intermediate SDD bookkeeping commits. Artifacts are still written in-flow as facts become known; writing never implies an immediate commit.",
+    "source": "Decisions/decisions.md:D-0019"
+  },
+  {
+    "id": "pd-f98234fe",
+    "date": "2026-08-16",
+    "statement": "Phase-gate reviews freeze at resolution, never at creation: sdd review scaffold writes frozen: false + status: open; only sdd review resolve sets frozen: true and status: resolved, atomically, after verifying the SDD167 gate. A frozen review is immutable through every supported command; post-resolution changes supersede it with a fresh scaffolded review.",
+    "source": "Decisions/decisions.md:D-0020"
+  },
+  {
+    "id": "pd-f4a8d1a2",
+    "date": "2026-08-17",
+    "statement": "The sdd binary is provisioned exclusively by the user running `go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@v\u003cversion\u003e` before the plugin is invoked. The plugin never ships prebuilt binaries, never compiles, and never invokes go; /setup only verifies the binary and copies it to the plugin root for hooks.json. Admission is by a minSddVersion floor declared in plugin.json — not exact version equality — and that floor is advanced deliberately, never by `make bump-*`.",
+    "supersedes": "SDD-Toolchain:pd-a0fd22ba",
+    "source": "Decisions/decisions.md:D-0021"
+  }
+]

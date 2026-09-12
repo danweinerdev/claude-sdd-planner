@@ -244,9 +244,9 @@ func (s *Schema) validate() error {
 	default:
 		return fmt.Errorf("frontmatterMode must be \"managed\" or \"preserve\", got %q", s.FrontmatterMode)
 	}
-	// Zero headings is legitimate: the decision ledger is frontmatter plus
-	// prose, with no H2 sections at all. A managed-frontmatter type still needs
-	// declared fields, which the loop below checks.
+	// Zero headings is legitimate for a frontmatter-plus-prose type with no H2
+	// sections at all. A managed-frontmatter type still needs declared fields,
+	// which the loop below checks.
 	if len(s.Headings) == 0 && len(s.Frontmatter) == 0 {
 		return fmt.Errorf("schema declares neither headings nor frontmatter fields")
 	}

@@ -25,7 +25,7 @@ full review gates and is never stored or hand-edited here.
 ### workflows-and-portable
 
 - Contract: Every required decision workflow including decide check, onboarding and setup documents the real fork commands/capability and storage contracts, preserves intent isolation and generates matching portable guidance.
-- Justifies: `FR-14`, `FR-17`, `NFR-03`, `NFR-05`, `DD-11`, `D-0025`, `AC-11`, `AC-14`, `AC-15`
+- Justifies: `FR-14`, `FR-17`, `NFR-03`, `NFR-05`, `DD-11`, `ForkAwareDecisionLedgers:pd-764da52e`, `AC-11`, `AC-14`, `AC-15`
 - Depends on: `decision-write-cli-completion`, `graph-intent-consumer`, `hook-context-consumer`, `simple-config-replacement`
 - Gate: tests — `TestForkWorkflowCommandsAndReferences` in cmd/sdd/fork_workflows_test.go (satisfies ships-prose); `TestForkWorkflowIntentIsolation` in internal/portable/fork_workflows_test.go
 - Hazards: ships-prose

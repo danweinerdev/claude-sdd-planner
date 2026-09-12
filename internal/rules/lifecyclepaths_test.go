@@ -50,9 +50,9 @@ func TestPhaseLifecyclePathsCoverPlanningRoot(t *testing.T) {
 		".plans/Plans/Sample/01-One.md",
 		".plans/Plans/Sample/README.md",
 		".plans/Retro/phase-review.md",
-		".plans/Specs/Other/README.md",  // a new spec written during the phase
-		".plans/Decisions/decisions.md", // a ledger entry
-		".plans/Plans/Sample/02-Two.md", // a follow-up note in another phase doc
+		".plans/Specs/Other/README.md",              // a new spec written during the phase
+		".plans/Plans/Sample/Sample-Decisions.json", // a plan-decision entry
+		".plans/Plans/Sample/02-Two.md",             // a follow-up note in another phase doc
 		".plans/Plans/Sample/Sample-Graph.json",
 		".plans/planning-config.json",
 	} {

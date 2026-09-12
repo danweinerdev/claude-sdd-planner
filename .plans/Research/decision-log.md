@@ -5,7 +5,7 @@ status: draft
 created: 2026-07-12
 updated: 2026-07-13
 tags: [decision-log, adr, architecture, memory, collision-detection]
-related: [Decisions/decisions.md]
+related: []
 ---
 
 # Decision Log — tracking decided truth across Spec/Design/Plan

@@ -13,7 +13,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisionview"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
@@ -47,11 +46,6 @@ type Root struct {
 	// Python's Validator.__init__ calling _configure_repositories
 	// immediately) so every other rule sees a populated PlanRepos.
 	ConfigDiagnostics []Diagnostic
-	// DecisionView is the one repository-root-bound fork authority snapshot
-	// shared by every rule and every in-process validation entry point. It is
-	// nil for repositories which never explicitly selected fork authority.
-	DecisionView        *decisionview.ConsumerCapture
-	DecisionDiagnostics []Diagnostic
 
 	// PlanDecisions is every Plans/<Name>/<Name>-Decisions.json under the
 	// root (Designs/PlanDecisions), loaded once; DecisionIndex is the
@@ -217,27 +211,6 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 	repoRoot = vcs.CanonPath(repoRoot)
 	r := &Root{Dir: dir, ByPath: map[string]*Artifact{}, RepoRoot: repoRoot}
 	r.PlanRepos, r.ConfigDiagnostics = configureRepositories(repoRoot, dir)
-	capture := decisionview.CaptureForRepository(repoRoot)
-	if capture.Declared || len(capture.Diagnostics) > 0 {
-		r.DecisionView = capture
-		for _, d := range capture.Diagnostics {
-			path := filepath.ToSlash(d.Path)
-			if filepath.IsAbs(d.Path) {
-				path = relativeToRoot(dir, d.Path)
-			}
-			r.DecisionDiagnostics = append(r.DecisionDiagnostics, Diagnostic{
-				Code: d.Code, Severity: Severity(d.Severity), Path: path,
-				Line: d.Line, Message: d.Message, Correction: d.Correction,
-			})
-		}
-		if capture.Selection != nil && capture.Selection.Explicit && vcs.CanonPath(capture.PlanningRoot) != dir {
-			r.DecisionDiagnostics = append(r.DecisionDiagnostics, Diagnostic{
-				Code: "FDL020", Severity: Error, Path: "planning-config.json", Line: 1,
-				Message:    "Declared decision authority planning root differs from the validated planning root.",
-				Correction: "Validate the represented repository's configured planning root.",
-			})
-		}
-	}
 	var paths []string
 	for _, name := range artifactDirs {
 		base := filepath.Join(dir, name)
@@ -284,45 +257,9 @@ func LoadRootRepo(dir, repoRoot string) (*Root, error) {
 			r.ByPath[rel] = a
 		}
 	}
-	r.addDecisionScopeDiagnostics()
 	r.PlanDecisions, _ = decisions.LoadRoot(dir)
 	r.DecisionIndex = decisions.NewIndex(r.PlanDecisions)
 	return r, nil
-}
-
-func (r *Root) addDecisionScopeDiagnostics() {
-	if r.DecisionView == nil || r.DecisionView.View == nil || r.DecisionView.Selection == nil {
-		return
-	}
-	owner := r.DecisionView.Selection.RepositoryID
-	if owner.Validate() != nil {
-		return
-	}
-	owners := map[string]decisionview.OwnerID{}
-	for rel := range r.ByPath {
-		repository := r.RepoForArtifact(rel)
-		artifactOwner := decisionview.OwnerID("")
-		if vcs.CanonPath(repository) == vcs.CanonPath(r.RepoRoot) {
-			artifactOwner = owner
-		} else if selection, err := decisionview.ReadSelection(repository); err == nil && selection != nil && selection.RepositoryID.Validate() == nil {
-			artifactOwner = selection.RepositoryID
-		}
-		if artifactOwner != "" {
-			// Record only discovered artifacts. In particular, do not infer a
-			// global owner for prefixes in an external shared planning store.
-			owners[rel] = artifactOwner
-		}
-	}
-	context := decisionview.ScopeContext{
-		Roots: decisionview.Roots{Repository: r.RepoRoot, Planning: r.Dir},
-		Owner: owner, ArtifactOwners: owners,
-	}
-	for _, d := range decisionview.CheckScopes(r.DecisionView.View, context) {
-		r.DecisionDiagnostics = append(r.DecisionDiagnostics, Diagnostic{
-			Code: d.Code, Severity: Severity(d.Severity), Path: filepath.ToSlash(d.Path),
-			Line: d.Line, Message: d.Message, Correction: d.Correction,
-		})
-	}
 }
 
 func parseArtifact(path, rel string) *Artifact {

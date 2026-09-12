@@ -37,7 +37,7 @@ full review gates and is never stored or hand-edited here.
 ### config-selection
 
 - Contract: The represented repository's existing config explicitly selects a planning-root ledger and matching owner/collection; internal and external roots work and malformed selection never falls back or creates root files.
-- Justifies: `FR-01`, `FR-02`, `FR-04`, `FR-15`, `FR-17`, `D-0025`, `DD-1`, `AC-01`, `AC-02`, `AC-12`
+- Justifies: `FR-01`, `FR-02`, `FR-04`, `FR-15`, `FR-17`, `ForkAwareDecisionLedgers:pd-764da52e`, `DD-1`, `AC-01`, `AC-02`, `AC-12`
 - Depends on: `fork-model`
 - Gate: tests — `TestForkSelectionHostileConfig` in internal/decisionview/selection_test.go (satisfies external-format); `TestForkSelectionInternalExternalOwners` in internal/decisionview/selection_test.go; `TestForkSelectionLegacyAndMalformed` in internal/decisionview/selection_test.go
 - Hazards: external-format

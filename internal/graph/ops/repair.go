@@ -63,11 +63,11 @@ func (e *RefusedError) Error() string {
 
 // RepairIntent backfills missing/empty intent hashes. With a non-empty
 // nodeID it considers only that node (which must exist); with an empty nodeID
-// it considers every node. A node whose citations are all decisions (D-NNNN)
-// needs no fingerprint and is left alone — that is not a refusal. The repair
-// is idempotent: re-running over an already-repaired graph reports zero
-// changes. dryRun computes and returns the same planned changes without
-// writing the graph (and never touches staged proposals either way).
+// it considers every node. A plan-decision citation is fingerprintable like
+// any other requirement, so it is backfilled the same way — the repair is
+// idempotent: re-running over an already-repaired graph reports zero changes.
+// dryRun computes and returns the same planned changes without writing the
+// graph (and never touches staged proposals either way).
 func RepairIntent(root, repoRoot, plan, nodeID string, dryRun bool) (*RepairIntentResult, error) {
 	return repairIntentWith(root, repoRoot, plan, nodeID, dryRun, gstore.Update)
 }
@@ -155,9 +155,9 @@ func planRepair(g *model.Graph, nodeID string, sources *gcompile.Sources) (*Repa
 			case gcompile.CitationAmbiguous:
 				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which is defined by more than one related source (%s)", n.ID, cited, strings.Join(d.Suggestions, ", ")))
 			case gcompile.CitationUnresolved:
-				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which resolves in no related spec, design, or decision ledger%s", n.ID, cited, d.Hint))
+				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which resolves in no related spec, design%s", n.ID, cited, d.Hint))
 			case gcompile.CitationDecision:
-				// Decisions are never fingerprinted — not a refusal.
+				nodeProblems = append(nodeProblems, fmt.Sprintf("%s cites %q, which no plan under the planning root records; record it with `sdd decide add --plan <plan> --statement ...` or cite the recorded id", n.ID, cited))
 			}
 		}
 		// A citation that cannot be blessed against today's text refuses even
@@ -166,7 +166,7 @@ func planRepair(g *model.Graph, nodeID string, sources *gcompile.Sources) (*Repa
 		// not be silently skipped.
 		refusals = append(refusals, nodeProblems...)
 		if !needsRepair {
-			continue // already anchored, or D-only: no change, no refusal
+			continue // already anchored: no change, no refusal
 		}
 		// A repair candidate must be UNCLAIMED, UNVERIFIED, carry no red
 		// observations, and cite nothing ambiguous or unresolved; anything
