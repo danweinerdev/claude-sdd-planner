@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,27 +237,6 @@ func specFixture(title string) string {
 		"## Overview\nx\n\n## Goals\n- g\n\n## Non-Goals\n- n\n\n" +
 		"## Requirements\n### Functional Requirements\n- **FR-01**: r\n\n" +
 		"## Acceptance Criteria\n- **AC-01**: a\n\n## Open Questions\nNone.\n"
-}
-
-// runValidate captures cmdValidate's stdout for one root/scope pair.
-func runValidate(t *testing.T, root, scope string) string {
-	t.Helper()
-	opts := validateOpts{Root: root, Scope: scope}
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-	done := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-	_ = cmdValidate(opts) // a refusal is expected; the output is the subject
-	w.Close()
-	os.Stdout = old
-	return <-done
 }
 
 // TestTransitionJSONShapeCarriesGateFindings pins the FR-04 contract for

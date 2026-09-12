@@ -1,7 +1,7 @@
 package rules
 
 // Family: artifact supersession — the spec/design/plan analogue of the review
-// rules (SDD099-SDD102) and the ledger rules (DLG05x).
+// rules (SDD099-SDD102).
 //
 // Supersession already had teeth for decisions (SDD121 refuses a live artifact
 // citing a superseded decision) and for reviews. Specs, designs, and plans had
@@ -13,7 +13,7 @@ package rules
 
 // supersedableKinds are the artifact kinds this family governs. Reviews and
 // decision logs are excluded: they have their own supersession rules whose
-// semantics (frozen review identity, append-only ledger entries) differ.
+// semantics (frozen review identity) differ.
 var supersedableKinds = map[string]bool{
 	"spec": true, "design": true, "plan": true,
 }

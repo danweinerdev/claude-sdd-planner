@@ -317,7 +317,7 @@ func validateCmd() *cobra.Command {
 		Short: "Validate every artifact under the planning root (read-only)",
 		Long: `Schema-driven validation over a whole planning root: structure, statuses,
 dependencies, identifiers, completion evidence, review state, and
-decision-ledger consistency.
+plan-decision consistency.
 
 Exit 0 means the checks passed; exit 1 means the diagnostics are authoritative
 findings; exit 2 means validation could not run.`,
@@ -630,7 +630,7 @@ call, which is worse than a missed denial.`,
 	}
 	for _, ev := range []struct{ use, short string }{
 		{"pretooluse", "Guard read-only agents' Bash/Write/Edit calls"},
-		{"sessionstart", "Inject accepted decision-ledger entries as context"},
+		{"sessionstart", "Inject the standing plan decisions as context"},
 	} {
 		e := ev
 		c.AddCommand(&cobra.Command{

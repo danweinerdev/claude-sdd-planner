@@ -1015,8 +1015,8 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	inRes := sources.InputResolver()
 	statesInputs := func(g *model.Graph) states.Inputs {
 		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-			CurrentIntentHashes: hashes, DecisionExemptions: snap.Exemptions,
-			CurrentInputHashes: inRes.GraphHashes(g)}
+			CurrentIntentHashes: hashes,
+			CurrentInputHashes:  inRes.GraphHashes(g)}
 	}
 
 	if !claim {

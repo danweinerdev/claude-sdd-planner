@@ -43,7 +43,7 @@ type Result struct {
 }
 
 // idTokenRe extracts identifier citations from a v1 task's prose justifies
-// field: requirement/criterion ids, design decisions, and ledger entries.
+// field: requirement/criterion ids and design decisions.
 var idTokenRe = regexp.MustCompile(`\b(?:FR|NFR|AC)-\d{2,}\b|\bDD-\d{1,4}[a-z]?\b|\bD-\d{4,}\b`)
 
 // Run converts one v1 plan into a staged proposal fragment. The plan's graph

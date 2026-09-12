@@ -164,8 +164,8 @@ func TestIntentStaleness(t *testing.T) {
 // TestMissingFingerprintFailsClosed: a recorded-pass node carrying a currently
 // fingerprintable justification with no embedded hash must derive STALE, not
 // GREEN — the split bug (children compiled without fingerprints) otherwise
-// reads GREEN against text the node never anchored to. An accepted decision
-// stays GREEN only when positively identified in DecisionExemptions, and a
+// reads GREEN against text the node never anchored to. Every citation is
+// fingerprintable (plan decisions included), so there is no exemption; a
 // nil CurrentIntentHashes disables the axis.
 func TestMissingFingerprintFailsClosed(t *testing.T) {
 	// Missing entirely: a justification with no hash at all.
@@ -198,16 +198,15 @@ func TestMissingFingerprintFailsClosed(t *testing.T) {
 		t.Fatalf("partial map must name exactly the missing ref: %+v", s2["b"])
 	}
 
-	// An accepted decision is legitimately exempt: GREEN, but only when the
-	// caller positively identifies it in DecisionExemptions (no D-prefix
-	// shape exemption).
+	// A plan decision is fingerprinted like any requirement: hashed and
+	// current, it is GREEN; there is no name-shape exemption.
 	n3 := node("c", nil, pass(1))
-	n3.Justifies = []string{"D-0001"}
+	n3.Justifies = []string{"pd-0123abcd"}
+	n3.IntentHashes = map[string]string{"pd-0123abcd": "sha256:pd"}
 	g3 := &model.Graph{Version: 1, Nodes: []model.Node{n3}}
-	s3 := Derive(Inputs{Graph: g3, CurrentIntentHashes: map[string]string{},
-		DecisionExemptions: map[string]bool{"D-0001": true}})
+	s3 := Derive(Inputs{Graph: g3, CurrentIntentHashes: map[string]string{"pd-0123abcd": "sha256:pd"}})
 	if s3["c"].State != Green {
-		t.Fatalf("an accepted decision-only node must stay GREEN: %+v", s3["c"])
+		t.Fatalf("a hashed, current plan-decision citation is GREEN: %+v", s3["c"])
 	}
 
 	// A nil CurrentIntentHashes disables the axis: GREEN.
@@ -218,8 +217,7 @@ func TestMissingFingerprintFailsClosed(t *testing.T) {
 }
 
 // TestCitationDispositionFailsClosed: a recorded-pass node whose citation is
-// absent from the current hash snapshot AND not positively identified as an
-// exempt decision derives STALE. This is the deletion/unlinking/ambiguity bug
+// absent from the current hash snapshot derives STALE. This is the deletion/unlinking/ambiguity bug
 // the missing-hash loop alone cannot see: a citation that vanishes from the
 // current tree leaves no hash entry to mismatch, so without the fail-closed
 // disposition check the PASS silently derives GREEN. Ambiguous and deleted
@@ -246,38 +244,24 @@ func TestCitationDispositionFailsClosed(t *testing.T) {
 		t.Fatalf("a citation newly ambiguous must derive STALE: %+v", sa["ambiguous"])
 	}
 
-	// Unknown decision-like string: a D-shaped id the ledger does not define
-	// is NOT an exemption — no name-shape exemption exists.
+	// Unknown decision-like string: a pd-shaped id no plan records is not
+	// an exemption — no name-shape exemption exists.
 	nu := node("unknown-decision", nil, pass(1))
-	nu.Justifies = []string{"D-9999"}
+	nu.Justifies = []string{"pd-deadbeef"}
 	gu := &model.Graph{Version: 1, Nodes: []model.Node{nu}}
-	su := Derive(Inputs{Graph: gu, CurrentIntentHashes: map[string]string{},
-		DecisionExemptions: map[string]bool{"D-0001": true}})
-	if su["unknown-decision"].State != Stale || len(su["unknown-decision"].IntentStale) != 1 || su["unknown-decision"].IntentStale[0] != "D-9999" {
-		t.Fatalf("an unknown D-shaped citation must NOT be exempt: %+v", su["unknown-decision"])
-	}
-
-	// A non-accepted decision (superseded/rejected) is not a legitimate
-	// exemption either: it lands in neither map and derives STALE.
-	nsup := node("superseded-decision", nil, pass(1))
-	nsup.Justifies = []string{"D-0002"}
-	gsup := &model.Graph{Version: 1, Nodes: []model.Node{nsup}}
-	ssup := Derive(Inputs{Graph: gsup, CurrentIntentHashes: map[string]string{},
-		DecisionExemptions: map[string]bool{"D-0001": true}})
-	if ssup["superseded-decision"].State != Stale || len(ssup["superseded-decision"].IntentStale) != 1 {
-		t.Fatalf("a superseded decision must NOT be exempt: %+v", ssup["superseded-decision"])
+	su := Derive(Inputs{Graph: gu, CurrentIntentHashes: map[string]string{}})
+	if su["unknown-decision"].State != Stale || len(su["unknown-decision"].IntentStale) != 1 || su["unknown-decision"].IntentStale[0] != "pd-deadbeef" {
+		t.Fatalf("an unknown pd-shaped citation must NOT be exempt: %+v", su["unknown-decision"])
 	}
 }
 
 func TestEmptyAnchorDoesNotHideLostCitation(t *testing.T) {
 	for _, tc := range []struct {
 		name, cited string
-		exempt      bool
 		want        State
 	}{
-		{"deleted-or-ambiguous", "AC-01", false, Stale},
-		{"unknown-decision", "D-9999", false, Stale},
-		{"accepted-decision", "D-0001", true, Green},
+		{"deleted-or-ambiguous", "AC-01", Stale},
+		{"unknown-decision", "pd-deadbeef", Stale},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			n := node("a", nil, pass(1))
@@ -286,7 +270,6 @@ func TestEmptyAnchorDoesNotHideLostCitation(t *testing.T) {
 			got := Derive(Inputs{
 				Graph:               &model.Graph{Version: 1, Nodes: []model.Node{n}},
 				CurrentIntentHashes: map[string]string{},
-				DecisionExemptions:  map[string]bool{tc.cited: tc.exempt},
 			})["a"]
 			if got.State != tc.want {
 				t.Fatalf("empty anchor with absent source: got %+v, want %s", got, tc.want)

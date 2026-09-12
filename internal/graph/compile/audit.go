@@ -131,7 +131,6 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 		Graph:               g,
 		ArtifactDigest:      digester.Artifact,
 		CurrentIntentHashes: snap.Hashes(),
-		DecisionExemptions:  snap.Exemptions,
 		CurrentInputHashes:  inRes.GraphHashes(g),
 	})
 

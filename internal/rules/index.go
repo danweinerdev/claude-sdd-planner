@@ -21,25 +21,6 @@ var specDefinitionRe = map[string]*regexp.Regexp{
 	"DD": regexp.MustCompile(`(?m)^\s*(?:#{2,4}\s+|-\s+\*\*)(DD-\d{1,4}[a-z]?)\b`),
 }
 
-// designFamilies are the identifier families a DESIGN artifact defines, and
-// citing artifacts may therefore resolve against it. Kept separate from
-// specFamilies because the two artifact kinds own different namespaces.
-var designFamilies = []string{"DD"}
-
-// specFamilies are the identifier families a SPEC artifact defines.
-var specFamilies = []string{"FR", "NFR", "AC"}
-
-// definedFamiliesFor returns the families the given artifact kind declares.
-func definedFamiliesFor(kind string) []string {
-	switch kind {
-	case "spec":
-		return specFamilies
-	case "design":
-		return designFamilies
-	}
-	return nil
-}
-
 // specDefinedIDs returns the id sets a spec artifact declares per family,
 // deduplicated. Shared with the citations family (h), which needs the same
 // index without re-deriving it per document.

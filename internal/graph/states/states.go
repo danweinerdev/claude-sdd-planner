@@ -103,12 +103,6 @@ type Inputs struct {
 	// the intent axis entirely (a pure caller intentionally not checking
 	// intent passes nil for both intent fields).
 	CurrentIntentHashes map[string]string
-	// DecisionExemptions is the set of cited ids that are legitimate exempt
-	// decisions — accepted decision-ledger entries, which carry no fingerprint
-	// by design. It travels alongside CurrentIntentHashes, produced from the
-	// same source-resolution snapshot: a cited id absent from both maps is
-	// stale (fail-closed), never silently exempted by name shape.
-	DecisionExemptions map[string]bool
 	// CurrentInputHashes maps input key -> the input's current fingerprint,
 	// "" / absent when the input no longer resolves. nil disables the input
 	// axis entirely.
@@ -230,20 +224,15 @@ func Derive(in Inputs) map[string]NodeState {
 				}
 				// Fail closed on the actual citation disposition: a
 				// recorded-pass node carrying a justification with NO
-				// embedded hash is stale UNLESS that citation is positively
-				// identified as an exempt decision. Every other disposition —
-				// fingerprintable-with-no-hash (the split bug), deleted,
-				// unlinked, ambiguous, or unresolved (a citation that has
-				// since vanished from the current tree) — is stale, so a PASS
-				// can never silently derive GREEN against text it never
-				// anchored to or a citation that no longer exists. There is
-				// no name-shape exemption here: a D-looking string is stale
-				// unless the caller placed it in DecisionExemptions.
+				// embedded hash is stale. Every citation is fingerprintable
+				// — requirements, design decisions, plan decisions, review
+				// findings — so fingerprintable-with-no-hash (the split
+				// bug), deleted, unlinked, ambiguous, or unresolved (a
+				// citation that has since vanished from the current tree)
+				// are all stale, and a PASS can never silently derive GREEN
+				// against text it never anchored to.
 				for _, cited := range n.Justifies {
 					if seen[cited] {
-						continue
-					}
-					if in.DecisionExemptions[cited] {
 						continue
 					}
 					ns.IntentStale = append(ns.IntentStale, cited)

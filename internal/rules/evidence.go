@@ -25,8 +25,6 @@ import (
 
 const pendingMarker = "Pending — not complete."
 
-var evidenceLabelRe = regexp.MustCompile(`(?m)^\s*-\s+(.+?):\s*(.*?)\s*$`)
-
 // evidenceValues returns visible, non-fenced values for an exact evidence
 // label, mirroring sdd_validate.py's evidence_values().
 func evidenceValues(body, label string) []string {

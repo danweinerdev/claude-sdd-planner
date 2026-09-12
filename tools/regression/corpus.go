@@ -67,9 +67,6 @@ type Expectation struct {
 }
 
 // validateOutput is the subset of `sdd validate --json` this tool reads.
-type validateOutput struct {
-	Diagnostics []Diagnostic `json:"diagnostics"`
-}
 
 // setupEnv fixes identity and timestamp so a fixture commit's SHA is
 // reproducible, matching internal/rules/rules_test.go's runExample. A fixture
@@ -370,10 +367,9 @@ func hash(s string) string {
 // validate runs the validator over one prepared root, in-process, and returns
 // what `sdd validate --no-waivers --format json` would have reported.
 //
-// It mirrors cmdValidate's composition deliberately: rules.Run for the artifact
-// rules plus FocusedDecisionLogs for the DLG family, which the CLI folds in the
-// same way. Diverging here would mean the corpus tested something the tool does
-// not actually do.
+// It mirrors cmdValidate's composition deliberately: rules.Run over the
+// loaded root. Diverging here would mean the corpus tested something the
+// tool does not actually do.
 //
 // Run, not RunWithWaivers: the corpus records the unexcused state. A fixture
 // that declared an accepted exception would otherwise record fewer diagnostics

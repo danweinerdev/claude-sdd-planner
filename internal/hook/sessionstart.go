@@ -8,9 +8,9 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 )
 
-// maxLedgerEntries bounds the number of standing decisions injected. Entries
+// maxStandingDecisions bounds the number of standing decisions injected. Entries
 // retain deterministic ordering; truncation is reported by a notice.
-const maxLedgerEntries = 30
+const maxStandingDecisions = 30
 
 // SessionStartContext returns the additionalContext for a session, or "" when
 // there is nothing to inject.
@@ -41,7 +41,7 @@ func sessionStartContext(projectDir string, byteBudget int) string {
 	header := "## Standing decisions\n" +
 		"Accepted plan decisions — standing constraints on planning and implementation. " +
 		"A new decision that contradicts one must stop for user reconciliation:\n"
-	if len(lines) <= maxLedgerEntries && fitsBudget(byteBudget, header+strings.Join(lines, "\n")) {
+	if len(lines) <= maxStandingDecisions && fitsBudget(byteBudget, header+strings.Join(lines, "\n")) {
 		return header + strings.Join(lines, "\n")
 	}
 	return budgetedDecisionContext(header, lines, byteBudget, truncatedNotice)
@@ -54,7 +54,7 @@ func budgetedDecisionContext(header string, lines []string, byteBudget int, noti
 	}
 	var included []string
 	for _, line := range lines {
-		if len(included) >= maxLedgerEntries {
+		if len(included) >= maxStandingDecisions {
 			break
 		}
 		candidate := prefix + strings.Join(append(included, line), "\n")

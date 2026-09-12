@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
@@ -347,18 +346,6 @@ func filterInScope(paths []string, scope string) []string {
 func fmVal(doc *artifact.Doc, key string) string {
 	v, _ := doc.FM(key)
 	return v
-}
-
-func splitIdent(id string) (string, int, bool) {
-	ns, rest, ok := strings.Cut(id, "-")
-	if !ok {
-		return "", 0, false
-	}
-	n, err := strconv.Atoi(rest)
-	if err != nil {
-		return "", 0, false
-	}
-	return ns, n, true
 }
 
 // selectInScope keeps the diagnostics that bear on the requested scope.

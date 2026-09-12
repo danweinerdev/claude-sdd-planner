@@ -155,7 +155,7 @@ func knownCode(code string) bool {
 		}
 	}
 	// Codes emitted outside the rule registry still count as known.
-	return code == "SDD000" || strings.HasPrefix(code, "DLG")
+	return code == "SDD000"
 }
 
 // applyWaivers marks diagnostics excused by their artifact's declared waivers

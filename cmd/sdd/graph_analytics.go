@@ -56,8 +56,8 @@ func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	snap := sources.IntentSnapshot()
 	digester := digest.New(repoRoot)
 	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions,
-		CurrentInputHashes: sources.InputResolver().GraphHashes(g)})
+		CurrentIntentHashes: snap.Hashes(),
+		CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
 	ctx := &analyticsCtx{planDir: planDir, g: g, st: st, closed: greview.Closed(g, st),
 		adjacency: algorithms.Graph{}, estimate: map[string]int{}}
 	for i := range g.Nodes {

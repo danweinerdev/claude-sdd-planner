@@ -619,7 +619,7 @@ func TestSplitChildGoesStaleOnSourceDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := states.Derive(states.Inputs{Graph: g, CurrentIntentHashes: snap.Hashes(), DecisionExemptions: snap.Exemptions})
+	st := states.Derive(states.Inputs{Graph: g, CurrentIntentHashes: snap.Hashes()})
 	ns := st["big-bare"]
 	if ns.State != states.Stale || len(ns.IntentStale) != 1 || ns.IntentStale[0] != "AC-01" {
 		t.Fatalf("a split child whose source drifted must derive INTENT-STALE: %+v", ns)

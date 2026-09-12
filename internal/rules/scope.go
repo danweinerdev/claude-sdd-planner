@@ -36,7 +36,7 @@ import (
 //     designs transitively reachable over `related` chains.
 //   - citations (SDD120-122): completing a task removes its `verification`
 //     text from the citation body, so resolution can change — against the
-//     ledger and the transitive `related` spec closure.
+//     transitive `related` spec closure.
 //
 // Every one of those inputs survives this scope: the plan's own directory is
 // kept whole, and specs, designs, research, brainstorms, decision logs, and
@@ -120,8 +120,7 @@ func PlanRelOf(rel string) string {
 //     itself;
 //   - SDD178/SDD179 supersession, which read the artifact and its `related`
 //     targets — specs, designs, and plan READMEs, all kept;
-//   - SDD121 (a live artifact citing a retired decision) and the citation
-//     family, which read the ledger and the `related` closure, all kept;
+//   - the citation family, which reads the `related` closure, all kept;
 //   - SDD160-162 traceability, anchored on PLANS: a plan README is kept, and
 //     the rules read the specs and designs it reaches, which are kept.
 //

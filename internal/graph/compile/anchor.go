@@ -51,7 +51,7 @@ func Anchor(n *model.Node, resolve Resolver) {
 
 // Sources is one plan's citation-resolution snapshot: which ids exist (per
 // the validator's own reachability), their fingerprints, and the decision
-// ledger's statuses. It carries the same resolution opinion every consumer
+// plan decisions. It carries the same resolution opinion every consumer
 // needs, built once, so embed, validate, and repair can never disagree about
 // what a citation means. It also carries the input resolver, so validation
 // and split anchor both citations and declared inputs from one snapshot.
@@ -150,15 +150,12 @@ func (s *Sources) ClassifyCitation(cited string) CitationDisposition {
 // Both halves come from the SAME source-resolution snapshot, so derive can
 // never disagree with what compile/split embedded — a citation that vanishes,
 // unlinks, or turns ambiguous lands in neither half and derives stale, while
-// an accepted decision lands in Exemptions and stays valid without a hash.
+// every citation is fingerprintable, so an unhashed one is stale.
 type IntentSnapshot struct {
 	// Items maps cited id (as written) -> the resolved requirement item
 	// (normalized text + hash). The hash half feeds INTENT-STALE matching;
 	// the text half feeds `next --claim` inlining.
 	Items map[string]intent.Item
-	// Exemptions is the set of cited ids that are accepted decisions —
-	// legitimate exempt citations that carry no fingerprint by design.
-	Exemptions map[string]bool
 }
 
 // Hashes returns the hash half of the snapshot: cited id -> current

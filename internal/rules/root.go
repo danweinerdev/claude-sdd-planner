@@ -457,21 +457,3 @@ func yamlErrLine(err error) int {
 	}
 	return 0
 }
-
-func unquoteScalar(v string) string {
-	v = strings.TrimSpace(v)
-	if len(v) >= 2 {
-		if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
-			return v[1 : len(v)-1]
-		}
-	}
-	return v
-}
-
-func leadingSpaces(s string) int {
-	i := 0
-	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
-		i++
-	}
-	return i
-}

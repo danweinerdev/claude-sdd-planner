@@ -12,7 +12,7 @@ import (
 //   - fmSequence decodes a named block sequence into ordered string maps. All
 //     reads go through this.
 //   - fmBlockBounds reports the *line range* a block sequence occupies, which
-//     the ledger writer needs to splice new entries into place while leaving
+//     a frontmatter writer needs to splice new entries into place while leaving
 //     every other byte of the frontmatter untouched. That is line arithmetic
 //     over raw text, not parsing — a decoder cannot answer it, because
 //     decoding discards layout.
@@ -163,63 +163,4 @@ func fmMeta(fm []string) map[string]any {
 	}
 	m, _ := nodeValue(&node).(map[string]any)
 	return m
-}
-
-// fmSequenceBlock decodes a bare block sequence — the lines fmBlockBounds
-// returns, with no owning `key:` line above them. Entries that are not
-// mappings decode to nil so a caller's index still lines up with the source
-// order.
-func fmSequenceBlock(block []string) []fmItem {
-	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(strings.Join(block, "\n")), &node); err != nil {
-		return nil
-	}
-	if len(node.Content) == 0 {
-		return nil
-	}
-	seq := node.Content[0]
-	if seq.Kind != yaml.SequenceNode {
-		return nil
-	}
-	out := make([]fmItem, 0, len(seq.Content))
-	for _, entry := range seq.Content {
-		m, ok := nodeValue(entry).(map[string]any)
-		if !ok {
-			out = append(out, nil)
-			continue
-		}
-		out = append(out, fmItem(m))
-	}
-	return out
-}
-
-// fmBlockBounds returns the [start, end) line range holding the named
-// top-level key's block sequence: every line after `key:` up to the next line
-// starting at column 0, or the end of fm. found is false when the key never
-// appears as an unindented `key:` line.
-//
-// This is deliberately textual. The ledger writer splices lines into an
-// existing document and must leave the surrounding bytes exactly as the author
-// wrote them, so it needs positions rather than values.
-func fmBlockBounds(fm []string, key string) (start, end int, found bool) {
-	want := key + ":"
-	for i, l := range fm {
-		if strings.TrimRight(l, " \t\r") != want {
-			continue
-		}
-		start, found = i+1, true
-		end = len(fm)
-		for j := i + 1; j < len(fm); j++ {
-			line := fm[j]
-			if strings.TrimSpace(line) == "" {
-				continue // blank lines inside the block are permitted
-			}
-			if line[0] != ' ' && line[0] != '\t' {
-				end = j
-				break
-			}
-		}
-		return start, end, true
-	}
-	return 0, 0, false
 }

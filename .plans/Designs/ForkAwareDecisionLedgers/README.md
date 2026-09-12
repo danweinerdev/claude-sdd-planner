@@ -1,7 +1,8 @@
 ---
 title: "Fork-Aware Decision Ledgers"
 type: design
-status: approved
+status: superseded
+superseded_by: Designs/PlanDecisions/README.md
 created: 2026-09-08
 updated: 2026-09-10
 tags: [decision-log, forks, inheritance, transactions, upstream-sync]

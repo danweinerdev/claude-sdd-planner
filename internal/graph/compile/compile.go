@@ -50,7 +50,6 @@ func deriveClosure(repoRoot string, sources *sourceSet, inRes *InputResolver) fu
 			Graph:               g,
 			ArtifactDigest:      digester.Artifact,
 			CurrentIntentHashes: snap.Hashes(),
-			DecisionExemptions:  snap.Exemptions,
 			CurrentInputHashes:  inRes.GraphHashes(g),
 		})
 		return st, review.Closed(g, st)
@@ -275,7 +274,7 @@ func (s *sourceSet) unrelatedHint(cited string) string {
 // item. A citation that is deleted, unlinked, or ambiguous lands in neither
 // half — the fail-closed signal states.Derive reads.
 func (s *sourceSet) intentSnapshot() IntentSnapshot {
-	snap := IntentSnapshot{Items: map[string]intent.Item{}, Exemptions: map[string]bool{}}
+	snap := IntentSnapshot{Items: map[string]intent.Item{}}
 	for _, key := range s.index.Keys() {
 		if _, item, ok := s.resolveItem(key); ok {
 			snap.Items[key] = item

@@ -1,7 +1,7 @@
 ---
 title: "Test-gate repair review"
 type: review
-status: resolved
+status: archived
 created: 2026-09-10
 updated: 2026-09-11
 tags: [review]
