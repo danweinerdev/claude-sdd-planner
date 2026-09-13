@@ -14,9 +14,15 @@ import (
 // installOneShotGitShim puts a git shim ahead of the real git on PATH that
 // answers exactly one invocation (delegating to the real binary) and then
 // removes its own execute bit, so every subsequent "git" invocation fails
-// to start at all. This reaches a genuine procexec-level operational
-// failure — not merely a nonzero git exit — for a query issued after VCS
-// detection's own git call has already succeeded.
+// to start at all. In this test the first invocation the shim answers is
+// VCS detection's own `git rev-parse --show-toplevel`; it disables itself
+// immediately after, so the later RevisionExists `cat-file` call is the one
+// that fails to start. That failure is a genuine procexec-level operational
+// failure — not merely a nonzero git exit. This ordering is load-bearing:
+// if detection ever issued a second git call before RevisionExists ran, the
+// shim would already be disabled by then and the test would silently shift
+// to exercising a detection failure instead of a RevisionExists query
+// failure.
 func installOneShotGitShim(t *testing.T) {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
