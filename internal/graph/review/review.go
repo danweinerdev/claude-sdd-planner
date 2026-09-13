@@ -359,7 +359,11 @@ func Record(o Options) (*Result, error) {
 
 	prov := o.Provider
 	if prov == nil {
-		prov = provider.Detect(o.RepoRoot, planDir)
+		detected, err := provider.DetectChecked(o.RepoRoot, planDir)
+		if err != nil {
+			return nil, fmt.Errorf("graph review: %w", err)
+		}
+		prov = detected
 	}
 	// Provenance is the shared tree's: the review is anchored to committed
 	// state, not to any claimant's workspace.

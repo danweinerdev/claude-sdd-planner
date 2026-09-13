@@ -563,7 +563,10 @@ func GC(root, repoRoot, plan string) (*GCResult, error) {
 	}
 
 	res := &GCResult{ExpiredClaims: expired}
-	prov := provider.Detect(repoRoot, planDir)
+	prov, err := provider.DetectChecked(repoRoot, planDir)
+	if err != nil {
+		return nil, fmt.Errorf("graph gc: %w", err)
+	}
 
 	graphDir := filepath.Join(planDir, gstore.GraphDirName)
 	entries, err := os.ReadDir(graphDir)

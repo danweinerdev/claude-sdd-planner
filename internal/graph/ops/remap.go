@@ -99,8 +99,15 @@ func remapRevisionsWithWrite(o RemapOptions, write graphWrite) (*RemapResult, er
 		return nil, fmt.Errorf("graph remap-revisions: %s does not exist", planRel)
 	}
 	target := loaded.RepoForArtifact(planRel)
-	repo := vcs.Detect(target)
-	if repo == nil || (repo.Kind() != vcs.Git && repo.Kind() != vcs.GitWorktree && repo.Kind() != vcs.GitBare) {
+	// Detection that could not run is never the answer "not a Git
+	// repository": the two are different facts, and the second would send
+	// the operator to fix a plan mapping that is already correct (FR-16,
+	// DD-10).
+	repo, err := vcs.DetectChecked(target)
+	if err != nil {
+		return nil, fmt.Errorf("graph remap-revisions: plan %s targets %s, whose VCS could not be determined: %w", o.Plan, target, err)
+	}
+	if repo.Kind() != vcs.Git && repo.Kind() != vcs.GitWorktree && repo.Kind() != vcs.GitBare {
 		return nil, fmt.Errorf("graph remap-revisions: plan %s targets %s, which is not a Git repository", o.Plan, target)
 	}
 	// Syntax is checked for every row (a regex); existence is probed only

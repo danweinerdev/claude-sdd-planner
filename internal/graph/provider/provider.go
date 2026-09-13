@@ -14,11 +14,12 @@
 package provider
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
@@ -78,27 +80,87 @@ type Provider interface {
 // runner executes one VCS command in a directory — the injectable seam.
 type runner func(dir, name string, args ...string) ([]byte, error)
 
+// execRunner runs one mutating VCS command through the bounded runner — a
+// finite deadline, bounded output, typed causes — so a hung or missing
+// executable cannot stall or silently degrade a claim. A command that RAN
+// and exited nonzero is an ordinary error carrying its own diagnostics; a
+// command that could not run at all wraps vcs.ErrOperational, which every
+// caller boundary maps to exit 2 (FR-16, DD-10).
 func execRunner(dir, name string, args ...string) ([]byte, error) {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	res, err := procexec.Run(context.Background(), name, args,
+		procexec.Policy{Dir: dir})
 	if err != nil {
-		return out, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		var pe *procexec.Error
+		if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+			return nil, fmt.Errorf("%s %s: exit %d: %s", name, strings.Join(args, " "),
+				pe.ExitCode, strings.TrimSpace(pe.Stderr))
+		}
+		return nil, fmt.Errorf("%w: %s %s: %w", vcs.ErrOperational, name, strings.Join(args, " "), err)
 	}
-	return out, nil
+	return res.Stdout, nil
 }
 
 // Detect routes on the repository's detected VCS. planDir hosts the
 // gitignored workspace area; repoRoot is where commands run.
+//
+// Detection that could not run yields the unavailable provider, never the
+// plain one: a plain posture on a real repository would disable worktree
+// isolation and record digest-only provenance for work that does have a
+// revision — an inability dressed as a posture. Callers whose outcome
+// depends on the answer should use DetectChecked (FR-16, DD-10).
 func Detect(repoRoot, planDir string) Provider {
-	switch vcs.Detect(repoRoot).Kind() {
-	case vcs.Git, vcs.GitWorktree:
-		return &gitProvider{repoRoot: repoRoot, planDir: planDir, run: execRunner}
-	case vcs.Perforce:
-		return &p4Provider{repoRoot: repoRoot, run: execRunner}
-	default:
-		return &plainProvider{repoRoot: repoRoot}
+	p, err := DetectChecked(repoRoot, planDir)
+	if err != nil {
+		return unavailableProvider{err: err}
 	}
+	return p
+}
+
+// DetectChecked is Detect with the failure distinguished from the answer: a
+// detection probe that could not run returns (nil, err) wrapping
+// vcs.ErrOperational, while a directory under no supported VCS still returns
+// the plain provider with a nil error.
+func DetectChecked(repoRoot, planDir string) (Provider, error) {
+	repo, err := vcs.DetectChecked(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("detecting the VCS at %s: %w", repoRoot, err)
+	}
+	switch repo.Kind() {
+	case vcs.Git, vcs.GitWorktree:
+		return &gitProvider{repoRoot: repoRoot, planDir: planDir, run: execRunner}, nil
+	case vcs.Perforce:
+		return &p4Provider{repoRoot: repoRoot, run: execRunner}, nil
+	case vcs.UnavailableKind:
+		// DetectChecked's own error is the usual route here; this arm
+		// catches an Unavailable adapter arriving by any other path, so
+		// the inability can never reach the default (plain) arm.
+		cause := error(vcs.ErrOperational)
+		if u, ok := repo.(vcs.Unavailable); ok && u.Err != nil {
+			cause = u.Err
+		}
+		return nil, fmt.Errorf("detecting the VCS at %s: %w", repoRoot, cause)
+	default:
+		return &plainProvider{repoRoot: repoRoot}, nil
+	}
+}
+
+// unavailableProvider is what the unchecked Detect returns when detection
+// could not run. Its Kind is never "plain": every operation reports the
+// operational failure, so an unchecked caller that keeps going still cannot
+// read the outcome as a plain-tree posture.
+type unavailableProvider struct{ err error }
+
+func (u unavailableProvider) Kind() string  { return string(vcs.UnavailableKind) }
+func (u unavailableProvider) Capacity() int { return 1 }
+func (u unavailableProvider) Allocate(string) (Workspace, error) {
+	return Workspace{}, u.err
+}
+func (u unavailableProvider) HandleFor(string) string                { return "" }
+func (u unavailableProvider) Release(string) error                   { return u.err }
+func (u unavailableProvider) PruneMergedBranches() ([]string, error) { return nil, u.err }
+func (u unavailableProvider) Isolation(string, int) string           { return model.IsolationSharedDirty }
+func (u unavailableProvider) Provenance(string) (*model.Provenance, error) {
+	return nil, u.err
 }
 
 // ForClaims adapts a Provider to the scheduling subset claims consumes.

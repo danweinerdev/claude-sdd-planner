@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -87,18 +88,33 @@ func cmdReviewScaffold(phasePath string, o reviewScaffoldOpts) error {
 	// The frozen identity must be a real, forward, non-degenerate range whose
 	// commits exist — the same shape SDD173 enforces. Checking here means a
 	// scaffold never carries an identity the gate would reject.
-	repo := vcs.Detect(evidenceRepoDir(phasePath))
+	repoDir := evidenceRepoDir(phasePath)
+	repo, err := vcs.DetectChecked(repoDir)
+	if err != nil {
+		return fmt.Errorf("review scaffold: the VCS at %s could not be determined: %w", repoDir, err)
+	}
 	base, endpoint, err := parseFrozenRange(o.Frozen)
 	if err != nil {
 		return fmt.Errorf("review scaffold: %w", err)
 	}
+	// Absence is claimed only after a successful query: a probe that could
+	// not run says nothing about whether the revision is there, and calling
+	// it missing would send the operator hunting a commit that exists
+	// (FR-16, DD-10).
 	for _, rev := range []string{base, endpoint} {
 		exists, err := repo.RevisionExists(rev)
-		if err != nil || !exists {
+		if err != nil && !errors.Is(err, vcs.ErrNotFound) {
+			return fmt.Errorf("review scaffold: revision %s could not be checked in %s: %w", rev, repoDir, err)
+		}
+		if !exists {
 			return fmt.Errorf("review scaffold: revision %s does not exist in the target repository", rev)
 		}
 	}
-	if ok, err := repo.IsAncestor(base, endpoint); err != nil || !ok {
+	ok, err := repo.IsAncestor(base, endpoint)
+	if err != nil {
+		return fmt.Errorf("review scaffold: the ancestry of %s and %s could not be checked in %s: %w", base, endpoint, repoDir, err)
+	}
+	if !ok {
 		return fmt.Errorf("review scaffold: %s is not an ancestor of %s; "+
 			"a reviewed range must move forward", base, endpoint)
 	}
@@ -238,7 +254,10 @@ func planningRootRelative(path string) (string, error) {
 }
 
 func headOf(dir string) (string, error) {
-	repo := vcs.Detect(dir)
+	repo, err := vcs.DetectChecked(dir)
+	if err != nil {
+		return "", err
+	}
 	return repo.Head()
 }
 

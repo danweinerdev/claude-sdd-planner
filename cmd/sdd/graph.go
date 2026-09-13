@@ -1141,7 +1141,10 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	}
 	cfg, _ := store.LoadConfig(".")
 	ttl := time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
-	prov := provider.Detect(repoRoot, planDir)
+	prov, err := provider.DetectChecked(repoRoot, planDir)
+	if err != nil {
+		return false, fmt.Errorf("next: %w", err)
+	}
 	claimed, err := claims.Claim(planDir, claims.Options{
 		By: by, TTL: ttl, StatesInputs: statesInputs, Provider: provider.ForClaims(prov),
 		ValidateCandidate: func(n *model.Node) error {
@@ -1310,12 +1313,17 @@ func graphReleaseCmd() *cobra.Command {
 			cleaned := false
 			if workspace != "" {
 				_, repoRoot, rootsErr := resolveRoots(".", "")
-				if rootsErr == nil {
-					if relErr := provider.Detect(repoRoot, planDir).Release(workspace); relErr == nil {
-						cleaned = true
-					} else {
-						fmt.Fprintf(c.ErrOrStderr(), "warning: workspace %s could not be removed: %v\n", workspace, relErr)
-					}
+				if rootsErr != nil {
+					return rootsErr
+				}
+				prov, detErr := provider.DetectChecked(repoRoot, planDir)
+				if detErr != nil {
+					return fmt.Errorf("release: %w", detErr)
+				}
+				if relErr := prov.Release(workspace); relErr == nil {
+					cleaned = true
+				} else {
+					fmt.Fprintf(c.ErrOrStderr(), "warning: workspace %s could not be removed: %v\n", workspace, relErr)
 				}
 			}
 			if asJSON {

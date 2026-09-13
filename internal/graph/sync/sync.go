@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -194,7 +195,11 @@ func Run(o Options) (*Result, error) {
 	// claimed workspace (or the shared tree when unclaimed).
 	prov := o.Provider
 	if prov == nil {
-		prov = provider.Detect(o.RepoRoot, o.PlanDir)
+		detected, derr := provider.DetectChecked(o.RepoRoot, o.PlanDir)
+		if derr != nil {
+			return nil, fmt.Errorf("graph sync: %w", derr)
+		}
+		prov = detected
 	}
 	handle := ""
 	if node.Claim != nil {
@@ -286,7 +291,26 @@ func Run(o Options) (*Result, error) {
 			return nil, fmt.Errorf("graph sync: red-before-green: hazard-discharging test(s) %v have never been observed failing; run them against the broken or unimplemented state and sync that failing report first — a test that passes against both correct and broken code guards nothing", unproven)
 		}
 		if handle != "" {
-			if clean, dirty, cleanErr := vcs.Detect(digestRoot).Clean(); cleanErr == nil && !clean {
+			// The probe's ANSWER gates the pass, so an unrunnable probe is
+			// not an answer: a failed detection or a failed Clean() aborts
+			// the sync rather than letting an unprobed workspace pass as
+			// clean, which would anchor the observation to bytes nobody
+			// confirmed were the tested ones (FR-16, DD-10).
+			repo, detErr := vcs.DetectChecked(digestRoot)
+			if detErr != nil {
+				return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", handle, detErr)
+			}
+			clean, dirty, cleanErr := repo.Clean()
+			if cleanErr != nil {
+				if errors.Is(cleanErr, vcs.ErrUnsupported) {
+					// No VCS in the workspace: there is nothing to be dirty
+					// about, and the digest anchor carries the identity.
+					clean = true
+				} else {
+					return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", handle, cleanErr)
+				}
+			}
+			if !clean {
 				example := ""
 				if len(dirty) > 0 {
 					example = " (e.g. " + dirty[0] + ")"

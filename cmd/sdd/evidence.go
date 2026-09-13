@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,21 +73,36 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 	}
 
 	repoDir := evidenceRepoDir(path)
-	repo := vcs.Detect(repoDir)
+	repo, err := vcs.DetectChecked(repoDir)
+	if err != nil {
+		return fmt.Errorf("evidence add: the VCS at %s could not be determined: %w", repoDir, err)
+	}
 
 	// The identity is the entity's OWN implementation commit, not whatever
 	// HEAD happens to be — shared/completion-evidence.md § Git adapter. When
 	// one is named, it is verified to exist rather than trusted; when it is
 	// not, HEAD is used and the worktree must be clean, because otherwise the
 	// recorded revision would not describe what was verified.
+	//
+	// Every verdict below is claimed only after the query that supports it
+	// actually ran: a probe that could not run is reported as the inability
+	// it is, never as a missing revision, an unreadable HEAD, or a dirty
+	// tree — each of which would send the operator to fix something that is
+	// not wrong (FR-16, DD-10).
 	rev := o.Revision
 	if rev == "" {
 		head, err := repo.Head()
-		if err != nil || head == "" {
+		if err != nil {
+			return fmt.Errorf("evidence add: the current revision of %s could not be read: %w", repoDir, err)
+		}
+		if head == "" {
 			return fmt.Errorf("evidence add: cannot read the current revision from %s; "+
 				"completion evidence must carry a real native identity", repoDir)
 		}
-		clean, dirty, _ := repo.Clean()
+		clean, dirty, err := repo.Clean()
+		if err != nil {
+			return fmt.Errorf("evidence add: the working tree at %s could not be checked for uncommitted changes: %w", repoDir, err)
+		}
 		if !clean {
 			return fmt.Errorf("evidence add: the target repository has uncommitted changes (%s).\n"+
 				"Commit the work first, or pass --revision <full40> naming the commit this "+
@@ -100,7 +116,10 @@ func cmdEvidenceAdd(path string, o evidenceOpts) error {
 			return fmt.Errorf("evidence add: %q is not a full native revision identifier for this SCM", rev)
 		}
 		exists, err := repo.RevisionExists(rev)
-		if err != nil || !exists {
+		if err != nil && !errors.Is(err, vcs.ErrNotFound) {
+			return fmt.Errorf("evidence add: revision %s could not be checked in %s: %w", rev, repoDir, err)
+		}
+		if !exists {
 			return fmt.Errorf("evidence add: revision %s does not exist in %s", rev, repoDir)
 		}
 	}
