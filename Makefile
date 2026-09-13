@@ -1,4 +1,4 @@
-.PHONY: bump-patch bump-minor bump-major test test-pure \
+.PHONY: bump-patch bump-minor bump-major test test-race test-pure \
         build build-release build-all gen-fixtures check-fixtures check-templates clean-build \
         plugins plugins-check
 
@@ -145,6 +145,41 @@ clean-build:
 # full coverage and does not claim that the upstream behavior has been fixed.
 test: check-templates
 	@go test -count=1 ./...
+
+# The race half of the authoritative gate. Declared as a separate prerequisite
+# rule so the recipe above stays a single literal line the testgate assertions
+# can match; make runs both prerequisites before `test`'s own recipe.
+test: test-race
+
+# test-race runs the shared-state packages under the race detector.
+#
+# Why these packages and not the whole suite: each one owns state reached from
+# more than one goroutine, and their locking is invisible to a test run without
+# -race. TestWaiverMemoConcurrencySafe (internal/rules) passes against an
+# unguarded memo unless the detector is on, so without this target deleting a
+# lock is a green build. internal/procexec owns process-group containment,
+# internal/vcs shares command plumbing, and internal/graph/{sync,ops,provider}
+# plus tools/regression drive concurrent graph reads and fixture runs.
+#
+# Why not `-race ./...`: the detector costs roughly 2-10x runtime and memory,
+# and the full suite spawns hundreds of SCM subprocesses. Paying that on every
+# package would trade a large share of CI time for coverage of packages with no
+# shared mutable state. The packages above are where a data race can actually
+# hide, so that is where the detector runs.
+#
+# Cross-platform note: -race needs a supported runner — cgo and a platform in
+# Go's race-detector support set (amd64/arm64 on linux, darwin, and windows).
+# On a host without it, `go test -race` fails loudly rather than silently
+# skipping, which is the intended behavior for an authoritative gate.
+test-race:
+	@go test -race -count=1 \
+		./internal/rules \
+		./internal/procexec \
+		./internal/vcs \
+		./internal/graph/sync \
+		./internal/graph/ops \
+		./internal/graph/provider \
+		./tools/regression
 
 # test-pure is a SUPPLEMENTARY fast selection, never a substitute for `test`.
 #
