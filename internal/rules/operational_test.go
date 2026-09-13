@@ -1416,3 +1416,380 @@ func (f fakeP4RepoFileAt) FileAt(rev, rel string) ([]byte, error) {
 	}
 	return f.fileAtVal[key], nil
 }
+
+// TestContentQueryFailuresAreOperational is the gate-test for review F-01's
+// remaining sites: every content/comparison load that a rule callback makes
+// (as opposed to an identity/existence probe, already covered above) must
+// stay silent on an operational failure rather than turning "the query never
+// answered" into a content diagnostic, EXCEPT verifyGitEvidenceCommitted's
+// (and verifyP4EvidenceCommitted's) evidence-committed check, whose
+// plan-lookup failure must suppress only the plan-state contribution to
+// lifecycleComplete — a content diagnostic computed without needing the
+// plan (e.g. genuinely unchecked acceptance criteria) must still emit.
+func TestContentQueryFailuresAreOperational(t *testing.T) {
+	opErr := fmt.Errorf("%w: git: deadline exceeded", vcs.ErrOperational)
+
+	// (a) site 1: verifyGitPhaseReviewCommitted's own FileAt (phasereview.go:413,
+	// SDD170) — the review-committed check.
+	t.Run("verifyGitPhaseReviewCommitted FileAt", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		review := root.ByPath["Retro/phase-review.md"]
+		if phase == nil || review == nil {
+			t.Fatal("fixture phase or review not found")
+		}
+		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		ctx := phaseGateContext{Phase: phase, Line: 1}
+		var diags []Diagnostic
+		verifyGitPhaseReviewCommitted(root, ctx, review, "r-2024-01-01-01", func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD170" {
+				t.Errorf("operational failure surfaced as SDD170: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhaseReviewCommitted FileAt negative control still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		review := root.ByPath["Retro/phase-review.md"]
+		if phase == nil || review == nil {
+			t.Fatal("fixture phase or review not found")
+		}
+		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		ctx := phaseGateContext{Phase: phase, Line: 1}
+		var diags []Diagnostic
+		verifyGitPhaseReviewCommitted(root, ctx, review, "r-2024-01-01-01", func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD170" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("not-committed diags = %v, want an SDD170", codesOf(diags))
+		}
+	})
+
+	// (a) site 2: verifyGitPhasePostReviewState's two gitLifecycleNormalized
+	// calls (phasereview.go:745-746, SDD173 "cannot compare canonical intent").
+	newLifecycleCtx := func(root *Root) (phaseGateContext, *Artifact, string) {
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		review := root.ByPath["Retro/phase-review.md"]
+		if phase == nil || review == nil {
+			t.Fatal("fixture phase or review not found")
+		}
+		endpoint := fixtureBaseCommit
+		return phaseGateContext{
+			Phase: phase,
+			Body:  "- Final aligned review: Retro/phase-review.md; frozen: " + endpoint + ".." + endpoint + "\n",
+			Line:  1,
+		}, review, endpoint
+	}
+
+	t.Run("verifyGitPhasePostReviewState gitLifecycleNormalized frozen", func(t *testing.T) {
+		files := withPlanReadme(phaseGateRangeFiles())
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		ctx, review, endpoint := newLifecycleCtx(root)
+		// current HEAD differs from endpoint but the only commit after it
+		// touches nothing (no material change), so the intent-comparison
+		// loop is reached instead of returning early at current==endpoint
+		// or failing on a material change.
+		fake := fakeGitRepo{
+			cleanOK: true, headVal: "current-head", ancestrOK: true,
+			revisionsAfterVal: []string{"commit-1"},
+			changedPathsVal:   map[string][]string{"commit-1": nil},
+			fileAtErr:         opErr,
+			Unavailable:       vcs.Unavailable{Dir: dir},
+		}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState gitLifecycleNormalized negative control (genuinely absent) still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateRangeFiles())
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		ctx, review, endpoint := newLifecycleCtx(root)
+		fake := fakeGitRepo{
+			cleanOK: true, headVal: "current-head", ancestrOK: true,
+			revisionsAfterVal: []string{"commit-1"},
+			changedPathsVal:   map[string][]string{"commit-1": nil},
+			fileAtErr:         fmt.Errorf("%w: path absent at revision", vcs.ErrNotFound),
+			Unavailable:       vcs.Unavailable{Dir: dir},
+		}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("absent-path diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	// (a) site 4: verifyPhaseReviewPlanningRevision's gitLifecycleNormalized
+	// calls (phasereview.go:1034, SDD174).
+	t.Run("verifyPhaseReviewPlanningRevision gitLifecycleNormalized", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		ctxs := completePhasesWithEvidence(root)
+		if len(ctxs) != 1 {
+			t.Fatalf("completePhasesWithEvidence = %d contexts, want 1", len(ctxs))
+		}
+		review := root.ByPath["Retro/phase-review.md"]
+		if review == nil {
+			t.Fatal("fixture review not found at Retro/phase-review.md")
+		}
+		rev := "1111111111111111111111111111111111111111"
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyPhaseReviewPlanningRevision(root, ctxs[0], review, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational for planning revision %s", err, rev)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD174" {
+				t.Errorf("operational failure surfaced as SDD174: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyPhaseReviewPlanningRevision gitLifecycleNormalized negative control (genuinely absent) still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		ctxs := completePhasesWithEvidence(root)
+		if len(ctxs) != 1 {
+			t.Fatalf("completePhasesWithEvidence = %d contexts, want 1", len(ctxs))
+		}
+		review := root.ByPath["Retro/phase-review.md"]
+		if review == nil {
+			t.Fatal("fixture review not found at Retro/phase-review.md")
+		}
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: fmt.Errorf("%w: path absent at revision", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyPhaseReviewPlanningRevision(root, ctxs[0], review, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD174" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("absent-path diags = %v, want an SDD174", codesOf(diags))
+		}
+	})
+
+	// (b) verifyGitEvidenceCommitted / verifyP4EvidenceCommitted: today the
+	// `operational` flag blanket-suppresses every emit from
+	// verifyCommittedLifecycle, not just the plan-state contribution to
+	// lifecycleComplete. A phase with genuinely unchecked acceptance criteria
+	// plus a transient plan FileAt failure must still emit the content SDD072
+	// (computed without the plan); a phase whose ONLY problem is incomplete
+	// plan state, combined with the same plan FileAt failure, must stay
+	// silent.
+	contentBrokenPhase := replaceFirst(
+		phaseStatus("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+		"## Phase Completion Evidence\n\nPending — not complete.",
+		"## Phase Completion Evidence\n\n- Final aligned review: Retro/phase-review.md; frozen: r-2024-01-01-01\n")
+
+	t.Run("verifyGitEvidenceCommitted plan FileAt operational failure still emits the content diagnostic", func(t *testing.T) {
+		files := withPlanReadme(map[string]string{
+			"Plans/Sample/01-One.md": contentBrokenPhase,
+			"Retro/phase-review.md":  phaseGateReview("r-2024-01-01-01", true),
+		})
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeGitRepo{
+			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
+			Unavailable: vcs.Unavailable{Dir: dir},
+		}
+		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("unchecked-acceptance-criteria diags = %v, want an SDD072 even though the plan lookup failed operationally", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitEvidenceCommitted plan FileAt operational failure suppresses plan-only incompleteness", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeGitRepo{
+			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
+			Unavailable: vcs.Unavailable{Dir: dir},
+		}
+		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("plan-only incompleteness surfaced as SDD072 despite the plan lookup failing operationally: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted plan FileAt operational failure still emits the content diagnostic", func(t *testing.T) {
+		files := withPlanReadme(map[string]string{
+			"Plans/Sample/01-One.md": contentBrokenPhase,
+			"Retro/phase-review.md":  phaseGateReview("r-2024-01-01-01", true),
+		})
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeP4RepoFileAt{
+			fileAtVal: map[string][]byte{"have:Plans/Sample/01-One.md": committedPhase},
+			dir:       root.Dir,
+			planKey:   "have:Plans/Sample/README.md",
+			planErr:   opErr,
+		}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("unchecked-acceptance-criteria diags = %v, want an SDD072 even though the plan lookup failed operationally", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted plan FileAt operational failure suppresses plan-only incompleteness", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeP4RepoFileAt{
+			fileAtVal: map[string][]byte{"have:Plans/Sample/01-One.md": committedPhase},
+			dir:       root.Dir,
+			planKey:   "have:Plans/Sample/README.md",
+			planErr:   opErr,
+		}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("plan-only incompleteness surfaced as SDD072 despite the plan lookup failing operationally: %+v", d)
+			}
+		}
+	})
+}

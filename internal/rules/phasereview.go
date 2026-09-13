@@ -412,6 +412,12 @@ func verifyGitPhaseReviewCommitted(r *Root, ctx phaseGateContext, review *Artifa
 
 	committedBytes, err := repo.FileAt("HEAD", relative)
 	if err != nil {
+		if errors.Is(err, vcs.ErrOperational) {
+			// The collector already recorded the operational failure
+			// (recordingRepo); don't misreport an unanswered query as
+			// not committed.
+			return
+		}
 		fail("Final aligned review `"+review.Rel+"` is not committed at HEAD.",
 			"Commit the exact final review artifact in the Git lifecycle record before phase completion.")
 		return
@@ -744,6 +750,13 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	for _, gov := range phaseLifecycleIntentPaths(r, ctx.Phase, targetRoot) {
 		frozenIntent, frozenErr := gitLifecycleNormalized(repo, endpoint, gov.rel, gov.kind)
 		currentIntent, currentErr := gitLifecycleNormalized(repo, "HEAD", gov.rel, gov.kind)
+		if (frozenErr != nil && errors.Is(frozenErr, vcs.ErrOperational)) ||
+			(currentErr != nil && errors.Is(currentErr, vcs.ErrOperational)) {
+			// The collector already recorded the operational failure
+			// (recordingRepo); don't misreport an unanswered query as a
+			// lifecycle-intent mismatch.
+			return
+		}
 		if frozenErr != nil || currentErr != nil {
 			fail("Cannot compare canonical "+gov.kind+" intent for lifecycle path `"+gov.rel+"` across the frozen phase review.",
 				"Keep the governing phase and plan artifacts valid and present at both the frozen endpoint and HEAD, or rerun the full phase review.")
@@ -1033,6 +1046,12 @@ func verifyPhaseReviewPlanningRevision(r *Root, ctx phaseGateContext, review *Ar
 		}
 		historical, err := gitLifecycleNormalized(repo, revision, filepath.ToSlash(relative), target.artifact.Kind())
 		if err != nil {
+			if errors.Is(err, vcs.ErrOperational) {
+				// The collector already recorded the operational failure
+				// (recordingRepo); don't misreport an unanswered query as
+				// missing content at the planning revision.
+				continue
+			}
 			fail("Final review `"+review.Rel+"` cannot load "+target.label+" at planning revision `"+revision+"`.",
 				"Review a planning commit that contains the current phase and plan README.")
 			continue

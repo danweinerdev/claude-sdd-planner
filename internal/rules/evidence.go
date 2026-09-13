@@ -689,15 +689,8 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 		}
 		return ParseArtifactBytes(planAtHead, filepath.ToSlash(planRelative))
 	}
-	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "committed at HEAD", func(d Diagnostic) {
-		if operational {
-			// The collector already recorded the plan's operational
-			// failure; don't let the caller's incomplete-lifecycle
-			// diagnostic surface it as absence instead.
-			return
-		}
-		emit(d)
-	})
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "committed at HEAD",
+		func() bool { return operational }, emit)
 }
 
 // verifyP4EvidenceCommitted is the Perforce durable-lifecycle adapter (G-2):
@@ -755,12 +748,8 @@ func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int
 		}
 		return ParseArtifactBytes(planAtHave, filepath.ToSlash(planRelative))
 	}
-	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "submitted to the depot", func(d Diagnostic) {
-		if operational {
-			return
-		}
-		emit(d)
-	})
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "submitted to the depot",
+		func() bool { return operational }, emit)
 }
 
 // verifyCommittedLifecycle is the SCM-independent half of the durable
@@ -769,10 +758,19 @@ func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int
 // evidence body all landed. commitDesc names the SCM's durability state in
 // diagnostics ("committed at HEAD", "submitted to the depot") — transition
 // verbs recognize both spellings as commit-pending rather than refusals.
-func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committed *Artifact, planCommitted func(planName string) *Artifact, commitDesc string, emit func(Diagnostic)) {
+// planLookupFailed, when non-nil, is called after the plan-state
+// contribution (the "Phase Completion Evidence" branch's planCommitted
+// lookup) to report whether that lookup failed operationally. The resulting
+// "lifecycle completion is not committed" diagnostic is suppressed only when
+// that unresolved plan state was the sole reason it would otherwise emit —
+// i.e. every other, plan-independent piece of content already established
+// completeness. A content diagnostic that content alone already justifies
+// (regardless of the plan) always emits.
+func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committed *Artifact, planCommitted func(planName string) *Artifact, commitDesc string, planLookupFailed func() bool, emit func(Diagnostic)) {
 	var committedBody string
 	haveBody := false
 	lifecycleComplete := false
+	suppressForPlanLookup := false
 	if m := taskCompletionEvidenceNameRe.FindStringSubmatch(name); m != nil {
 		taskID := m[1]
 		if tasks, ok := committed.Meta["tasks"].([]any); ok {
@@ -803,10 +801,16 @@ func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committe
 		}
 		criteria := headingBodies(committed.Body, 2, "Acceptance Criteria")
 		lifecycleComplete = lifecycleComplete && len(criteria) > 0 && !hasUncheckedCheckbox(criteria[0])
+		// contentComplete captures everything above, computed without the
+		// plan: when it is already false, the diagnostic below is justified
+		// by content alone and must emit regardless of whether the plan
+		// lookup that follows succeeds.
+		contentComplete := lifecycleComplete
 		planName := planNameFor(a)
 		planComplete := false
 		if planName != "" {
-			if planArtifact := planCommitted(planName); planArtifact != nil {
+			planArtifact := planCommitted(planName)
+			if planArtifact != nil {
 				if phases, ok := planArtifact.Meta["phases"].([]any); ok {
 					for _, p := range phases {
 						pm := planEntry(p)
@@ -816,6 +820,12 @@ func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committe
 						}
 					}
 				}
+			} else if contentComplete && planLookupFailed != nil && planLookupFailed() {
+				// The plan lookup came back nil because it failed
+				// operationally, and content alone did not already decide
+				// the answer: the resulting diagnostic, if any, is purely
+				// the unresolved plan-state contribution.
+				suppressForPlanLookup = true
 			}
 		}
 		lifecycleComplete = lifecycleComplete && planComplete
@@ -827,6 +837,13 @@ func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committe
 		}
 	}
 	if !lifecycleComplete || !haveBody {
+		if suppressForPlanLookup {
+			// The collector already recorded the plan's operational
+			// failure, and content alone (independent of plan state) did
+			// not already justify this diagnostic; don't let the
+			// unresolved plan-state contribution surface as absence.
+			return
+		}
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message:    "`" + name + "` lifecycle completion is not " + commitDesc + ".",
 			Correction: "Commit the complete status, checked criteria/subtasks, and evidence in the phase-close lifecycle commit (D-0024)."})
