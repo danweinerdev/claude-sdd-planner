@@ -59,7 +59,7 @@ Ask the researcher for a **structured** summary aimed at the payload you are abo
 A node is **one red→green cycle**: one falsifiable contract, verified by named tests that fail before the work and pass after. For each node:
 
 - **Contract** — 1–2 sentences stating what is *true* when the node is done. Falsifiable, not aspirational ("the parser refuses duplicate keys naming the path", not "improve parsing").
-- **Justifies** — the AC/FR/NFR/DD/D ids that demand it. A node with no source is cut, not compiled.
+- **Justifies** — the AC/FR/NFR/DD ids, plan decisions (`pd-…` or `<Plan>:pd-…`), or frozen review findings (`<review qualifier>:F-NN`) that demand it. A node with no source is cut, not compiled.
 - **Tests** — the runner-visible test ids (and file) that gate it. Name them now; the implement loop writes them first and must observe them red.
 - **Artifacts** — the file set the node touches. Disjoint artifact sets are what let claims run in parallel; overlaps serialize.
 - **Inputs** — read-only context the node *reads but never writes*: whole files, or sections of Markdown files, declared as `{"root": "repository"|"planning", "path": "...", "section": {"heading_path": ["..."]}}`. The root is the explicit repository or planning root (never the working directory); the path is root-relative. A `section` selects one heading (plus its nested subsections) by a unique suffix of its ancestry chain — a missing or ambiguous heading refuses. Inputs are fingerprinted at compile time, so a later edit to a declared input derives INPUT-STALE, the same ripple intent hashes give citations. Use them for docs/PRDs/specs the work must stay anchored to, never as a substitute for `justifies`.

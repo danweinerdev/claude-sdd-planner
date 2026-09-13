@@ -32,6 +32,8 @@ Single source of truth for **plan decisions** — the per-plan, append-only reco
 
 ## Compile Conversion
 
+`sdd decide sync --plan <Name>` performs this copy on its own for a plan with no proposal to compile, or after a related design gains decisions; it is idempotent.
+
 `sdd compile` reads every design in the plan's `related` frontmatter and appends one entry per top-level `- **DD-N**:` bullet (or `## DD-N` heading), copied verbatim, with `source: Designs/<X>:DD-N`. A `Supersedes DD-N` (or `Supersedes: Other:DD-N`) clause anywhere in the bullet's text becomes that entry's `supersedes` edge. Re-running compile on an existing plan appends only DDs whose digest is not already present, so extending a design and recompiling adds only the new decisions. Designs freeze at handoff (first compile); a DD edited after that point produces a new, un-superseding entry on recompile that the validator reports as pointless, not dangerous.
 
 ## Write Protocol

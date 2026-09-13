@@ -26,6 +26,7 @@ The convention — entry schema, write protocol, cross-plan citation, conflicts 
 /decide current [plan]                  # Standing decisions across every plan (or one plan)
 /decide lookup <id>                     # Show one decision and its supersession chain
 /decide render <plan>                   # Regenerate the plan's Design.md from its decisions and graph
+/decide sync <plan>                     # Copy related designs' DD bullets into the plan's decisions file (no proposal needed)
 ```
 
 ## Process
@@ -39,6 +40,9 @@ The convention — entry schema, write protocol, cross-plan citation, conflicts 
 - `sdd decide list --plan <Name> [--json]` — one plan's file, in append order.
 - `sdd decide current [--plan <Name>] [--json]` — standing decisions (supersession chains followed, superseded entries omitted).
 - `sdd decide lookup <id> [--json]` — one entry and its supersession chain in both directions.
+
+### Sync
+`sdd decide sync --plan <Name>` is the decisions half of `sdd compile` on its own: it copies every related design's `DD-N` bullet into the plan's decisions file, verbatim, with any declared `Supersedes DD-N` / `Supersedes Design:DD-N` edge. Use it when a design gained decisions after the plan was compiled, or for a record-only plan that has no proposal to compile. Idempotent; a dangling `Supersedes` refuses.
 
 ### Render
 `sdd decide render --plan <Name>` writes `Plans/<Name>/Design.md` (type `decisions-view`, never validated, never hand-edited): every standing decision with the nodes that cite it, and every superseded one struck through with its successor. Run it when a plan closes, or whenever a reader wants "how this plan works"; regenerating for the same inputs is byte-identical.

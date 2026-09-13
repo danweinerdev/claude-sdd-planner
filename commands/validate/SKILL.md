@@ -1,6 +1,6 @@
 ---
 name: validate
-description: "Validate SDD artifact structure, statuses, completion evidence, dependencies, identifiers, and decision-ledger consistency without modifying files. Triggers: /validate, validate plan, check SDD integrity, audit completion evidence, validate artifacts"
+description: "Validate SDD artifact structure, statuses, completion evidence, dependencies, identifiers, and plan-decision consistency without modifying files. Triggers: /validate, validate plan, check SDD integrity, audit completion evidence, validate artifacts"
 ---
 
 # /validate — Validate SDD Artifacts
@@ -48,7 +48,7 @@ The script proves citation presence, not semantic conformance. Never report the 
 - **Hierarchy/traceability**: README `phases[]` match phase docs; `depends_on` resolves acyclically; `FR/NFR/AC/F/FU/D` ids unique in their owning artifact and citations resolve through the `related` graph; complete parents contain no incomplete children; approved+ artifacts have no blocking Open Questions (retained bullets use the exact `**non-blocking** — <rationale>` form).
 - **Review artifacts**: finding statuses match Resolution Log dispositions; deferred findings are tracked (`FU-NN` or plan task); supersession links bidirectional; phase-gate reviews carry the exact `review_scope`/`frozen`/`verdict`/`review_mode`/`lane_results`/`reviewed_planning_revision` contract from `shared/review-artifacts.md`.
 - **Completion evidence**: applies `shared/completion-evidence.md` literally — evidence sections present; complete entities carry conforming retrospective evidence with native-SCM identity, identity recheck, focused review in strict syntax, and passing checks; Git ancestry and lifecycle-commit checks; legacy `complete` artifacts without evidence reported as legacy gaps, never backfilled.
-- **Decision ledger**: field/status validity, id uniqueness across live+archive, bidirectional supersession, stale citations to superseded/rejected entries, deterministic collision candidates (nonfatal — user judgment resolves them).
+- **Plan decisions**: each `Plans/<Name>/<Name>-Decisions.json` decodes to the canonical five-field array (SDD190); open plans and phases citing a superseded decision are flagged as candidates (SDD191); two plans superseding the same decision is an error until one reconciling entry supersedes both (SDD192); unresolved, ambiguous, or retired-ledger citations in open work are errors (SDD193).
 
 ## Output
 

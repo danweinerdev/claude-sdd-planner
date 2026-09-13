@@ -52,7 +52,7 @@ the plugin simply has no hooks — a documented, supported state.
 **Tell the user the hooks need a session restart to take effect.** Claude Code
 documents its file watcher for *settings* hooks; whether a newly generated
 *plugin* `hooks.json` is picked up mid-session is not documented, and a user
-who sees no ledger context after setup would otherwise have no way to tell a
+who sees no standing-decision context after setup would otherwise have no way to tell a
 broken install from one that just needs a reload. Report it as a next step,
 not a warning.
 

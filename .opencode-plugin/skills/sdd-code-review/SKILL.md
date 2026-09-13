@@ -54,7 +54,12 @@ name or description field; do not request an agent or model.
    source-identity-mismatched evidence is a plan-drift finding, not proof.
 3. Render and run all four lanes, preserving their input isolation. Consolidate
    only actual findings and give `Aligned`, `Needs changes`, `Blocked`, or `No
-   reviewable diff` with actual verification results.
+   reviewable diff` with actual verification results. For a graph plan's
+   `review`-role node, every finding left `open` carries `action: revise`
+   (with `nodes` and a `revise:` block) or `action: extend` (with a `node:`
+   fragment), and the verdict is `Aligned` only when every finding is
+   terminal, else `Amend` — the frozen findings report `sdd graph amend`
+   applies (`shared/review-artifacts.md`).
 4. Persist the review using `shared/templates/review.md`. A phase gate is
    driven through the binary: `sdd review scaffold <phase-path> --frozen
    <base>..<endpoint>` creates it open and unfrozen with `review_of` set to the
