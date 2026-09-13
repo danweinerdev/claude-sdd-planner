@@ -90,9 +90,31 @@ func VerifyRetirementSource(planDir string, source model.RetirementSource) (mode
 
 // RetirementProblems is shared by compile, audit and ordinary validation.
 // A historical reference is never treated as a live input fingerprint.
+//
+// This is the lossy form: an operational VerifyRetirementSource failure
+// (network/filesystem/process trouble, not a genuine verification
+// failure) is folded into the returned problem strings rather than
+// reported separately, so a caller that only inspects []string still
+// fails closed instead of silently reading an unanswered probe as a
+// clean plan. Callers that need to distinguish an operational failure
+// from a substantive one — to retry, or to avoid mis-attributing it as
+// a plan defect — use RetirementProblemsChecked instead.
 func RetirementProblems(planDir string, g *model.Graph) []string {
-	problems, _ := retirementProblems(planDir, g)
+	problems, operational := retirementProblems(planDir, g)
+	for _, err := range operational {
+		problems = append(problems, err.Error())
+	}
 	return problems
+}
+
+// RetirementProblemsChecked is RetirementProblems' non-lossy form: the
+// substantive problem strings are returned alongside a wrapped error
+// satisfying errors.Is(err, vcs.ErrOperational) when one or more
+// VerifyRetirementSource probes failed operationally, so no caller can
+// read an unanswered verification as a clean result.
+func RetirementProblemsChecked(planDir string, g *model.Graph) ([]string, error) {
+	problems, operational := retirementProblems(planDir, g)
+	return problems, errors.Join(operational...)
 }
 
 // retirementProblems is RetirementProblems' implementation, additionally

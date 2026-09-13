@@ -1941,7 +1941,7 @@ func TestRetirementRuleFailureIsOperational(t *testing.T) {
 	}
 
 	t.Run("operational RevisionExists probe failure is recorded, not reported", func(t *testing.T) {
-		dir, root := planDir(t, "")
+		dir, _ := planDir(t, "")
 		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
 			t.Fatalf("git init: %v\n%s", err, out)
 		}
@@ -1969,7 +1969,7 @@ func TestRetirementRuleFailureIsOperational(t *testing.T) {
 		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "graph").CombinedOutput(); err != nil {
 			t.Fatalf("git commit: %v\n%s", err, out)
 		}
-		root = freshRoot(t, dir)
+		root := freshRoot(t, dir)
 
 		installNShotGitShim(t, 3)
 
@@ -1988,7 +1988,7 @@ func TestRetirementRuleFailureIsOperational(t *testing.T) {
 	})
 
 	t.Run("control: genuinely unverifiable source still emits SDD181", func(t *testing.T) {
-		dir, root := planDir(t, "1111111111111111111111111111111111111111")
+		dir, _ := planDir(t, "1111111111111111111111111111111111111111")
 		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
 			t.Fatalf("git init: %v\n%s", err, out)
 		}
@@ -1998,7 +1998,7 @@ func TestRetirementRuleFailureIsOperational(t *testing.T) {
 		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "base").CombinedOutput(); err != nil {
 			t.Fatalf("git commit: %v\n%s", err, out)
 		}
-		root = freshRoot(t, dir)
+		root := freshRoot(t, dir)
 
 		rule := ruleByCode(t, "SDD181")
 		var diags []Diagnostic
@@ -2015,6 +2015,115 @@ func TestRetirementRuleFailureIsOperational(t *testing.T) {
 		}
 		if err := root.OperationalFailure(); err != nil {
 			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+	})
+}
+
+// TestRetirementProblemsReturnsOperationalError: RetirementProblems is the
+// lossy wrapper around retirementProblems — it drops the operational error
+// slice returned alongside the substantive problem strings. A caller that
+// only inspects the returned []string cannot tell an unanswered
+// VerifyRetirementSource probe (operational) from a clean plan (no
+// problems), so an operational failure must never be read as success.
+// Phase 1 asserts only the fail-closed behavior on RetirementProblems
+// itself, which fails today because the wrapper silently discards the
+// error via `problems, _ := retirementProblems(...)`. The checked
+// entry-point assertion (errors.Is(err, vcs.ErrOperational)) is added in
+// Phase 2 alongside the RetirementProblemsChecked implementation.
+func TestRetirementProblemsReturnsOperationalError(t *testing.T) {
+	planDir := func(t *testing.T, rev string) (string, *Root) {
+		t.Helper()
+		graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+		files := map[string]string{
+			"Plans/Sample/README.md":         validPlan(false),
+			"Plans/Sample/Sample-Graph.json": graph,
+			"old.md":                         "---\ntasks:\n  - id: \"1.1\"\n---\n",
+		}
+		dir, root := materializeRoot(t, files)
+		return dir, root
+	}
+
+	t.Run("operational RevisionExists probe failure still yields fail-closed problems", func(t *testing.T) {
+		dir, _ := planDir(t, "")
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "base").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+		head, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+		if err != nil {
+			t.Fatalf("git rev-parse: %v", err)
+		}
+		rev := strings.TrimSpace(string(head))
+
+		graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+		if err := os.WriteFile(filepath.Join(dir, "Plans/Sample/Sample-Graph.json"), []byte(graph), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "graph").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+
+		g, err := model.DecodeGraph([]byte(graph))
+		if err != nil {
+			t.Fatalf("DecodeGraph: %v", err)
+		}
+		planSubdir := filepath.Join(dir, "Plans", "Sample")
+
+		t.Run("lossy RetirementProblems fails closed", func(t *testing.T) {
+			installNShotGitShim(t, 3)
+			problems := RetirementProblems(planSubdir, g)
+			if len(problems) == 0 {
+				t.Fatalf("RetirementProblems() = %v, want a non-empty fail-closed problem list when the operational probe fails", problems)
+			}
+		})
+
+		t.Run("checked entry point returns an operational error", func(t *testing.T) {
+			installNShotGitShim(t, 3)
+			checkedProblems, err := RetirementProblemsChecked(planSubdir, g)
+			if !errors.Is(err, vcs.ErrOperational) {
+				t.Fatalf("RetirementProblemsChecked() err = %v, want errors.Is(err, vcs.ErrOperational)", err)
+			}
+			_ = checkedProblems
+		})
+	})
+
+	t.Run("control: genuinely unverifiable source still yields a problem", func(t *testing.T) {
+		dir, _ := planDir(t, "1111111111111111111111111111111111111111")
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "base").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+
+		graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"1111111111111111111111111111111111111111","path":"old.md","source_id":"1.1"}}}}`
+		g, err := model.DecodeGraph([]byte(graph))
+		if err != nil {
+			t.Fatalf("DecodeGraph: %v", err)
+		}
+
+		problems := RetirementProblems(dir, g)
+		if len(problems) == 0 {
+			t.Fatalf("RetirementProblems() = %v, want a non-empty problem list for an unverifiable source", problems)
+		}
+
+		checkedProblems, err := RetirementProblemsChecked(dir, g)
+		if err != nil {
+			t.Fatalf("RetirementProblemsChecked() err = %v, want nil for a genuinely unverifiable (non-operational) source", err)
+		}
+		if len(checkedProblems) == 0 {
+			t.Fatalf("RetirementProblemsChecked() problems = %v, want a non-empty problem list for an unverifiable source", checkedProblems)
 		}
 	})
 }
