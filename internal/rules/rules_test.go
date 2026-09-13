@@ -64,9 +64,6 @@ func TestAllReturnsDistinctExampleMaps(t *testing.T) {
 				continue
 			}
 			found = true
-			if &ex.Files == &other.Files {
-				t.Fatalf("%s Good[%d]: two All() calls returned the same Files map pointer", r.Code, j)
-			}
 			for k := range ex.Files {
 				ex.Files[k] = "mutated"
 			}
