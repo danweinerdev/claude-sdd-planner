@@ -20,45 +20,26 @@ const selfFile = "adoption_test.go"
 // exemptDirs are package directories excused from the TestMain requirement
 // despite spawning git in their tests, each with the reason a package-level
 // TestMain would break them.
+//
+// internal/testenv itself was previously exempted here (testenv_test.go
+// tests Install/cleanup's own before/after env state, and a package-level
+// TestMain would pre-install and break those assertions). Re-checked under
+// the import-based rule: testenv_test.go still imports os/exec directly (it
+// spawns a real git binary to assert the policy takes effect), so the
+// package still spawns and the same conflict with a package-level TestMain
+// still applies. The exemption stays for the same reason.
 var exemptDirs = map[string]string{
-	// internal/testenv: testenv_test.go tests Install/cleanup's own env
-	// mutation and restoration (TestHermeticGitPolicy asserts
-	// GIT_CONFIG_GLOBAL is unset before Install, set after, and restored
-	// after cleanup). A package-level TestMain would call Install before
-	// these tests run, pre-setting that variable and making "restore to
-	// previous" restore to the outer policy instead of the unset state the
-	// assertions require, so this package's tests must own Install/cleanup
-	// directly rather than go through testenv.Main.
 	"internal/testenv": "tests Install/cleanup's own before/after env state; a package-level TestMain would pre-install and break those assertions",
 }
 
-// gitSpawnCalls names the selector expressions (pkg.Func) that spawn or
-// resolve a real git binary when their first argument is the string literal
-// "git": exec.Command, exec.CommandContext (first argument after the
-// context), exec.LookPath, procexec.Run (first argument after the
-// context), and procexec.LookPath. Resolving the git binary is only ever
-// followed by spawning it via the resolved path in this module's code, so
-// LookPath counts as a spawn site too.
-var gitSpawnCalls = map[string]map[string]int{
-	"exec": {
-		"Command":        0,
-		"CommandContext": 1,
-		"LookPath":       0,
-	},
-	"procexec": {
-		"Run":      1,
-		"LookPath": 0,
-	},
-}
-
 // TestGitSpawningTestPackagesInstallPolicy requires that every package in
-// this module whose tests spawn a real git process also installs the
+// this module whose tests spawn a real subprocess also installs the
 // hermetic policy via a TestMain that calls testenv.Main, so test-owned Git
 // activity never depends on the workstation's ambient configuration
 // (Designs/TestSuiteReliability DD-1). It walks the module from its own
-// package outward and flags any package that spawns git — directly in a
-// test file, in its own production sources, or transitively through a
-// module package it (or its tests) import — without declaring the required
+// package outward and flags any package that spawns — directly in a test
+// file, in its own production sources, or transitively through a module
+// package it (or its tests) import — without declaring the required
 // TestMain.
 func TestGitSpawningTestPackagesInstallPolicy(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
@@ -67,17 +48,18 @@ func TestGitSpawningTestPackagesInstallPolicy(t *testing.T) {
 		return
 	}
 	t.Fatalf(
-		"packages spawn git in tests without installing the hermetic policy "+
-			"(add a TestMain that calls testenv.Main): %s",
+		"packages spawn a subprocess in tests without installing the hermetic "+
+			"policy (add a TestMain that calls testenv.Main): %s",
 		strings.Join(offenders, ", "),
 	)
 }
 
 // pkgInfo holds one package directory's parsed shape: its module import
-// path, whether its own production sources spawn git directly, whether any
-// of its test files spawn git directly, whether it declares the required
-// TestMain, and the module-internal import paths reachable from its
-// production sources and from its test files respectively.
+// path, whether its own production sources import a spawning package
+// directly, whether any of its test files import one directly, whether it
+// declares the required TestMain, and the module-internal import paths
+// reachable from its production sources and from its test files
+// respectively.
 type pkgInfo struct {
 	dir             string
 	importPath      string
@@ -90,18 +72,38 @@ type pkgInfo struct {
 	hasProductionGo bool
 }
 
-// gitSpawnOffenders walks moduleRoot, parses every .go file with go/parser,
-// and returns the module-relative, slash-separated, sorted list of package
-// directories whose tests spawn git — directly, through a local wrapper,
-// or transitively through an imported module package's production sources
-// — without declaring the required TestMain. skipTestFile names a test
-// file (by base name) to exclude from scanning entirely (this test's own
-// file). exempt maps module-relative directories to their excuse for
-// skipping the TestMain requirement despite spawning git.
+// spawnImportPaths names the import paths that make a file a direct
+// spawner: the standard library's process-launch package and this module's
+// own process-launch wrapper. Membership is resolved purely from each
+// file's import path list (go/parser with ImportsOnly) — never from
+// identifiers, aliases, or string literals in the file's code, so import
+// aliasing, concatenated literals, or variable-named call sites cannot
+// hide a spawn from this scan.
+func spawnImportPaths(modulePath string) map[string]bool {
+	return map[string]bool{
+		"os/exec":                         true,
+		modulePath + "/internal/procexec": true,
+	}
+}
+
+// gitSpawnOffenders walks moduleRoot, parses every .go file's imports with
+// go/parser (ImportsOnly), and returns the module-relative,
+// slash-separated, sorted list of package directories whose tests spawn —
+// directly, through a local wrapper, or transitively through an imported
+// module package's production sources — without declaring the required
+// TestMain. A package is spawning purely by import path: its test sources
+// import os/exec or the module's internal/procexec package directly, or
+// the package (through its production or test imports) transitively
+// reaches, within the module, a package whose production sources import
+// either. skipTestFile names a test file (by base name) to exclude from
+// scanning entirely (this test's own file). exempt maps module-relative
+// directories to their excuse for skipping the TestMain requirement
+// despite spawning.
 func gitSpawnOffenders(t *testing.T, moduleRoot, skipTestFile string, exempt map[string]string) []string {
 	t.Helper()
 
 	modulePath := readModulePath(t, moduleRoot)
+	spawnImports := spawnImportPaths(modulePath)
 	pkgs := map[string]*pkgInfo{} // keyed by import path
 
 	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
@@ -133,7 +135,7 @@ func gitSpawnOffenders(t *testing.T, moduleRoot, skipTestFile string, exempt map
 			return err
 		}
 		fset := token.NewFileSet()
-		file, perr := parser.ParseFile(fset, path, src, 0)
+		file, perr := parser.ParseFile(fset, path, src, parser.ImportsOnly)
 		if perr != nil {
 			t.Fatalf("parsing %s: %v", path, perr)
 		}
@@ -150,19 +152,27 @@ func gitSpawnOffenders(t *testing.T, moduleRoot, skipTestFile string, exempt map
 		}
 
 		imports := map[string]bool{}
+		spawns := false
 		for _, imp := range file.Imports {
 			p := strings.Trim(imp.Path.Value, `"`)
 			imports[p] = true
+			if spawnImports[p] {
+				spawns = true
+			}
 		}
 
 		isTest := strings.HasSuffix(path, "_test.go")
-		var spawns bool
+		hasMain := false
 		if isTest {
-			spawns = fileHasGitLiteral(file)
-		} else {
-			spawns = fileCallsGitSpawner(file)
+			// TestMain detection still needs the full AST (it inspects a
+			// function body), so parse again without ImportsOnly only for
+			// _test.go files, which are comparatively few.
+			fullFile, ferr := parser.ParseFile(fset, path, src, 0)
+			if ferr != nil {
+				t.Fatalf("parsing %s: %v", path, ferr)
+			}
+			hasMain = declaresHermeticTestMain(fullFile)
 		}
-		hasMain := declaresHermeticTestMain(file)
 
 		if isTest {
 			info.hasTestFiles = true
@@ -192,7 +202,7 @@ func gitSpawnOffenders(t *testing.T, moduleRoot, skipTestFile string, exempt map
 
 	// A package's effective "reaches a spawner" set starts from its own
 	// production spawn status and its production imports; memoize the
-	// transitive reachability of each module package to a git-spawning
+	// transitive reachability of each module package to a spawning
 	// production package.
 	reaches := map[string]bool{}
 	visiting := map[string]bool{}
@@ -257,71 +267,6 @@ func gitSpawnOffenders(t *testing.T, moduleRoot, skipTestFile string, exempt map
 	}
 	sort.Strings(offenders)
 	return offenders
-}
-
-// fileHasGitLiteral reports whether file contains the string literal "git"
-// anywhere in code (comments are not part of the AST, so they never
-// match). Used for _test.go files: a test spawns git whether it passes the
-// literal directly to exec.Command or hands it to a local wrapper.
-func fileHasGitLiteral(file *ast.File) bool {
-	found := false
-	ast.Inspect(file, func(n ast.Node) bool {
-		if found {
-			return false
-		}
-		lit, ok := n.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return true
-		}
-		if strings.Trim(lit.Value, `"`) == "git" {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
-}
-
-// fileCallsGitSpawner reports whether file contains a call to one of
-// gitSpawnCalls whose designated argument is the direct string literal
-// "git". Used for production .go files, where only a genuine spawn call
-// site counts, not any mention of the literal.
-func fileCallsGitSpawner(file *ast.File) bool {
-	found := false
-	ast.Inspect(file, func(n ast.Node) bool {
-		if found {
-			return false
-		}
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		pkgIdent, ok := sel.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		argIdx, ok := gitSpawnCalls[pkgIdent.Name][sel.Sel.Name]
-		if !ok {
-			return true
-		}
-		if argIdx >= len(call.Args) {
-			return true
-		}
-		lit, ok := call.Args[argIdx].(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return true
-		}
-		if strings.Trim(lit.Value, `"`) == "git" {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
 }
 
 // declaresHermeticTestMain reports whether file declares
@@ -509,6 +454,149 @@ func TestD(t *testing.T) {
 	offenders := gitSpawnOffenders(t, root, "", nil)
 
 	want := []string{"a", "b"}
+	if !equalStrings(offenders, want) {
+		t.Fatalf("gitSpawnOffenders = %v, want %v", offenders, want)
+	}
+}
+
+// TestSpawnInventoryIsImportBased requires that the git-spawn inventory
+// resolves packages by import path only: a test package is spawning when
+// any of its test sources import os/exec or the module's procexec package,
+// or when the package or its test sources transitively import (within the
+// module) a package whose production sources import either, so identifier
+// names, string literals, and comments play no part and wrappers, import
+// aliases, concatenated binary names, variable-named spawners, and helper
+// packages cannot escape. It builds a synthetic module under t.TempDir()
+// with six packages:
+//
+//   - w: a _test.go file that imports os/exec under the alias ex and
+//     spawns via ex.Command("g"+"it") — a concatenated literal, not the
+//     bare string "git", and an import alias rather than the identifier
+//     "exec".
+//   - h: a production (non-test) file with var run = exec.Command (a
+//     variable-named spawner, not a call the literal-matcher recognizes)
+//     and func Spawn(name string) that invokes run(name).
+//   - u: a _test.go file with no direct exec import that only calls
+//     h.Spawn("git"), reaching a spawner transitively through h.
+//   - r: a production file defining type runner func(dir, name string) and
+//     an execRunner variable of that type built from os/exec under a
+//     variable name (not a recognized selector call shape), plus a
+//     Run(dir, name string) wrapper; its _test.go file only calls
+//     r.Run(dir, "git") and never mentions exec directly.
+//   - c: a _test.go file whose only mention of exec.Command("git") is in a
+//     comment, never in code.
+//   - d: a _test.go file that imports os/exec and declares a proper
+//     TestMain calling testenv.Main.
+//
+// The expected offender set is exactly {w, u, r}: c must not be flagged
+// (comment, not code) and d must not be flagged (it installs the policy).
+// Detection here must be purely import-based — none of w, u, or r contains
+// a string literal "git" or a recognized pkg.Func(...) call shape that the
+// prior literal/identifier matcher required.
+func TestSpawnInventoryIsImportBased(t *testing.T) {
+	root := t.TempDir()
+
+	writeFile(t, root, "go.mod", "module synthtest\n\ngo 1.21\n")
+
+	writeFile(t, root, "w/w_test.go", `package w
+
+import (
+	ex "os/exec"
+	"testing"
+)
+
+func TestW(t *testing.T) {
+	cmd := ex.Command("g" + "it")
+	_ = cmd.Run()
+}
+`)
+
+	writeFile(t, root, "h/h.go", `package h
+
+import "os/exec"
+
+var run = exec.Command
+
+func Spawn(name string) error {
+	cmd := run(name)
+	return cmd.Run()
+}
+`)
+
+	writeFile(t, root, "u/u_test.go", `package u
+
+import (
+	"testing"
+
+	"synthtest/h"
+)
+
+func TestU(t *testing.T) {
+	if err := h.Spawn("git"); err != nil {
+		t.Fatal(err)
+	}
+}
+`)
+
+	writeFile(t, root, "r/r.go", `package r
+
+import "os/exec"
+
+type runner func(dir, name string) *exec.Cmd
+
+var execRunner runner = func(dir, name string) *exec.Cmd {
+	cmd := exec.Command(name)
+	cmd.Dir = dir
+	return cmd
+}
+
+func Run(dir, name string) error {
+	cmd := execRunner(dir, name)
+	return cmd.Run()
+}
+`)
+
+	writeFile(t, root, "r/r_test.go", `package r
+
+import "testing"
+
+func TestR(t *testing.T) {
+	if err := Run(".", "git"); err != nil {
+		t.Fatal(err)
+	}
+}
+`)
+
+	writeFile(t, root, "c/c_test.go", `package c
+
+import "testing"
+
+// TestC does not spawn git; exec.Command("git") only appears in this
+// comment for documentation purposes.
+func TestC(t *testing.T) {
+}
+`)
+
+	writeFile(t, root, "d/d_test.go", `package d
+
+import (
+	"os/exec"
+	"testing"
+)
+
+func TestMain(m *testing.M) {
+	testenv.Main(m)
+}
+
+func TestD(t *testing.T) {
+	cmd := exec.Command("git", "status")
+	_ = cmd.Run()
+}
+`)
+
+	offenders := gitSpawnOffenders(t, root, "", nil)
+
+	want := []string{"r", "u", "w"}
 	if !equalStrings(offenders, want) {
 		t.Fatalf("gitSpawnOffenders = %v, want %v", offenders, want)
 	}

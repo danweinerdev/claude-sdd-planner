@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/testenv"
 )
 
 // helperEnv selects a cooperative helper behavior when the test binary is
@@ -15,10 +17,20 @@ import (
 // helper never touches the Go test framework.
 const helperEnv = "PROCEXEC_HELPER_MODE"
 
+// TestMain first intercepts the self-re-exec helper mode (before any test
+// or hermetic-policy setup runs, so the helper child never touches the Go
+// test framework or the policy install), then installs the hermetic Git
+// policy (internal/testenv) for every test in this package before parallel
+// tests start: a temporary HOME and config, no system/global/injected
+// configuration, fsmonitor, hooks, signing and prompts off, the fixed
+// fixture identity, and the Perforce probe disabled. Code under test
+// inherits it from the process environment; child processes receive it
+// through the same variables.
 func TestMain(m *testing.M) {
 	mode := os.Getenv(helperEnv)
 	if mode == "" {
-		os.Exit(m.Run())
+		testenv.Main(m)
+		return
 	}
 	os.Exit(runHelper(mode))
 }
