@@ -110,14 +110,17 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	// here, within the cleanup allowance. A failure to clean up is reported
 	// ahead of the command's own result.
 	postCleaned, postErr := cleanupGroup(cmd, p.Cleanup, swept)
-	// When the sweep did not complete, the fallback re-probed and re-killed the
-	// same group, so its answer supersedes the pre-reap one: a probe failure the
-	// fallback then resolved is not an operational failure, and reporting it
-	// would discard a valid result (review F-01). A fallback that itself failed
-	// still surfaces as containment.
-	if !swept || containErr == nil {
-		containErr = postErr
-	}
+	// The post-reap step is the authority on whether descendants leaked, so its
+	// answer replaces the pre-reap one outright. Every pre-reap failure is
+	// provisional: a probe that failed before any kill leaves swept false and
+	// the fallback re-probes and re-kills the same group, while a kill that
+	// reported an error was still attempted at the only safe moment and the
+	// poll then watches that group until it is empty. postErr nil therefore
+	// means the group was observed gone, and reporting the superseded error
+	// would discard a valid result (review F-01). A post-reap step that itself
+	// failed — the fallback erroring, or the swept poll erroring or timing out
+	// with descendants still live — surfaces as containment.
+	containErr = postErr
 	cleaned = cleaned || postCleaned
 	end := time.Now()
 

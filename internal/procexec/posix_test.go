@@ -357,3 +357,63 @@ func TestResolvedProbeFailureIsNotAnError(t *testing.T) {
 		t.Fatal("the stubbed probe never ran; the test did not exercise the pre-kill probe path")
 	}
 }
+
+// FR-14 / DD-4 (review F-01): a pre-reap SIGKILL that reported a non-ESRCH
+// error but whose group the post-reap poll then observed empty is not an
+// operational failure. kill(-pgid) reports one error for a whole group, so a
+// refusal for one member coexists with delivery to the rest: the authority on
+// whether descendants leaked is the emptiness poll, not the kill's return
+// value. Under the pre-fix code sweepGroupBeforeReap returned swept=true
+// alongside that error, and Run's guard kept the stale error and discarded the
+// poll's answer, so a command that exited 0 with its descendants gone was
+// reported as CauseContainment. The swept path must never re-signal the group
+// after the reap (the leader's pid is recyclable from that instant), so the
+// stub below models the real shape: the refused kill is still delivered.
+func TestResolvedKillFailureIsNotAnError(t *testing.T) {
+	restore := signalGroup
+	var mu sync.Mutex
+	killRefused := false
+	signalGroup = func(pgid int, sig syscall.Signal) error {
+		mu.Lock()
+		if sig == syscall.SIGKILL && !killRefused {
+			killRefused = true
+			mu.Unlock()
+			// The signal lands; the reported error does not describe that.
+			_ = restore(pgid, sig)
+			return syscall.EPERM
+		}
+		mu.Unlock()
+		return restore(pgid, sig)
+	}
+	t.Cleanup(func() { signalGroup = restore })
+
+	exe, args, p := helperPolicy(t, "spawn-descendant-exit")
+	p.Cleanup = 2 * time.Second
+
+	res, err := Run(context.Background(), exe, args, p)
+	if err != nil {
+		var pe *Error
+		if errors.As(err, &pe) && pe.Stdout != "" {
+			if pid, convErr := strconv.Atoi(strings.TrimSpace(pe.Stdout)); convErr == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+		t.Fatalf("a kill failure the post-reap poll resolved must not fail the run: %v", err)
+	}
+	if res.ExitCode != 0 {
+		t.Errorf("exit code %d, want 0", res.ExitCode)
+	}
+	grandchild := pidFrom(t, res.Stdout)
+	killLater(t, grandchild)
+	if !waitDead(grandchild, p.Cleanup+2*time.Second) {
+		t.Errorf("grandchild %d survived the sweep", grandchild)
+	}
+	if !res.DescendantsCleaned {
+		t.Error("result does not report that descendants were cleaned")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !killRefused {
+		t.Fatal("the stubbed kill never ran; the test did not exercise the pre-reap kill path")
+	}
+}
