@@ -50,8 +50,10 @@ func VerifyRetirementSource(planDir string, source model.RetirementSource) (mode
 		return source, fmt.Errorf("historical revision did not resolve to an immutable Git commit")
 	}
 	source.Revision = strings.ToLower(source.Revision)
-	if exists, err := repo.RevisionExists(source.Revision); err != nil || !exists {
-		return source, fmt.Errorf("historical commit %s is unavailable locally (history may need fetching): %v", source.Revision, err)
+	if exists, err := repo.RevisionExists(source.Revision); err != nil && errors.Is(err, vcs.ErrOperational) {
+		return source, fmt.Errorf("historical commit %s cannot be verified: %w", source.Revision, err)
+	} else if err != nil || !exists {
+		return source, fmt.Errorf("historical commit %s is unavailable locally (history may need fetching): %w", source.Revision, err)
 	}
 	raw, err := repo.FileAt(source.Revision, source.Path)
 	if err != nil {

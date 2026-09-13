@@ -567,7 +567,13 @@ func verifyCleanGitIdentity(r *Root, a *Artifact, revision, name string, line in
 			Message: "`" + name + "` records Git but `" + repository + "` is not a Git worktree.", Correction: "Correct the repository/VCS evidence."})
 		return
 	}
-	if ok, _ := repo.RevisionExists(revision); !ok {
+	ok, err := repo.RevisionExists(revision)
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
+		// The collector already recorded the operational failure
+		// (recordingRepo); don't misreport an unanswered query as absence.
+		return
+	}
+	if !ok {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` Git revision/checkpoint `" + revision + "` is not a commit in `" + repository + "`.", Correction: "Record an existing full native Git revision/checkpoint, not a tag or another Git object."})
 		return
@@ -575,7 +581,11 @@ func verifyCleanGitIdentity(r *Root, a *Artifact, revision, name string, line in
 	if !compareCurrent {
 		return
 	}
-	if ok, _ := repo.IsAncestor(revision, "HEAD"); !ok {
+	ancestor, err := repo.IsAncestor(revision, "HEAD")
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
+		return
+	}
+	if !ancestor {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` Git revision/checkpoint `" + revision + "` is not an ancestor of current HEAD.", Correction: "Check out a descendant containing the completed entity or use historical identity mode for an archival audit."})
 	}
@@ -597,7 +607,7 @@ func verifyCleanP4Identity(r *Root, a *Artifact, revision, name string, line int
 		return
 	}
 	ok, err := repo.RevisionExists(revision)
-	if err != nil && !errors.Is(err, vcs.ErrNotFound) {
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
 		// The collector already recorded the operational failure (recordingRepo);
 		// don't misreport an unanswered query as "not a submitted changelist".
 		return
@@ -949,7 +959,11 @@ func validGitTaskReviewIdentity(r *Root, a *Artifact, name, focused, reviewed, r
 		}
 	}
 	for _, id := range identities {
-		if ok, _ := repo.RevisionExists(id); !ok {
+		ok, err := repo.RevisionExists(id)
+		if err != nil && errors.Is(err, vcs.ErrOperational) {
+			return false
+		}
+		if !ok {
 			emit(Diagnostic{Code: "SDD169", Severity: Error, Path: a.Rel, Line: line,
 				Message:    "`" + name + "` reviewed Git identity names a commit absent from target repository `" + repository + "`.",
 				Correction: "Use only full reviewed commits that exist in the target repository."})

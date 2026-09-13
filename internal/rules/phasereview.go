@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -858,9 +859,15 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 	}
 	repository := r.RepoForArtifact(ctx.Phase.Rel)
 	repo := r.Repo(repository)
-	exists := func(rev string) bool {
+	// exists reports ok=false, operational=true when the query itself failed
+	// operationally (the collector already recorded it); the caller must stay
+	// silent rather than report that as absence.
+	exists := func(rev string) (ok, operational bool) {
 		ok, err := repo.RevisionExists(rev)
-		return err == nil && ok
+		if err != nil && errors.Is(err, vcs.ErrOperational) {
+			return false, true
+		}
+		return ok, false
 	}
 
 	checkpoint := markdownScalar(evidenceValue(ctx.Body, "Revision / checkpoint"))
@@ -887,7 +894,11 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 	}
 	allExist := true
 	for _, id := range identities {
-		if exists(id) {
+		ok, operational := exists(id)
+		if operational {
+			return
+		}
+		if ok {
 			continue
 		}
 		allExist = false
@@ -903,7 +914,11 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 		return
 	}
 	for _, t := range tasks {
-		if !exists(t.Revision) {
+		ok, operational := exists(t.Revision)
+		if operational {
+			return
+		}
+		if !ok {
 			fail("Completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` does not exist in target repository `"+repository+"`.",
 				"Record an existing clean full native Git revision/checkpoint in the completed task's evidence before completing the phase.")
 			continue
@@ -961,12 +976,16 @@ func verifyPhaseReviewPlanningRevision(r *Root, ctx phaseGateContext, review *Ar
 		// returns here rather than reporting it twice.
 		return
 	}
-	if ok, err := repo.RevisionExists(revision); err != nil || !ok {
+	if ok, err := repo.RevisionExists(revision); err != nil && errors.Is(err, vcs.ErrOperational) {
+		return
+	} else if !ok {
 		fail("Final review `"+review.Rel+"` planning revision `"+revision+"` does not exist in planning Git history.",
 			"Record an existing full planning Git commit in `reviewed_planning_revision`.")
 		return
 	}
-	if ok, err := repo.IsAncestor(revision, "HEAD"); err != nil || !ok {
+	if ok, err := repo.IsAncestor(revision, "HEAD"); err != nil && errors.Is(err, vcs.ErrOperational) {
+		return
+	} else if !ok {
 		fail("Final review `"+review.Rel+"` planning revision `"+revision+"` is not an ancestor of planning HEAD.",
 			"Use a reviewed planning revision retained by the current planning Git history.")
 		return
@@ -1067,9 +1086,15 @@ func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line in
 		return
 	}
 	repo := r.Repo(repository)
-	exists := func(rev string) bool {
+	// exists reports ok=false, operational=true when the query itself failed
+	// operationally (the collector already recorded it); the caller must stay
+	// silent rather than report that as absence.
+	exists := func(rev string) (ok, operational bool) {
 		ok, err := repo.RevisionExists(rev)
-		return err == nil && ok
+		if err != nil && errors.Is(err, vcs.ErrOperational) {
+			return false, true
+		}
+		return ok, false
 	}
 
 	planCheckpoint := markdownScalar(evidenceValue(body, "Revision / checkpoint"))
@@ -1078,7 +1103,9 @@ func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line in
 			"Record the target repository's exact full native Git revision/checkpoint; a validated integration merge is allowed.")
 		return
 	}
-	if !exists(planCheckpoint) {
+	if ok, operational := exists(planCheckpoint); operational {
+		return
+	} else if !ok {
 		fail("Plan Git checkpoint `"+planCheckpoint+"` does not exist in target repository `"+repository+"`.",
 			"Record an existing target-repository Git checkpoint.")
 		return
@@ -1122,7 +1149,9 @@ func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line in
 				"Record the phase's exact full native Git revision/checkpoint; a validated integration merge is allowed.")
 			continue
 		}
-		if !exists(phaseCheckpoint) {
+		if ok, operational := exists(phaseCheckpoint); operational {
+			return
+		} else if !ok {
 			fail("Completed phase `"+phaseID+"` Git checkpoint `"+phaseCheckpoint+"` does not exist in target repository `"+repository+"`.",
 				"Record an existing phase Git checkpoint in the plan target repository.")
 			continue
