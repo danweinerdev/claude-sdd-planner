@@ -102,7 +102,7 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	}
 	// Owned descendants are swept before the leader is reaped: while the
 	// leader is a zombie its pid is still its own, so signalling -pgid cannot
-	// reach a group the kernel handed that pid to after a reap (review F-02).
+	// reach a group the kernel handed that pid to after a reap (review-fixtures 4d10f15 F-02).
 	cleaned, swept, _ := sweepGroupBeforeReap(cmd)
 	waitErr := cmd.Wait()
 	// After the reap the group is only polled for emptiness, never signalled
@@ -117,7 +117,7 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	// reported an error was still attempted at the only safe moment and the
 	// poll then watches that group until it is empty. postErr nil therefore
 	// means the group was observed gone, and reporting the superseded error
-	// would discard a valid result (review F-01). A post-reap step that itself
+	// would discard a valid result (review-execution 57d4ffb F-01). A post-reap step that itself
 	// failed — the fallback erroring, or the swept poll erroring or timing out
 	// with descendants still live — surfaces as containment. The pre-reap
 	// result is discarded outright (never merged in): postErr is the sole

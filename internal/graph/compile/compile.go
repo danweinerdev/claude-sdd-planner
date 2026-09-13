@@ -174,10 +174,11 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 }
 
 // Validate runs the full semantic pass over a graph as it stands (an empty
-// proposal against it) — the transition gate `graph split` and friends use
-// to prove a mutation introduces no findings that compile would refuse. When
-// a caller already holds a Sources snapshot, use Sources.Validate instead so
-// the before/after comparison shares that snapshot rather than re-resolving.
+// proposal against it). It is a convenience wrapper for callers without a
+// Sources snapshot already in hand; it has no non-test caller today because
+// the graph verbs (`graph split` and friends) all hold a snapshot and call
+// Sources.Validate directly so the before/after comparison shares it rather
+// than re-resolving.
 func Validate(root, repoRoot, plan string, g *model.Graph) ([]Finding, error) {
 	sources, err := NewSources(root, repoRoot, plan)
 	if err != nil {

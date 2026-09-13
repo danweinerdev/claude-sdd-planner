@@ -79,6 +79,9 @@ type pkgInfo struct {
 // identifiers, aliases, or string literals in the file's code, so import
 // aliasing, concatenated literals, or variable-named call sites cannot
 // hide a spawn from this scan.
+//
+// This is a deliberately closed set: only these two import paths count as
+// spawners, by design, not by omission.
 func spawnImportPaths(modulePath string) map[string]bool {
 	return map[string]bool{
 		"os/exec":                         true,

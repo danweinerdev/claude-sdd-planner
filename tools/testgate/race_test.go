@@ -78,20 +78,34 @@ func coversPackage(recipe, pkg string) bool {
 }
 
 func TestParseMakeRulesSkipsVariableAssignments(t *testing.T) {
-	src := "FOO := bar\ntest: deps\n\t@go test\n"
-	rules := parseMakeRules(src)
-	if _, ok := rules["FOO"]; ok {
-		t.Fatalf("variable assignment must not be parsed as a rule: %v", rules)
+	operators := []struct {
+		name string
+		op   string
+	}{
+		{"simple", "="},
+		{"immediate", ":="},
+		{"immediate-posix", "::="},
+		{"conditional", "?="},
+		{"append", "+="},
 	}
-	test := rules["test"]
-	if test == nil {
-		t.Fatal("test: deps must still be parsed as a rule")
-	}
-	if len(test.prereqs) != 1 || test.prereqs[0] != "deps" {
-		t.Fatalf("test rule prereqs = %v, want [deps]", test.prereqs)
-	}
-	if len(test.recipe) != 1 || test.recipe[0] != "@go test" {
-		t.Fatalf("test rule recipe = %v, want [@go test]", test.recipe)
+	for _, tc := range operators {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "FOO " + tc.op + " bar\ntest: deps\n\t@go test\n"
+			rules := parseMakeRules(src)
+			if _, ok := rules["FOO"]; ok {
+				t.Fatalf("variable assignment %q must not be parsed as a rule: %v", tc.op, rules)
+			}
+			test := rules["test"]
+			if test == nil {
+				t.Fatal("test: deps must still be parsed as a rule")
+			}
+			if len(test.prereqs) != 1 || test.prereqs[0] != "deps" {
+				t.Fatalf("test rule prereqs = %v, want [deps]", test.prereqs)
+			}
+			if len(test.recipe) != 1 || test.recipe[0] != "@go test" {
+				t.Fatalf("test rule recipe = %v, want [@go test]", test.recipe)
+			}
+		})
 	}
 }
 

@@ -68,7 +68,7 @@ func groupPGID(cmd *exec.Cmd) (int, bool, error) {
 // has actually been attempted; when the platform cannot observe an exit
 // without reaping, or the pre-kill probe fails before any kill is sent, it
 // reports swept=false so the caller keeps the documented post-reap fallback
-// that still probes and kills (review F-01). An error returned alongside
+// that still probes and kills (review-execution facd924 F-01). An error returned alongside
 // swept=true is provisional: the kill was attempted at the only safe moment
 // and cannot be retried after the reap, so whether it left anything behind is
 // settled by the caller's emptiness poll, not by this return value.
@@ -104,7 +104,7 @@ func sweepGroupBeforeReap(cmd *exec.Cmd) (cleaned, swept bool, err error) {
 		// single error for the whole group, so a refusal for one member says
 		// nothing about the rest. cleaned stays true and the error is
 		// provisional — the caller's post-reap poll decides whether anything
-		// actually leaked (review F-01).
+		// actually leaked (review-execution 57d4ffb F-01).
 		return true, true, fmt.Errorf("containment: kill group %d: %w", pgid, killErr)
 	}
 	return true, true, nil

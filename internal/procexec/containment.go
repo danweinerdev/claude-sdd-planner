@@ -22,7 +22,8 @@ func ContainmentSupported() (bool, string) { return ContainmentProbe() }
 // adapter. It unwraps to ErrNoContainmentAdapter so callers can match the case
 // with errors.Is, but renders only the platform reason: the reason already
 // opens with the sentinel's own wording, so wrapping it with %w printed "no
-// process-containment adapter" twice in the line a user reads (review F-02).
+// process-containment adapter" twice in the line a user reads
+// (review-execution facd924 F-02).
 type noAdapterError struct{ reason string }
 
 func (e *noAdapterError) Error() string {

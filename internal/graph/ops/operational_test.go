@@ -23,6 +23,10 @@ import (
 // shim would already be disabled by then and the test would silently shift
 // to exercising a detection failure instead of a RevisionExists query
 // failure.
+//
+// A second copy of this helper (same name, same shape) lives in
+// internal/rules/operational_test.go, ported from this one; keep them in
+// sync by hand rather than extracting a shared helper.
 func installOneShotGitShim(t *testing.T) {
 	t.Helper()
 	realGit, err := exec.LookPath("git")

@@ -88,10 +88,12 @@ func VerifyRetirementSource(planDir string, source model.RetirementSource) (mode
 	return source, fmt.Errorf("id %q is not declared in historical file %q at %s", source.SourceID, source.Path, source.Revision)
 }
 
-// RetirementProblems is shared by compile, audit and ordinary validation.
-// A historical reference is never treated as a live input fingerprint.
+// RetirementProblems is the lossy form: it has no production caller — compile
+// and graph ops both call RetirementProblemsChecked — and exists for callers
+// that only want the combined []string. A historical reference is never
+// treated as a live input fingerprint.
 //
-// This is the lossy form: an operational VerifyRetirementSource failure
+// An operational VerifyRetirementSource failure
 // (network/filesystem/process trouble, not a genuine verification
 // failure) is folded into the returned problem strings rather than
 // reported separately, so a caller that only inspects []string still
@@ -119,10 +121,11 @@ func RetirementProblemsChecked(planDir string, g *model.Graph) ([]string, error)
 
 // retirementProblems is RetirementProblems' implementation, additionally
 // returning the operational VerifyRetirementSource failures (if any)
-// separately from the substantive problem strings. Callers that only need
-// the combined list (compile, graph ops) use RetirementProblems; the SDD181
-// CheckRoot uses this directly so it can record an operational failure on
-// the Root and stay silent instead of emitting it as a retirement problem.
+// separately from the substantive problem strings. Production goes through
+// RetirementProblemsChecked, which compile and graph ops both call; the
+// SDD181 CheckRoot uses retirementProblems directly so it can record an
+// operational failure on the Root and stay silent instead of emitting it as
+// a retirement problem.
 func retirementProblems(planDir string, g *model.Graph) (problems []string, operational []error) {
 	retired := map[string]bool{}
 	for _, id := range g.Retired {

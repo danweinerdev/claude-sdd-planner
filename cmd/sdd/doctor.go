@@ -221,7 +221,14 @@ func printDoctorReport(r doctorReport) {
 		}
 	}
 	if r.ContainmentBlocker != "" {
-		fmt.Printf("  BLOCKER: %s\n", r.ContainmentBlocker)
+		// The hook-binary line above already names this same reason when a
+		// pinned binary exists to report it against; repeating the full text
+		// here would print it twice in one report.
+		if r.HookBinaryError != "" && strings.Contains(r.HookBinaryError, r.ContainmentBlocker) {
+			fmt.Println("  BLOCKER: see hook binary line above")
+		} else {
+			fmt.Printf("  BLOCKER: %s\n", r.ContainmentBlocker)
+		}
 		fmt.Println("    every command this binary runs (git, p4) is refused until that adapter lands")
 	}
 	if r.PlanningRootError != "" {
