@@ -652,6 +652,12 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 	relative = filepath.ToSlash(relative)
 	tracked, err := repo.FileAt("HEAD", relative)
 	if err != nil {
+		if errors.Is(err, vcs.ErrOperational) {
+			// The collector already recorded the operational failure
+			// (recordingRepo); don't misreport an unanswered query as
+			// not committed.
+			return
+		}
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` completion evidence is not committed at HEAD.", Correction: "Record it in the phase-close lifecycle commit before finalizing completion (D-0024)."})
 		return
@@ -662,6 +668,7 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 			Message: "`" + name + "` committed planning artifact is malformed.", Correction: "Commit a valid populated lifecycle artifact before finalizing completion."})
 		return
 	}
+	operational := false
 	planCommitted := func(planName string) *Artifact {
 		planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
 		planRepository := gitRootFS(planPath)
@@ -675,11 +682,22 @@ func verifyGitEvidenceCommitted(r *Root, a *Artifact, name, body string, line in
 		planRepo := r.Repo(planRepository)
 		planAtHead, ferr := planRepo.FileAt("HEAD", filepath.ToSlash(planRelative))
 		if ferr != nil {
+			if errors.Is(ferr, vcs.ErrOperational) {
+				operational = true
+			}
 			return nil
 		}
 		return ParseArtifactBytes(planAtHead, filepath.ToSlash(planRelative))
 	}
-	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "committed at HEAD", emit)
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "committed at HEAD", func(d Diagnostic) {
+		if operational {
+			// The collector already recorded the plan's operational
+			// failure; don't let the caller's incomplete-lifecycle
+			// diagnostic surface it as absence instead.
+			return
+		}
+		emit(d)
+	})
 }
 
 // verifyP4EvidenceCommitted is the Perforce durable-lifecycle adapter (G-2):
@@ -705,6 +723,12 @@ func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int
 	relative = filepath.ToSlash(relative)
 	tracked, err := repo.FileAt("have", relative)
 	if err != nil {
+		if errors.Is(err, vcs.ErrOperational) {
+			// The collector already recorded the operational failure
+			// (recordingRepo); don't misreport an unanswered query as
+			// not submitted.
+			return
+		}
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` completion evidence is not submitted to the depot.", Correction: "Submit the separate scoped lifecycle/evidence changelist before finalizing completion."})
 		return
@@ -715,6 +739,7 @@ func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int
 			Message: "`" + name + "` submitted planning artifact is malformed.", Correction: "Submit a valid populated lifecycle artifact before finalizing completion."})
 		return
 	}
+	operational := false
 	planCommitted := func(planName string) *Artifact {
 		planPath := filepath.Join(r.Dir, "Plans", planName, "README.md")
 		planRelative, relErr := filepath.Rel(resolveSymlinks(repo.Root()), resolveSymlinks(planPath))
@@ -723,11 +748,19 @@ func verifyP4EvidenceCommitted(r *Root, a *Artifact, name, body string, line int
 		}
 		planAtHave, ferr := repo.FileAt("have", filepath.ToSlash(planRelative))
 		if ferr != nil {
+			if errors.Is(ferr, vcs.ErrOperational) {
+				operational = true
+			}
 			return nil
 		}
 		return ParseArtifactBytes(planAtHave, filepath.ToSlash(planRelative))
 	}
-	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "submitted to the depot", emit)
+	verifyCommittedLifecycle(a, name, body, line, committed, planCommitted, "submitted to the depot", func(d Diagnostic) {
+		if operational {
+			return
+		}
+		emit(d)
+	})
 }
 
 // verifyCommittedLifecycle is the SCM-independent half of the durable

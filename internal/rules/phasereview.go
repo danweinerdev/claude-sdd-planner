@@ -656,6 +656,11 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	targetRoot := repo.Root()
 
 	clean, _, err := repo.Clean()
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
+		// The collector already recorded the operational failure
+		// (recordingRepo); don't misreport an unanswered query as dirty.
+		return
+	}
 	if err != nil || !clean {
 		fail("Git phase completion requires the current target worktree to be clean after review.",
 			"Commit only permitted lifecycle records, remove uncommitted changes, and rerun the full phase review after material changes.")
@@ -663,6 +668,9 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	}
 
 	current, err := repo.Head()
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
+		return
+	}
 	if err != nil || current == "" {
 		fail("Git phase completion target `"+targetRoot+"` has no current HEAD.",
 			"Use a target worktree with the reviewed endpoint checked into history.")
@@ -682,6 +690,9 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	}
 
 	if ok, err := repo.IsAncestor(endpoint, "HEAD"); err != nil || !ok {
+		if err != nil && errors.Is(err, vcs.ErrOperational) {
+			return
+		}
 		fail("Reviewed endpoint `"+endpoint+"` is not an ancestor of current target HEAD.",
 			"Check out a descendant of the reviewed endpoint or rerun the full phase review.")
 		return
@@ -689,6 +700,9 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 
 	commits, err := repo.RevisionsAfter(endpoint)
 	if err != nil {
+		if errors.Is(err, vcs.ErrOperational) {
+			return
+		}
 		fail("Cannot inspect committed target changes after the frozen phase review.",
 			"Repair the target Git worktree and rerun phase completion validation.")
 		return
@@ -697,6 +711,9 @@ func verifyGitPhasePostReviewState(r *Root, ctx phaseGateContext, review *Artifa
 	for _, commit := range commits {
 		paths, err := repo.ChangedPaths(commit)
 		if err != nil {
+			if errors.Is(err, vcs.ErrOperational) {
+				return
+			}
 			fail("Cannot inspect every committed target change after the frozen phase review.",
 				"Repair the target Git worktree and rerun phase completion validation.")
 			return
@@ -814,6 +831,11 @@ func init() {
 				allExist := true
 				for _, id := range identities {
 					if ok, err := repo.RevisionExists(id); err != nil || !ok {
+						// An operational failure here is recorded by
+						// recordingRepo; skip the post-review state gate
+						// silently either way, exactly like a genuinely
+						// absent identity (SDD172 owns range-identity
+						// absence diagnostics).
 						allExist = false
 						break
 					}
@@ -909,6 +931,9 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 		return
 	}
 	if ok, err := repo.IsAncestor(identities[0], identities[1]); err != nil || !ok {
+		if err != nil && errors.Is(err, vcs.ErrOperational) {
+			return
+		}
 		fail("Git phase review range base `"+identities[0]+"` is not an ancestor of endpoint `"+identities[1]+"`.",
 			"Use a forward reviewed range whose base is an ancestor of the phase checkpoint.")
 		return
@@ -924,11 +949,16 @@ func verifyPhaseReviewIdentity(r *Root, ctx phaseGateContext, frozen string, tas
 			continue
 		}
 		if ok, err := repo.IsAncestor(t.Revision, identities[1]); err != nil || !ok {
+			if err != nil && errors.Is(err, vcs.ErrOperational) {
+				return
+			}
 			fail("Git phase review range `"+frozen+"` omits completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` because it is not an ancestor of the endpoint.",
 				"Use a frozen range whose endpoint descends from every completed task evidence revision/checkpoint.")
 			continue
 		}
-		if ok, err := repo.IsAncestor(t.Revision, identities[0]); err == nil && ok {
+		if ok, err := repo.IsAncestor(t.Revision, identities[0]); err != nil && errors.Is(err, vcs.ErrOperational) {
+			return
+		} else if err == nil && ok {
 			fail("Git phase review range `"+frozen+"` omits completed task `"+t.ID+"` evidence revision/checkpoint `"+t.Revision+"` because it is at or before the range base.",
 				"Move the frozen range base before every completed task evidence revision/checkpoint.")
 		}
@@ -1157,6 +1187,9 @@ func verifyGitPlanPhaseCheckpoints(r *Root, plan *Artifact, body string, line in
 			continue
 		}
 		if ok, err := repo.IsAncestor(phaseCheckpoint, planCheckpoint); err != nil || !ok {
+			if err != nil && errors.Is(err, vcs.ErrOperational) {
+				return
+			}
 			fail("Completed phase `"+phaseID+"` Git checkpoint `"+phaseCheckpoint+
 				"` is not an ancestor of plan checkpoint `"+planCheckpoint+"`.",
 				"Record a plan checkpoint equal to or descending from every completed phase checkpoint.")

@@ -196,8 +196,8 @@ func TestP4IdentityQueryFailureIsOperational(t *testing.T) {
 	})
 }
 
-// fakeGitRepo is a Git-kind adapter whose RevisionExists/IsAncestor answers
-// are scripted, so the identity checks below can be exercised without a
+// fakeGitRepo is a Git-kind adapter whose query answers are scripted, so the
+// identity and post-review-state checks below can be exercised without a
 // live git binary. Every other operation reports ErrUnsupported via the
 // embedded Unavailable.
 type fakeGitRepo struct {
@@ -206,6 +206,20 @@ type fakeGitRepo struct {
 	existsErr  error
 	ancestrOK  bool
 	ancestrErr error
+
+	cleanOK  bool
+	cleanErr error
+	headVal  string
+	headErr  error
+
+	revisionsAfterVal []string
+	revisionsAfterErr error
+
+	changedPathsVal map[string][]string
+	changedPathsErr error
+
+	fileAtVal map[string][]byte
+	fileAtErr error
 }
 
 func (f fakeGitRepo) Kind() vcs.Kind { return vcs.Git }
@@ -222,6 +236,41 @@ func (f fakeGitRepo) IsAncestor(string, string) (bool, error) {
 		return false, f.ancestrErr
 	}
 	return f.ancestrOK, nil
+}
+
+func (f fakeGitRepo) Clean() (bool, []string, error) {
+	if f.cleanErr != nil {
+		return false, nil, f.cleanErr
+	}
+	return f.cleanOK, nil, nil
+}
+
+func (f fakeGitRepo) Head() (string, error) {
+	if f.headErr != nil {
+		return "", f.headErr
+	}
+	return f.headVal, nil
+}
+
+func (f fakeGitRepo) RevisionsAfter(string) ([]string, error) {
+	if f.revisionsAfterErr != nil {
+		return nil, f.revisionsAfterErr
+	}
+	return f.revisionsAfterVal, nil
+}
+
+func (f fakeGitRepo) ChangedPaths(rev string) ([]string, error) {
+	if f.changedPathsErr != nil {
+		return nil, f.changedPathsErr
+	}
+	return f.changedPathsVal[rev], nil
+}
+
+func (f fakeGitRepo) FileAt(rev, rel string) ([]byte, error) {
+	if f.fileAtErr != nil {
+		return nil, f.fileAtErr
+	}
+	return f.fileAtVal[rev+":"+rel], nil
 }
 
 // TestIdentityQueryFailuresAreOperational is the git-flavoured counterpart of
@@ -483,4 +532,887 @@ func TestRetirementProbeFailureIsOperational(t *testing.T) {
 	if strings.Contains(err.Error(), "may need fetching") {
 		t.Fatalf("an operational query failure must not be reported as a commit absent from local history: %v", err)
 	}
+}
+
+// TestRepoQueryFailuresAreOperational is the SDD173/evidence-committed
+// counterpart of TestIdentityQueryFailuresAreOperational: every repository
+// query a rule callback makes that can emit or suppress a diagnostic must
+// emit an absence/state diagnostic only when the query actually ran and
+// answered negatively, and must stay silent — with the failure already
+// recorded on the collector — when the query itself failed operationally.
+func TestRepoQueryFailuresAreOperational(t *testing.T) {
+	opErr := fmt.Errorf("%w: git: deadline exceeded", vcs.ErrOperational)
+	endpoint := "1123456789abcdef0123456789abcdef01234567"
+	base := "0123456789abcdef0123456789abcdef01234567"
+
+	newCtx := func(root *Root) (phaseGateContext, *Artifact) {
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		review := root.ByPath["Retro/phase-review.md"]
+		if phase == nil || review == nil {
+			t.Fatal("fixture phase or review not found")
+		}
+		ctx := phaseGateContext{
+			Phase: phase,
+			Body:  "- Final aligned review: Retro/phase-review.md; frozen: " + base + ".." + endpoint + "\n",
+			Line:  1,
+		}
+		return ctx, review
+	}
+
+	t.Run("verifyGitPhasePostReviewState Clean", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState Clean negative control still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: false, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("dirty-worktree diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState Head", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: true, headErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState Head negative control still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: true, headVal: "", Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no-HEAD diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState IsAncestor", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: true, headVal: "current-head", ancestrErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState IsAncestor negative control still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: true, headVal: "current-head", ancestrOK: false, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("non-ancestor diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState RevisionsAfter", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{cleanOK: true, headVal: "current-head", ancestrOK: true, revisionsAfterErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState RevisionsAfter negative control (inspection failure) still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{
+			cleanOK: true, headVal: "current-head", ancestrOK: true,
+			revisionsAfterErr: fmt.Errorf("%w: cannot inspect", vcs.ErrNotFound),
+			Unavailable:       vcs.Unavailable{Dir: root.Dir},
+		}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("RevisionsAfter-failure diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState ChangedPaths", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{
+			cleanOK: true, headVal: "current-head", ancestrOK: true,
+			revisionsAfterVal: []string{"commit-1"},
+			changedPathsErr:   opErr,
+			Unavailable:       vcs.Unavailable{Dir: root.Dir},
+		}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPhasePostReviewState ChangedPaths negative control (inspection failure) still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		ctx, review := newCtx(root)
+		fake := fakeGitRepo{
+			cleanOK: true, headVal: "current-head", ancestrOK: true,
+			revisionsAfterVal: []string{"commit-1"},
+			changedPathsErr:   fmt.Errorf("%w: cannot inspect", vcs.ErrNotFound),
+			Unavailable:       vcs.Unavailable{Dir: root.Dir},
+		}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("ChangedPaths-failure diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	// gateLoopFiles is phaseGateRangeFiles rebuilt with a distinct, non-
+	// degenerate base/endpoint range and a matching `Revision / checkpoint`
+	// line, so verifyPhaseReviewIdentity's own checks pass cleanly (every
+	// identity here is answered by the fake, never by real git) and the
+	// CheckRoot loop reaches the RevisionExists gate that decides whether to
+	// run verifyGitPhasePostReviewState.
+	gateBase := "2223456789abcdef0123456789abcdef01234567"
+	gateLoopFiles := func() map[string]string {
+		rangeID := gateBase + ".." + fixtureBaseCommit
+		files := map[string]string{
+			"code.txt":              "code\n",
+			"Retro/phase-review.md": phaseGateReview(rangeID, true),
+		}
+		files["Plans/Sample/01-One.md"] = replaceFirst(
+			replaceFirst(
+				checkedPhase("complete", "1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: complete
+    verification: x
+    justifies: FR-01
+`),
+				"## Phase Completion Evidence\n\nPending — not complete.",
+				"## Phase Completion Evidence\n\n- Revision / checkpoint: "+fixtureBaseCommit+
+					"\n- Final aligned review: Retro/phase-review.md; frozen: "+rangeID+"\n"),
+			"", "")
+		return files
+	}
+
+	t.Run("SDD173 RevisionExists gate loop", func(t *testing.T) {
+		files := withPlanReadme(gateLoopFiles())
+		_, root := materializeRoot(t, files)
+		// existsOK=true lets verifyPhaseReviewIdentity's own RevisionExists
+		// calls pass cleanly, so only the gate loop's later RevisionExists
+		// call (which decides whether to run the post-review state gate) is
+		// exercised: it must record the operational failure and skip the
+		// gate silently rather than treat "unanswered" as "missing".
+		fake := &revisionExistsThenFails{fakeGitRepo: fakeGitRepo{existsOK: true, ancestrOK: true, Unavailable: vcs.Unavailable{Dir: root.Dir}}, failAfter: 2, err: opErr}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		rule := ruleByCode(t, "SDD173")
+		rule.CheckRoot(root, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("SDD173 RevisionExists gate loop negative control (genuinely absent skips the gate too, no diagnostic either way)", func(t *testing.T) {
+		files := withPlanReadme(gateLoopFiles())
+		_, root := materializeRoot(t, files)
+		fake := &revisionExistsThenFails{
+			fakeGitRepo: fakeGitRepo{existsOK: true, ancestrOK: true, Unavailable: vcs.Unavailable{Dir: root.Dir}},
+			failAfter:   2, err: fmt.Errorf("%w: rev", vcs.ErrNotFound),
+		}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		rule := ruleByCode(t, "SDD173")
+		rule.CheckRoot(root, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("a genuinely absent gate-loop identity must skip the post-review gate silently too (SDD172 owns range-identity absence), not emit SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity base/endpoint IsAncestor", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		fake := fakeGitRepo{existsOK: true, ancestrErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, nil, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity base/endpoint IsAncestor negative control still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		fake := fakeGitRepo{existsOK: true, ancestrOK: false, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, nil, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("non-ancestor diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity task-vs-endpoint IsAncestor", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		fake := fakeGitRepo{existsOK: true, ancestrErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+		tasks := []taskIdentity{{ID: "1.1", Revision: checkpoint}}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, tasks, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity task-vs-endpoint IsAncestor negative control still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		fake := fakeGitRepo{existsOK: true, ancestrOK: false, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+		tasks := []taskIdentity{{ID: "1.1", Revision: checkpoint}}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, tasks, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("non-ancestor diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity task-vs-base IsAncestor", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		// ancestrOK=true satisfies the task-vs-endpoint check above it
+		// (line 926, an "is descendant" gate that must pass to reach the
+		// task-vs-base check); ancestrErr then fires on every IsAncestor
+		// call, including this one, which is the one under test.
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, ancestrErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+		tasks := []taskIdentity{{ID: "1.1", Revision: checkpoint}}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, tasks, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				t.Errorf("operational failure surfaced as SDD173: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyPhaseReviewIdentity task-vs-base IsAncestor negative control (task at range base) still emits", func(t *testing.T) {
+		_, root := materializeRoot(t, withPlanReadme(phaseGateFiles(true, true)))
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		checkpoint := "1123456789abcdef0123456789abcdef01234567"
+		frozenHex := base + ".." + checkpoint
+		// The task revision equals the range base itself: task-vs-endpoint
+		// IsAncestor(base, endpoint) must answer true (the base is always
+		// an ancestor of the endpoint in a forward range), and
+		// task-vs-base IsAncestor(base, base) must also answer true,
+		// which is the genuine "at or before the range base" absence this
+		// site's diagnostic exists to catch.
+		tasks := []taskIdentity{{ID: "1.1", Revision: base}}
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+		ctx := phaseGateContext{Phase: phase, Body: "- Revision / checkpoint: " + checkpoint + "\n", Line: 1}
+
+		var diags []Diagnostic
+		verifyPhaseReviewIdentity(root, ctx, frozenHex, tasks, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD173" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("task-at-base diags = %v, want an SDD173", codesOf(diags))
+		}
+	})
+
+	// planWithCompletePhase is phaseGateFiles with a plan README whose
+	// `phases:` names the completed phase doc, and a phase evidence VCS/
+	// checkpoint line added, so verifyGitPlanPhaseCheckpoints's per-phase
+	// loop actually iterates and reaches the phase/plan IsAncestor call
+	// instead of stopping at the (otherwise empty) `phases: []` in
+	// validPlan or the missing per-phase VCS/checkpoint evidence.
+	phaseGateCheckpoint := "1123456789abcdef0123456789abcdef01234567"
+	planWithCompletePhase := func() map[string]string {
+		files := phaseGateFiles(true, true)
+		files["Plans/Sample/README.md"] = planWithPhasesRaw(`phases:
+  - id: "1"
+    title: One
+    status: complete
+    doc: 01-One.md
+`)
+		files["Plans/Sample/01-One.md"] = strings.Replace(files["Plans/Sample/01-One.md"],
+			"## Phase Completion Evidence\n\n- Final aligned review:",
+			"## Phase Completion Evidence\n\n- VCS: git\n- Revision / checkpoint: "+phaseGateCheckpoint+"\n- Final aligned review:",
+			1)
+		return files
+	}
+
+	t.Run("verifyGitPlanPhaseCheckpoints phase/plan IsAncestor", func(t *testing.T) {
+		files := planWithCompletePhase()
+		_, root := materializeRoot(t, files)
+		plan := root.ByPath["Plans/Sample/README.md"]
+		if plan == nil {
+			t.Fatal("fixture plan not found")
+		}
+		planCheckpoint := "0123456789abcdef0123456789abcdef01234567"
+		body := "- VCS: git\n- Revision / checkpoint: " + planCheckpoint + "\n"
+		fake := fakeGitRepo{existsOK: true, ancestrErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPlanPhaseCheckpoints(root, plan, body, 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD175" {
+				t.Errorf("operational failure surfaced as SDD175: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitPlanPhaseCheckpoints phase/plan IsAncestor negative control still emits", func(t *testing.T) {
+		files := planWithCompletePhase()
+		_, root := materializeRoot(t, files)
+		plan := root.ByPath["Plans/Sample/README.md"]
+		if plan == nil {
+			t.Fatal("fixture plan not found")
+		}
+		planCheckpoint := "0123456789abcdef0123456789abcdef01234567"
+		body := "- VCS: git\n- Revision / checkpoint: " + planCheckpoint + "\n"
+		fake := fakeGitRepo{existsOK: true, ancestrOK: false, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitPlanPhaseCheckpoints(root, plan, body, 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD175" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("non-ancestor diags = %v, want an SDD175", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitEvidenceCommitted own FileAt", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("operational failure surfaced as SDD072: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitEvidenceCommitted own FileAt negative control still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("not-committed diags = %v, want an SDD072", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyGitEvidenceCommitted plan FileAt", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeGitRepo{
+			fileAtVal: map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
+			// The plan's own FileAt (planCommitted) is scripted to fail
+			// operationally by returning a distinct error only for that key
+			// via a wrapping repo below.
+			Unavailable: vcs.Unavailable{Dir: dir},
+		}
+		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("operational failure surfaced as SDD072: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyGitEvidenceCommitted plan FileAt negative control still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		dir, root := materializeRoot(t, files)
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeGitRepo{
+			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
+			Unavailable: vcs.Unavailable{Dir: dir},
+		}
+		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrNotFound)}
+		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+
+		var diags []Diagnostic
+		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("plan-absent diags = %v, want an SDD072", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted own FileAt", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		fake := fakeP4RepoFileAt{fileAtErr: opErr, dir: root.Dir}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("operational failure surfaced as SDD072: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted own FileAt negative control still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		fake := fakeP4RepoFileAt{fileAtErr: fmt.Errorf("%w: have:x", vcs.ErrNotFound), dir: root.Dir}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("not-submitted diags = %v, want an SDD072", codesOf(diags))
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted plan FileAt", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeP4RepoFileAt{
+			fileAtVal: map[string][]byte{"have:Plans/Sample/01-One.md": committedPhase},
+			dir:       root.Dir,
+			planKey:   "have:Plans/Sample/README.md",
+			planErr:   opErr,
+		}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("operational failure surfaced as SDD072: %+v", d)
+			}
+		}
+	})
+
+	t.Run("verifyP4EvidenceCommitted plan FileAt negative control still emits", func(t *testing.T) {
+		files := withPlanReadme(phaseGateFiles(true, true))
+		_, root := materializeRoot(t, files)
+		phase := root.ByPath["Plans/Sample/01-One.md"]
+		if phase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		committedPhase := []byte(files["Plans/Sample/01-One.md"])
+		fake := fakeP4RepoFileAt{
+			fileAtVal: map[string][]byte{"have:Plans/Sample/01-One.md": committedPhase},
+			dir:       root.Dir,
+			planKey:   "have:Plans/Sample/README.md",
+			planErr:   fmt.Errorf("%w: have:Plans/Sample/README.md", vcs.ErrNotFound),
+		}
+		root.repoCache = map[string]vcs.Repo{root.Dir: recordingRepo{Repo: fake, root: root}}
+
+		var diags []Diagnostic
+		verifyP4EvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("plan-absent diags = %v, want an SDD072", codesOf(diags))
+		}
+	})
+}
+
+// revisionExistsThenFails wraps fakeGitRepo so the first failAfter
+// RevisionExists calls answer from the embedded fake and every call after
+// that returns err instead — a pointer receiver because the fake is shared
+// across every RevisionExists call the rule under test makes, and the count
+// must persist across those calls.
+type revisionExistsThenFails struct {
+	fakeGitRepo
+	failAfter int
+	err       error
+	calls     int
+}
+
+func (f *revisionExistsThenFails) RevisionExists(rev string) (bool, error) {
+	f.calls++
+	if f.calls > f.failAfter {
+		return false, f.err
+	}
+	return f.fakeGitRepo.RevisionExists(rev)
+}
+
+// planFileAtFails wraps fakeGitRepo so a FileAt call for planKey fails with
+// err while every other FileAt call answers from fakeGitRepo.fileAtVal, so
+// the artifact's own FileAt (verifyGitEvidenceCommitted's first call) can
+// succeed while its planCommitted closure's FileAt (the second call) is the
+// one exercised.
+type planFileAtFails struct {
+	fakeGitRepo
+	planKey string
+	err     error
+}
+
+func (p planFileAtFails) FileAt(rev, rel string) ([]byte, error) {
+	key := rev + ":" + rel
+	if key == p.planKey {
+		return nil, p.err
+	}
+	return p.fakeGitRepo.FileAt(rev, rel)
+}
+
+// fakeP4RepoFileAt is a Perforce-kind adapter whose FileAt answer is
+// scripted per key, so verifyP4EvidenceCommitted's two FileAt call sites
+// (the artifact's own `have` copy and, via planCommitted, the plan
+// README's `have` copy) can be exercised independently without a live p4
+// server.
+type fakeP4RepoFileAt struct {
+	vcs.Unavailable
+	dir       string
+	fileAtVal map[string][]byte
+	fileAtErr error
+	planKey   string
+	planErr   error
+}
+
+func (f fakeP4RepoFileAt) Kind() vcs.Kind { return vcs.Perforce }
+func (f fakeP4RepoFileAt) Root() string   { return f.dir }
+
+func (f fakeP4RepoFileAt) FileAt(rev, rel string) ([]byte, error) {
+	key := rev + ":" + rel
+	if key == f.planKey && f.planErr != nil {
+		return nil, f.planErr
+	}
+	if f.fileAtErr != nil {
+		return nil, f.fileAtErr
+	}
+	return f.fileAtVal[key], nil
 }
