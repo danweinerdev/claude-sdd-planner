@@ -291,7 +291,7 @@ func init() {
 				// A graph plan's phase closure is synced from the committed
 				// graph (a derived predicate), not cross-checked against
 				// this README's own phases[] status field.
-				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" || isGraphPlan(a) {
+				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" || isGraphPlan(r, a) {
 					continue
 				}
 				for _, p := range asAnyList(a.Meta["phases"]) {

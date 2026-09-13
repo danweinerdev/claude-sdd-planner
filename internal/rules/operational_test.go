@@ -2127,3 +2127,44 @@ func TestRetirementProblemsReturnsOperationalError(t *testing.T) {
 		}
 	})
 }
+
+// TestGraphPlanStatFailureIsOperational is review-execution F-02's third
+// regression: isGraphPlan's os.Stat call folds every error into "not a graph
+// plan" today, including a stat failure that is NOT not-exist (permission
+// denied, a transient FS fault). Such a failure is an inability to answer
+// the predicate, not evidence of absence, and must be recorded as an
+// operational failure on the Root — never silently treated as "not a graph
+// plan", which would let the v1 completion-evidence rules fire spuriously
+// (or, worse, stay silently exempt) on a plan whose graph status could not
+// actually be determined.
+func TestGraphPlanStatFailureIsOperational(t *testing.T) {
+	r := rootFrom(t, map[string]string{
+		"Plans/Sample/README.md":         completeGraphPlanReadme("Sample", "01-core.md", "One"),
+		"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+	})
+
+	statErr := fmt.Errorf("stat %s: permission denied", "Plans/Sample/Sample-Graph.json")
+	orig := statGraphFile
+	statGraphFile = func(name string) (os.FileInfo, error) {
+		return nil, statErr
+	}
+	t.Cleanup(func() { statGraphFile = orig })
+
+	diags, err := runWith(r, allRules())
+	if !errors.Is(err, vcs.ErrOperational) {
+		t.Fatalf("runWith err = %v, want errors.Is(err, vcs.ErrOperational)", err)
+	}
+	if len(diags) != 0 {
+		t.Errorf("partial findings leaked past an operational stat failure: %v", codesOf(diags))
+	}
+	exempted := map[string]bool{
+		"SDD059": true, "SDD070": true, "SDD157": true, "SDD158": true,
+		"SDD166": true, "SDD167": true,
+	}
+	for _, d := range diags {
+		if exempted[d.Code] {
+			t.Errorf("exempted code %s fired despite an operational stat failure: %s", d.Code, d.Message)
+		}
+	}
+}

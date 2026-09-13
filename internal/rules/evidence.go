@@ -328,7 +328,7 @@ func evidenceTargets(r *Root) []evidenceTarget {
 			// from the committed graph, not asserted in this markdown
 			// section — isGraphPlan exempts its own Plan/Phase Completion
 			// Evidence target here.
-			if !isGraphPlan(a) {
+			if !isGraphPlan(r, a) {
 				heading := "Plan Completion Evidence"
 				if a.Kind() == "phase" {
 					heading = "Phase Completion Evidence"

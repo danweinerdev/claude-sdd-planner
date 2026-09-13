@@ -104,6 +104,15 @@ type Root struct {
 	appendMu       sync.Mutex
 	appendDone     bool
 	appendFindings []appendOnlyFinding
+
+	// graphPlanCache memoizes isGraphPlanDir's `<Plan>-Graph.json` stat per
+	// plan directory, for the same reason as repoCache: five rule sites
+	// (headings.go SDD157/SDD158, phasereview.go, plan.go SDD059,
+	// evidence.go SDD070) ask every plan/phase artifact in the root whether
+	// its directory is graph-managed, and the answer cannot change within
+	// one evaluation pass.
+	graphPlanMu    sync.Mutex
+	graphPlanCache map[string]bool
 }
 
 // recordFailure appends an operational failure to the evaluation's collector.

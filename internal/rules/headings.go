@@ -121,22 +121,27 @@ func init() {
 		// findings (a legacy rollup heading, and a complete phase's missing/wrong
 		// `### Completed task identities` section) — both folded into this one
 		// Check since Register panics on a second Rule claiming the same code.
+		// CheckRoot rather than a plain per-artifact Check because
+		// completedTaskIdentitiesCheck needs r to consult isGraphPlan's
+		// per-Root memoized exemption (review-execution F-02).
 		Code: "SDD157", Severity: Error, PyFunc: "_headings",
 		What: "a phase carries a legacy `### ... Evidence Rollup` heading, or a complete phase's `### Completed task identities` section is missing or wrong",
-		Check: func(a *Artifact, emit func(Diagnostic)) {
-			if a.Meta == nil || a.Kind() != "phase" {
-				return
+		CheckRoot: func(r *Root, emit func(Diagnostic)) {
+			for _, a := range r.Artifacts {
+				if a.Meta == nil || a.Kind() != "phase" {
+					continue
+				}
+				visible := visibleMarkdown(a.Body)
+				if loc := legacyEvidenceRollupRe.FindStringIndex(visible); loc != nil {
+					line := a.BodyLine + strings.Count(visible[:loc[0]], "\n")
+					emit(Diagnostic{
+						Code: "SDD157", Severity: Error, Path: a.Rel, Line: line,
+						Message:    "Legacy `Evidence Rollup` headings are not permitted.",
+						Correction: "Replace the rollup with the required concise completed-identity section.",
+					})
+				}
+				completedTaskIdentitiesCheck(r, a, emit)
 			}
-			visible := visibleMarkdown(a.Body)
-			if loc := legacyEvidenceRollupRe.FindStringIndex(visible); loc != nil {
-				line := a.BodyLine + strings.Count(visible[:loc[0]], "\n")
-				emit(Diagnostic{
-					Code: "SDD157", Severity: Error, Path: a.Rel, Line: line,
-					Message:    "Legacy `Evidence Rollup` headings are not permitted.",
-					Correction: "Replace the rollup with the required concise completed-identity section.",
-				})
-			}
-			completedTaskIdentitiesCheck(a, emit)
 		},
 		Bad: []Example{
 			{Name: "legacy-rollup", Files: map[string]string{
@@ -235,14 +240,14 @@ var finalAlignedReviewLineRe = regexp.MustCompile(`^\s*-\s+Final aligned review:
 // parenthetical annotation on an entry, and the section's `Final aligned
 // review` entry (see finalAlignedReviewLineRe) are tolerated; any other
 // non-entry line still invalidates.
-func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
+func completedTaskIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) {
 	if a.Status() != "complete" {
 		return
 	}
 	// SDD157: a graph plan's rendered phase views carry `tasks: []` by
 	// design (DD-9) — the graph, not this section, is the completed-task
 	// record.
-	if isGraphPlan(a) {
+	if isGraphPlan(r, a) {
 		return
 	}
 	tasks, ok := a.Meta["tasks"].([]any)
@@ -333,7 +338,7 @@ func completedPhaseIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) 
 	}
 	// SDD158: a graph plan's phase closure is a derived predicate synced
 	// from the committed graph, not asserted in this section.
-	if isGraphPlan(a) {
+	if isGraphPlan(r, a) {
 		return
 	}
 	phases, ok := a.Meta["phases"].([]any)

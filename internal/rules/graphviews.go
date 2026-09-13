@@ -2,10 +2,13 @@ package rules
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // Graph-projection markers (Plans/SddGraph 5.6). These strings are the
@@ -65,19 +68,76 @@ func taskNodeID(taskID string) string {
 	return "task-" + strings.ReplaceAll(taskID, ".", "-")
 }
 
-// isGraphPlan reports whether a's plan directory carries a committed
-// `<Plan>-Graph.json` beside its README — plan and phase artifacts share
-// that directory, so this works from either. Graph plans replace the v1
-// markdown completion protocol with a derived one (CLAUDE.md "Completion
-// Evidence": "states derive from observations ..., completion is
-// sync-only ..., review gates green only from frozen Aligned review
-// artifacts, and closure is a derived predicate"): several v1
-// completion-evidence rules are structurally inapplicable to their
-// rendered views and use this predicate to exempt them.
-func isGraphPlan(a *Artifact) bool {
+// statGraphFile is the os.Stat indirection isGraphPlan queries — a seam so
+// tests can inject an operational stat failure (permission denied, a
+// transient FS error) without a real unreadable directory. Production
+// behavior is unchanged: it is os.Stat.
+var statGraphFile = os.Stat
+
+// isGraphPlanDir reports whether dir (a plan directory) carries a committed
+// `<Plan>-Graph.json` beside its README, memoized on r so the underlying
+// os.Stat runs at most once per plan directory per Root's lifetime — the
+// same repoCache convention root.go documents: one validation pass asks
+// this of the plan README and every one of its phase docs, over and over.
+//
+// A stat failure that IS not-exist means "no graph": the ordinary, expected
+// answer for a v1 plan. Any OTHER stat failure (permission denied, a
+// transient FS fault) is an inability to answer the predicate, not evidence
+// of absence — it is recorded on r's operational-failure collector via
+// recordFailure, the same path Repo() uses, and reported back to the caller
+// so it can refuse to treat the plan as v1 rather than silently doing so.
+func isGraphPlanDir(r *Root, dir string) (bool, error) {
+	r.graphPlanMu.Lock()
+	defer r.graphPlanMu.Unlock()
+	if v, ok := r.graphPlanCache[dir]; ok {
+		return v, nil
+	}
+	_, err := statGraphFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
+	if err != nil && !os.IsNotExist(err) {
+		opErr := fmt.Errorf("%w: stat %s: %v", vcs.ErrOperational, dir, err)
+		r.recordFailure(opErr)
+		return false, opErr
+	}
+	graphPlan := err == nil
+	if r.graphPlanCache == nil {
+		r.graphPlanCache = map[string]bool{}
+	}
+	r.graphPlanCache[dir] = graphPlan
+	return graphPlan, nil
+}
+
+// isGraphPlan reports whether a is exempt from the v1 completion-evidence
+// rules because it is part of a graph plan's derived-closure protocol
+// (CLAUDE.md "Completion Evidence": "states derive from observations ...,
+// completion is sync-only ..., review gates green only from frozen Aligned
+// review artifacts, and closure is a derived predicate").
+//
+// The exemption is scoped PER DOCUMENT, not per directory (review-execution
+// finding F-02): a plan README is exempt whenever its directory carries the
+// committed graph — the README's own Graph View section is itself a
+// projection, and SDD059/070/158's README-level checks have no other way to
+// learn the plan is graph-managed. A PHASE document is exempt only when it
+// is itself a rendered projection of that graph (IsGeneratedView) — a
+// hand-authored phase doc sitting beside a graph is still the plan author's
+// own markdown, not a projection, and stays under the v1 rules.
+//
+// An operational stat failure (see isGraphPlanDir) is recorded on r and
+// reported as "not exempt" to the caller — never silently treated as
+// absence — so the aborted evaluation's callback-boundary check catches it
+// before any rule can turn the inability into a finding either way.
+func isGraphPlan(r *Root, a *Artifact) bool {
 	dir := filepath.Dir(a.AbsPath)
-	_, err := os.Stat(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
-	return err == nil
+	graphPlan, err := isGraphPlanDir(r, dir)
+	if err != nil {
+		return false
+	}
+	if !graphPlan {
+		return false
+	}
+	if a.Kind() == "phase" {
+		return IsGeneratedView(a.Source)
+	}
+	return true
 }
 
 // planGraphIDs loads a plan's committed graph and returns every id that can

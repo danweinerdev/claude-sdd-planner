@@ -8,6 +8,7 @@ package rules
 // SDD174's lifecycle normalization strips the README's generated section.
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -294,7 +295,8 @@ func TestGraphPlanExemptsV1CompletionEvidenceRules(t *testing.T) {
 	})
 	exempted := map[string]bool{
 		"SDD059": true, "SDD070": true, "SDD157": true, "SDD158": true,
-		"SDD166": true, "SDD167": true,
+		"SDD166": true, "SDD167": true, "SDD168": true, "SDD170": true,
+		"SDD172": true, "SDD173": true, "SDD174": true,
 	}
 	for _, d := range Run(r) {
 		if d.Severity != Error {
@@ -303,5 +305,134 @@ func TestGraphPlanExemptsV1CompletionEvidenceRules(t *testing.T) {
 		if exempted[d.Code] {
 			t.Errorf("graph plan: %s fired and should not have: %s", d.Code, d.Message)
 		}
+	}
+}
+
+// handAuthoredCompletePhase renders a `status: complete` phase document that
+// carries NONE of the rendered-view marker (IsGeneratedView) and none of the
+// v1 completion-evidence apparatus (Completed task identities, a filled
+// Phase Completion Evidence section) — a plan author's own markdown sitting
+// beside a graph, not a projection of it. The graph-plan exemption keys on
+// the generated-view marker per document, not on plan directory alone, so
+// this document must still be held to the v1 rules.
+func handAuthoredCompletePhase(planName, phaseOrdinal, title, doc string) string {
+	return `---
+title: "` + title + `"
+type: phase
+plan: "` + planName + `"
+phase: ` + phaseOrdinal + `
+status: complete
+created: 2024-01-01
+updated: 2024-01-01
+deliverable: "Hand-authored."
+tasks: []
+---
+
+# Phase ` + phaseOrdinal + `: ` + title + `
+
+## Overview
+
+Hand-written, not rendered.
+
+## Acceptance Criteria
+
+- [ ] Works.
+
+## Phase Completion Evidence
+
+Pending — not complete.
+`
+}
+
+// TestGraphPlanExemptionRequiresGeneratedView is the review-execution F-02
+// regression: the v1 completion-evidence exemption must key on the PER
+// DOCUMENT generated-view marker (IsGeneratedView), not on "this plan
+// directory carries a Graph.json" alone. A hand-authored phase doc sitting
+// beside a graph plan's Graph.json, registered in the README's `phases:`
+// list, is still plan-author markdown — not a rendered projection — and
+// must still be held to the v1 rules the generated view is exempt from.
+func TestGraphPlanExemptionRequiresGeneratedView(t *testing.T) {
+	// The README registers BOTH phases, so SDD059/SDD158's plan-level
+	// phase-entry checks see phase 2 (the hand-authored doc) too.
+	twoPhaseReadme := strings.Replace(completeGraphPlanReadme("Sample", "01-core.md", "One"),
+		`phases:
+  - id: 1
+    title: "One"
+    status: complete
+    doc: "01-core.md"`,
+		`phases:
+  - id: 1
+    title: "One"
+    status: complete
+    doc: "01-core.md"
+  - id: 2
+    title: "Two"
+    status: complete
+    doc: "02-hand.md"`, 1)
+	r := rootFrom(t, map[string]string{
+		"Plans/Sample/README.md":         twoPhaseReadme,
+		"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+		"Plans/Sample/02-hand.md":        handAuthoredCompletePhase("Sample", "2", "Two", "02-hand.md"),
+		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+	})
+
+	diags := Run(r)
+	byCode := map[string][]Diagnostic{}
+	for _, d := range diags {
+		byCode[d.Code] = append(byCode[d.Code], d)
+	}
+
+	// The generated view (01-core.md) must still fire NONE of the exempted
+	// codes.
+	for _, code := range []string{"SDD059", "SDD070", "SDD157", "SDD158", "SDD166", "SDD167"} {
+		for _, d := range byCode[code] {
+			if d.Path == "Plans/Sample/01-core.md" {
+				t.Errorf("generated view: %s fired and should not have: %s", code, d.Message)
+			}
+		}
+	}
+
+	// The hand-authored doc (02-hand.md) must still be held to SDD070 and
+	// SDD157 (and at least one of the phase-review family).
+	for _, code := range []string{"SDD070", "SDD157"} {
+		found := false
+		for _, d := range byCode[code] {
+			if d.Path == "Plans/Sample/02-hand.md" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("hand-authored phase doc beside a graph plan: %s did not fire (all diagnostics: %v)", code, codesOf(diags))
+		}
+	}
+}
+
+// TestIsGraphPlanMemoizesStat is the review-execution F-02 memoization
+// regression: isGraphPlan is called from five rule sites over every artifact
+// in a plan directory (headings.go x2, phasereview.go, plan.go, evidence.go)
+// and today re-stats the filesystem on every single call — the package's
+// established convention (repoCache, sectionCache in root.go) is to memoize
+// per-Root instead. With several phase docs and the full rule set running,
+// the underlying stat must execute at most once per plan directory per Root.
+func TestIsGraphPlanMemoizesStat(t *testing.T) {
+	r := rootFrom(t, map[string]string{
+		"Plans/Sample/README.md":         completeGraphPlanReadme("Sample", "01-core.md", "One"),
+		"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+		"Plans/Sample/02-more.md":        completeGeneratedPhaseView("Sample", "2", "Two"),
+		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+	})
+
+	var calls int
+	orig := statGraphFile
+	statGraphFile = func(name string) (os.FileInfo, error) {
+		calls++
+		return orig(name)
+	}
+	t.Cleanup(func() { statGraphFile = orig })
+
+	Run(r)
+
+	if calls > 1 {
+		t.Errorf("statGraphFile called %d times for one plan directory in one Root; want at most 1 (memoized)", calls)
 	}
 }

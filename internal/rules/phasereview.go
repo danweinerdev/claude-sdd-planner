@@ -223,15 +223,18 @@ type phaseGateContext struct {
 // completePhasesWithEvidence yields each complete phase carrying a Phase
 // Completion Evidence section. Python only runs the gate for those.
 //
-// SDD166/167/168: a graph plan's review gates attach a frozen Aligned review
-// to gate nodes whose `review_of` is the acceptance phase doc (DD-9), so
-// this per-phase-doc `Final aligned review` match is structurally
-// unsatisfiable for every other phase — isGraphPlan exempts the whole
-// family; the graph's own review-gate sync is the replacement mechanism.
+// SDD166/167/168/170/172/173/174 — every rule reading this collector's
+// output: a graph plan's review gates attach a frozen Aligned review to gate
+// nodes whose `review_of` is the acceptance phase doc (DD-9), so this
+// per-phase-doc `Final aligned review` match is structurally unsatisfiable
+// for every other phase — isGraphPlan exempts the whole family (scoped per
+// document: a hand-authored phase doc beside a graph is NOT exempt, only a
+// rendered view is); the graph's own review-gate sync is the replacement
+// mechanism.
 func completePhasesWithEvidence(r *Root) []phaseGateContext {
 	var out []phaseGateContext
 	for _, a := range r.Artifacts {
-		if a.Meta == nil || a.Kind() != "phase" || metaStr(a.Meta, "status") != "complete" || isGraphPlan(a) {
+		if a.Meta == nil || a.Kind() != "phase" || metaStr(a.Meta, "status") != "complete" || isGraphPlan(r, a) {
 			continue
 		}
 		sec, ok := sections(a, 2)["Phase Completion Evidence"]
