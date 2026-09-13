@@ -288,7 +288,10 @@ func init() {
 		What: "a complete plan contains a phase entry whose doc is not complete",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
 			for _, a := range r.Artifacts {
-				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" {
+				// A graph plan's phase closure is synced from the committed
+				// graph (a derived predicate), not cross-checked against
+				// this README's own phases[] status field.
+				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" || isGraphPlan(a) {
 					continue
 				}
 				for _, p := range asAnyList(a.Meta["phases"]) {
@@ -319,12 +322,19 @@ func init() {
 			}),
 			"Plans/Sample/01-One.md": phaseDoc("Sample", "1", "One", "planned"),
 		}}},
-		Good: []Example{{Name: "all-complete", Files: map[string]string{
-			"Plans/Sample/README.md": planStatus("complete", map[string]string{
-				"id": "1", "title": "One", "status": "complete", "doc": "01-One.md",
-			}),
-			"Plans/Sample/01-One.md": phaseDoc("Sample", "1", "One", "complete"),
-		}}},
+		Good: []Example{
+			{Name: "all-complete", Files: map[string]string{
+				"Plans/Sample/README.md": planStatus("complete", map[string]string{
+					"id": "1", "title": "One", "status": "complete", "doc": "01-One.md",
+				}),
+				"Plans/Sample/01-One.md": phaseDoc("Sample", "1", "One", "complete"),
+			}},
+			{Name: "graph-plan-incomplete-doc-status-is-fine", Files: map[string]string{
+				"Plans/Sample/README.md":         completeGraphPlanReadme("Sample", "01-core.md", "One"),
+				"Plans/Sample/01-core.md":        generatedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
+		},
 	})
 
 	Register(&Rule{

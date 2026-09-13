@@ -222,10 +222,16 @@ type phaseGateContext struct {
 
 // completePhasesWithEvidence yields each complete phase carrying a Phase
 // Completion Evidence section. Python only runs the gate for those.
+//
+// SDD166/167/168: a graph plan's review gates attach a frozen Aligned review
+// to gate nodes whose `review_of` is the acceptance phase doc (DD-9), so
+// this per-phase-doc `Final aligned review` match is structurally
+// unsatisfiable for every other phase — isGraphPlan exempts the whole
+// family; the graph's own review-gate sync is the replacement mechanism.
 func completePhasesWithEvidence(r *Root) []phaseGateContext {
 	var out []phaseGateContext
 	for _, a := range r.Artifacts {
-		if a.Meta == nil || a.Kind() != "phase" || metaStr(a.Meta, "status") != "complete" {
+		if a.Meta == nil || a.Kind() != "phase" || metaStr(a.Meta, "status") != "complete" || isGraphPlan(a) {
 			continue
 		}
 		sec, ok := sections(a, 2)["Phase Completion Evidence"]
@@ -277,7 +283,13 @@ func init() {
 		Bad: []Example{{Name: "missing-final-aligned-review", Files: map[string]string{
 			"Plans/Sample/01-One.md": completePhaseNoReview(),
 		}}},
-		Good: []Example{{Name: "valid-final-aligned-review", Files: phaseGateFiles(true, true)}},
+		Good: []Example{
+			{Name: "valid-final-aligned-review", Files: phaseGateFiles(true, true)},
+			{Name: "graph-plan-without-final-aligned-review-is-fine", Files: map[string]string{
+				"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
+		},
 	})
 
 	Register(&Rule{
@@ -368,7 +380,13 @@ func init() {
 					"review_mode: independent", "review_mode: guesswork"),
 			}},
 		},
-		Good: []Example{{Name: "review-aligned", Files: phaseGateFiles(true, true)}},
+		Good: []Example{
+			{Name: "review-aligned", Files: phaseGateFiles(true, true)},
+			{Name: "graph-plan-without-final-aligned-review-is-fine", Files: map[string]string{
+				"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
+		},
 	})
 }
 

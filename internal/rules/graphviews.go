@@ -65,6 +65,21 @@ func taskNodeID(taskID string) string {
 	return "task-" + strings.ReplaceAll(taskID, ".", "-")
 }
 
+// isGraphPlan reports whether a's plan directory carries a committed
+// `<Plan>-Graph.json` beside its README — plan and phase artifacts share
+// that directory, so this works from either. Graph plans replace the v1
+// markdown completion protocol with a derived one (CLAUDE.md "Completion
+// Evidence": "states derive from observations ..., completion is
+// sync-only ..., review gates green only from frozen Aligned review
+// artifacts, and closure is a derived predicate"): several v1
+// completion-evidence rules are structurally inapplicable to their
+// rendered views and use this predicate to exempt them.
+func isGraphPlan(a *Artifact) bool {
+	dir := filepath.Dir(a.AbsPath)
+	_, err := os.Stat(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
+	return err == nil
+}
+
 // planGraphIDs loads a plan's committed graph and returns every id that can
 // anchor a follow-up: live node ids AND the append-only retired register —
 // the tool's own tombstone place, which is what lets a frozen (immutable)

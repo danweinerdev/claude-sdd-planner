@@ -324,14 +324,20 @@ func evidenceTargets(r *Root) []evidenceTarget {
 		}
 		switch a.Kind() {
 		case "plan", "phase":
-			heading := "Plan Completion Evidence"
-			if a.Kind() == "phase" {
-				heading = "Phase Completion Evidence"
-			}
-			secs := sections(a, 2)
-			if headingBodiesCount(a.Body, 2, heading) == 1 {
-				if info, ok := secs[heading]; ok {
-					out = append(out, evidenceTarget{Artifact: a, Status: a.Status(), Name: heading, Line: info.Line, Body: info.Body})
+			// SDD070: a graph plan's completion is sync-only and derived
+			// from the committed graph, not asserted in this markdown
+			// section — isGraphPlan exempts its own Plan/Phase Completion
+			// Evidence target here.
+			if !isGraphPlan(a) {
+				heading := "Plan Completion Evidence"
+				if a.Kind() == "phase" {
+					heading = "Phase Completion Evidence"
+				}
+				secs := sections(a, 2)
+				if headingBodiesCount(a.Body, 2, heading) == 1 {
+					if info, ok := secs[heading]; ok {
+						out = append(out, evidenceTarget{Artifact: a, Status: a.Status(), Name: heading, Line: info.Line, Body: info.Body})
+					}
 				}
 			}
 		}
@@ -1120,15 +1126,21 @@ func init() {
     justifies: FR-01
 `),
 		}}},
-		Good: []Example{{Name: "planned-pending-is-fine", Files: map[string]string{
-			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+		Good: []Example{
+			{Name: "planned-pending-is-fine", Files: map[string]string{
+				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
   - id: "1.1"
     title: First
     status: planned
     verification: x
     justifies: FR-01
 `),
-		}}},
+			}},
+			{Name: "graph-plan-complete-pending-is-fine", Files: map[string]string{
+				"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
+		},
 	})
 
 	Register(&Rule{

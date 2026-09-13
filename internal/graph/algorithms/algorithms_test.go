@@ -111,9 +111,9 @@ func itoa(i int) string {
 
 func TestDependencyClosure(t *testing.T) {
 	g := Graph{
-		"gate": {"a", "b"},
-		"a":    {"shared"},
-		"b":    {"shared"},
+		"gate":   {"a", "b"},
+		"a":      {"shared"},
+		"b":      {"shared"},
 		"shared": nil,
 		"other":  nil,
 	}
@@ -199,10 +199,10 @@ func TestGraphAnalyticsDepthHistogramAndSilhouette(t *testing.T) {
 		hist []int
 		want string
 	}{
-		{[]int{5}, ShapeFlat},          // everything at once
-		{[]int{3, 4}, ShapeFlat},       // two shallow levels
-		{[]int{1, 1, 1}, ShapeChain},   // serial plan
-		{[]int{4, 2, 1}, ShapeFunnel},  // converging
+		{[]int{5}, ShapeFlat},            // everything at once
+		{[]int{3, 4}, ShapeFlat},         // two shallow levels
+		{[]int{1, 1, 1}, ShapeChain},     // serial plan
+		{[]int{4, 2, 1}, ShapeFunnel},    // converging
 		{[]int{4, 1, 3}, ShapeHourglass}, // waist
 		{[]int{1, 2, 1}, ShapeMixed},
 		{nil, ShapeFlat}, // empty graph makes no shape claim beyond FLAT

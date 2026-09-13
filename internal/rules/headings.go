@@ -104,9 +104,16 @@ func init() {
 				"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", " []"),
 			}},
 		},
-		Good: []Example{{Name: "no-legacy-heading", Files: map[string]string{
-			"Plans/Sample/README.md": validPlan(false),
-		}}},
+		Good: []Example{
+			{Name: "no-legacy-heading", Files: map[string]string{
+				"Plans/Sample/README.md": validPlan(false),
+			}},
+			{Name: "graph-plan-complete-without-identities-is-fine", Files: map[string]string{
+				"Plans/Sample/README.md":         completeGraphPlanReadme("Sample", "01-core.md", "One"),
+				"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
+		},
 	})
 
 	Register(&Rule{
@@ -174,6 +181,10 @@ func init() {
 						"- Final aligned review: `reviews/01-sample-code-review-abc.md`; frozen: `a..b`\n",
 					1),
 			}},
+			{Name: "graph-plan-complete-without-identities-is-fine", Files: map[string]string{
+				"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+				"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+			}},
 		},
 	})
 }
@@ -226,6 +237,12 @@ var finalAlignedReviewLineRe = regexp.MustCompile(`^\s*-\s+Final aligned review:
 // non-entry line still invalidates.
 func completedTaskIdentitiesCheck(a *Artifact, emit func(Diagnostic)) {
 	if a.Status() != "complete" {
+		return
+	}
+	// SDD157: a graph plan's rendered phase views carry `tasks: []` by
+	// design (DD-9) — the graph, not this section, is the completed-task
+	// record.
+	if isGraphPlan(a) {
 		return
 	}
 	tasks, ok := a.Meta["tasks"].([]any)
@@ -312,6 +329,11 @@ var completedPhaseIdentityRe = regexp.MustCompile(
 // is (checkpoint, review path), a task's is a checkpoint alone.
 func completedPhaseIdentitiesCheck(r *Root, a *Artifact, emit func(Diagnostic)) {
 	if a.Status() != "complete" {
+		return
+	}
+	// SDD158: a graph plan's phase closure is a derived predicate synced
+	// from the committed graph, not asserted in this section.
+	if isGraphPlan(a) {
 		return
 	}
 	phases, ok := a.Meta["phases"].([]any)

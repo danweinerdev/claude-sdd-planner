@@ -787,6 +787,65 @@ Pending — not complete.
 `
 }
 
+// completeGeneratedPhaseView renders a compile-generated phase view like
+// generatedPhaseView, but `status: complete` with no `### Completed task
+// identities` / `Final aligned review` evidence — exactly the shape a
+// closed graph plan's rendered view has, which SDD070/SDD157/SDD166/SDD167
+// must not flag (their v1 completion-evidence protocol does not apply to
+// graph plans; the graph's own sync-only closure is the record instead).
+func completeGeneratedPhaseView(planName, phaseOrdinal, title string) string {
+	return replaceFirst(
+		replaceFirst(generatedPhaseView(planName, phaseOrdinal, title),
+			"status: planned", "status: complete"),
+		"## Phase Completion Evidence\n\nPending — not complete.",
+		"## Phase Completion Evidence\n\n- Verified: 2024-01-01\n")
+}
+
+// completeGraphPlanReadme renders a compile-generated plan README naming a
+// single complete phase — the plan-level counterpart of
+// completeGeneratedPhaseView, for SDD059/SDD070/SDD158's plan-side checks.
+func completeGraphPlanReadme(planName, doc, title string) string {
+	return `---
+title: "` + planName + `"
+type: plan
+status: complete
+created: 2024-01-01
+updated: 2024-01-01
+tags: []
+related: []
+phases:
+  - id: 1
+    title: "` + title + `"
+    status: complete
+    doc: "` + doc + `"
+---
+
+## Overview
+
+Rendered.
+
+## Non-Goals
+
+None.
+
+## Architecture
+
+Rendered.
+
+## Key Decisions
+
+None.
+
+## Dependencies
+
+None.
+
+## Plan Completion Evidence
+
+- Verified: 2024-01-01
+`
+}
+
 // v1PhaseWithTasks renders a v1 phase document for the given plan and phase
 // ordinal whose tasks[] declares each given task id.
 func v1PhaseWithTasks(planName, phaseOrdinal string, taskIDs ...string) string {

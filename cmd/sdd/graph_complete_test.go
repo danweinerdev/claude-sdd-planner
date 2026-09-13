@@ -32,7 +32,7 @@ phases: []
 # Demo
 `)
 	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core",
-		Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
 		Hazards: model.Hazards{}, Estimate: 1}
 	if !open {
 		a.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}

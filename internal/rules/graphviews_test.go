@@ -279,3 +279,29 @@ func TestFollowupTracksGraphNodesAndRetiredIds(t *testing.T) {
 		}
 	}
 }
+
+// TestGraphPlanExemptsV1CompletionEvidenceRules runs the full rule set over
+// a minimal closed graph plan (a `status: complete` README and phase view
+// beside a committed Graph.json, carrying none of the v1 completion-evidence
+// apparatus those rules demand) and asserts none of the v1 rules exempted
+// for graph plans fire — their completion record is the graph, not this
+// markdown (CLAUDE.md "Completion Evidence").
+func TestGraphPlanExemptsV1CompletionEvidenceRules(t *testing.T) {
+	r := rootFrom(t, map[string]string{
+		"Plans/Sample/README.md":         completeGraphPlanReadme("Sample", "01-core.md", "One"),
+		"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
+		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
+	})
+	exempted := map[string]bool{
+		"SDD059": true, "SDD070": true, "SDD157": true, "SDD158": true,
+		"SDD166": true, "SDD167": true,
+	}
+	for _, d := range Run(r) {
+		if d.Severity != Error {
+			continue
+		}
+		if exempted[d.Code] {
+			t.Errorf("graph plan: %s fired and should not have: %s", d.Code, d.Message)
+		}
+	}
+}
