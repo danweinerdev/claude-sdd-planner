@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // fixtureDecisionStatement is the one plan decision fixtureRoot records —
@@ -301,6 +303,70 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	}
 	if len(again) != 0 {
 		t.Fatalf("re-render of an unchanged graph must be a no-op, rewrote %v", again)
+	}
+}
+
+// TestCompileResolvesEvidenceRepoOnce (task 4): Run's preflight (over the
+// preview graph) and its write-pass render (over the graph as written) must
+// share ONE resolved evidence repo, not resolve (and so, per closed phase,
+// potentially probe) it twice. detectVCS is the seam that proves resolution
+// itself happens once, independent of revExistsMemoRepo's own per-revision
+// memoization (which only proves stability WITHIN one resolved repo).
+func TestCompileResolvesEvidenceRepoOnce(t *testing.T) {
+	dir, rev := realGitRepo(t)
+	root := fixtureRoot(t, fixtureSpec)
+
+	// Pre-seed an already-closed phase (labeled "existing", distinct from
+	// the proposal's own Ungrouped phase) whose checkpoint matches the real
+	// git repo's HEAD, so the write-pass render actually renders a frozen
+	// phase and so actually resolves+probes an evidence repo — proving the
+	// count below is not vacuously zero.
+	frHash := intent.Items(rules.CommentStripped(fixtureSpec))["FR-01"].Hash
+	if frHash == "" {
+		t.Fatal("fixture spec must define FR-01")
+	}
+	graphPath := gstore.PathFor(filepath.Join(root, "Plans", "SamplePlan"))
+	if _, err := gstore.Update(graphPath, func(g *model.Graph) error {
+		g.Nodes = append(g.Nodes, model.Node{
+			ID: "existing-work", Contract: "already done", Phase: "existing",
+			Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1,
+			Justifies: []string{"FR-01"}, IntentHashes: map[string]string{"FR-01": frHash},
+			Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+				Provenance: &model.Provenance{Kind: "git", Revision: rev}},
+		}, model.Node{
+			ID: "existing-review", Contract: "reviewed", Phase: "existing", Deps: []string{"existing-work"},
+			Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
+			Justifies: []string{"FR-01"}, IntentHashes: map[string]string{"FR-01": frHash},
+			Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean,
+				Provenance: &model.Provenance{Kind: "git", Revision: rev}},
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recordFixtureDecision(t, root)
+	stage(t, root, happyProposalCiting(fixtureDecisionID()))
+
+	var calls int
+	old := detectVCS
+	detectVCS = func(root string) vcs.Repo {
+		calls++
+		return old(root)
+	}
+	t.Cleanup(func() { detectVCS = old })
+
+	if _, findings, err := Run(root, dir, "SamplePlan"); err != nil || len(findings) != 0 {
+		t.Fatalf("compile: %v %v", err, findings)
+	}
+	doc, err := os.ReadFile(filepath.Join(root, "Plans", "SamplePlan", "01-existing.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(doc), frozenViewMarker) {
+		t.Fatalf("fixture must render a frozen phase (the case that actually probes):\n%s", doc)
+	}
+	if calls != 1 {
+		t.Fatalf("resolveEvidenceRepo resolved %d times, want 1 (shared across preflight and the write-pass render)", calls)
 	}
 }
 
@@ -814,6 +880,202 @@ func TestFrozenViewLifecycle(t *testing.T) {
 	}
 	if _, err := renderViews(root, "P", "", g, st, closed); err != nil {
 		t.Fatalf("after the explicit delete, the render proceeds: %v", err)
+	}
+}
+
+// TestFrozenViewReopenedThenReclosedReRenders (task 1): a legitimately
+// reopened phase (a review finding demoted a node, so its verification
+// moved and the phase briefly derived open) that re-verifies and re-closes
+// must re-render as a no-op-shaped write — not refuse with "delete the
+// frozen view file explicitly". The only difference between the old frozen
+// view and the new rendering is the per-node `- Observation: ...` line(s);
+// everything else about the projection is unchanged, and the new rendering
+// is itself frozen.
+func TestFrozenViewReopenedThenReclosedReRenders(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	readme := "---\ntitle: \"P\"\ntype: plan\nstatus: draft\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags: []\nrelated: []\nphases: []\n---\n\n# P\n"
+	if err := os.WriteFile(filepath.Join(planDir, "README.md"), []byte(readme), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pass := func(seq int) *model.Verification {
+		return &model.Verification{Result: model.ResultPass, Seq: seq, Isolation: model.IsolationClean}
+	}
+	g := &model.Graph{Version: 1, SeqCounter: 2, Nodes: []model.Node{
+		{ID: "a", Contract: "works", Gate: model.Gate{Type: model.GateTests},
+			Hazards: model.Hazards{}, Estimate: 1, Verification: pass(1)},
+		{ID: "g1", Contract: "reviewed", Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview},
+			Hazards: model.Hazards{}, Estimate: 1, Verification: pass(2)},
+	}}
+	st := map[string]states.NodeState{
+		"a":  {ID: "a", State: states.Green},
+		"g1": {ID: "g1", State: states.Green},
+	}
+	closed := map[string]bool{"a": true, "g1": true}
+
+	if _, err := renderViews(root, "P", "", g, st, closed); err != nil {
+		t.Fatalf("initial close render: %v", err)
+	}
+	frozen := rendererRead(t, filepath.Join(planDir, "01-Ungrouped.md"))
+	if !strings.Contains(frozen, frozenViewMarker) {
+		t.Fatalf("fixture must render frozen: %s", frozen)
+	}
+
+	// Reopen: node "a" is demoted (a review finding), so it is no longer
+	// closed — the phase genuinely opens. It must still refuse here, same
+	// as before, because deleting the frozen view is the sanctioned way to
+	// author the reopened content while the file on disk still claims the
+	// old frozen history.
+	reopenedClosed := map[string]bool{"g1": true} // "a" no longer closed
+	if _, err := renderViews(root, "P", "", g, st, reopenedClosed); err == nil {
+		t.Fatal("a genuinely reopened phase (a node no longer closed) must still refuse without deleting the frozen view")
+	}
+	if rendererRead(t, filepath.Join(planDir, "01-Ungrouped.md")) != frozen {
+		t.Fatal("a genuine-reopen refusal must not rewrite the file")
+	}
+
+	// Reclose: node "a" re-verifies (a fresh observation, seq advances) and
+	// the phase re-closes. The graph itself proves this is a legitimate
+	// reclose (every node closed again); the only projected difference is
+	// the Observation line. This must re-render, not refuse.
+	g.Nodes[0].Verification = pass(3)
+	st["a"] = states.NodeState{ID: "a", State: states.Green}
+	reclosed := map[string]bool{"a": true, "g1": true}
+	written, err := renderViews(root, "P", "", g, st, reclosed)
+	if err != nil {
+		t.Fatalf("a reopened-then-reclosed phase must re-render, not refuse: %v", err)
+	}
+	if len(written) == 0 {
+		t.Fatal("expected the reclosed phase doc to be rewritten")
+	}
+	reclosedDoc := rendererRead(t, filepath.Join(planDir, "01-Ungrouped.md"))
+	if !strings.Contains(reclosedDoc, frozenViewMarker) {
+		t.Fatalf("reclosed re-render must still be frozen:\n%s", reclosedDoc)
+	}
+	if !strings.Contains(reclosedDoc, "at seq 3") {
+		t.Fatalf("reclosed re-render must carry the fresh observation:\n%s", reclosedDoc)
+	}
+
+	// An unrelated hand edit to a frozen view (not shaped like a
+	// reopen/reclose — a genuine content change alongside a fresh
+	// observation) must still be refused: reclosedNoOtherChange must not
+	// paper over a real change riding along with the seq bump.
+	g.Nodes[0].Contract = "works differently now"
+	g.Nodes[0].Verification = pass(4)
+	if _, err := renderViews(root, "P", "", g, st, reclosed); err == nil {
+		t.Fatal("a genuine content change alongside a reclose must still refuse")
+	}
+	if rendererRead(t, filepath.Join(planDir, "01-Ungrouped.md")) != reclosedDoc {
+		t.Fatal("refused render must not rewrite the file")
+	}
+}
+
+// TestFrozenViewUnrelatedHandEditStillRefuses (task 1): a frozen view edited
+// by hand — no graph-side reopen/reclose signal at all, the graph is
+// unchanged — must still refuse exactly as before; reclosedNoOtherChange
+// must never authorize an edit the graph itself does not explain.
+func TestFrozenViewUnrelatedHandEditStillRefuses(t *testing.T) {
+	root, planDir := evidencePlanFixture(t)
+	g := &model.Graph{Version: 1, Nodes: []model.Node{closedNode("work", "01-core")}}
+	closed := map[string]bool{"work": true}
+	if _, err := renderViews(root, "P", "", g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	phaseDoc := filepath.Join(planDir, "01-core.md")
+	frozen := rendererRead(t, phaseDoc)
+
+	hand := strings.Replace(frozen, "- Estimate: 1", "- Estimate: 99", 1)
+	rendererWrite(t, phaseDoc, hand)
+
+	// Re-render against the SAME (unchanged) graph: the on-disk file now
+	// disagrees with the graph for a reason the graph cannot explain (no
+	// node moved), so it must refuse.
+	if _, err := renderViews(root, "P", "", g, nil, closed); err == nil {
+		t.Fatal("an unrelated hand edit to a frozen view must still refuse")
+	}
+	if rendererRead(t, phaseDoc) != hand {
+		t.Fatal("a refused render must not rewrite the hand-edited file")
+	}
+}
+
+// TestReadmeHalfWrittenGraphViewSectionRepairs (task 2): a README carrying
+// exactly one `graph-view:begin` marker and NO `graph-view:end` marker — the
+// shape a previous (buggy) run left behind after a partial write — must be
+// repaired in place: the span from the begin marker to the next depth<=2
+// heading (or EOF) is replaced, and the result carries exactly one
+// well-formed begin/end pair. The operator must not need to restore the
+// README from git first.
+func TestReadmeHalfWrittenGraphViewSectionRepairs(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{{ID: "work", Contract: "works", Phase: "01-core", Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1}}}
+	readme := filepath.Join(dir, "README.md")
+	// Simulate a half-written section: a begin marker followed by stale
+	// table content, but no end marker before the next heading — the shape
+	// a previous (buggy) run left behind.
+	half := graphViewBegin + "\n\n## Graph View\n\nstale content, no end marker\n"
+	src := "---\ntitle: \"P\"\ntype: plan\nstatus: active\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags: []\nrelated: []\nphases: []\n---\n\n# P\n\n## Overview\n\nKeep identity prose exactly.\n\n" +
+		half + "\n## Plan Completion Evidence\n\nPending — not complete.\n"
+	rendererWrite(t, readme, src)
+
+	out, changed, err := planReadmeUpdate(dir, "P", groupPhases(g, "P"), nil)
+	if err != nil {
+		t.Fatalf("half-written section must repair, not refuse: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected the half-written section to be rewritten")
+	}
+	if strings.Count(out, graphViewBegin) != 1 || strings.Count(out, graphViewEnd) != 1 {
+		t.Fatalf("expected exactly one begin and one end marker after repair:\n%s", out)
+	}
+	if strings.Contains(out, "stale content, no end marker") {
+		t.Fatalf("stale half-written content must be replaced:\n%s", out)
+	}
+	if !strings.Contains(out, "## Plan Completion Evidence\n\nPending — not complete.\n") {
+		t.Fatalf("content after the section (next heading) must survive:\n%s", out)
+	}
+
+	// Idempotent: a second render against the repaired README is a
+	// byte-identical no-op.
+	rendererWrite(t, readme, out)
+	out2, changed2, err := planReadmeUpdate(dir, "P", groupPhases(g, "P"), nil)
+	if err != nil {
+		t.Fatalf("second render: %v", err)
+	}
+	if changed2 {
+		t.Fatalf("second render must be idempotent:\n%s", out2)
+	}
+}
+
+// TestReadmeMultipleBeginMarkersStillRefuses (task 2): two or more
+// `graph-view:begin` markers is genuinely ambiguous (which span is the real
+// section?) and must still refuse explicitly, naming the cause.
+func TestReadmeMultipleBeginMarkersStillRefuses(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{{ID: "work", Contract: "works", Phase: "01-core", Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1}}}
+	readme := filepath.Join(dir, "README.md")
+	doubled := graphViewBegin + "\n\n## Graph View\n\nfirst\n\n" + graphViewEnd + "\n\n" +
+		graphViewBegin + "\n\n## Graph View\n\nsecond\n\n" + graphViewEnd + "\n"
+	src := "---\ntitle: \"P\"\ntype: plan\nstatus: active\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags: []\nrelated: []\nphases: []\n---\n\n# P\n\n## Overview\n\nKeep identity prose exactly.\n\n" + doubled
+	rendererWrite(t, readme, src)
+
+	_, _, err := planReadmeUpdate(dir, "P", groupPhases(g, "P"), nil)
+	if err == nil {
+		t.Fatal("multiple begin markers must be refused")
+	}
+	if !strings.Contains(err.Error(), "multiple begin markers") {
+		t.Fatalf("refusal must name multiple begin markers: %v", err)
 	}
 }
 

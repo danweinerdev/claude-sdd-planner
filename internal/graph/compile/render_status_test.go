@@ -484,3 +484,38 @@ func TestRenderViewsReconcilesLegacyReadmeIdempotently(t *testing.T) {
 		t.Fatalf("second render must be byte-identical to the first:\nfirst:\n%s\nsecond:\n%s", first, second)
 	}
 }
+
+// TestLegacyGraphViewSpanIsFenceAware (task 3): a `## Graph View` heading
+// appearing inside a fenced code block (README prose showing a fenced
+// example) must not be recognized as the real, orphaned legacy section — the
+// genuine section, outside any fence, must still be found and reconciled,
+// and the fenced example's text must survive untouched.
+func TestLegacyGraphViewSpanIsFenceAware(t *testing.T) {
+	src := "before\n\n" +
+		"```markdown\n" +
+		"## Graph View\n" +
+		"this is example prose inside a fence, not the real section\n" +
+		"```\n\n" +
+		"## Graph View\n\n" +
+		"<!-- GENERATED VIEW — source of truth: P-Graph.json. Regenerate with `sdd compile --plan P`. Edits here are overwritten. -->\n\n" +
+		"real content\n\n" +
+		"<!-- graph-view:end -->\n\n" +
+		"## Next Heading\n\nafter\n"
+	start, end, found := legacyGraphViewSpan(src)
+	if !found {
+		t.Fatal("expected the real (non-fenced) section to be found")
+	}
+	span := src[start:end]
+	if strings.Contains(span, "inside a fence") {
+		t.Fatalf("matched the fenced example instead of the real section:\n%s", span)
+	}
+	if !strings.Contains(span, "real content") || !strings.Contains(span, "graph-view:end") {
+		t.Fatalf("expected the real section's content:\n%s", span)
+	}
+	if !strings.Contains(src[:start], "this is example prose inside a fence, not the real section") {
+		t.Fatal("the fenced example text must be untouched and precede the matched span")
+	}
+	if strings.Contains(src[end:], "graph-view:end") {
+		t.Fatal("span must include the real end marker, not leave it in the remainder")
+	}
+}
