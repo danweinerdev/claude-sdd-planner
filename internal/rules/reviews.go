@@ -855,6 +855,46 @@ func tasksByPlan(r *Root) map[[2]string]bool {
 // taskCitationRe matches a bare `N.N` task reference in a resolution entry.
 var taskCitationRe = regexp.MustCompile(`\b\d+\.\d+\b`)
 
+// graphNodeCitationRe matches a graph node id token in a resolution entry:
+// lowercase identifiers of the shape the graph compiler assigns (e.g.
+// "task-1-1", "extra", "harden-retry"). It is intentionally loose —
+// deferredCitationResolves is the actual membership test against the
+// plan's committed graph, so a false-positive token here costs nothing.
+var graphNodeCitationRe = regexp.MustCompile(`\b[a-z][a-z0-9-]*[a-z0-9]\b`)
+
+// frozenReviewCitationRe matches a `<qualifier>:F-NN` frozen review finding
+// citation in a resolution entry.
+var frozenReviewCitationRe = regexp.MustCompile(`\b[\w.-]+:F-\d+\b`)
+
+// deferredCitationResolves reports whether a task citation discharges a
+// deferred finding: a v1 task id in any candidate plan, a graph node id
+// (live or retired) in any candidate plan's committed graph, or a frozen
+// review finding citation (`<review qualifier>:F-NN`) that resolves through
+// the citing plan's CitationIndex — the same resolver `justifies` uses.
+func deferredCitationResolves(r *Root, tasks map[[2]string]bool, planNames map[string]bool, citation string) bool {
+	for plan := range planNames {
+		if tasks[[2]string{plan, citation}] {
+			return true
+		}
+		planArt, ok := r.ByPath["Plans/"+plan+"/README.md"]
+		if !ok {
+			continue
+		}
+		if ids, ok := planGraphIDs(r, planArt); ok {
+			if ids[citation] || ids[taskNodeID(citation)] {
+				return true
+			}
+		}
+		if strings.Contains(citation, ":F-") {
+			index := BuildCitationIndex(r, planArt)
+			if hit, ok := index.Resolve(citation); ok && hit.Kind == KindReviewFinding {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // resolutionEntryFor ports resolution_entry(): the Resolution Log text from a
 // finding's `### F-NN` heading up to the next `### F-NN`, or the end.
 func resolutionEntryFor(log, findingID string) string {
@@ -868,6 +908,18 @@ func resolutionEntryFor(log, findingID string) string {
 		return log[loc[0] : loc[1]+next[0]]
 	}
 	return log[loc[0]:]
+}
+
+// frozenResolvedReview renders a frozen, resolved review of Plans/Sample
+// carrying one finding F-02 — a citation source for the
+// `<qualifier>:F-NN` frozen-review-citation acceptance in SDD098.
+func frozenResolvedReview() string {
+	return replaceFirst(replaceFirst(
+		reviewWithBlocks(
+			"\n  - id: F-02\n    severity: minor\n    title: Two\n    status: fixed\n",
+			"", "### F-02 — two\n\nText.\n", "### F-02 — fixed\n\n2024-01-01. Done.\n"),
+		"status: open", "status: resolved"),
+		`review_of: "Specs/Sample/README.md"`, "frozen: true\nreview_of: \"Plans/Sample/README.md\"")
 }
 
 func init() {
@@ -905,7 +957,7 @@ func init() {
 							matches++
 						}
 					}
-					if matches == 1 {
+					if matches == 1 || (matches == 0 && deferredCitationResolves(r, tasks, planNames, trackedIn)) {
 						tracked[metaStr(m, "finding")] = true
 					}
 				}
@@ -927,6 +979,22 @@ func init() {
 						}
 						if cited {
 							break
+						}
+					}
+					if !cited {
+						for _, nodeID := range frozenReviewCitationRe.FindAllString(entry, -1) {
+							if deferredCitationResolves(r, tasks, planNames, nodeID) {
+								cited = true
+								break
+							}
+						}
+					}
+					if !cited {
+						for _, nodeID := range graphNodeCitationRe.FindAllString(entry, -1) {
+							if deferredCitationResolves(r, tasks, planNames, nodeID) {
+								cited = true
+								break
+							}
 						}
 					}
 					if cited {
@@ -960,6 +1028,31 @@ func init() {
     verification: x
     justifies: FR-01
 `, false, true),
+		}}, {Name: "deferred-finding-cites-graph-node", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: deferred\n",
+					"", "### F-01 — one\n\nText.\n",
+					"### F-01 — deferred\n\n2024-01-01. Tracked as extra.\n"),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md":         validPlan(false),
+			"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"extra"}, nil),
+		}}, {Name: "deferred-finding-cites-frozen-review", Files: map[string]string{
+			"Retro/sample-review.md": replaceFirst(
+				reviewWithBlocks(
+					"\n  - id: F-01\n    severity: major\n    title: One\n    status: deferred\n",
+					"", "### F-01 — one\n\nText.\n",
+					"### F-01 — deferred\n\n2024-01-01. Tracked as prior-review:F-02.\n"),
+				`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`),
+			"Plans/Sample/README.md": validPlan(false),
+			"Plans/Sample/01-One.md": phaseWithTasks("1", "Sample", `
+  - id: "1.1"
+    title: First
+    status: planned
+    verification: x
+    justifies: FR-01
+`, false, true),
+			"Plans/Sample/reviews/prior-review.md": frozenResolvedReview(),
 		}}},
 	})
 }

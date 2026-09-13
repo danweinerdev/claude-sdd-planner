@@ -148,3 +148,55 @@ func TestUnrelatedSourceHint(t *testing.T) {
 		}
 	}
 }
+
+// TestUnqualifiedDDResolvesAgainstDirectRelation is SDD122's fix: a plan's
+// bare DD-N citation must resolve against a directly related design even
+// when that design itself relates other specs/designs that also define a
+// same-numbered DD — the direct relation is not a competitor with a design
+// merely reachable through it. Before the fix, CitationIndex treated the two
+// as an unqualified collision and refused to resolve DD-1 at all.
+func TestUnqualifiedDDResolvesAgainstDirectRelation(t *testing.T) {
+	designA := strReplace(designWithDecisions("### DD-1 — from A\n"), "related: []", "related: [Designs/B]")
+	designB := designWithDecisions("### DD-1 — from B\n")
+	ex := Example{Files: map[string]string{
+		"Plans/Sample/README.md": strReplace(validPlan(false), "related: []", "related: [Designs/A]"),
+		"Designs/A/README.md":    designA,
+		"Designs/B/README.md":    designB,
+	}}
+	root := exampleRoot(t, ex)
+	plan := root.ByPath["Plans/Sample/README.md"]
+	x := BuildCitationIndex(root, plan)
+	hit, ok := x.Resolve("DD-1")
+	if !ok {
+		t.Fatalf("DD-1 must resolve against the directly related design; ambiguous=%v", x.Ambiguous("DD-1"))
+	}
+	if hit.SourceRel != "Designs/A/README.md" {
+		t.Errorf("DD-1 resolved to %q, want the directly related Designs/A/README.md", hit.SourceRel)
+	}
+}
+
+// TestQualifiedDDStillAmbiguousBetweenTwoDirectRelations: when two
+// DIRECTLY related designs both define the same bare DD id, nothing
+// distinguishes which the citation meant — that refusal is genuine and the
+// fix must not paper over it.
+func TestQualifiedDDStillAmbiguousBetweenTwoDirectRelations(t *testing.T) {
+	designA := designWithDecisions("### DD-1 — from A\n")
+	designB := designWithDecisions("### DD-1 — from B\n")
+	ex := Example{Files: map[string]string{
+		"Plans/Sample/README.md": strReplace(validPlan(false), "related: []", "related: [Designs/A, Designs/B]"),
+		"Designs/A/README.md":    designA,
+		"Designs/B/README.md":    designB,
+	}}
+	root := exampleRoot(t, ex)
+	plan := root.ByPath["Plans/Sample/README.md"]
+	x := BuildCitationIndex(root, plan)
+	if _, ok := x.Resolve("DD-1"); ok {
+		t.Fatal("two directly related designs both defining DD-1 must remain ambiguous")
+	}
+	amb := x.Ambiguous("DD-1")
+	sort.Strings(amb)
+	want := []string{"Designs/A:DD-1", "Designs/B:DD-1"}
+	if strings.Join(amb, ",") != strings.Join(want, ",") {
+		t.Fatalf("want ambiguous %v, got %v", want, amb)
+	}
+}

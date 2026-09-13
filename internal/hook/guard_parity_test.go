@@ -269,3 +269,36 @@ func TestWriteGuardFailsOpenWithoutPlanningRoot(t *testing.T) {
 		t.Error("guard denied without a resolvable planning root; it must fail open")
 	}
 }
+
+// TestGuardDeniesTreeMutatingCommands pins the commands a reviewer lane must
+// never run: a stash or clean can wipe uncommitted planning state, a reset
+// or checkout/restore/switch can silently discard it, and a commit/merge/
+// rebase/worktree mutation or an unvetted dependency fetch changes the tree
+// out from under the session. These are already denied by checkGit's
+// default (not on the read-only allowlist) or denyWithArgs's `go mod tidy`
+// pattern; this test exists so a future allowlist addition cannot
+// reintroduce the gap without failing here first.
+func TestGuardDeniesTreeMutatingCommands(t *testing.T) {
+	cases := []string{
+		"git stash", "git stash push", "git stash save", "git stash pop", "git stash apply",
+		"git checkout -- file.md", "git checkout main -- file.md", "git checkout main",
+		"git checkout -b new-branch",
+		"git restore file.md", "git restore --staged file.md",
+		"git clean -fd", "git clean -n",
+		"git reset --hard", "git reset --soft HEAD~1", "git reset HEAD",
+		"git worktree add /tmp/w", "git worktree remove /tmp/w", "git worktree prune",
+		"git switch main", "git switch -c new-branch",
+		"git commit -m x", "git commit -am x",
+		"git merge main", "git merge --abort",
+		"git rebase main", "git rebase --abort",
+		"go mod tidy", "go get x",
+		"cp a b", "mv a b", "tee out.txt", "echo x > f",
+	}
+	for _, command := range cases {
+		t.Run(command, func(t *testing.T) {
+			if d := CheckBash("drift-detector", command); !d.Deny {
+				t.Errorf("expected %q to be denied for a read-only agent", command)
+			}
+		})
+	}
+}

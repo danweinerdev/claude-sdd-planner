@@ -15,6 +15,30 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
+// missingArtifactDetail explains why an artifact "does not exist": ordinary
+// absence, or a working tree whose lock sentinel (`.<name>.sdd-lock`, next
+// to where the artifact would be — see internal/store/lock.go) survived a
+// stash or clean that removed the artifact body itself. That sentinel is
+// otherwise invisible evidence that the artifact used to be there, so a
+// bare "does not exist" sends the caller looking for a typo instead of
+// their working tree. Both the resolved path store.Read settled on and the
+// caller's original spelling are checked, since ResolveArtifactPath guesses
+// a candidate location for an artifact that turns out not to exist under
+// either spelling.
+func missingArtifactDetail(resolvedPath, originalPath string) string {
+	sentinelFor := func(p string) string {
+		dir, base := filepath.Split(p)
+		return filepath.Join(dir, "."+base+".sdd-lock")
+	}
+	for _, p := range []string{resolvedPath, originalPath} {
+		sentinel := sentinelFor(p)
+		if _, err := os.Stat(sentinel); err == nil {
+			return fmt.Sprintf("%s does not exist, but its lock sentinel %s is present — the working tree may have been stashed or cleaned", resolvedPath, sentinel)
+		}
+	}
+	return fmt.Sprintf("%s does not exist", resolvedPath)
+}
+
 // `sdd review scaffold` writes the phase-completion review artifact the
 // completion gate requires (shared/review-artifacts.md § Phase-completion
 // review gate).
@@ -423,7 +447,7 @@ func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
 		return fmt.Errorf("review evidence set: %w", err)
 	}
 	if !art.Exists {
-		return fmt.Errorf("review evidence set: %s does not exist", path)
+		return fmt.Errorf("review evidence set: %s", missingArtifactDetail(art.Path, path))
 	}
 	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)
@@ -588,7 +612,7 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 		return fmt.Errorf("review resolve: %w", err)
 	}
 	if !art.Exists {
-		return fmt.Errorf("review resolve: %s does not exist", path)
+		return fmt.Errorf("review resolve: %s", missingArtifactDetail(art.Path, path))
 	}
 	path = art.Path // write where the artifact was read, never the unresolved argument
 	doc := artifact.Parse(art.Source)

@@ -81,7 +81,7 @@ var denyWithArgs = []struct{ head, args *regexp.Regexp }{
 	{regexp.MustCompile(`^(npm|pnpm|yarn|bun)$`), regexp.MustCompile(`^(install|i|ci|add|remove|rm|update|up|upgrade|link|publish)\b`)},
 	{regexp.MustCompile(`^(pip\d?(?:\.\d+)?)$`), regexp.MustCompile(`^(install|uninstall|download)\b`)},
 	{regexp.MustCompile(`^cargo$`), regexp.MustCompile(`^(install|add|remove|publish|yank)\b`)},
-	{regexp.MustCompile(`^go$`), regexp.MustCompile(`^(install|get)\b`)},
+	{regexp.MustCompile(`^go$`), regexp.MustCompile(`^(install|get)\b|^mod\s+tidy\b`)},
 	{regexp.MustCompile(`^gh$`), regexp.MustCompile(`.`)},
 }
 

@@ -17,6 +17,11 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
+	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
@@ -110,6 +115,11 @@ func cmdValidate(o validateOpts) error {
 		// authoritative. Not a refusal (exit 1) and never a clean run.
 		return fmt.Errorf("validate: could not complete: %w", err)
 	}
+	graphDiags, err := graphCompleteButUnclosedDiagnostics(r, resolved, repoRoot)
+	if err != nil {
+		return fmt.Errorf("validate: could not complete: %w", err)
+	}
+	diags = append(diags, graphDiags...)
 	rules.SortDiagnostics(diags)
 
 	artifactsInScope := make([]string, 0, len(r.Artifacts))
@@ -378,4 +388,64 @@ func selectInScope(diags []rules.Diagnostic, scope string, inScope []string) []r
 		}
 	}
 	return out
+}
+
+// graphCompleteButUnclosedDiagnostics is SDD199: a graph plan's README can
+// say `status: complete` while its committed graph is not actually closed —
+// CLAUDE.md's graph-plan discipline that "closure is a derived predicate",
+// never an assertion. It derives closure the same way `sdd plan complete`
+// does (states.Derive + review.Closed, see cmd/sdd/graph_complete.go's
+// graphDerive) and reports one diagnostic per disagreeing plan, naming the
+// nodes that are not closed.
+//
+// This lives here rather than in internal/rules because internal/rules
+// cannot import internal/graph/{states,review} without an import cycle
+// (those packages already depend on internal/rules-adjacent artifact
+// parsing); it is a post-rules check over the same Root instead.
+func graphCompleteButUnclosedDiagnostics(r *rules.Root, resolved, repoRoot string) ([]rules.Diagnostic, error) {
+	var out []rules.Diagnostic
+	for _, a := range r.Artifacts {
+		if a.Kind() != "plan" || a.Status() != "complete" {
+			continue
+		}
+		planDir := filepath.Dir(a.AbsPath)
+		plan := filepath.Base(planDir)
+		graphPath := gstore.PathFor(planDir)
+		if _, statErr := os.Stat(graphPath); statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue // v1 plan: SDD059/SDD070/... own this shape instead.
+			}
+			return nil, fmt.Errorf("checking for a committed graph in %s: %w", planDir, statErr)
+		}
+		g, err := gstore.Load(graphPath)
+		if err != nil {
+			continue // a malformed/unreadable graph is the graph subsystem's own refusal to report, not validate's.
+		}
+		sources, err := gcompile.NewSources(resolved, repoRoot, plan)
+		if err != nil {
+			return nil, err
+		}
+		snap := sources.IntentSnapshot()
+		digester := digest.New(repoRoot)
+		st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
+			CurrentIntentHashes: snap.Hashes(),
+			CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
+		closed := greview.Closed(g, st)
+		var open []string
+		for _, n := range g.Nodes {
+			if !closed[n.ID] {
+				open = append(open, n.ID)
+			}
+		}
+		if len(open) == 0 {
+			continue
+		}
+		sort.Strings(open)
+		out = append(out, rules.Diagnostic{
+			Code: "SDD199", Severity: rules.Error, Path: a.Rel, Line: 1,
+			Message:    "Plan status is `complete` but its graph is not closed: " + strings.Join(open, ", ") + ".",
+			Correction: "Close every node (sdd graph status) or move status off complete until the graph agrees.",
+		})
+	}
+	return out, nil
 }

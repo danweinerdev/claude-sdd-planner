@@ -76,11 +76,45 @@ const KindPlanDecisions = "decisions"
 // "M1:AC-01"). Any spelling claimed by two different (source, id) pairs
 // resolves for neither and records qualified suggestions instead.
 func BuildCitationIndex(r *Root, a *Artifact) *CitationIndex {
-	x := buildCitationIndexFrom(relatedSources(r, a))
+	// Direct-relation priority follows the same first hop relatedSources
+	// takes before it starts transitively walking `related`: a's own
+	// `related` list, plus (for a phase or a review) the plan/reviewed
+	// document's — the actual "directly related" documents from the
+	// citing artifact's perspective, not just a's own frontmatter.
+	priority := map[string]bool{}
+	for _, doc := range citingDocuments(r, a) {
+		for _, src := range DirectRelatedSources(r, doc) {
+			priority[src.Rel] = true
+		}
+	}
+	x := buildCitationIndexFromPriority(relatedSources(r, a), priority)
 	x.decisions = r.DecisionIndex
 	x.citingPlan = citingPlanOf(r, a)
 	x.registerReviewFindings(r)
 	return x
+}
+
+// citingDocuments is relatedSources' first hop, isolated: the artifact
+// itself, plus (for a phase) its plan or (for a review) its review_of
+// target — the document(s) whose OWN `related` list counts as "directly
+// related" for citation-priority purposes.
+func citingDocuments(r *Root, a *Artifact) []*Artifact {
+	out := []*Artifact{a}
+	if a.Kind() == "phase" {
+		if plan := metaStr(a.Meta, "plan"); plan != "" {
+			if p, ok := r.ByPath["Plans/"+plan+"/README.md"]; ok {
+				out = append(out, p)
+			}
+		}
+	}
+	if a.Kind() == "review" {
+		if ref, ok := a.Meta["review_of"].(string); ok {
+			if target := resolveRef(r, ref); target != nil {
+				out = append(out, target)
+			}
+		}
+	}
+	return out
 }
 
 // registerReviewFindings adds every frozen, resolved review artifact that
@@ -214,16 +248,51 @@ func (x *CitationIndex) DecisionSuccessor(id string) (decisions.Located, bool) {
 func CitationKey(sourceRel, id string) string { return sourceRel + "\x00" + id }
 
 // buildCitationIndexFrom indexes an explicit source list. Non-spec/design
-// artifacts are skipped; order is preserved.
+// artifacts are skipped; order is preserved. No source is preferred over
+// another for a bare-id collision — see BuildCitationIndex, which layers
+// direct-relation priority on top for the citing artifact's own `related`.
 func buildCitationIndexFrom(sources []*Artifact) *CitationIndex {
+	return buildCitationIndexFromPriority(sources, nil)
+}
+
+// buildCitationIndexFromPriority is buildCitationIndexFrom with an optional
+// priority set: a bare id defined by a source in priority is claimed by
+// that source even when a non-priority source also defines it — a citing
+// artifact's directly related design or spec is not ambiguous with an id
+// merely reachable through it. Two priority sources (or two non-priority
+// sources) colliding on the same bare id remain genuinely ambiguous, since
+// nothing then distinguishes which the citation meant. priority is checked
+// by source Rel; nil (or empty) means no source is prioritized, preserving
+// buildCitationIndexFrom's flat behavior.
+func buildCitationIndexFromPriority(sources []*Artifact, priority map[string]bool) *CitationIndex {
 	x := &CitationIndex{
 		byKey:     map[string]CitationHit{},
 		ambiguous: map[string][]string{},
 		defined:   map[string]map[string][]string{},
 	}
-	register := func(key string, hit CitationHit) {
+	// priorityHit tracks, per bare key, whether the current claimant in
+	// x.byKey was registered from a priority source — so a later
+	// non-priority collision on that key can be dropped silently instead of
+	// manufacturing ambiguity, and a later priority collision can still
+	// displace an earlier non-priority claimant.
+	priorityHit := map[string]bool{}
+	register := func(key string, hit CitationHit, fromPriority bool) {
 		if prior, taken := x.byKey[key]; taken {
 			if prior == hit {
+				return
+			}
+			if fromPriority && !priorityHit[key] {
+				// A direct relation's definition displaces an earlier
+				// transitively-reached claimant outright: it was never a
+				// genuine competitor for this citing artifact.
+				x.byKey[key] = hit
+				priorityHit[key] = true
+				return
+			}
+			if !fromPriority && priorityHit[key] {
+				// The direct relation already owns this key; a
+				// transitively-reached same-numbered id is not a
+				// competitor and is simply not registered.
 				return
 			}
 			delete(x.byKey, key)
@@ -232,10 +301,20 @@ func buildCitationIndexFrom(sources []*Artifact) *CitationIndex {
 			return
 		}
 		if others := x.ambiguous[key]; others != nil {
+			if fromPriority {
+				// A direct relation's definition resolves what would
+				// otherwise be an ambiguity among only transitively-reached
+				// sources.
+				delete(x.ambiguous, key)
+				x.byKey[key] = hit
+				priorityHit[key] = true
+				return
+			}
 			x.ambiguous[key] = appendUnique(others, hit.Qualifier+":"+hit.ID)
 			return
 		}
 		x.byKey[key] = hit
+		priorityHit[key] = fromPriority
 	}
 	for _, src := range sources {
 		kind := src.Kind()
@@ -245,16 +324,17 @@ func buildCitationIndexFrom(sources []*Artifact) *CitationIndex {
 		x.sources = append(x.sources, src)
 		qualifier := SourceQualifier(src.Rel)
 		base := path.Base(qualifier)
+		fromPriority := priority[src.Rel]
 		perFamily := map[string][]string{}
 		for _, family := range IdentifierFamilies() {
 			var ids []string
 			for id := range DefinedIdentifiers(src, family) {
 				ids = append(ids, id)
 				hit := CitationHit{SourceRel: src.Rel, Qualifier: qualifier, ID: id, Kind: kind}
-				register(id, hit)
-				register(qualifier+":"+id, hit)
+				register(id, hit, fromPriority)
+				register(qualifier+":"+id, hit, fromPriority)
 				if base != qualifier {
-					register(base+":"+id, hit)
+					register(base+":"+id, hit, fromPriority)
 				}
 			}
 			sortStrings(ids)

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
@@ -333,4 +335,71 @@ func TestScopedSelectionKeepsImplicatedCrossPlanConflict(t *testing.T) {
 	if got := selectInScope([]rules.Diagnostic{d}, "Plans/Z", []string{"Plans/Z/README.md"}); len(got) != 0 {
 		t.Fatal("an uninvolved plan must not see it")
 	}
+}
+
+// completeButUnclosedFixture builds a planning root with one committed graph
+// plan whose README already claims `status: complete`. When open is true,
+// node "a" carries no observation, so the graph does not actually close —
+// SDD199's disagreement case.
+func completeButUnclosedFixture(t *testing.T, root string, open bool) {
+	t.Helper()
+	writeArtifact(t, root, "Plans/Demo", "README.md", strings.Replace(nextPlanReadme("complete", ""), "phases:\n\n", "phases: []\n", 1))
+	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core",
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1}
+	if !open {
+		a.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
+	}
+	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
+		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}
+	if !open {
+		reviewA.Verification = &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}
+	}
+	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA}}
+	planDir := filepath.Join(root, "Plans", "Demo")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestValidate_GraphCompleteButUnclosed is SDD199: a graph plan whose
+// README says `status: complete` while the graph is not actually closed
+// must surface a diagnostic naming the unclosed node, and validate must
+// stay clean when the graph agrees with the README.
+func TestValidate_GraphCompleteButUnclosed(t *testing.T) {
+	t.Run("unclosed", func(t *testing.T) {
+		root := t.TempDir()
+		writeConfig(t, root)
+		completeButUnclosedFixture(t, root, true)
+		out, err := captureStdout(t, func() error {
+			return cmdValidate(validateOpts{Root: root, Format: "json"})
+		})
+		if _, ok := err.(*refusedError); !ok {
+			t.Fatalf("expected *refusedError, got %v (%T)", err, err)
+		}
+		if !strings.Contains(out, `"SDD199"`) {
+			t.Fatalf("expected SDD199 in output:\n%s", out)
+		}
+		if !strings.Contains(out, "not closed: a, review-a") {
+			t.Fatalf("expected the open node named in the diagnostic:\n%s", out)
+		}
+	})
+
+	t.Run("closed", func(t *testing.T) {
+		root := t.TempDir()
+		writeConfig(t, root)
+		completeButUnclosedFixture(t, root, false)
+		out, err := captureStdout(t, func() error {
+			return cmdValidate(validateOpts{Root: root, Format: "json"})
+		})
+		if err != nil {
+			t.Fatalf("expected nil error for a closed graph, got %v\n%s", err, out)
+		}
+		if strings.Contains(out, `"SDD199"`) {
+			t.Fatalf("a closed graph must not report SDD199:\n%s", out)
+		}
+	})
 }

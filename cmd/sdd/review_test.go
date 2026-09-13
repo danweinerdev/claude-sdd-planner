@@ -513,3 +513,107 @@ func TestReviewResolveAmendVerdictFreezesActionedFindings(t *testing.T) {
 		t.Fatalf("Amend resolve must freeze and resolve in one write:\n%s", src)
 	}
 }
+
+// A stash or clean can remove an artifact's body while leaving its
+// `.<name>.sdd-lock` sentinel behind. Both `review evidence set` and
+// `review resolve` must call that out by name instead of reporting a plain
+// "does not exist" that sends the caller looking for a typo.
+func TestReviewEvidenceSetAndResolveNameLockSentinel(t *testing.T) {
+	_, review := scaffoldedReview(t)
+	sentinel := filepath.Join(filepath.Dir(review), "."+filepath.Base(review)+".sdd-lock")
+	if err := os.Remove(review); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinel, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(sentinel) })
+
+	err := cmdReviewEvidenceSet(review, reviewEvidenceOpts{
+		Lane: "review_quality", Evidence: "Inspected the full diff at the frozen range",
+	})
+	if err == nil || !strings.Contains(err.Error(), "sdd-lock") || !strings.Contains(err.Error(), "stashed or cleaned") {
+		t.Fatalf("evidence set must name the lock sentinel; got %v", err)
+	}
+
+	err = cmdReviewResolve(review, reviewResolveOpts{})
+	if err == nil || !strings.Contains(err.Error(), "sdd-lock") || !strings.Contains(err.Error(), "stashed or cleaned") {
+		t.Fatalf("resolve must name the lock sentinel; got %v", err)
+	}
+}
+
+// scaffoldedReviewUnderPlansRoot is scaffoldedReview but with the planning
+// root at ".plans" rather than ".", so a planning-root-relative path
+// ("Plans/...") and a repo-relative path (".plans/Plans/...") genuinely
+// differ — the two forms `review evidence set`/`resolve` must both accept.
+func scaffoldedReviewUnderPlansRoot(t *testing.T) (dir, planRelative, repoRelative string) {
+	t.Helper()
+	dir = t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, "planning-config.json"),
+		[]byte(`{"planningRoot": ".plans"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planDir := filepath.Join(dir, ".plans", "Plans", "Sample Plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	phase := filepath.Join(planDir, "01-First-Phase.md")
+	phaseDoc := "---\ntitle: \"First Phase\"\ntype: phase\nstatus: in-progress\n---\n\n# First Phase\n"
+	if err := os.WriteFile(phase, []byte(phaseDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, dir, "init", "-q")
+	gitOK(t, dir, "add", ".")
+	gitOK(t, dir, "commit", "-q", "-m", "base")
+	base := gitOK(t, dir, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, dir, "add", ".")
+	gitOK(t, dir, "commit", "-q", "-m", "work")
+	endpoint := gitOK(t, dir, "rev-parse", "HEAD")
+
+	opts := reviewScaffoldOpts{Frozen: base + ".." + endpoint, Mode: "independent"}
+	if err := cmdReviewScaffold(phase, opts); err != nil {
+		t.Fatalf("cmdReviewScaffold: %v", err)
+	}
+	name := "01-sample-plan-code-review-" + endpoint[:7] + ".md"
+	planRelative = filepath.Join("Plans", "Sample Plan", "reviews", name)
+	repoRelative = filepath.Join(".plans", "Plans", "Sample Plan", "reviews", name)
+	return dir, planRelative, repoRelative
+}
+
+// Both `review evidence set` and `review resolve` must accept a
+// planning-root-relative path ("Plans/...") and a repo-relative path
+// (".plans/Plans/...") equally, naming whichever form it resolved on
+// failure.
+func TestReviewVerbsAcceptBothPathForms(t *testing.T) {
+	for _, form := range []string{"plan-relative", "repo-relative"} {
+		t.Run(form, func(t *testing.T) {
+			_, planRelative, repoRelative := scaffoldedReviewUnderPlansRoot(t)
+			path := planRelative
+			if form == "repo-relative" {
+				path = repoRelative
+			}
+			if err := cmdReviewEvidenceSet(path, reviewEvidenceOpts{
+				Lane: "review_quality", Evidence: "Inspected the full diff at the frozen range",
+			}); err != nil {
+				t.Fatalf("evidence set on %s form %q: %v", form, path, err)
+			}
+			for _, lane := range reviewLaneIDs() {
+				if lane == "review_quality" {
+					continue
+				}
+				if err := cmdReviewEvidenceSet(path, reviewEvidenceOpts{
+					Lane: lane, Evidence: "Inspected the full diff at the frozen range",
+				}); err != nil {
+					t.Fatalf("evidence set %s on %s form %q: %v", lane, form, path, err)
+				}
+			}
+			if err := cmdReviewResolve(path, reviewResolveOpts{}); err != nil {
+				t.Fatalf("resolve on %s form %q: %v", form, path, err)
+			}
+		})
+	}
+}
