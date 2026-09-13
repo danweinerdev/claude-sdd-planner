@@ -220,10 +220,6 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 					addProblem("%s: names %q, which is outside %q's dependency closure (%s)", f.ID, id, reviewNode, strings.Join(reachList, ", "))
 					continue
 				}
-				if target := g.NodeByID(id); target != nil && (target.Gate.Type == model.GateReview || target.Gate.Type == model.GateCommand) {
-					addProblem("%s: names %q, which has gate type %q; revise/extend act on implementation nodes, not review or command nodes", f.ID, id, target.Gate.Type)
-					continue
-				}
 				if revised[id] {
 					addProblem("%s: %q is already revised by another finding in this artifact; merge them", f.ID, id)
 					continue
@@ -237,6 +233,21 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 				if len(changed) == 0 {
 					addProblem("%s: revise of %q changes nothing normative (contract, gate, justifies, inputs); mark the finding answered or rejected instead", f.ID, id)
 					continue
+				}
+				// A review or command node states an obligation rather than
+				// discharging one, so a decision can retire what its contract
+				// demands and leave the node itself legitimate. Its contract
+				// and the inputs that contract is read against are therefore
+				// revisable in place — the ID, the gate and the dependencies
+				// survive, and the contract-rev bump stales the prior
+				// observation so the revised obligation is re-proved. Its
+				// gate and what it justifies stay off limits: changing either
+				// makes it a different node, which is a retire-and-replace.
+				if before != nil && (before.Gate.Type == model.GateReview || before.Gate.Type == model.GateCommand) {
+					if other := changedStructurally(changed); len(other) > 0 {
+						addProblem("%s: names %q, which has gate type %q; a %s node's contract and inputs are revisable but its %s is not — retire and replace it instead", f.ID, id, before.Gate.Type, before.Gate.Type, strings.Join(other, ", "))
+						continue
+					}
 				}
 				revised[id] = true
 				plan.Amendments = append(plan.Amendments, Amendment{Finding: f.ID, Action: ActionRevise, Node: id, Before: payloadCopy(before), After: after, Changed: changed})
@@ -293,6 +304,23 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 	}
 	sort.SliceStable(plan.Amendments, func(i, j int) bool { return plan.Amendments[i].Finding < plan.Amendments[j].Finding })
 	return plan, nil
+}
+
+// changedStructurally returns the fields a revise changed that restructure a
+// review or command node rather than restate its obligation, in applyRevise's
+// order. The contract is the obligation itself and `inputs` are the sources it
+// is read against — a revised obligation routinely cites the decision that
+// revised it — so both follow the contract. `gate` and `justifies` are the
+// node's role in the plan and its reason for existing; changing either makes
+// it a different node, which is a retire-and-replace.
+func changedStructurally(changed []string) []string {
+	var other []string
+	for _, f := range changed {
+		if f == "gate" || f == "justifies" {
+			other = append(other, f)
+		}
+	}
+	return other
 }
 
 // applyRevise overlays a revise block onto a node's payload form and

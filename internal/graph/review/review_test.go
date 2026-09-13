@@ -630,26 +630,76 @@ func TestPlanAmendmentsScopeVsReach(t *testing.T) {
 		t.Fatalf("plan2 = %+v", plan2.Amendments)
 	}
 
-	// A revise naming a review-gate node in the closure is refused: revise/extend
-	// act on implementation nodes, not review or command nodes.
+	// A contract-only revise naming a review-gate node in the closure is
+	// accepted: a decision can retire what the node's contract demands while
+	// the node itself stays legitimate, so the contract is revisable in place.
 	artReviewGate := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
 		Findings: []finding{{ID: "F-04", Status: "open", Action: ActionRevise, Nodes: []string{"inner-review"},
 			Revise: map[string]any{"contract": "changed"}}},
 	}}
-	_, err = PlanAmendmentsInScope(g, "review-final", artReviewGate, scope)
-	if err == nil || !strings.Contains(err.Error(), "revise/extend act on implementation nodes") {
-		t.Fatalf("a revise naming a review-gate node must be refused: %v", err)
+	planReview, err := PlanAmendmentsInScope(g, "review-final", artReviewGate, scope)
+	if err != nil {
+		t.Fatalf("a contract-only revise of a review-gate node must be accepted: %v", err)
+	}
+	if len(planReview.Amendments) != 1 {
+		t.Fatalf("planReview = %+v", planReview.Amendments)
+	}
+	amended := planReview.Amendments[0]
+	if amended.Node != "inner-review" || len(amended.Changed) != 1 || amended.Changed[0] != "contract" {
+		t.Fatalf("the revise must change the contract and nothing else: %+v", amended)
+	}
+	// The node keeps its identity and its gate across the revise.
+	if amended.After.ID != "inner-review" || amended.After.Gate.Type != model.GateReview {
+		t.Fatalf("a review node's id and gate must survive a contract revise: %+v", amended.After)
 	}
 
-	// A revise naming a command-gate node in the closure is refused for the
-	// same reason.
+	// A contract-only revise of a command-gate node is accepted for the same
+	// reason.
 	artCommandGate := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
 		Findings: []finding{{ID: "F-05", Status: "open", Action: ActionRevise, Nodes: []string{"full-gate"},
 			Revise: map[string]any{"contract": "changed"}}},
 	}}
-	_, err = PlanAmendmentsInScope(g, "review-final", artCommandGate, scope)
-	if err == nil || !strings.Contains(err.Error(), "revise/extend act on implementation nodes") {
-		t.Fatalf("a revise naming a command-gate node must be refused: %v", err)
+	if _, err = PlanAmendmentsInScope(g, "review-final", artCommandGate, scope); err != nil {
+		t.Fatalf("a contract-only revise of a command-gate node must be accepted: %v", err)
+	}
+
+	// Only the contract is revisable on such a node. A revise that would also
+	// restructure the gate is still refused — that is a retire-and-replace.
+	artReviewGateStructural := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-06", Status: "open", Action: ActionRevise, Nodes: []string{"inner-review"},
+			Revise: map[string]any{"contract": "changed", "gate": map[string]any{"type": "review", "lanes": []any{"review_quality"}}}}},
+	}}
+	_, err = PlanAmendmentsInScope(g, "review-final", artReviewGateStructural, scope)
+	if err == nil || !strings.Contains(err.Error(), "is not — retire and replace it instead") {
+		t.Fatalf("a revise changing a review node's gate must be refused: %v", err)
+	}
+
+	// A revised obligation routinely cites the decision that revised it, so a
+	// review node's inputs follow its contract rather than being frozen with
+	// the gate.
+	artReviewGateInputs := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-07", Status: "open", Action: ActionRevise, Nodes: []string{"inner-review"},
+			Revise: map[string]any{
+				"contract": "changed",
+				"inputs":   []any{map[string]any{"root": "planning", "path": "Decisions/decisions.md"}},
+			}}},
+	}}
+	planInputs, err := PlanAmendmentsInScope(g, "review-final", artReviewGateInputs, scope)
+	if err != nil {
+		t.Fatalf("a review node's inputs must be revisable alongside its contract: %v", err)
+	}
+	if len(planInputs.Amendments) != 1 || len(planInputs.Amendments[0].Changed) != 2 {
+		t.Fatalf("planInputs = %+v", planInputs.Amendments)
+	}
+
+	// `justifies` is structural for the same reason the gate is.
+	artReviewGateJustifies := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-08", Status: "open", Action: ActionRevise, Nodes: []string{"inner-review"},
+			Revise: map[string]any{"contract": "changed", "justifies": []any{"reviews/other:F-01"}}}},
+	}}
+	_, err = PlanAmendmentsInScope(g, "review-final", artReviewGateJustifies, scope)
+	if err == nil || !strings.Contains(err.Error(), "is not — retire and replace it instead") {
+		t.Fatalf("a revise changing a review node's justifies must be refused: %v", err)
 	}
 }
 

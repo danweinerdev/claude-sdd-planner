@@ -1019,7 +1019,16 @@ func graphReviewCmd() *cobra.Command {
 					return err
 				}
 				if asJSON {
-					return writeJSON(res)
+					// The problems array is the refusal: emitting it with a
+					// success status let a caller that checks only the exit
+					// code read a refused check as an accepted one.
+					if err := writeJSON(res); err != nil {
+						return err
+					}
+					if len(res.Problems) > 0 {
+						return &refusedError{n: len(res.Problems)}
+					}
+					return nil
 				}
 				w := c.OutOrStdout()
 				if len(res.Problems) == 0 {
