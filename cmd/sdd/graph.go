@@ -917,6 +917,17 @@ func printAmendmentPlan(w io.Writer, p *greview.Plan) {
 	}
 }
 
+// printWidenedReach prints the non-refusing notice for a revise/extend
+// target that sits inside the review's Reach but outside its increment
+// scope: the amendment is admitted, but it widens the blast radius, naming
+// which inner gate(s) will re-stale.
+func printWidenedReach(w io.Writer, widened []ops.WidenedTarget) {
+	for _, wt := range widened {
+		fmt.Fprintf(w, "  note: %s targets %s, outside this review's increment scope; this will re-stale inner gate(s): %s\n",
+			wt.Finding, wt.Node, strings.Join(wt.Gates, ", "))
+	}
+}
+
 // graphAmendCmd applies a frozen review artifact's open findings as one
 // fenced amendment (ReviewDrivenAmendment DD-2, DD-8). Mutating.
 func graphAmendCmd() *cobra.Command {
@@ -952,12 +963,14 @@ func graphAmendCmd() *cobra.Command {
 			if !res.Applied {
 				fmt.Fprintf(w, "dry run: %d amendment(s) would apply to %s\n", len(res.Plan.Amendments), plan)
 				printAmendmentPlan(w, res.Plan)
+				printWidenedReach(w, res.WidenedReach)
 				fmt.Fprintf(w, "expect-digest: %s\n", res.ExpectDigest)
 				fmt.Fprintf(w, "expect-report-digest: %s\n", res.ExpectReportDigest)
 				return nil
 			}
 			fmt.Fprintf(w, "applied %d amendment(s) at seq %d\n", len(res.Plan.Amendments), res.Seq)
 			printAmendmentPlan(w, res.Plan)
+			printWidenedReach(w, res.WidenedReach)
 			fmt.Fprintf(w, "revised nodes owe a fresh RED at their new contract revision; %s re-runs once they are GREEN\n", node)
 			return nil
 		},
@@ -975,7 +988,7 @@ func graphAmendCmd() *cobra.Command {
 
 func graphReviewCmd() *cobra.Command {
 	var plan, node, artifact, by string
-	var asJSON bool
+	var asJSON, check bool
 	c := &cobra.Command{
 		Use:   "review",
 		Short: "Record a review gate's observation from a frozen Aligned review artifact",
@@ -997,6 +1010,27 @@ func graphReviewCmd() *cobra.Command {
 			_, repoRoot, err := resolveRoots(".", "")
 			if err != nil {
 				return fmt.Errorf("graph review: %w", err)
+			}
+			if check {
+				res, err := greview.Check(greview.Options{
+					Root: root, RepoRoot: repoRoot, Plan: plan, Node: node, Artifact: artifact,
+				})
+				if err != nil {
+					return err
+				}
+				if asJSON {
+					return writeJSON(res)
+				}
+				w := c.OutOrStdout()
+				if len(res.Problems) == 0 {
+					fmt.Fprintf(w, "check: %s's open finding(s) all target admissible nodes within %s's dependency closure\n", res.Artifact, res.Node)
+					return nil
+				}
+				fmt.Fprintf(w, "check: %s carries %d target problem(s) — nothing recorded:\n", res.Artifact, len(res.Problems))
+				for _, p := range res.Problems {
+					fmt.Fprintf(w, "  %s\n", p)
+				}
+				return &refusedError{n: len(res.Problems)}
 			}
 			res, err := greview.Record(greview.Options{
 				Root: root, RepoRoot: repoRoot, Plan: plan, Node: node,
@@ -1031,6 +1065,8 @@ func graphReviewCmd() *cobra.Command {
 	c.Flags().StringVar(&artifact, "artifact", "", "path to the frozen Aligned review artifact")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the gate node is claimed)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	c.Flags().BoolVar(&check, "check", false, "validate the artifact's open-finding targets and report every problem without recording anything; accepts an unfrozen, unresolved artifact (alias: --dry-run)")
+	c.Flags().BoolVar(&check, "dry-run", false, "alias for --check")
 	return c
 }
 

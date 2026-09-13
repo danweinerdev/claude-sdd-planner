@@ -45,6 +45,38 @@ func TestSchedulingOnlyDependencyNeverStales(t *testing.T) {
 	}
 }
 
+// A command-gated node (e.g. a full-suite gate) gets the same
+// dependency-digest staleness a tests gate gets, including when the
+// dependency is a review gate — which carries no Node.Artifacts, so its
+// identity is the recorded scope-diff digests rather than a literal artifact
+// comparison, and the ripple has to go through the dependency's own derived
+// state instead.
+func TestCommandGateStalesOnReviewDependencyDigestDrift(t *testing.T) {
+	review := node("review-execution", nil, pass(1))
+	review.Gate = model.Gate{Type: model.GateReview}
+	review.Verification.ArtifactDigests = map[string]string{"src/a.ext": "sha-old"}
+
+	full := node("full-gate", []string{"review-execution"}, nil)
+	full.Gate = model.Gate{Type: model.GateCommand}
+	full.Verification = &model.Verification{
+		Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean,
+		DependencyDigests: map[string]map[string]string{"review-execution": {}},
+	}
+
+	g := &model.Graph{Version: 1, Nodes: []model.Node{review, full}}
+	current := map[string]string{"src/a.ext": "sha-old"}
+	st := Derive(Inputs{Graph: g, ArtifactDigest: func(rel string) string { return current[rel] }})
+	if st["full-gate"].State != Green {
+		t.Fatalf("unchanged review dep must leave the command gate GREEN: %+v", st["full-gate"])
+	}
+
+	current["src/a.ext"] = "sha-new"
+	st = Derive(Inputs{Graph: g, ArtifactDigest: func(rel string) string { return current[rel] }})
+	if st["full-gate"].State != Stale || len(st["full-gate"].DependencyStale) != 1 || st["full-gate"].DependencyStale[0] != "review-execution" {
+		t.Fatalf("a review dep's drifted scope digest must stale the command gate: %+v", st["full-gate"])
+	}
+}
+
 // Dependency staleness ripples: a consumer of a consumer goes stale when the
 // root dependency's bytes change, even though its own direct dep's bytes did not.
 func TestDependencyStalenessRipples(t *testing.T) {

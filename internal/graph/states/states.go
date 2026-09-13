@@ -370,11 +370,25 @@ func Derive(in Inputs) map[string]NodeState {
 						ns.DependencyStale = append(ns.DependencyStale, dep)
 					case !present:
 						// A dependency added after the observation (an
-						// extend, a rewire): the run never exercised it.
-						if len(depNode.Artifacts) > 0 {
+						// extend, a rewire): the run never exercised it. A
+						// review gate declares no Node.Artifacts of its own
+						// (its identity is the recorded scope-diff digests), so
+						// it counts here on gate type, not on Artifacts.
+						if len(depNode.Artifacts) > 0 || depNode.Gate.Type == model.GateReview {
 							ns.DependencyStale = append(ns.DependencyStale, dep)
 						}
 					case len(out[dep].DependencyStale) > 0:
+						ns.DependencyStale = append(ns.DependencyStale, dep)
+					case depNode.Gate.Type == model.GateReview && out[dep].State != Green:
+						// A review gate carries no Node.Artifacts of its own
+						// (its identity is the recorded scope-diff digests),
+						// so the literal per-artifact loop below has nothing
+						// to walk. Any non-GREEN state on it — most commonly
+						// DigestStale over its recorded scope — is the signal
+						// a consumer must ripple on instead. This is what
+						// gives a command gate (e.g. a full-suite gate
+						// depending on a review gate) the same
+						// dependency-digest staleness a tests gate gets.
 						ns.DependencyStale = append(ns.DependencyStale, dep)
 					case in.ArtifactDigest != nil:
 						for _, artifact := range depNode.Artifacts {

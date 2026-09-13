@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -51,6 +52,93 @@ type AmendResult struct {
 	ExpectDigest       string       `json:"expect_digest,omitempty"`
 	ExpectReportDigest string       `json:"expect_report_digest,omitempty"`
 	NewDigest          string       `json:"new_digest,omitempty"`
+	// WidenedReach is a non-refusing notice: revise/extend targets that sit
+	// inside the review's Reach (its full dependency closure — admissible
+	// since the P-17 fix) but outside its increment scope (the region no
+	// earlier frozen full review already covers), and the inner full-review
+	// gate(s) that cover each one and will re-stale (ReviewStale, via the
+	// target's contract-revision bump) once the amendment lands.
+	WidenedReach []WidenedTarget `json:"widened_reach,omitempty"`
+}
+
+// WidenedTarget names one amendment target outside the increment scope and
+// the inner full-review gates its contract-revision bump will re-stale.
+type WidenedTarget struct {
+	Finding string   `json:"finding"`
+	Node    string   `json:"node"`
+	Gates   []string `json:"gates"`
+}
+
+// widenedReach finds, for every amendment target in the review's Reach but
+// outside its current increment scope, the currently-GREEN full-lane inner
+// review gate(s) whose dependency closure covers that target — the gates a
+// revise/extend there will re-stale. It reads the graph as evaluated for the
+// preview; it never writes.
+func widenedReach(g *model.Graph, reviewNode string, plan *review.Plan) []WidenedTarget {
+	inScope := map[string]bool{}
+	for _, id := range plan.Scope {
+		inScope[id] = true
+	}
+	reach := review.Reach(g, reviewNode)
+	statesByID := states.Derive(states.Inputs{Graph: g})
+
+	adjacency := map[string][]string{}
+	for i := range g.Nodes {
+		adjacency[g.Nodes[i].ID] = g.Nodes[i].Deps
+	}
+	// Every currently-GREEN full-lane inner review gate in Reach, with its
+	// own dependency closure precomputed once.
+	type innerGate struct {
+		id     string
+		covers map[string]bool
+	}
+	var inner []innerGate
+	for i := range g.Nodes {
+		n := &g.Nodes[i]
+		if n.ID == reviewNode || !reach[n.ID] || n.Gate.Type != model.GateReview || n.Gate.Lanes != nil {
+			continue
+		}
+		if statesByID[n.ID].State != states.Green {
+			continue
+		}
+		inner = append(inner, innerGate{id: n.ID, covers: algorithms.DependencyClosure(adjacency, n.ID)})
+	}
+
+	var out []WidenedTarget
+	for _, a := range plan.Amendments {
+		target := a.Node
+		if a.Action == review.ActionExtend {
+			// An extend adds a new node; the widened blast radius is on the
+			// dependency it hangs off, which is what an inner gate could
+			// already cover.
+			if len(a.New.Deps) == 0 {
+				continue
+			}
+			target = a.New.Deps[0]
+			for _, d := range a.New.Deps {
+				if inScope[d] {
+					target = d
+					break
+				}
+			}
+		}
+		if !reach[target] || inScope[target] {
+			continue
+		}
+		var gates []string
+		for _, ig := range inner {
+			if ig.covers[target] {
+				gates = append(gates, ig.id)
+			}
+		}
+		if len(gates) == 0 {
+			continue
+		}
+		sort.Strings(gates)
+		out = append(out, WidenedTarget{Finding: a.Finding, Node: a.Node, Gates: gates})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Finding < out[j].Finding })
+	return out
 }
 
 // AmendFromReview plans and applies the artifact's open findings.
@@ -89,7 +177,8 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 	if len(plan.Amendments) == 0 {
 		return nil, fmt.Errorf("graph amend: %s has no open findings; record it with `sdd graph review` instead", o.Artifact)
 	}
-	res := &AmendResult{Plan: plan, ExpectDigest: art.Digest, ExpectReportDigest: artifact.ReportDigest}
+	res := &AmendResult{Plan: plan, ExpectDigest: art.Digest, ExpectReportDigest: artifact.ReportDigest,
+		WidenedReach: widenedReach(g, o.Node, plan)}
 
 	// One citation snapshot: new and revised nodes are anchored against
 	// it, and the before/after gate re-derives from it. The gate runs on a

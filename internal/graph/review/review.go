@@ -245,6 +245,74 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 	return nil
 }
 
+// CheckResult is the outcome of a dry-run validation: Problems is empty and
+// nil when every open finding's target is admissible.
+type CheckResult struct {
+	Node     string   `json:"node"`
+	Artifact string   `json:"artifact"`
+	Scope    []string `json:"scope"`
+	// Problems lists every target problem PlanAmendmentsInScope found (outside
+	// the review's dependency closure, an unknown node, a non-normative
+	// revise, or an extend hanging off an out-of-scope node) — empty when the
+	// artifact's open findings all resolve cleanly.
+	Problems []string `json:"problems,omitempty"`
+}
+
+// Check validates an artifact's open-finding targets against a review gate
+// without requiring the artifact to be resolved or frozen, and without
+// recording anything. It exists so an operator can catch a finding naming a
+// node outside the gate's dependency closure (or any other target problem
+// PlanAmendmentsInScope reports) before scaffolding, evidencing, and
+// freezing a review artifact — a step that, once done, cannot be undone.
+func Check(o Options) (*CheckResult, error) {
+	if err := ValidatePlanName(o.Plan); err != nil {
+		return nil, fmt.Errorf("graph review: %w", err)
+	}
+	planDir := filepath.Join(o.Root, "Plans", o.Plan)
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		return nil, err
+	}
+	node := g.NodeByID(o.Node)
+	if node == nil {
+		return nil, fmt.Errorf("graph review: node %q does not exist", o.Node)
+	}
+	if node.Gate.Type != model.GateReview {
+		return nil, fmt.Errorf("graph review: %q has gate type %q; test and command gates record through `sdd graph sync`", o.Node, node.Gate.Type)
+	}
+	if role := node.EffectiveRole(); role != model.RoleReview {
+		return nil, fmt.Errorf("graph review: %q has role %q; only a review node records a review artifact", o.Node, role)
+	}
+
+	art, err := ReadArtifact(o.Root, o.Artifact)
+	if err != nil {
+		return nil, fmt.Errorf("graph review: %w", err)
+	}
+
+	scope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
+	if err != nil {
+		return nil, fmt.Errorf("graph review: %w", err)
+	}
+
+	res := &CheckResult{Node: o.Node, Artifact: o.Artifact, Scope: scope}
+	if _, err := PlanAmendmentsInScope(g, o.Node, art, scope); err != nil {
+		res.Problems = splitAmendProblems(err.Error())
+	}
+	return res, nil
+}
+
+// splitAmendProblems recovers the per-problem lines PlanAmendmentsInScope
+// joins into one error, so Check can report the list rather than one opaque
+// blob. The joiner (amend.go) always emits "\n  " between entries.
+func splitAmendProblems(msg string) []string {
+	const sep = "\n  "
+	idx := strings.Index(msg, ":\n  ")
+	if idx < 0 {
+		return []string{msg}
+	}
+	return strings.Split(msg[idx+2:], sep)
+}
+
 // Record wires a frozen review artifact into a review node's observation.
 // The node greens ONLY from an artifact that is resolved AND frozen: true
 // AND verdict Aligned — three signals read together, because resolve sets

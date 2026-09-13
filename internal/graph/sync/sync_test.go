@@ -679,3 +679,30 @@ func TestSyncRecordsDependencyDigests(t *testing.T) {
 		t.Fatal("a root without the plan README records no anchor snapshot")
 	}
 }
+
+// A command gate (e.g. a full-suite gate) records dependency digests
+// identically to a tests gate — the states package's derive pass gives it
+// the same staleness axis, but only if sync actually writes them here.
+func TestSyncCommandGateRecordsDependencyDigests(t *testing.T) {
+	dep := testsNode("dep", "test_dep")
+	dep.Artifacts = []string{"src/dep.ext"}
+	full := model.Node{ID: "full-gate", Contract: "c", Deps: []string{"dep"},
+		Gate: model.Gate{Type: model.GateCommand, Command: "make test"}, Hazards: model.Hazards{}, Estimate: 1}
+	planDir, repoRoot := fixture(t, dep, full)
+	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "src", "dep.ext"), []byte("dep impl"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exit := 0
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "full-gate",
+		CommandExit: &exit, CommandLog: []byte("ok")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := res.Observation
+	if v.DependencyDigests == nil || v.DependencyDigests["dep"]["src/dep.ext"] != digest.Bytes([]byte("dep impl")) {
+		t.Fatalf("command gate did not record dependency digests: %+v", v.DependencyDigests)
+	}
+}

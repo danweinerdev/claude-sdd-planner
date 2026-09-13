@@ -416,6 +416,50 @@ func TestRecordRefusesOutOfScopeFindingNodes(t *testing.T) {
 	}
 }
 
+// Check validates an artifact's open-finding targets without requiring it to
+// be resolved or frozen, and never records anything — an operator should be
+// able to catch a finding naming a node outside the gate's dependency
+// closure before scaffolding, evidencing, and freezing the artifact, a step
+// that cannot be undone once the artifact is admitted.
+func TestCheckReportsOutOfClosureTargetWithoutRecording(t *testing.T) {
+	a := work("a", nil)
+	gate := fullGate("g1", []string{"a"})
+	unrelated := work("z", nil)
+	root, _ := fixture(t, 0, a, gate, unrelated)
+	writeFile(t, root, "reviews/r.md", artifactText("draft", false, "",
+		nil, "  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: open\n    action: revise\n    nodes: [z]\n    revise:\n      contract: \"changed\"\n"))
+
+	res, err := Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "r.md")})
+	if err != nil {
+		t.Fatalf("check must accept an unfrozen, unresolved artifact: %v", err)
+	}
+	if len(res.Problems) != 1 || !strings.Contains(res.Problems[0], "outside") || !strings.Contains(res.Problems[0], "F-01") {
+		t.Fatalf("check must report the out-of-closure target: %+v", res.Problems)
+	}
+
+	// Nothing was recorded: the gate node still carries no verification.
+	g, err := gstore.Load(gstore.PathFor(filepath.Join(root, "Plans", "P")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeByID("g1").Verification != nil {
+		t.Fatalf("check must never record: %+v", g.NodeByID("g1").Verification)
+	}
+
+	// A clean artifact (in-closure target) reports no problems.
+	writeFile(t, root, "reviews/ok.md", artifactText("draft", false, "",
+		nil, "  - id: F-02\n    severity: major\n    title: \"names in-closure\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"changed\"\n"))
+	res, err = Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
+		Artifact: filepath.Join(root, "reviews", "ok.md")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Problems) != 0 {
+		t.Fatalf("an in-closure target must report no problems: %+v", res.Problems)
+	}
+}
+
 // TestPlanAmendmentsScopeVsReach reproduces the top-level review shape
 // review-final -> full-gate (command) -> inner-review (GREEN, full) ->
 // impl: the increment scope subtracts the inner review's covered region,

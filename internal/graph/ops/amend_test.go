@@ -567,3 +567,56 @@ func TestAcknowledgeRebindsAnchorButCannotGreen(t *testing.T) {
 		t.Fatal("a current anchor has nothing to acknowledge")
 	}
 }
+
+func widenedFullGate(id string, deps []string) model.Node {
+	return model.Node{ID: id, Contract: id + " survives review", Gate: model.Gate{Type: model.GateReview},
+		Hazards: model.Hazards{}, Estimate: 1, Deps: deps}
+}
+
+func widenedPass(seq int) *model.Verification {
+	return &model.Verification{Result: model.ResultPass, Seq: seq, Isolation: model.IsolationClean}
+}
+
+// A revise/extend target inside the review's Reach but outside its
+// increment scope (P-17: admissible, since Reach — not the narrower
+// increment scope — is what gates revise/extend targets) does not refuse,
+// but it widens the blast radius: the inner GREEN full-review gate covering
+// that target will re-stale once the target's contract revision bumps. The
+// preview must name it rather than staying silent.
+func TestWidenedReachNamesInnerGate(t *testing.T) {
+	implNode := model.Node{ID: "impl", Contract: "does impl", Gate: model.Gate{Type: model.GateTests,
+		Tests: []model.Test{{ID: "test_impl", File: "t.ext"}}}, Hazards: model.Hazards{}, Estimate: 1,
+		Artifacts: []string{"src/impl.ext"}, Verification: widenedPass(1)}
+	inner := widenedFullGate("inner-review", []string{"impl"})
+	inner.Verification = widenedPass(2)
+	fullGateCmd := model.Node{ID: "full-gate", Contract: "runs the full gate", Deps: []string{"inner-review"},
+		Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1}
+	outer := widenedFullGate("review-final", []string{"full-gate"})
+
+	g := &model.Graph{Version: model.SchemaVersion, SeqCounter: 3, Nodes: []model.Node{implNode, inner, fullGateCmd, outer}}
+
+	scope, err := greview.Scope(g, "review-final")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope) != 1 || scope[0] != "full-gate" {
+		t.Fatalf("increment scope must subtract the inner GREEN review's region: %v", scope)
+	}
+
+	plan := &greview.Plan{Review: "review-final", Scope: scope, Amendments: []greview.Amendment{
+		{Finding: "F-01", Action: greview.ActionRevise, Node: "impl"},
+	}}
+	widened := widenedReach(g, "review-final", plan)
+	if len(widened) != 1 || widened[0].Node != "impl" || len(widened[0].Gates) != 1 || widened[0].Gates[0] != "inner-review" {
+		t.Fatalf("widened reach must name inner-review for the impl target: %+v", widened)
+	}
+
+	// A target that is itself in the increment scope (full-gate) widens
+	// nothing: it is already the region this review is responsible for.
+	planInScope := &greview.Plan{Review: "review-final", Scope: scope, Amendments: []greview.Amendment{
+		{Finding: "F-02", Action: greview.ActionRevise, Node: "full-gate"},
+	}}
+	if got := widenedReach(g, "review-final", planInScope); len(got) != 0 {
+		t.Fatalf("an in-scope target must not report a widened reach: %+v", got)
+	}
+}

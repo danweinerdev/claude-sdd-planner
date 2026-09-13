@@ -483,7 +483,7 @@ func reviewCmd() *cobra.Command {
 	rf.BoolVar(&ro.JSON, "json", false, "emit the result as JSON")
 
 	c := &cobra.Command{Use: "review", Short: "Persisted review artifacts"}
-	c.AddCommand(scaffold, evidence, resolve)
+	c.AddCommand(scaffold, evidence, resolve, reviewSupersedeCmd())
 	return c
 }
 
