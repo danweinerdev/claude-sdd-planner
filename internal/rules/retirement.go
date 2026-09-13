@@ -91,11 +91,21 @@ func VerifyRetirementSource(planDir string, source model.RetirementSource) (mode
 // RetirementProblems is shared by compile, audit and ordinary validation.
 // A historical reference is never treated as a live input fingerprint.
 func RetirementProblems(planDir string, g *model.Graph) []string {
+	problems, _ := retirementProblems(planDir, g)
+	return problems
+}
+
+// retirementProblems is RetirementProblems' implementation, additionally
+// returning the operational VerifyRetirementSource failures (if any)
+// separately from the substantive problem strings. Callers that only need
+// the combined list (compile, graph ops) use RetirementProblems; the SDD181
+// CheckRoot uses this directly so it can record an operational failure on
+// the Root and stay silent instead of emitting it as a retirement problem.
+func retirementProblems(planDir string, g *model.Graph) (problems []string, operational []error) {
 	retired := map[string]bool{}
 	for _, id := range g.Retired {
 		retired[id] = true
 	}
-	var problems []string
 	var ids []string
 	for id := range g.RetirementSources {
 		ids = append(ids, id)
@@ -108,7 +118,11 @@ func RetirementProblems(planDir string, g *model.Graph) []string {
 		}
 		resolved, err := VerifyRetirementSource(planDir, record.Source)
 		if err != nil {
-			problems = append(problems, fmt.Sprintf("retirement %s: %v", id, err))
+			if errors.Is(err, vcs.ErrOperational) {
+				operational = append(operational, err)
+			} else {
+				problems = append(problems, fmt.Sprintf("retirement %s: %v", id, err))
+			}
 		} else if resolved.Revision != record.Source.Revision {
 			problems = append(problems, fmt.Sprintf("retirement %s must pin the full commit %s, not a movable revision", id, resolved.Revision))
 		}
@@ -143,7 +157,7 @@ func RetirementProblems(planDir string, g *model.Graph) []string {
 			break
 		}
 	}
-	return problems
+	return problems, operational
 }
 
 func init() {
@@ -163,7 +177,11 @@ func init() {
 				if err != nil {
 					continue
 				}
-				for _, problem := range RetirementProblems(dir, g) {
+				problems, operational := retirementProblems(dir, g)
+				for _, err := range operational {
+					r.recordFailure(err)
+				}
+				for _, problem := range problems {
 					emit(Diagnostic{Code: "SDD181", Severity: Error, Path: plan.Rel, Line: 1, Message: problem,
 						Correction: "Restore access to the pinned history or record valid provenance through graph retire; never infer success from unavailable Git objects."})
 				}

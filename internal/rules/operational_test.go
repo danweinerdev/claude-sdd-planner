@@ -1793,3 +1793,228 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		}
 	})
 }
+
+// TestMissingEvidenceHeadingSurvivesPlanLookupFailure: verifyCommittedLifecycle's
+// "Phase Completion Evidence" branch folds status and checked-criteria
+// completeness into contentComplete but, before this fix, never folded in
+// haveBody (whether the evidence heading itself is present). A phase whose
+// status/criteria are complete but whose evidence heading is missing already
+// has enough content-only information to justify SDD072 regardless of the
+// plan; a plan FileAt lookup that fails operationally must not suppress it.
+func TestMissingEvidenceHeadingSurvivesPlanLookupFailure(t *testing.T) {
+	files := withPlanReadme(phaseGateFiles(true, true))
+	// Strip the evidence heading and its body so haveBody is false while
+	// status is still "complete" and Acceptance Criteria is still checked.
+	files["Plans/Sample/01-One.md"] = replaceFirst(files["Plans/Sample/01-One.md"],
+		"## Phase Completion Evidence\n\n- Final aligned review: Retro/phase-review.md; frozen: r-2024-01-01-01\n",
+		"")
+	dir, root := materializeRoot(t, files)
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	phase := root.ByPath["Plans/Sample/01-One.md"]
+	if phase == nil {
+		t.Fatal("fixture phase not found")
+	}
+	committedPhase := []byte(files["Plans/Sample/01-One.md"])
+	fake := fakeGitRepo{
+		fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
+		Unavailable: vcs.Unavailable{Dir: dir},
+	}
+	opErr := fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrOperational)
+	wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
+	root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+
+	var diags []Diagnostic
+	verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+	if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+		t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == "SDD072" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missing-evidence-heading diags = %v, want an SDD072 even though the plan lookup failed operationally", codesOf(diags))
+	}
+
+	t.Run("control: heading present stays silent", func(t *testing.T) {
+		controlFiles := withPlanReadme(phaseGateFiles(true, true))
+		controlDir, controlRoot := materializeRoot(t, controlFiles)
+		if out, err := exec.Command("git", "-C", controlDir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		controlPhase := controlRoot.ByPath["Plans/Sample/01-One.md"]
+		if controlPhase == nil {
+			t.Fatal("fixture phase not found")
+		}
+		controlCommitted := []byte(controlFiles["Plans/Sample/01-One.md"])
+		controlFake := fakeGitRepo{
+			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": controlCommitted},
+			Unavailable: vcs.Unavailable{Dir: controlDir},
+		}
+		controlOpErr := fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrOperational)
+		controlWrapped := planFileAtFails{fakeGitRepo: controlFake, planKey: "HEAD:Plans/Sample/README.md", err: controlOpErr}
+		controlRoot.repoCache = map[string]vcs.Repo{controlDir: recordingRepo{Repo: controlWrapped, root: controlRoot}}
+
+		var controlDiags []Diagnostic
+		verifyGitEvidenceCommitted(controlRoot, controlPhase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { controlDiags = append(controlDiags, d) })
+
+		if err := controlRoot.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range controlDiags {
+			if d.Code == "SDD072" {
+				t.Errorf("evidence-heading-present control surfaced SDD072 despite the plan lookup failing operationally: %+v", d)
+			}
+		}
+	})
+}
+
+// installNShotGitShim is installOneShotGitShim generalized to answer n
+// invocations (delegating to the real binary) before removing its own
+// execute bit. VerifyRetirementSource's planDir is a plan subdirectory, not
+// the Git root, so probeGit's `rev-parse --is-bare-repository` and
+// `rev-parse --git-dir` calls both run before RevisionExists is ever
+// reached; a one-shot shim would fail detection itself rather than the
+// probe this test targets.
+func installNShotGitShim(t *testing.T, n int) {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	chmod, err := exec.LookPath("chmod")
+	if err != nil {
+		t.Skip("chmod not installed")
+	}
+	// cat must be resolved to an absolute path here (not merely available
+	// as a bare command): the shim's PATH becomes exactly shimDir once
+	// installed, so "cat" alone would not resolve inside the script's own
+	// invocation of itself.
+	cat, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("cat not installed")
+	}
+	counterFile := filepath.Join(t.TempDir(), "count")
+	if err := os.WriteFile(counterFile, []byte("0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shimDir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"n=$(" + cat + " '" + counterFile + "')\n" +
+		"n=$((n + 1))\n" +
+		"echo $n > '" + counterFile + "'\n" +
+		"if [ $n -ge " + fmt.Sprint(n) + " ]; then " + chmod + " -x \"$0\"; fi\n" +
+		"exec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shimDir)
+}
+
+// TestRetirementRuleFailureIsOperational: SDD181's CheckRoot drives
+// RetirementProblems, which resolves VerifyRetirementSource by calling
+// vcs.DetectChecked directly rather than through the Root's recordingRepo.
+// Before this fix, an operational failure there was folded into a problem
+// string and emitted as an ordinary SDD181 diagnostic instead of being
+// recorded on the Root and suppressed. The n-shot git shim lets detection's
+// three git calls succeed — the plan directory is not the Git root, so
+// probeGit falls through to `rev-parse --is-bare-repository`, then
+// `rev-parse --git-dir`, and newGitRepo's `rev-parse --show-toplevel` — and
+// only the following RevisionExists probe fail to start, reaching a genuine
+// operational failure inside VerifyRetirementSource.
+func TestRetirementRuleFailureIsOperational(t *testing.T) {
+	planDir := func(t *testing.T, rev string) (string, *Root) {
+		t.Helper()
+		graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+		files := map[string]string{
+			"Plans/Sample/README.md":         validPlan(false),
+			"Plans/Sample/Sample-Graph.json": graph,
+			"old.md":                         "---\ntasks:\n  - id: \"1.1\"\n---\n",
+		}
+		dir, root := materializeRoot(t, files)
+		return dir, root
+	}
+
+	t.Run("operational RevisionExists probe failure is recorded, not reported", func(t *testing.T) {
+		dir, root := planDir(t, "")
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "base").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+		head, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+		if err != nil {
+			t.Fatalf("git rev-parse: %v", err)
+		}
+		rev := strings.TrimSpace(string(head))
+
+		// Rewrite the graph with the real revision now that it's known, and
+		// re-commit so the plan directory has real history to detect against.
+		graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+		if err := os.WriteFile(filepath.Join(dir, "Plans/Sample/Sample-Graph.json"), []byte(graph), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "graph").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+		root = freshRoot(t, dir)
+
+		installNShotGitShim(t, 3)
+
+		rule := ruleByCode(t, "SDD181")
+		var diags []Diagnostic
+		rule.CheckRoot(root, func(d Diagnostic) { diags = append(diags, d) })
+
+		for _, d := range diags {
+			if d.Code == "SDD181" {
+				t.Errorf("operational retirement-source failure surfaced as SDD181: %+v", d)
+			}
+		}
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+	})
+
+	t.Run("control: genuinely unverifiable source still emits SDD181", func(t *testing.T) {
+		dir, root := planDir(t, "1111111111111111111111111111111111111111")
+		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "add", "-A").CombinedOutput(); err != nil {
+			t.Fatalf("git add: %v\n%s", err, out)
+		}
+		if out, err := exec.Command("git", "-C", dir, "commit", "-q", "-m", "base").CombinedOutput(); err != nil {
+			t.Fatalf("git commit: %v\n%s", err, out)
+		}
+		root = freshRoot(t, dir)
+
+		rule := ruleByCode(t, "SDD181")
+		var diags []Diagnostic
+		rule.CheckRoot(root, func(d Diagnostic) { diags = append(diags, d) })
+
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD181" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("unverifiable-source diags = %v, want an SDD181", codesOf(diags))
+		}
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+	})
+}

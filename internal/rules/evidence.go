@@ -801,11 +801,13 @@ func verifyCommittedLifecycle(a *Artifact, name, body string, line int, committe
 		}
 		criteria := headingBodies(committed.Body, 2, "Acceptance Criteria")
 		lifecycleComplete = lifecycleComplete && len(criteria) > 0 && !hasUncheckedCheckbox(criteria[0])
-		// contentComplete captures everything above, computed without the
-		// plan: when it is already false, the diagnostic below is justified
-		// by content alone and must emit regardless of whether the plan
-		// lookup that follows succeeds.
-		contentComplete := lifecycleComplete
+		// contentComplete captures everything above — including haveBody,
+		// since content completeness includes the presence of the evidence
+		// heading itself — computed without the plan: when it is already
+		// false, the diagnostic below is justified by content alone and
+		// must emit regardless of whether the plan lookup that follows
+		// succeeds.
+		contentComplete := lifecycleComplete && haveBody
 		planName := planNameFor(a)
 		planComplete := false
 		if planName != "" {
