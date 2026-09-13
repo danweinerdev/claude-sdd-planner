@@ -276,6 +276,61 @@ func TestValidationLeavesFixtureUnchanged(t *testing.T) {
 	}
 }
 
+// TestFreshRootsAreIndependentInProcess: two evaluations of distinct fresh
+// roots inside one process, in either order, produce identical diagnostics
+// because no memo keyed by a root-relative path or artifact identity
+// outlives its Root. It reproduces the shape of the regression this guards:
+// a caller that fetches a registered Bad example via Get(), mutates a file
+// under the Example's Files map (the same in-place-edit pattern
+// TestSDD161ConflationRefusedPerSpec uses to test citation qualification),
+// and then a later, unrelated evaluation of a *fresh* root built from the
+// same registered example must still see the example's original, unmutated
+// content rather than the mutation leaking through the shared registry.
+func TestFreshRootsAreIndependentInProcess(t *testing.T) {
+	var ex Example
+	for _, candidate := range Get("SDD161").Bad {
+		if candidate.Name == "design-conflates-same-numbered-id" {
+			ex = candidate
+		}
+	}
+	if ex.Name == "" {
+		t.Fatal("example missing")
+	}
+
+	rootA, diagsA := evaluatePrepared(t, prepareExample(t, ex))
+
+	// Simulate a caller mutating its own copy of the example's Files map in
+	// place, the same way TestSDD161ConflationRefusedPerSpec does: fetch the
+	// example fresh, then edit a file's content by key.
+	var mutant Example
+	for _, candidate := range Get("SDD161").Bad {
+		if candidate.Name == "design-conflates-same-numbered-id" {
+			mutant = candidate
+		}
+	}
+	mutant.Files["Designs/Sample/README.md"] = strReplace(mutant.Files["Designs/Sample/README.md"],
+		"Realizes FR-01 and NFR-01.", "Realizes Sample:FR-01, Sample:NFR-01, Other:FR-01 and Specs/Other:NFR-01.")
+	evaluatePrepared(t, prepareExample(t, mutant))
+
+	// A fresh root built from the same registered example afterward must be
+	// unaffected by the mutation above, and repeating the original
+	// evaluation must reproduce the original diagnostics exactly.
+	var again Example
+	for _, candidate := range Get("SDD161").Bad {
+		if candidate.Name == "design-conflates-same-numbered-id" {
+			again = candidate
+		}
+	}
+	rootB, diagsB := evaluatePrepared(t, prepareExample(t, again))
+
+	if rootA == rootB {
+		t.Fatal("evaluations must load distinct Root values")
+	}
+	if ok, why := diagnosticsEqual(diagsA, diagsB); !ok {
+		t.Fatalf("fresh roots built from the same registered example diverged after an intervening mutation: %s", why)
+	}
+}
+
 // FR-13 / FR-14 / DD-2: fixture setup runs through the bounded runner, so a
 // hanging or over-producing setup command fails inside the runner's own
 // bounds instead of stalling the package. The control case proves the path

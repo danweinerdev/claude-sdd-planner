@@ -84,6 +84,40 @@ type Example struct {
 	Setup [][]string
 }
 
+// clone returns a deep copy of ex: a fresh Files map and a fresh Setup slice
+// (copying its argv slices), so a caller that edits the copy — including in
+// place, the way TestSDD161ConflationRefusedPerSpec edits Files by key —
+// cannot reach the registry's own Example.
+func (ex Example) clone() Example {
+	out := ex
+	if ex.Files != nil {
+		out.Files = make(map[string]string, len(ex.Files))
+		for k, v := range ex.Files {
+			out.Files[k] = v
+		}
+	}
+	if ex.Setup != nil {
+		out.Setup = make([][]string, len(ex.Setup))
+		for i, args := range ex.Setup {
+			out.Setup[i] = append([]string(nil), args...)
+		}
+	}
+	return out
+}
+
+// cloneExamples returns a deep copy of an example slice, preserving nil vs.
+// empty.
+func cloneExamples(exs []Example) []Example {
+	if exs == nil {
+		return nil
+	}
+	out := make([]Example, len(exs))
+	for i, ex := range exs {
+		out[i] = ex.clone()
+	}
+	return out
+}
+
 // Rule is one diagnostic code's implementation and its evidence.
 type Rule struct {
 	Code     string
@@ -134,18 +168,38 @@ func Register(r *Rule) {
 	registry[r.Code] = r
 }
 
-// All returns every registered rule, ordered by code.
+// All returns every registered rule, ordered by code. The returned Rules are
+// shallow copies of the registry's: Check and CheckRoot are shared function
+// values (safe — they close over no per-call mutable state), but Good and Bad
+// are fresh deep copies, so a caller cannot mutate a registered Example's
+// Files map and corrupt the registry for later callers in the same process.
 func All() []*Rule {
 	out := make([]*Rule, 0, len(registry))
 	for _, r := range registry {
-		out = append(out, r)
+		out = append(out, exportRule(r))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
 	return out
 }
 
-// Get returns one rule by code, or nil.
-func Get(code string) *Rule { return registry[code] }
+// Get returns one rule by code, or nil. Like All, the Good/Bad examples on
+// the returned Rule are deep copies, immutable to the caller.
+func Get(code string) *Rule {
+	r, ok := registry[code]
+	if !ok {
+		return nil
+	}
+	return exportRule(r)
+}
+
+// exportRule copies r with fresh Good/Bad example slices, so nothing a
+// caller does to the result reaches the registered *Rule.
+func exportRule(r *Rule) *Rule {
+	out := *r
+	out.Good = cloneExamples(r.Good)
+	out.Bad = cloneExamples(r.Bad)
+	return &out
+}
 
 // Codes lists every implemented diagnostic code.
 func Codes() []string {
