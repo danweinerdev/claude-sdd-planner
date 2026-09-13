@@ -1,0 +1,267 @@
+package procexec
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Result is a complete, successful command result.
+type Result struct {
+	Stdout          []byte // complete machine output (never truncated on success)
+	Stderr          string // bounded diagnostic excerpt
+	StderrTruncated bool
+	ExitCode        int
+	Run             time.Duration // start to exit
+	Cleanup         time.Duration // cancel/exit to drained and reaped (0 when nothing was pending)
+}
+
+// Run executes name with args (never through a shell) under the policy and
+// returns either a complete Result or a typed *Error. The executable is
+// resolved before launch against the child's PATH (the policy environment
+// when explicit, the process environment otherwise). Mutations are never
+// retried: a failure is reported once with its cause and evidence.
+func Run(ctx context.Context, name string, args []string, p Policy) (Result, error) {
+	p = p.withDefaults()
+	argv := append([]string{name}, args...)
+	fail := func(c Cause, err error, stderr *excerptWriter) (Result, error) {
+		e := &Error{Cause: c, Argv: argv, Err: err}
+		if stderr != nil {
+			e.Stderr, e.Truncated = stderr.excerpt()
+		}
+		return Result{}, e
+	}
+
+	path, err := lookPath(name, p.Env)
+	if err != nil {
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, errNotExecutable) {
+			return fail(CauseAccess, err, nil)
+		}
+		return fail(CauseUnavailable, err, nil)
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, p.Timeout)
+	defer cancel()
+
+	var cancelledAt atomicTime
+	stderr := &excerptWriter{limit: p.DiagnosticLimit}
+	stdout := &machineWriter{limit: p.MachineLimit, onOverflow: func() {
+		cancelledAt.mark(time.Now())
+		cancel()
+	}}
+
+	cmd := exec.CommandContext(runCtx, path, args...)
+	cmd.Args = argv
+	cmd.Dir = p.Dir
+	cmd.Env = p.Env
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	// Cancel kills only the direct child; descendant ownership is the
+	// containment adapter's job (DD-4). WaitDelay bounds the drain of pipes
+	// a descendant may still hold, so Wait can never block forever.
+	cmd.WaitDelay = p.Cleanup
+
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return fail(CauseUnavailable, err, nil)
+		}
+		return fail(CauseAccess, err, nil)
+	}
+	waitErr := cmd.Wait()
+	end := time.Now()
+
+	run := end.Sub(start)
+	var cleanup time.Duration
+	if t, ok := cancelledAt.get(); ok {
+		cleanup = end.Sub(t)
+		run = t.Sub(start)
+	} else if runCtx.Err() != nil {
+		// The deadline or the caller fired; Wait returned after the kill.
+		if dl, ok := runCtx.Deadline(); ok && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			cleanup = end.Sub(dl)
+			run = dl.Sub(start)
+		}
+	}
+
+	switch {
+	case stdout.overflowed():
+		return fail(CauseOverflow, errMachineOverflow, stderr)
+	case ctx.Err() != nil:
+		return fail(CauseCancelled, ctx.Err(), stderr)
+	case errors.Is(runCtx.Err(), context.DeadlineExceeded):
+		return fail(CauseDeadline, runCtx.Err(), stderr)
+	case waitErr == nil:
+	case errors.Is(waitErr, exec.ErrWaitDelay):
+		return fail(CauseDrain, waitErr, stderr)
+	default:
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: exitErr.ExitCode(), Err: waitErr}
+			e.Stderr, e.Truncated = stderr.excerpt()
+			return Result{}, e
+		}
+		return fail(CauseAccess, waitErr, stderr)
+	}
+
+	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup}
+	res.Stderr, res.StderrTruncated = stderr.excerpt()
+	return res, nil
+}
+
+var (
+	errMachineOverflow = errors.New("machine output exceeded the policy limit; result incomplete")
+	errNotExecutable   = errors.New("file is not executable")
+)
+
+// lookPath resolves name the way the child would see it. A name containing a
+// path separator is checked directly; a bare name is searched on the child's
+// PATH. Go's own LookPath is used when the child inherits the environment so
+// its executable-path security behavior (ErrDot) is retained.
+func lookPath(name string, env []string) (string, error) {
+	if env == nil {
+		return exec.LookPath(name)
+	}
+	if strings.ContainsRune(name, os.PathSeparator) || (runtime.GOOS == "windows" && strings.ContainsRune(name, '/')) {
+		return name, checkExecutable(name)
+	}
+	var pathVar string
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && strings.EqualFold(k, "PATH") {
+			pathVar = v
+		}
+	}
+	var lastErr error = exec.ErrNotFound
+	for _, dir := range filepath.SplitList(pathVar) {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		if runtime.GOOS == "windows" && filepath.Ext(candidate) == "" {
+			candidate += ".exe"
+		}
+		err := checkExecutable(candidate)
+		if err == nil {
+			return candidate, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			lastErr = err
+		}
+	}
+	return "", &exec.Error{Name: name, Err: lastErr}
+}
+
+func checkExecutable(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return &exec.Error{Name: path, Err: errNotExecutable}
+	}
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+		return &exec.Error{Name: path, Err: errNotExecutable}
+	}
+	return nil
+}
+
+func asError(err error, target **Error) bool { return errors.As(err, target) }
+
+// machineWriter collects the machine stream up to a finite limit. Exceeding
+// it flags overflow, asks the runner to cancel, and stops accepting bytes;
+// exec's copier then closes the pipe so the child cannot block on it.
+type machineWriter struct {
+	mu         sync.Mutex
+	buf        bytes.Buffer
+	limit      int64
+	overflow   bool
+	onOverflow func()
+}
+
+func (w *machineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.overflow {
+		return 0, errMachineOverflow
+	}
+	if int64(w.buf.Len())+int64(len(p)) > w.limit {
+		w.overflow = true
+		w.buf.Reset()
+		w.mu.Unlock()
+		w.onOverflow()
+		w.mu.Lock()
+		return 0, errMachineOverflow
+	}
+	return w.buf.Write(p)
+}
+
+func (w *machineWriter) overflowed() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.overflow
+}
+
+func (w *machineWriter) bytes() []byte {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]byte(nil), w.buf.Bytes()...)
+}
+
+// excerptWriter retains the head of a diagnostic stream up to a limit and
+// keeps draining everything after it, so a chatty child never blocks on a
+// full pipe and the caller still learns the stream was cut.
+type excerptWriter struct {
+	mu        sync.Mutex
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (w *excerptWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	room := w.limit - w.buf.Len()
+	if room >= len(p) {
+		w.buf.Write(p)
+		return len(p), nil
+	}
+	if room > 0 {
+		w.buf.Write(p[:room])
+	}
+	w.truncated = true
+	return len(p), nil
+}
+
+func (w *excerptWriter) excerpt() (string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String(), w.truncated
+}
+
+type atomicTime struct {
+	mu  sync.Mutex
+	t   time.Time
+	set bool
+}
+
+func (a *atomicTime) mark(t time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.set {
+		a.t, a.set = t, true
+	}
+}
+
+func (a *atomicTime) get() (time.Time, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.t, a.set
+}
