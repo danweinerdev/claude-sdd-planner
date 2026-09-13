@@ -110,7 +110,12 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	// here, within the cleanup allowance. A failure to clean up is reported
 	// ahead of the command's own result.
 	postCleaned, postErr := cleanupGroup(cmd, p.Cleanup, swept)
-	if containErr == nil {
+	// When the sweep did not complete, the fallback re-probed and re-killed the
+	// same group, so its answer supersedes the pre-reap one: a probe failure the
+	// fallback then resolved is not an operational failure, and reporting it
+	// would discard a valid result (review F-01). A fallback that itself failed
+	// still surfaces as containment.
+	if !swept || containErr == nil {
 		containErr = postErr
 	}
 	cleaned = cleaned || postCleaned

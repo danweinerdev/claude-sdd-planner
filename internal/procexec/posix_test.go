@@ -304,3 +304,56 @@ func TestTransientProbeFailureStillKills(t *testing.T) {
 		t.Fatal("the stubbed probe never ran; the test did not exercise the pre-kill probe path")
 	}
 }
+
+// FR-14 / DD-4 (review F-01): a pre-reap probe failure that the post-reap
+// fallback then resolved — it probed, killed, and confirmed the group empty —
+// is not an operational failure. Under the pre-fix code Run merged the stale
+// probe error into containErr whenever it was non-nil, so a command that
+// exited 0 with its descendants demonstrably cleaned was reported as
+// CauseContainment and every caller discarded a valid Result.Stdout.
+func TestResolvedProbeFailureIsNotAnError(t *testing.T) {
+	restore := signalGroup
+	var mu sync.Mutex
+	probeFailed := false
+	signalGroup = func(pgid int, sig syscall.Signal) error {
+		mu.Lock()
+		if sig == 0 && !probeFailed {
+			probeFailed = true
+			mu.Unlock()
+			return syscall.EPERM
+		}
+		mu.Unlock()
+		return restore(pgid, sig)
+	}
+	t.Cleanup(func() { signalGroup = restore })
+
+	exe, args, p := helperPolicy(t, "spawn-descendant-exit")
+	p.Cleanup = 2 * time.Second
+
+	res, err := Run(context.Background(), exe, args, p)
+	if err != nil {
+		var pe *Error
+		if errors.As(err, &pe) && pe.Stdout != "" {
+			if pid, convErr := strconv.Atoi(strings.TrimSpace(pe.Stdout)); convErr == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+		t.Fatalf("a probe failure the fallback resolved must not fail the run: %v", err)
+	}
+	if res.ExitCode != 0 {
+		t.Errorf("exit code %d, want 0", res.ExitCode)
+	}
+	grandchild := pidFrom(t, res.Stdout)
+	killLater(t, grandchild)
+	if !waitDead(grandchild, p.Cleanup+2*time.Second) {
+		t.Errorf("grandchild %d survived the fallback cleanup", grandchild)
+	}
+	if !res.DescendantsCleaned {
+		t.Error("result does not report that descendants were cleaned")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !probeFailed {
+		t.Fatal("the stubbed probe never ran; the test did not exercise the pre-kill probe path")
+	}
+}
