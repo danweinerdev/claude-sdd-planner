@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/testenv"
 )
 
 const (
@@ -312,6 +313,27 @@ func TestCorpusSetupInheritsPolicy(t *testing.T) {
 	}
 
 	// The fixed identity still governs, so the corpus's recorded SHAs hold.
+	// Observed on a real corpus root prepared through prepare() — the same
+	// path every fixture takes — rather than inferred from setupEnv, because
+	// what the recorded SHAs depend on is the commit git actually writes.
+	prepared, err := prepare(committingFixture(t), t.TempDir())
+	if err != nil {
+		t.Fatalf("preparing a committing corpus fixture: %v", err)
+	}
+	out, err := exec.Command("git", "-C", prepared, "log", "-1", "--format=%an|%ae|%aI").Output()
+	if err != nil {
+		t.Fatalf("git log in the prepared fixture: %v", err)
+	}
+	gotIdentity := strings.Split(strings.TrimSpace(string(out)), "|")
+	wantIdentity := []string{testenv.FixtureName, testenv.FixtureEmail, "2024-01-01T00:00:00Z"}
+	if !slices.Equal(gotIdentity, wantIdentity) {
+		t.Errorf("a prepared fixture's commit records author, email, date = %v, want %v; "+
+			"the corpus's recorded SHAs depend on this fixed identity", gotIdentity, wantIdentity)
+	}
+
+	// Structural guard on the same contract: a config key here is appended
+	// after os.Environ() and would silently replace the policy's global
+	// configuration for every SETUP command.
 	for _, kv := range setupEnv {
 		k, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(k, "GIT_CONFIG_") {
@@ -319,4 +341,28 @@ func TestCorpusSetupInheritsPolicy(t *testing.T) {
 				"replace the policy's configuration for every SETUP command", k)
 		}
 	}
+}
+
+// committingFixture returns a corpus root whose SETUP makes a git commit, so a
+// prepared copy of it carries an observable author identity. It fails rather
+// than skips: the corpus is committed alongside this test, so the absence of
+// such a root is a corpus regression, not an environment limitation.
+func committingFixture(t *testing.T) string {
+	t.Helper()
+	roots, err := loadManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(roots) // deterministic pick
+	for _, root := range roots {
+		raw, err := os.ReadFile(filepath.Join(root, "SETUP"))
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(raw), "commit") {
+			return root
+		}
+	}
+	t.Fatal("no corpus root has a SETUP that commits; the identity of a prepared fixture cannot be observed")
+	return ""
 }
