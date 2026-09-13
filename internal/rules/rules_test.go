@@ -1,9 +1,6 @@
 package rules
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -100,25 +97,20 @@ func TestExamplesBehaveAsDeclared(t *testing.T) {
 // rule's own examples must produce the same finding as the rule alone would.
 // Order dependence would make the parity comparison unstable.
 //
-// Parallel per example for the same reason as TestExamplesBehaveAsDeclared;
-// the four runs WITHIN one example stay serial because their comparison is
-// the point of the test.
+// Parallel per example for the same reason as TestExamplesBehaveAsDeclared.
+// Each case prepares its fixture ONCE and evaluates four independently
+// loaded roots, comparing complete diagnostics — code, severity, path, line,
+// message, correction, implicated, waived reason — not just codes (FR-04,
+// FR-05, DD-8).
 func TestRunIsDeterministic(t *testing.T) {
 	for _, r := range All() {
 		for _, ex := range r.Bad {
 			t.Run(r.Code+"/"+ex.Name, func(t *testing.T) {
 				t.Parallel()
-				first := codesOf(runExample(t, ex))
-				for i := 0; i < 3; i++ {
-					again := codesOf(runExample(t, ex))
-					if len(first) != len(again) {
-						t.Fatalf("%s/%s: diagnostic count varies between runs (%d vs %d)",
-							r.Code, ex.Name, len(first), len(again))
-					}
-					for j := range first {
-						if first[j] != again[j] {
-							t.Fatalf("%s/%s: diagnostic order varies between runs", r.Code, ex.Name)
-						}
+				_, results := runDeterminismCase(t, ex)
+				for i := 1; i < len(results); i++ {
+					if ok, why := diagnosticsEqual(results[0], results[i]); !ok {
+						t.Fatalf("%s/%s: evaluation %d differs from the first: %s", r.Code, ex.Name, i, why)
 					}
 				}
 			})
@@ -137,37 +129,12 @@ var setupEnv = []string{
 	"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
 }
 
+// runExample prepares an example and evaluates it once; the single-run
+// harness for TestExamplesBehaveAsDeclared.
 func runExample(t *testing.T, ex Example) []Diagnostic {
 	t.Helper()
-	dir := t.TempDir()
-	for rel, content := range ex.Files {
-		// {{REPO}} lets an example reference its own fixture root — needed for
-		// a `Repository:` evidence label, which must equal the exact resolved
-		// target repository root (t.TempDir() is different every run, so this
-		// can't be a hardcoded path the way a commit SHA can be, per Setup's
-		// fixed-identity determinism).
-		content = strings.ReplaceAll(content, "{{REPO}}", dir)
-		p := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, args := range ex.Setup {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), setupEnv...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("setup command %v: %v\n%s", args, err, out)
-		}
-	}
-	root, err := LoadRoot(dir)
-	if err != nil {
-		t.Fatalf("LoadRoot: %v", err)
-	}
-	return Run(root)
+	_, diags := evaluatePrepared(t, prepareExample(t, ex))
+	return diags
 }
 
 func codesOf(ds []Diagnostic) []string {
