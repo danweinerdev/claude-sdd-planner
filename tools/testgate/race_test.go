@@ -42,7 +42,12 @@ func parseMakeRules(src string) map[string]*makeRule {
 			continue
 		}
 		targets, prereqs, ok := strings.Cut(line, ":")
-		if !ok || strings.Contains(targets, "=") || strings.HasPrefix(strings.TrimSpace(targets), ".") {
+		// A variable assignment (`:=`, `::=`, `?=`, `+=`, or plain `=`) has its
+		// colon immediately followed — for `::=` after one more colon — by `=`,
+		// not a rule's prerequisite list; strings.Contains(targets, "=") alone
+		// misses these because the `=` lands in prereqs, not targets.
+		isAssignment := strings.HasPrefix(prereqs, "=") || strings.HasPrefix(prereqs, ":=")
+		if !ok || isAssignment || strings.Contains(targets, "=") || strings.HasPrefix(strings.TrimSpace(targets), ".") {
 			current = nil
 			continue
 		}
@@ -70,6 +75,24 @@ func coversPackage(recipe, pkg string) bool {
 		}
 	}
 	return false
+}
+
+func TestParseMakeRulesSkipsVariableAssignments(t *testing.T) {
+	src := "FOO := bar\ntest: deps\n\t@go test\n"
+	rules := parseMakeRules(src)
+	if _, ok := rules["FOO"]; ok {
+		t.Fatalf("variable assignment must not be parsed as a rule: %v", rules)
+	}
+	test := rules["test"]
+	if test == nil {
+		t.Fatal("test: deps must still be parsed as a rule")
+	}
+	if len(test.prereqs) != 1 || test.prereqs[0] != "deps" {
+		t.Fatalf("test rule prereqs = %v, want [deps]", test.prereqs)
+	}
+	if len(test.recipe) != 1 || test.recipe[0] != "@go test" {
+		t.Fatalf("test rule recipe = %v, want [@go test]", test.recipe)
+	}
 }
 
 func TestMakeTestRunsRaceDetector(t *testing.T) {
