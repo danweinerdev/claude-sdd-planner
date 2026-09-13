@@ -113,6 +113,16 @@ func runP4(dir string, args ...string) ([]byte, error) {
 	return res.Stdout, nil
 }
 
+// absentP4 maps a failed p4 query to its authoritative answer: an operational
+// failure (runP4 could not run p4 at all) stays operational; a query that
+// ran and came back empty or erroring means the object is not there.
+func absentP4(err error, what string) error {
+	if errors.Is(err, ErrOperational) {
+		return err
+	}
+	return fmt.Errorf("%w: %s", ErrNotFound, what)
+}
+
 func (p *p4Repo) Kind() Kind   { return Perforce }
 func (p *p4Repo) Root() string { return p.root }
 
@@ -124,7 +134,7 @@ func (p *p4Repo) RevisionExists(rev string) (bool, error) {
 	}
 	out, err := runP4(p.root, "describe", "-s", rev)
 	if err != nil {
-		return false, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return false, absentP4(err, rev)
 	}
 	if strings.Contains(string(out), "no such changelist") {
 		return false, fmt.Errorf("%w: %s", ErrNotFound, rev)
@@ -160,7 +170,7 @@ func (p *p4Repo) FileAt(rev, relPath string) ([]byte, error) {
 	if rev == "have" || rev == "head" {
 		out, err := runP4(p.root, "print", "-q", fmt.Sprintf("%s#%s", relPath, rev))
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s#%s", ErrNotFound, relPath, rev)
+			return nil, absentP4(err, fmt.Sprintf("%s#%s", relPath, rev))
 		}
 		return out, nil
 	}
@@ -169,7 +179,7 @@ func (p *p4Repo) FileAt(rev, relPath string) ([]byte, error) {
 	}
 	out, err := runP4(p.root, "print", "-q", fmt.Sprintf("%s@%s", relPath, rev))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s@%s", ErrNotFound, relPath, rev)
+		return nil, absentP4(err, fmt.Sprintf("%s@%s", relPath, rev))
 	}
 	return out, nil
 }
@@ -192,7 +202,7 @@ func (p *p4Repo) ChangedPaths(rev string) ([]string, error) {
 	}
 	out, err := runP4(p.root, "describe", "-s", rev)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return nil, absentP4(err, rev)
 	}
 	var paths []string
 	for _, line := range strings.Split(string(out), "\n") {

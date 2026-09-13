@@ -94,6 +94,30 @@ func TestVCSOperationalErrors(t *testing.T) {
 	}
 }
 
+// review-execution: runP4 wraps every non-exit failure in ErrOperational
+// (p4.go ~100-114), but RevisionExists, FileAt, and ChangedPaths rewrap any
+// runP4 failure as ErrNotFound regardless of cause, so a transient
+// inability to run p4 at all reads as "revision does not exist" — and the
+// memoization decorator would then cache that transient failure as
+// permanent absence.
+func TestP4OperationalErrorsAreNotAbsence(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	repo := &p4Repo{root: t.TempDir()}
+
+	if _, err := repo.RevisionExists("1"); !errors.Is(err, ErrOperational) || errors.Is(err, ErrNotFound) {
+		t.Errorf("RevisionExists without p4: %v, want ErrOperational and not ErrNotFound", err)
+	}
+	if _, err := repo.FileAt("have", "a.txt"); !errors.Is(err, ErrOperational) || errors.Is(err, ErrNotFound) {
+		t.Errorf("FileAt(have) without p4: %v, want ErrOperational and not ErrNotFound", err)
+	}
+	if _, err := repo.FileAt("1", "a.txt"); !errors.Is(err, ErrOperational) || errors.Is(err, ErrNotFound) {
+		t.Errorf("FileAt(changelist) without p4: %v, want ErrOperational and not ErrNotFound", err)
+	}
+	if _, err := repo.ChangedPaths("1"); !errors.Is(err, ErrOperational) || errors.Is(err, ErrNotFound) {
+		t.Errorf("ChangedPaths without p4: %v, want ErrOperational and not ErrNotFound", err)
+	}
+}
+
 // FR-16: with git available, genuine absence keeps its authoritative answer
 // and a non-repository is still NoRepo — a successful query is required
 // before either is claimed.
