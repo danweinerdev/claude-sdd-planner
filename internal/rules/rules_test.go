@@ -49,6 +49,46 @@ func TestEveryRuleHasGoodAndBadExamples(t *testing.T) {
 	}
 }
 
+// All's copy contract: two calls must return independent Files maps, so that
+// a caller mutating one call's result (as TestSDD161ConflationRefusedPerSpec
+// does, editing Files by key) cannot corrupt what a later call — or the
+// registry itself — returns.
+func TestAllReturnsDistinctExampleMaps(t *testing.T) {
+	first := All()
+	second := All()
+	found := false
+	for i, r := range first {
+		for j, ex := range r.Good {
+			other := second[i].Good[j]
+			if ex.Files == nil || other.Files == nil {
+				continue
+			}
+			found = true
+			if &ex.Files == &other.Files {
+				t.Fatalf("%s Good[%d]: two All() calls returned the same Files map pointer", r.Code, j)
+			}
+			for k := range ex.Files {
+				ex.Files[k] = "mutated"
+			}
+			if second[i].Good[j].Files[k0(other.Files)] == "mutated" {
+				t.Fatalf("%s Good[%d]: mutating one All() call's Files reached another call's result",
+					r.Code, j)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no rule had a non-nil Good example Files map to test against")
+	}
+}
+
+// k0 returns an arbitrary key of m, for the mutation check above.
+func k0(m map[string]string) string {
+	for k := range m {
+		return k
+	}
+	return ""
+}
+
 // Each Bad example must produce its rule's code, and each Good example must not.
 // This is the substantive per-rule test: the registry gives it for free for every
 // code, so a newly ported rule is exercised the moment it is registered.

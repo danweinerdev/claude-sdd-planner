@@ -173,6 +173,10 @@ func Register(r *Rule) {
 // values (safe — they close over no per-call mutable state), but Good and Bad
 // are fresh deep copies, so a caller cannot mutate a registered Example's
 // Files map and corrupt the registry for later callers in the same process.
+//
+// Copy contract: every call to All returns examples independent of every
+// other call's and of the registry's own. External callers — anything that
+// might read or mutate Good/Bad — must use All or Get, never allRules.
 func All() []*Rule {
 	out := make([]*Rule, 0, len(registry))
 	for _, r := range registry {
@@ -183,13 +187,32 @@ func All() []*Rule {
 }
 
 // Get returns one rule by code, or nil. Like All, the Good/Bad examples on
-// the returned Rule are deep copies, immutable to the caller.
+// the returned Rule are deep copies, immutable to the caller. See All's copy
+// contract.
 func Get(code string) *Rule {
 	r, ok := registry[code]
 	if !ok {
 		return nil
 	}
 	return exportRule(r)
+}
+
+// allRules returns every registered rule, ordered by code, as the registry's
+// own *Rule values — no Good/Bad clone. It exists for the production
+// evaluation path, which calls Check/CheckRoot and never reads Good/Bad, so
+// paying All's per-call deep copy on every validate is wasted work.
+//
+// Callers must not mutate a returned *Rule or its Good/Bad slices: doing so
+// would corrupt the registry for every later caller in the process, exactly
+// what All's clone exists to prevent. Only read Code/Severity/Check/CheckRoot
+// and the like.
+func allRules() []*Rule {
+	out := make([]*Rule, 0, len(registry))
+	for _, r := range registry {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	return out
 }
 
 // exportRule copies r with fresh Good/Bad example slices, so nothing a
@@ -219,7 +242,7 @@ func Codes() []string {
 // violate?" wants this. Use RunWithWaivers for the reporting path, where a
 // human's declared exceptions apply.
 func Run(r *Root) []Diagnostic {
-	d, err := runWith(r, All())
+	d, err := runWith(r, allRules())
 	if err != nil {
 		return []Diagnostic{operationalDiagnostic(err)}
 	}
@@ -252,7 +275,7 @@ func sortStrict(out []Diagnostic) {
 // can forget to honor an exception, and so the set of waivable codes is decided
 // in one place.
 func RunWithWaivers(r *Root) []Diagnostic {
-	d, err := runWithWaiversWith(r, All())
+	d, err := runWithWaiversWith(r, allRules())
 	if err != nil {
 		return []Diagnostic{operationalDiagnostic(err)}
 	}

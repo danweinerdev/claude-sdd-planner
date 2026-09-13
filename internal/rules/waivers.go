@@ -149,7 +149,7 @@ func Waivers(a *Artifact) []Waiver {
 // an unknown code is always a mistake — a typo, or a rule that has since been
 // renamed — and silently keeping it would leave a waiver that can never match.
 func knownCode(code string) bool {
-	for _, r := range All() {
+	for _, r := range allRules() {
 		if r.Code == code {
 			return true
 		}
@@ -245,7 +245,7 @@ func bareOnce(r *Root) []Diagnostic {
 	r.bareMu.Lock()
 	defer r.bareMu.Unlock()
 	if !r.bareComputed {
-		r.bareDiagnostics, _ = evaluate(r, All()) // failure stays recorded on r
+		r.bareDiagnostics, _ = evaluate(r, allRules()) // failure stays recorded on r
 		r.bareComputed = true
 	}
 	return r.bareDiagnostics
