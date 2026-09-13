@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -115,4 +116,64 @@ func TestHermeticChildCase(t *testing.T) {
 		t.Fatalf("Clean() = %v, %v; want a clean fixture", clean, err)
 	}
 	_ = testenv.FixtureName
+}
+
+// FR-01 / AC-01 (review F-01): fixture setup commands inherit the policy's
+// global configuration instead of overriding it.
+//
+// The observable is what a Setup command itself sees, not what a later probe
+// sees: the policy's pins (fsmonitor, signing, gc, maintenance) govern git's
+// behavior while the command runs and are never persisted into the fixture's
+// .git/config, so reading the fixture's config afterwards under the process
+// environment reports the policy either way and would prove nothing. This
+// test therefore runs the introspection through runSetup — the same env
+// composition every fixture Setup command uses — and asserts the pins are in
+// effect there. The identity assertions pin the other half of the contract:
+// dropping the config override must not disturb the fixed author and date
+// the hard-coded fixture SHAs depend on.
+func TestFixtureSetupInheritsPolicy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the config introspection probe is a POSIX shell command")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+
+	dir := t.TempDir()
+	const seen = "seen-config.txt"
+	setup := [][]string{
+		{"git", "init", "-q"},
+		{"sh", "-c", "git config --get core.fsmonitor > " + seen + "; git config --get commit.gpgsign >> " + seen},
+	}
+	if err := runSetup(dir, setup, setupPolicy); err != nil {
+		t.Fatalf("setup could not read the policy's pins, so they are not in effect for fixture setup: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, seen))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Fields(string(b))
+	if want := []string{"false", "false"}; !slices.Equal(got, want) {
+		t.Errorf("a Setup command saw core.fsmonitor, commit.gpgsign = %v, want %v (the policy's pins)", got, want)
+	}
+
+	// The fixed identity still governs, so hard-coded fixture SHAs hold.
+	p := appendOnlyGoodFixture(t)
+	head := func(format string) string {
+		t.Helper()
+		out, err := exec.Command("git", "-C", p.dir, "log", "-1", "--format="+format).Output()
+		if err != nil {
+			t.Fatalf("git log %s: %v", format, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if g := head("%an"); g != testenv.FixtureName {
+		t.Errorf("HEAD author name = %q, want %q", g, testenv.FixtureName)
+	}
+	if g := head("%ae"); g != testenv.FixtureEmail {
+		t.Errorf("HEAD author email = %q, want %q", g, testenv.FixtureEmail)
+	}
+	if g := head("%ad"); !strings.HasPrefix(g, "Mon Jan 1 00:00:00 2024") {
+		t.Errorf("HEAD author date = %q, want the fixed fixture date 2024-01-01", g)
+	}
 }

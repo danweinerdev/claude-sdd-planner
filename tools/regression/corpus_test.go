@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +271,52 @@ func TestCorpusPrepareUsesOwnedRunner(t *testing.T) {
 					tc.commands, tc.policy.Timeout, tc.policy.Cleanup)
 			}
 		})
+	}
+}
+
+// FR-01 / AC-01 (review F-01): corpus fixture SETUP commands inherit the
+// policy's global configuration instead of overriding it.
+//
+// The observable is what a SETUP command itself sees, not what a later probe
+// sees: the policy's pins (fsmonitor, signing, gc, maintenance) govern git's
+// behavior while the command runs and are never persisted into the prepared
+// root's .git/config, so reading that config afterwards under the process
+// environment reports the policy either way and would prove nothing. This
+// test therefore runs the introspection through runSetup — the same env
+// composition prepare() uses for every corpus root — and asserts the pins
+// are in effect there.
+func TestCorpusSetupInheritsPolicy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the config introspection probe is a POSIX shell command")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+
+	dir := t.TempDir()
+	const seen = "seen-config.txt"
+	commands := [][]string{
+		{"git", "init", "-q"},
+		{"sh", "-c", "git config --get core.fsmonitor > " + seen + "; git config --get commit.gpgsign >> " + seen},
+	}
+	if err := runSetup(dir, commands, setupPolicy); err != nil {
+		t.Fatalf("setup could not read the policy's pins, so they are not in effect for corpus setup: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, seen))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Fields(string(b))
+	if want := []string{"false", "false"}; !slices.Equal(got, want) {
+		t.Errorf("a SETUP command saw core.fsmonitor, commit.gpgsign = %v, want %v (the policy's pins)", got, want)
+	}
+
+	// The fixed identity still governs, so the corpus's recorded SHAs hold.
+	for _, kv := range setupEnv {
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(k, "GIT_CONFIG_") {
+			t.Errorf("setupEnv sets %s; it is appended after os.Environ() and would "+
+				"replace the policy's configuration for every SETUP command", k)
+		}
 	}
 }

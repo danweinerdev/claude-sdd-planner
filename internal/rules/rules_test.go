@@ -122,11 +122,19 @@ func TestRunIsDeterministic(t *testing.T) {
 // Example.Setup git command runs under, so a commit's resulting SHA is
 // reproducible across machines and runs and can be hardcoded into an
 // example's Files content instead of computed at test time.
+//
+// It carries identity and timestamp only. Configuration isolation belongs to
+// the package's hermetic policy (internal/testenv, installed by TestMain),
+// and setupEnv is appended after os.Environ(), where exec takes the last
+// duplicate key — so a GIT_CONFIG_GLOBAL or GIT_CONFIG_NOSYSTEM here would
+// silently replace the policy's global config for every fixture setup
+// command, voiding its fsmonitor, signing, gc and maintenance pins. The
+// identity variables are redundant with the policy and kept as an explicit
+// belt-and-braces; never add a config key to this list.
 var setupEnv = []string{
 	"GIT_AUTHOR_NAME=sdd-fixture", "GIT_AUTHOR_EMAIL=sdd-fixture@example.com",
 	"GIT_COMMITTER_NAME=sdd-fixture", "GIT_COMMITTER_EMAIL=sdd-fixture@example.com",
 	"GIT_AUTHOR_DATE=2024-01-01T00:00:00+0000", "GIT_COMMITTER_DATE=2024-01-01T00:00:00+0000",
-	"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
 }
 
 // runExample prepares an example and evaluates it once; the single-run
