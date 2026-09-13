@@ -312,8 +312,15 @@ func diagKey(d rules.Diagnostic) string {
 // diff gateDiagnostics computes. The freezing verbs need this stronger form:
 // a frozen artifact is immutable, so any invalid byte it carries at freeze
 // time becomes permanently invalid, whether or not the freezing transition
-// introduced it. Waivers are honored (RunWithWaivers), the same criterion
-// `sdd validate` applies by default.
+// introduced it. Waivers are honored (RunWithWaiversChecked), the same
+// criterion `sdd validate` applies by default.
+//
+// RunWithWaiversChecked, not RunWithWaivers: an operational sweep failure
+// (e.g. git could not run) synthesizes a root-scoped SDD198 (Path ".") that
+// the `d.Path == rel` filter below would silently drop, letting a freezing
+// verb (review resolve) write `frozen: true` on a root nothing actually
+// validated. The checked form surfaces that failure as an error instead, so
+// the caller can refuse before any write.
 func candidateArtifactErrors(path, candidate string) ([]rules.Diagnostic, error) {
 	root, repoRoot, err := resolveRoots(".", "")
 	if err != nil {
@@ -345,8 +352,12 @@ func candidateArtifactErrors(path, candidate string) ([]rules.Diagnostic, error)
 	} else if rel != "" {
 		loaded = rules.ScopeToDoc(loaded, rel)
 	}
+	diags, err := rules.RunWithWaiversChecked(loaded)
+	if err != nil {
+		return nil, err
+	}
 	var out []rules.Diagnostic
-	for _, d := range rules.RunWithWaivers(loaded) {
+	for _, d := range diags {
 		if d.Severity.Invalidating() && d.Path == rel {
 			out = append(out, d)
 		}

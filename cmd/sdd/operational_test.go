@@ -239,6 +239,168 @@ func TestTransitionGateOperationalSweepExits(t *testing.T) {
 	}
 }
 
+// reviewResolveOperationalFixture builds a planning root with a phase-gate
+// review artifact whose frontmatter passes review resolve's earlier checks
+// (review.go:625-675): all four lanes present with real evidence, verdict
+// Aligned, no open findings, no untracked followups. Only the final
+// candidateArtifactErrors sweep (review.go:713-719) remains to run.
+func reviewResolveOperationalFixture(t *testing.T) (root, reviewPath string) {
+	t.Helper()
+	root = t.TempDir()
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"-C", dir, "-c", "user.name=SDD Test", "-c", "user.email=sdd@example.invalid"}, args...)
+		out, err := exec.Command(gitExe, argv...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("planning-config.json", `{"planningRoot":"."}`)
+	write("Plans/Demo/README.md",
+		"---\ntitle: Demo\ntype: plan\nstatus: active\ncreated: 2026-09-12\nupdated: 2026-09-12\n"+
+			"tags: []\nrelated: []\nphases: []\n---\n\n# Demo\n\n## Overview\n\nText.\n")
+	write("Plans/Demo/01-phase.md",
+		"---\ntitle: Phase One\ntype: phase\nstatus: in-progress\ncreated: 2026-09-12\nupdated: 2026-09-12\n"+
+			"tags: []\nrelated: []\ntasks: []\n---\n\n# Phase One\n\n## Overview\n\nText.\n")
+
+	// The planning root must be a committed repository first, so the review's
+	// `rev` range and the planning revision it reads at scaffold time both
+	// name real, ancestor-related commits.
+	git(root, "init", "-q", "-b", "main")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "base")
+	base := git(root, "rev-parse", "HEAD")
+	write("Plans/Demo/01-phase.md",
+		"---\ntitle: Phase One\ntype: phase\nstatus: in-progress\ncreated: 2026-09-12\nupdated: 2026-09-13\n"+
+			"tags: []\nrelated: []\ntasks: []\n---\n\n# Phase One\n\n## Overview\n\nText updated.\n")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "phase update")
+	endpoint := git(root, "rev-parse", "HEAD")
+	rangeRev := base + ".." + endpoint
+
+	reviewPath = "Plans/Demo/reviews/01-review-demo-" + endpoint[:7] + ".md"
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("title: \"Phase review: 01-phase\"\n")
+	b.WriteString("type: review\n")
+	b.WriteString("status: open\n")
+	b.WriteString("created: 2026-09-13\n")
+	b.WriteString("updated: 2026-09-13\n")
+	b.WriteString("tags: [review]\n")
+	b.WriteString("related: [\"Plans/Demo/01-phase.md\"]\n")
+	b.WriteString("review_of: \"Plans/Demo/01-phase.md\"\n")
+	fmt.Fprintf(&b, "rev: %q\n", rangeRev)
+	b.WriteString("review_scope: phase\n")
+	b.WriteString("frozen: false\n")
+	b.WriteString("verdict: Aligned\n")
+	fmt.Fprintf(&b, "reviewed_planning_revision: %q\n", endpoint)
+	b.WriteString("review_mode: independent\n")
+	b.WriteString("lane_results:\n")
+	for _, l := range []string{"review_plan_drift", "review_quality", "review_spec_compliance", "review_blind_spots"} {
+		fmt.Fprintf(&b, "  - lane: %s\n", l)
+		b.WriteString("    result: PASS/Aligned\n")
+		fmt.Fprintf(&b, "    reviewed_identity: %q\n", rangeRev)
+		b.WriteString("    evidence: \"agent read the full diff and phase doc; nothing outstanding\"\n")
+	}
+	b.WriteString("findings: []\n")
+	b.WriteString("followups: []\n")
+	b.WriteString("---\n\n")
+	b.WriteString("# Phase review: 01-phase\n\n")
+	fmt.Fprintf(&b, "Reviewed `Plans/Demo/01-phase.md` at frozen identity `%s`.\n\n", rangeRev)
+	b.WriteString("## Findings\n\nNone.\n\n")
+	b.WriteString("## Resolution Log\n\nNone.\n")
+	write(reviewPath, b.String())
+
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "add review")
+	return root, reviewPath
+}
+
+// TestReviewResolveOperationalSweepExits (review-execution F-01): `review
+// resolve` on a phase-gate review calls candidateArtifactErrors
+// (transition.go:317-355) as its final gate before writing `status: resolved`
+// and `frozen: true`. Today that function calls the unchecked
+// rules.RunWithWaivers and filters findings by `d.Path == rel`, which drops
+// the synthesized SDD198 (Path ".") an operational sweep failure produces —
+// so review resolve silently proceeds to write on an unvalidated root. This
+// test documents that defect red and must start failing once
+// candidateArtifactErrors switches to the checked entry point.
+func TestReviewResolveOperationalSweepExits(t *testing.T) {
+	bin := stressBinary(t)
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	root, reviewPath := reviewResolveOperationalFixture(t)
+
+	base := []string{"SDD_VCS_DISABLE_P4=1", "HOME=" + t.TempDir(),
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull}
+	run := func(path string, extraArgs ...string) (int, string) {
+		t.Helper()
+		args := append([]string{"review", "resolve", reviewPath}, extraArgs...)
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = root
+		cmd.Env = append(append([]string{}, base...), "PATH="+path)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatalf("running sdd review resolve: %v", err)
+		}
+		return code, string(out)
+	}
+
+	// Control: git available, --dry-run so it never mutates the fixture. The
+	// gate may refuse (exit 1) or succeed (exit 0), but it must never be an
+	// operational exit — establishing the fixture itself is not the cause.
+	if code, out := run(filepath.Dir(gitExe), "--dry-run"); code == 2 {
+		t.Fatalf("control with git exited 2 (operational):\n%s", out)
+	}
+
+	before, err := os.ReadFile(filepath.Join(root, reviewPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := run(t.TempDir())
+	if code != 2 {
+		t.Fatalf("without git: exit %d, want 2 (operational)\n%s", code, out)
+	}
+	low := strings.ToLower(out)
+	if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+		t.Errorf("the operational exit must name the cause; got:\n%s", out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(root, reviewPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("an operational sweep must not let review resolve write; artifact changed:\nbefore:\n%s\nafter:\n%s",
+			before, after)
+	}
+	if strings.Contains(string(after), "status: resolved") || strings.Contains(string(after), "frozen: true") {
+		t.Errorf("an operational sweep must not resolve or freeze the review:\n%s", after)
+	}
+}
+
 // TestLifecycleVerbsOperationalExit (FR-16, AC-08, DD-10): the lifecycle
 // verbs that consult the VCS — `evidence add` and `graph remap-revisions` —
 // exit 2 with the cause named when git cannot run, never 1 (an authoritative
