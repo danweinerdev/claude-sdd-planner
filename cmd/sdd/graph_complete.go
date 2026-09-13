@@ -12,6 +12,7 @@ package main
 // same frontmatter write path the v1 transition uses.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,20 +30,41 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
+// beforeStatusFlip is a test seam invoked in graphPlanComplete right after
+// the status flip's expected digest is computed and right before the flip
+// itself, so a test can inject a concurrent writer into that window. See
+// the call site's comment. Production code leaves it nil.
+var beforeStatusFlip func(readme string)
+
+// statGraphStore is the graph-store existence probe graphPlanDir and
+// graphPhaseComplete perform, exposed as a package-level variable so tests
+// can inject a non-not-exist failure without a real unreadable filesystem
+// fixture (chmod cannot isolate the graph-store file's own stat from its
+// sibling README.md, since both share the same parent directory). Production
+// code always uses os.Stat.
+var statGraphStore = os.Stat
+
 // graphPlanDir resolves path (a plan directory or its README.md) to the
 // plan's directory and name, returning ok=false when there is no committed
 // graph next to it — the v1 caller falls through untouched, same contract
-// as graphNext.
-func graphPlanDir(path string) (planDir, plan string, ok bool) {
+// as graphNext. A graph-store stat failure for any reason other than
+// not-exist is an inability to answer, not an absence: it is returned as an
+// operational error rather than folded into "not a graph plan", which would
+// silently route the v1 completion path onto a graph plan the code simply
+// could not see (review-execution 56815db-b F-01 item 2).
+func graphPlanDir(path string) (planDir, plan string, ok bool, err error) {
 	readme, err := resolvePlanReadme(path)
 	if err != nil {
-		return "", "", false
+		return "", "", false, nil
 	}
 	planDir = filepath.Dir(readme)
-	if _, err := os.Stat(gstore.PathFor(planDir)); err != nil {
-		return "", "", false
+	if _, statErr := statGraphStore(gstore.PathFor(planDir)); statErr != nil {
+		if os.IsNotExist(statErr) {
+			return "", "", false, nil
+		}
+		return "", "", false, fmt.Errorf("checking for a committed graph in %s: %w", planDir, statErr)
 	}
-	return planDir, filepath.Base(planDir), true
+	return planDir, filepath.Base(planDir), true, nil
 }
 
 // graphDerive loads the graph and derives its three-axis state plus
@@ -104,7 +126,10 @@ func liveClaims(nodes []*model.Node) []string {
 // handled=false when path is not a graph plan, so the caller falls through
 // to the v1 transition.
 func graphPlanComplete(path string, o completeOpts) (handled bool, err error) {
-	planDir, plan, ok := graphPlanDir(path)
+	planDir, plan, ok, err := graphPlanDir(path)
+	if err != nil {
+		return true, fmt.Errorf("plan complete: %w", err)
+	}
 	if !ok {
 		return false, nil
 	}
@@ -153,7 +178,22 @@ func graphPlanComplete(path string, o completeOpts) (handled bool, err error) {
 	if _, err := gcompile.RenderViews(root, plan, repoRoot, g, st, closed); err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}
-	if err := writeReadmeStatusComplete(readme); err != nil {
+	// The status flip's compare-and-swap targets exactly the bytes
+	// RenderViews just wrote (or, when it left the README untouched, the
+	// bytes on disk right now) — never a stale pre-render read.
+	rendered, err := os.ReadFile(readme)
+	if err != nil {
+		return true, fmt.Errorf("plan complete: %w", err)
+	}
+	expectDigest := store.Digest(string(rendered))
+	// beforeStatusFlip is a test seam: it runs after the expected digest
+	// has been computed from the just-rendered bytes and before the status
+	// flip's compare-and-swap write, letting a test simulate a concurrent
+	// writer racing exactly that window. Production code leaves it nil.
+	if beforeStatusFlip != nil {
+		beforeStatusFlip(readme)
+	}
+	if err := writeReadmeStatusComplete(readme, expectDigest); err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}
 	res.Wrote = true
@@ -175,8 +215,13 @@ func graphPhaseComplete(path string, o completeOpts) (handled bool, err error) {
 	}
 	planDir := filepath.Dir(abs)
 	plan := filepath.Base(planDir)
-	if _, err := os.Stat(gstore.PathFor(planDir)); err != nil {
-		return false, nil
+	// Same discipline as graphPlanDir: only not-exist means "not a graph
+	// plan"; any other stat failure is operational.
+	if _, statErr := statGraphStore(gstore.PathFor(planDir)); statErr != nil {
+		if os.IsNotExist(statErr) {
+			return false, nil
+		}
+		return true, fmt.Errorf("phase complete: checking for a committed graph in %s: %w", planDir, statErr)
 	}
 
 	g, st, closed, err := graphDerive(planDir, plan)
@@ -243,7 +288,14 @@ func graphPhaseComplete(path string, o completeOpts) (handled bool, err error) {
 // complete through the same frontmatter write path the v1 transition uses
 // (setTopLevelStatus + restampUpdated), independent of the v1 evidence
 // gate: the graph's own closure, checked above, is this transition's gate.
-func writeReadmeStatusComplete(readme string) error {
+//
+// expectDigest is the digest of the README bytes RenderViews just wrote (or
+// a fresh read taken immediately before, when RenderViews wrote nothing):
+// the status flip is a compare-and-swap against exactly those bytes, so a
+// concurrent writer between the render and the flip is refused rather than
+// silently overwritten. A refusal here means the views were already
+// rendered when the flip failed — the caller's error wraps that fact.
+func writeReadmeStatusComplete(readme, expectDigest string) error {
 	art, err := store.Read(readme)
 	if err != nil {
 		return err
@@ -261,5 +313,12 @@ func writeReadmeStatusComplete(readme string) error {
 		return fmt.Errorf("no top-level `status:` field to advance")
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
-	return store.WriteAtomic(art.Path, updated)
+	if err := store.WriteAtomicExpecting(art.Path, updated, expectDigest); err != nil {
+		var conflict *store.ErrConcurrentWrite
+		if errors.As(err, &conflict) {
+			return fmt.Errorf("the rendered views were already written to %s, but the status flip was refused: %w", readme, err)
+		}
+		return err
+	}
+	return nil
 }

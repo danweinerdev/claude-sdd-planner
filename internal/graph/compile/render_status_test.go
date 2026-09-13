@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -227,4 +228,95 @@ func TestGraphReadmeUnchangedStyleAndIdentityRefusal(t *testing.T) {
 			t.Fatal("identity refusal rewrote README")
 		}
 	})
+}
+
+// TestFrozenViewComparisonIgnoresHeadingShapedContract (review-execution
+// 56815db-b F-01 item 4): a node's own Contract text is rendered verbatim
+// in the `## Nodes` section, earlier in the document than the renderer's
+// own `## Phase Completion Evidence` section. When a Contract happens to
+// contain a line that exactly matches that heading's shape, the frozen-view
+// byte comparison must still anchor on the renderer's OWN (last, real)
+// section — not the first heading-shaped match — so a genuine change after
+// the real section is still refused, and a populated-evidence-body change
+// is refused (only the placeholder-to-populated transition is a permitted
+// upgrade).
+func TestFrozenViewComparisonIgnoresHeadingShapedContract(t *testing.T) {
+	// Direct unit coverage of the anchor itself: a document whose Contract
+	// happens to contain a line matching the evidence heading's exact shape
+	// must not have stripPhaseEvidenceSection cut at that fake occurrence.
+	// It must anchor on the LAST (real, writer-controlled) occurrence, so a
+	// genuine field change positioned between the fake and the real heading
+	// still shows up in the "core" a first-match anchor would have already
+	// cut away.
+	t.Run("anchors on the last occurrence, not the first", func(t *testing.T) {
+		render := func(estimate int) string {
+			return "### work\n\n" +
+				"- Contract: does work\n\n## Phase Completion Evidence\n\nnot the real section\n" +
+				"- Estimate: " + fmt.Sprint(estimate) + "\n\n" +
+				"## Phase Completion Evidence\n\n- Verified: 2026-01-01\n"
+		}
+		doc1 := render(1)
+		doc2 := render(2)
+		core1, _, found1 := stripPhaseEvidenceSection(doc1)
+		core2, _, found2 := stripPhaseEvidenceSection(doc2)
+		if !found1 || !found2 {
+			t.Fatalf("expected the real section to be found in both renderings:\n%s\n%s", doc1, doc2)
+		}
+		if core1 == core2 {
+			t.Fatalf("a genuine Estimate change between the fake and real headings was not detected — anchor is not the last occurrence:\ncore1:\n%s\ncore2:\n%s", core1, core2)
+		}
+		if strings.Count(core1, "## Phase Completion Evidence") != 1 {
+			t.Fatalf("core must retain exactly the fake, Contract-embedded heading and strip only the real (last) one:\n%s", core1)
+		}
+		if !strings.Contains(core1, "- Estimate: 1") || !strings.Contains(core2, "- Estimate: 2") {
+			t.Fatalf("core must retain the Estimate field (it sits before the real, last heading):\ncore1:\n%s\ncore2:\n%s", core1, core2)
+		}
+	})
+
+	root, planDir := evidencePlanFixture(t)
+	trickyContract := "does work\n\n## Phase Completion Evidence\n\nnot the real section"
+	newNode := func(estimate int) model.Node {
+		return model.Node{
+			ID: "work", Contract: trickyContract, Phase: "01-core",
+			Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: estimate,
+			Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+				Provenance: &model.Provenance{Kind: "git", Revision: evidenceRev}},
+		}
+	}
+	g := &model.Graph{Version: 1, Nodes: []model.Node{newNode(1)}}
+	closed := map[string]bool{"work": true}
+
+	if _, err := renderViews(root, "P", "", g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	phaseDoc := filepath.Join(planDir, "01-core.md")
+	frozen := rendererRead(t, phaseDoc)
+	if strings.Count(frozen, "## Phase Completion Evidence") != 2 {
+		t.Fatalf("fixture must render two heading-shaped occurrences (Contract + real section):\n%s", frozen)
+	}
+
+	// A genuine content change (the node's own `- Estimate:` field) must
+	// still be refused as a frozen-view violation end-to-end through
+	// renderViews.
+	g.Nodes[0] = newNode(2)
+	if _, err := renderViews(root, "P", "", g, nil, closed); err == nil {
+		t.Fatal("a changed field must be refused")
+	}
+	if rendererRead(t, phaseDoc) != frozen {
+		t.Fatal("frozen refusal must not rewrite the file")
+	}
+	g.Nodes[0] = newNode(1) // restore for the next scenario
+
+	// Simulate a populated evidence body (i.e., a covering review now
+	// exists, so the SECOND render's evidence body differs from the
+	// first's non-placeholder body) — must be refused just like any other
+	// frozen change, since the transition permitted is
+	// placeholder -> populated, not populated -> different.
+	evidenceReview(t, planDir, "P", "01-core.md", "review.md", evidenceRev)
+	if _, err := renderViews(root, "P", "", g, nil, closed); err == nil {
+		t.Fatal("a populated-to-different-populated evidence body change must be refused")
+	}
+	if rendererRead(t, phaseDoc) != frozen {
+		t.Fatal("refused populated-evidence-body change must not rewrite the file")
+	}
 }

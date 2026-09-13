@@ -42,6 +42,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,6 +50,14 @@ import (
 // was closed. Its presence turns content-changing regeneration into a
 // refusal (DD-2's frozen-view invariant).
 const frozenViewMarker = "<!-- FROZEN VIEW — every node in this phase is closed: GREEN and covered by a passing frozen full review gate. This projection is history; a render that would change it is refused. -->"
+
+// now is the render-time clock every date stamp in this file reads,
+// exposed as a package-level variable so a test can advance it across a
+// simulated day boundary without a real wall-clock wait — the only way to
+// distinguish "reads a stable placeholder" from "reads the wall clock
+// directly" within a single test process. Production code never assigns
+// it.
+var now = time.Now
 
 // viewMarker identifies a generated view. Its presence is the renderer's
 // permission to overwrite; its absence on an existing target is a refusal.
@@ -206,7 +215,7 @@ func allClosed(nodes []*model.Node, closed map[string]bool) bool {
 // the writer so unchanged content stays byte-identical across days. st and
 // closed carry the derived truth the view projects (DD-2: a projection may
 // show derived state precisely because it is never parsed back).
-func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created, updated, repoRoot string, st map[string]states.NodeState, closed map[string]bool) string {
+func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created, updated, repoRoot string, repo vcs.Repo, st map[string]states.NodeState, closed map[string]bool) (string, error) {
 	frozen := allClosed(ph.Nodes, closed)
 	var b strings.Builder
 	fmt.Fprintf(&b, "---\ntitle: \"%s\"\ntype: phase\nplan: \"%s\"\nphase: %d\nstatus: %s\n", ph.Title, plan, ph.Ordinal, phaseStatus(ph.Nodes, closed))
@@ -254,11 +263,15 @@ func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created
 	fmt.Fprintf(&b, "- %s Every node in this phase is truly closed: a passing observation, and\n      coverage by a passing frozen full review gate (derived from the graph;\n      never checked off by hand).\n\n", box)
 	b.WriteString("## Phase Completion Evidence\n\n")
 	if frozen {
-		b.WriteString(renderPhaseEvidence(planDir, plan, ph, repoRoot, "{VERIFIED_DATE}"))
+		evidence, err := renderPhaseEvidence(planDir, plan, ph, repoRoot, "{VERIFIED_DATE}", repo)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(evidence)
 	} else {
 		b.WriteString("Pending — not complete.\n")
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // describeClosure projects the two-axis closure distinction (D-0022):
@@ -379,7 +392,7 @@ var (
 // preflight (dry-run, before the graph write) and writeView, so a refusal
 // can never fire after the graph moved.
 func planWrite(path, content, plan string) (write bool, filled string, err error) {
-	today := time.Now().Format("2006-01-02")
+	today := now().Format("2006-01-02")
 	existing, readErr := os.ReadFile(path)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
@@ -418,10 +431,26 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 		// stays able to pick up a renderer fix on an already-completed
 		// plan without ever silently rewriting what the projection says
 		// happened.
-		existingCore, existingHasEvidence := stripPhaseEvidenceSection(string(existing))
-		contentCore, contentHasEvidence := stripPhaseEvidenceSection(content)
-		if !contentHasEvidence || !existingHasEvidence ||
-			fillDates(contentCore, created, prevUpdated) != existingCore {
+		existingCore, existingEvidenceBody, existingHasEvidence := stripPhaseEvidenceSection(string(existing))
+		contentCore, contentEvidenceBody, contentHasEvidence := stripPhaseEvidenceSection(content)
+		refuse := !contentHasEvidence || !existingHasEvidence ||
+			fillDates(contentCore, created, prevUpdated) != existingCore
+		if !refuse {
+			// The projection of history (everything before the evidence
+			// section) is unchanged. A renderer upgrade may only ADD
+			// evidence (placeholder "Pending — not complete." ->
+			// populated body); once both the frozen view and the new
+			// rendering already carry a populated (non-placeholder) body,
+			// a differing body is a change like any other frozen change
+			// and must be refused too (review-execution 56815db-b F-01
+			// item 4).
+			existingPending := strings.TrimSpace(existingEvidenceBody) == "Pending — not complete."
+			filledContentBody := fillDates(contentEvidenceBody, created, prevUpdated)
+			if !existingPending && filledContentBody != existingEvidenceBody {
+				refuse = true
+			}
+		}
+		if refuse {
 			return false, "", fmt.Errorf("compile: %s is a frozen view — every node in it was closed when it was rendered, and the graph now disagrees with that frozen history; if the phase was legitimately reopened (a review finding demoted a node), delete the frozen view file explicitly and recompile", path)
 		}
 	}
@@ -431,20 +460,29 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 // phaseEvidenceHeadingRe locates a phase doc's `## Phase Completion
 // Evidence` section — always the view's last section (renderPhaseDoc emits
 // nothing after it), so everything from the heading to EOF is exactly that
-// section's extent.
+// section's extent. A node's own Contract text is rendered verbatim earlier
+// in the document (the `## Nodes` section) and could itself contain a line
+// that matches this heading shape; stripPhaseEvidenceSection anchors on the
+// LAST match rather than the first for exactly that reason — the renderer's
+// own section is always the final occurrence, a boundary the writer
+// controls, never the content a node happens to carry (review-execution
+// 56815db-b F-01 item 4).
 var phaseEvidenceHeadingRe = regexp.MustCompile(`(?m)^## Phase Completion Evidence\s*$`)
 
 // stripPhaseEvidenceSection returns a rendered phase doc with its `## Phase
-// Completion Evidence` section (heading and body) removed, and whether the
-// heading was found. Used only to isolate frozen-view byte comparison from
-// evidence-only content growth (planWrite) — never to change what is
-// written.
-func stripPhaseEvidenceSection(content string) (string, bool) {
-	loc := phaseEvidenceHeadingRe.FindStringIndex(content)
-	if loc == nil {
-		return content, false
+// Completion Evidence` section (heading and body) removed, the section's
+// own body (trimmed), and whether the heading was found. Used only to
+// isolate frozen-view byte comparison from evidence-only content growth
+// (planWrite) — never to change what is written.
+func stripPhaseEvidenceSection(content string) (core, body string, found bool) {
+	locs := phaseEvidenceHeadingRe.FindAllStringIndex(content, -1)
+	if len(locs) == 0 {
+		return content, "", false
 	}
-	return strings.TrimRight(content[:loc[0]], "\n"), true
+	loc := locs[len(locs)-1]
+	core = strings.TrimRight(content[:loc[0]], "\n")
+	body = strings.TrimSpace(content[loc[1]:])
+	return core, body, true
 }
 
 // writeView writes one rendered view with date stability: an existing
@@ -480,15 +518,37 @@ func fillDates(content, created, updated string) string {
 // nothing half-done.
 func preflightViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
 	planDir := filepath.Join(root, "Plans", plan)
+	repo := resolveEvidenceRepo(repoRoot)
 	for _, ph := range groupPhases(g, plan) {
 		path := filepath.Join(planDir, ph.Doc)
-		content := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, st, closed)
+		content, err := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, repo, st, closed)
+		if err != nil {
+			return err
+		}
 		if _, _, err := planWrite(path, content, plan); err != nil {
 			return err
 		}
 	}
 	_, _, err := planReadmeUpdate(planDir, plan, groupPhases(g, plan), closed)
 	return err
+}
+
+// resolveEvidenceRepo resolves the vcs.Repo the phase evidence's identity
+// recheck probes, or nil when repoRoot is empty (no resolved target
+// repository at render time) or repoRoot is under no supported VCS — the
+// honest "no recheck ran" case identityRecheckLine renders rather than
+// fabricating a check. A detection failure that IS operational (the git
+// executable itself unavailable, ...) still resolves to vcs.Unavailable,
+// which correctly reports vcs.ErrOperational once actually probed.
+func resolveEvidenceRepo(repoRoot string) vcs.Repo {
+	if repoRoot == "" {
+		return nil
+	}
+	repo := vcs.Detect(repoRoot)
+	if repo.Kind() == vcs.None {
+		return nil
+	}
+	return repo
 }
 
 // RenderViews writes the phase views and updates the README projection.
@@ -520,12 +580,16 @@ func renderViews(root, plan, repoRoot string, g *model.Graph, st map[string]stat
 		return nil, err
 	}
 
+	repo := resolveEvidenceRepo(repoRoot)
 	var written []string
 	for _, ph := range groups {
 		path := filepath.Join(planDir, ph.Doc)
 		// Dates stay templated here; writeView fills them with stability
 		// rules (existing created preserved, updated stamped on change).
-		content := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, st, closed)
+		content, err := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, repo, st, closed)
+		if err != nil {
+			return nil, err
+		}
 		wrote, err := writeView(path, content, plan)
 		if err != nil {
 			return nil, err
@@ -594,21 +658,41 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 		out += "\n" + section + "\n"
 	}
 
-	out, err = applyPlanEvidence(planDir, plan, out, groups, closed)
+	// The plan evidence's Verified date is rendered as the same
+	// {VERIFIED_DATE} placeholder the phase docs use, then filled with
+	// whatever `updated` stamp this render settles on below — never the
+	// render-time clock directly. That is what makes an unchanged closed
+	// plan's Verified line, and therefore its whole evidence body, stay
+	// byte-identical across days: the placeholder participates in the
+	// byte-stability comparison the same way the rest of the projection
+	// does (review-execution 56815db-b F-01 item 5).
+	out, err = applyPlanEvidence(planDir, plan, out, groups, closed, "{VERIFIED_DATE}")
 	if err != nil {
 		return "", false, err
 	}
 
-	if out == src {
+	prevUpdated := now().Format("2006-01-02")
+	if m := updatedLineRe.FindStringSubmatch(src); m != nil {
+		prevUpdated = m[1]
+	}
+	// Byte-stability check: filling the {VERIFIED_DATE} placeholder with
+	// the PREVIOUS updated stamp and comparing against src tells whether
+	// anything besides the date actually changed — the same shape the
+	// phase docs' planWrite performs.
+	if strings.ReplaceAll(out, "{VERIFIED_DATE}", prevUpdated) == src {
 		return "", false, nil
 	}
-	// A real change restamps the README's updated date; an unchanged README
-	// is never touched, so idempotent re-renders stay byte-stable.
+	// A real change restamps the README's updated date (both the
+	// frontmatter field and every {VERIFIED_DATE} placeholder the evidence
+	// body carries) to today; an unchanged README is never touched, so
+	// idempotent re-renders stay byte-stable.
+	today := now().Format("2006-01-02")
+	out = strings.ReplaceAll(out, "{VERIFIED_DATE}", today)
 	end, err := readmeFrontmatterEnd(out)
 	if err != nil {
 		return "", false, err
 	}
-	out = updatedLineRe.ReplaceAllString(out[:end], "updated: "+time.Now().Format("2006-01-02")) + out[end:]
+	out = updatedLineRe.ReplaceAllString(out[:end], "updated: "+today) + out[end:]
 	return out, true, nil
 }
 
@@ -623,8 +707,11 @@ var nextH2HeadingRe = regexp.MustCompile(`(?m)^ {0,3}#{1,2}\s+`)
 // otherwise the section (typically still `Pending — not complete.`) is left
 // exactly as it is — this function never invents evidence and never
 // regresses a section a human or an earlier render already completed.
-func applyPlanEvidence(planDir, plan, src string, groups []phaseGroup, closed map[string]bool) (string, error) {
-	body, ok := renderPlanEvidence(planDir, plan, time.Now().Format("2006-01-02"), groups, closed)
+func applyPlanEvidence(planDir, plan, src string, groups []phaseGroup, closed map[string]bool, verifiedDate string) (string, error) {
+	body, ok, err := renderPlanEvidence(planDir, plan, verifiedDate, groups, closed)
+	if err != nil {
+		return "", err
+	}
 	if !ok {
 		return src, nil
 	}

@@ -160,3 +160,199 @@ func TestGraphPhaseCompleteRefreshesPhaseStatus(t *testing.T) {
 		t.Fatalf("phase doc status was not refreshed to complete:\n%s", phaseBytes)
 	}
 }
+
+// TestGraphCompleteReadFailuresAreOperational (review-execution 56815db-b
+// F-01 items 1-2): a graph-store stat failure for any reason other than
+// not-exist, and a reviews-directory read failure, must exit 2 with the
+// cause — never fall through to the v1 completion path, and never write
+// anything.
+func TestGraphCompleteReadFailuresAreOperational(t *testing.T) {
+	t.Run("graph-store stat failure", func(t *testing.T) {
+		_, planDir := completeFixture(t, false)
+		readme := filepath.Join(planDir, "README.md")
+		before, err := os.ReadFile(readme)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		old := statGraphStore
+		statGraphStore = func(name string) (os.FileInfo, error) {
+			return nil, &os.PathError{Op: "stat", Path: name, Err: os.ErrPermission}
+		}
+		defer func() { statGraphStore = old }()
+
+		out, err := captureStdout(t, func() error {
+			root := newRootCmd()
+			root.SetArgs([]string{"plan", "complete", readme})
+			return root.Execute()
+		})
+		if err == nil {
+			t.Fatalf("expected an error, got success:\n%s", out)
+		}
+		if exitCode(err) != 2 {
+			t.Fatalf("exit = %d, want 2 (operational): %v", exitCode(err), err)
+		}
+		if _, ok := err.(*refusedError); ok {
+			t.Fatalf("a graph-store stat failure must not be a refusal: %v", err)
+		}
+		after, err := os.ReadFile(readme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Fatal("an operational stat failure must write nothing")
+		}
+	})
+
+	t.Run("reviews-directory read failure", func(t *testing.T) {
+		_, planDir := completeFixture(t, false)
+		readme := filepath.Join(planDir, "README.md")
+		before, err := os.ReadFile(readme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reviews := filepath.Join(planDir, "reviews")
+		if err := os.MkdirAll(reviews, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(reviews, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(reviews, 0o755)
+
+		out, err := captureStdout(t, func() error {
+			root := newRootCmd()
+			root.SetArgs([]string{"plan", "complete", readme})
+			return root.Execute()
+		})
+		if err == nil {
+			t.Fatalf("expected an error, got success:\n%s", out)
+		}
+		if exitCode(err) != 2 {
+			t.Fatalf("exit = %d, want 2 (operational): %v", exitCode(err), err)
+		}
+		after, err := os.ReadFile(readme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Fatal("an operational reviews-directory read failure must write nothing")
+		}
+		phaseDoc := filepath.Join(planDir, "01-core.md")
+		if _, err := os.Stat(phaseDoc); !os.IsNotExist(err) {
+			t.Fatalf("an operational failure must not render a phase doc: %v", err)
+		}
+	})
+}
+
+// TestGraphPhaseCompleteRefusesAndDryRuns (contract rev 7 acceptance): an
+// open node in the phase must refuse naming it, writing nothing, and
+// --dry-run on a closed phase must write nothing while still reporting
+// success.
+func TestGraphPhaseCompleteRefusesAndDryRuns(t *testing.T) {
+	t.Run("open node refuses and writes nothing", func(t *testing.T) {
+		_, planDir := completeFixture(t, true)
+		// The phase doc has never been rendered (the fixture's graph is not
+		// closed), matching TestGraphPhaseCompleteRefreshesPhaseStatus's
+		// convention of driving `phase complete` against the not-yet-rendered
+		// doc path directly.
+		phaseDoc := filepath.Join(planDir, "01-core.md")
+		if _, err := os.Stat(phaseDoc); !os.IsNotExist(err) {
+			t.Fatalf("fixture must not have a pre-rendered phase doc: %v", err)
+		}
+
+		out, err := captureStdout(t, func() error {
+			root := newRootCmd()
+			root.SetArgs([]string{"phase", "complete", phaseDoc})
+			return root.Execute()
+		})
+		if err == nil {
+			t.Fatalf("expected refusal, got success:\n%s", out)
+		}
+		re, ok := err.(*refusedError)
+		if !ok {
+			t.Fatalf("expected *refusedError, got %T: %v", err, err)
+		}
+		if !strings.Contains(re.Error(), "a") {
+			t.Fatalf("refusal must name the open node:\n%s", re.Error())
+		}
+		if _, statErr := os.Stat(phaseDoc); !os.IsNotExist(statErr) {
+			t.Fatal("a refused phase complete must not render the phase doc")
+		}
+	})
+
+	t.Run("dry-run on a closed phase writes nothing", func(t *testing.T) {
+		_, planDir := completeFixture(t, false)
+		phaseDoc := filepath.Join(planDir, "01-core.md")
+		if _, err := os.Stat(phaseDoc); !os.IsNotExist(err) {
+			t.Fatalf("fixture must not have a pre-rendered phase doc: %v", err)
+		}
+
+		out, err := captureStdout(t, func() error {
+			root := newRootCmd()
+			root.SetArgs([]string{"phase", "complete", phaseDoc, "--dry-run"})
+			return root.Execute()
+		})
+		if err != nil {
+			t.Fatalf("dry-run on a closed phase must succeed: %v\n%s", err, out)
+		}
+		if _, statErr := os.Stat(phaseDoc); !os.IsNotExist(statErr) {
+			t.Fatal("--dry-run must not render the phase doc")
+		}
+	})
+}
+
+// TestGraphCompleteStatusFlipIsCompareAndSwap (review-execution 56815db-b
+// F-01 item 6): the README status flip that follows RenderViews is a
+// compare-and-swap against exactly the bytes RenderViews just wrote. A
+// concurrent writer that changes the README in the window between the
+// render and the flip must cause the flip to be refused (an
+// *store.ErrConcurrentWrite, surfaced through plan complete's operational
+// error), and the concurrent writer's content must survive untouched —
+// never silently overwritten by the flip.
+func TestGraphCompleteStatusFlipIsCompareAndSwap(t *testing.T) {
+	_, planDir := completeFixture(t, false)
+	readme := filepath.Join(planDir, "README.md")
+
+	var concurrentContent string
+	beforeStatusFlip = func(readme string) {
+		src, err := os.ReadFile(readme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A concurrent writer changes the README (e.g. an unrelated
+		// frontmatter edit) after RenderViews wrote its views and before
+		// the status flip runs.
+		concurrentContent = string(src) + "\n<!-- concurrent writer -->\n"
+		if err := os.WriteFile(readme, []byte(concurrentContent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { beforeStatusFlip = nil })
+
+	out, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"plan", "complete", readme})
+		return root.Execute()
+	})
+	if err == nil {
+		t.Fatalf("expected the status flip to be refused, got success:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "already") {
+		t.Fatalf("refusal must say the views were already rendered when the flip was refused: %v", err)
+	}
+
+	after, readErr := os.ReadFile(readme)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != concurrentContent {
+		t.Fatalf("the concurrent writer's content must survive untouched:\nwant:\n%s\ngot:\n%s", concurrentContent, after)
+	}
+	if strings.Contains(string(after), "\nstatus: complete\n") {
+		t.Fatal("a refused status flip must not have marked the plan complete")
+	}
+	if !strings.Contains(string(after), "\nstatus: active\n") {
+		t.Fatalf("the plan's top-level status must remain untouched by the refused flip:\n%s", after)
+	}
+}

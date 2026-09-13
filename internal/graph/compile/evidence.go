@@ -12,6 +12,7 @@ package compile
 // artifact's own frontmatter.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,12 +24,16 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
-// phaseIdentity is one node's recorded verification identity: the exact git
-// revision (or "none") the observation's provenance carries.
-type phaseIdentity struct {
-	Node     string
-	Revision string // "" when the node has no recorded git revision
-}
+// readReviewDir/readReviewFile are the disk reads findPhaseReview performs,
+// exposed as package-level variables so tests can inject a failure that is
+// not not-exist without a real unreadable filesystem fixture. Production
+// code always uses the os defaults; only findPhaseReview's not-exist ==
+// "no covering review" folding is by design — every other error must
+// surface as operational (review-execution 56815db-b F-01).
+var (
+	readReviewDir  = os.ReadDir
+	readReviewFile = os.ReadFile
+)
 
 // nodeRevision returns the git revision a node's observation recorded, or
 // "" when it has none (no verification, or a non-git/absent provenance).
@@ -81,11 +86,20 @@ type reviewArtifact struct {
 // is the one that actually covers its recorded checkpoint; otherwise the
 // lexicographically last matching filename wins (later review files sort
 // after earlier ones in this plan's naming convention).
-func findPhaseReview(planDir, phaseDocRel, want string) (*reviewArtifact, bool) {
+//
+// Only a not-exist on the reviews directory means "no covering review" —
+// any other read failure (permission denied, I/O error, an unreadable
+// individual review file) is an inability to answer, not an absence, and
+// must propagate as an operational error rather than silently render "no
+// covering review" (review-execution 56815db-b F-01).
+func findPhaseReview(planDir, phaseDocRel, want string) (*reviewArtifact, bool, error) {
 	dir := filepath.Join(planDir, "reviews")
-	entries, err := os.ReadDir(dir)
+	entries, err := readReviewDir(dir)
 	if err != nil {
-		return nil, false
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("reading %s: %w", dir, err)
 	}
 	var names []string
 	for _, e := range entries {
@@ -96,9 +110,12 @@ func findPhaseReview(planDir, phaseDocRel, want string) (*reviewArtifact, bool) 
 	sort.Strings(names)
 	var best *reviewArtifact
 	for _, name := range names {
-		raw, err := os.ReadFile(filepath.Join(dir, name))
+		raw, err := readReviewFile(filepath.Join(dir, name))
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, false, fmt.Errorf("reading %s: %w", filepath.Join(dir, name), err)
 		}
 		rel := filepath.ToSlash(filepath.Join(filepath.Base(planDir), "reviews", name))
 		art := rules.ParseArtifactBytes(raw, "Plans/"+rel)
@@ -124,32 +141,54 @@ func findPhaseReview(planDir, phaseDocRel, want string) (*reviewArtifact, bool) 
 		rev, _ := art.Meta["rev"].(string)
 		candidate := &reviewArtifact{Rel: rel, Meta: art.Meta}
 		if strings.HasSuffix(rev, want) {
-			return candidate, true // exact head-endpoint match: no better candidate exists
+			return candidate, true, nil // exact head-endpoint match: no better candidate exists
 		}
 		best = candidate
 	}
-	return best, best != nil
+	return best, best != nil, nil
 }
 
-// phaseEvidence is the derived content for one phase's `## Phase Completion
-// Evidence` section, or ok=false when the phase is not (yet) closed — the
-// caller keeps the `Pending — not complete.` placeholder in that case.
-type phaseEvidence struct {
-	Body string
+// identityRecheckLine renders the phase evidence's `- Identity recheck:`
+// line. When repo is non-nil, it runs a real RevisionExists probe against
+// rev at render time and reports the true outcome: an operational probe
+// failure propagates as an error (never silently "matched"), and a
+// determinate not-found renders as not matched. When repo is nil (no
+// resolved target repository at render time), the line states honestly
+// that no recheck ran, rather than fabricating a check that never executed
+// (review-execution 56815db-b F-01 item 3).
+func identityRecheckLine(repo vcs.Repo, rev, today string) (string, error) {
+	if repo == nil {
+		return fmt.Sprintf("- Identity recheck: no recheck ran (no resolved target repository at render time)\n\n"), nil
+	}
+	exists, err := repo.RevisionExists(rev)
+	if err != nil && !errors.Is(err, vcs.ErrNotFound) {
+		return "", fmt.Errorf("identity recheck for %s: %w", rev, err)
+	}
+	status := "matched"
+	if !exists {
+		status = "not matched"
+	}
+	return fmt.Sprintf("- Identity recheck: revision-exists probe for `%s` at %sT00:00:00 — %s\n\n", rev, today, status), nil
 }
 
 // renderPhaseEvidence builds the `## Phase Completion Evidence` body for a
 // closed phase. today is the render date (Verified label); repoRoot is the
 // resolved target repository (Repository label, canonicalized the same way
 // SDD072 canonicalizes its own comparison so the two can never disagree).
-func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today string) string {
+// repo is the vcs.Repo resolved for repoRoot (nil when none was resolved),
+// used for the identity recheck's real probe.
+func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today string, repo vcs.Repo) (string, error) {
 	rev := phaseCheckpoint(ph.Nodes)
 	var b strings.Builder
 	fmt.Fprintf(&b, "- Verified: %s\n", today)
 	fmt.Fprintf(&b, "- Repository: %s\n", vcs.CanonPath(repoRoot))
 	fmt.Fprintf(&b, "- VCS: git\n")
 	fmt.Fprintf(&b, "- Revision / checkpoint: `%s`\n", rev)
-	fmt.Fprintf(&b, "- Identity recheck: `git cat-file -e %s` at %sT00:00:00 — matched\n\n", rev, today)
+	line, err := identityRecheckLine(repo, rev, today)
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(line)
 	b.WriteString("| Command | Working directory | Result | Observable evidence |\n")
 	b.WriteString("| --- | --- | --- | --- |\n")
 	fmt.Fprintf(&b, "| `sdd graph status --plan %s` | . | PASS (exit 0) | phase %d: %d/%d node(s) closed (GREEN, covered by a passing frozen full review gate) |\n\n",
@@ -162,11 +201,15 @@ func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today st
 	b.WriteString("### Completed task identities\n\n")
 
 	phaseDocRel := "Plans/" + plan + "/" + ph.Doc
-	if review, ok := findPhaseReview(planDir, phaseDocRel, rev); ok {
+	review, found, err := findPhaseReview(planDir, phaseDocRel, rev)
+	if err != nil {
+		return "", err
+	}
+	if found {
 		reviewRev, _ := review.Meta["rev"].(string)
 		fmt.Fprintf(&b, "- Final aligned review: `Plans/%s`; frozen: %s\n", review.Rel, reviewRev)
 	}
-	return strings.TrimRight(b.String(), "\n") + "\n"
+	return strings.TrimRight(b.String(), "\n") + "\n", nil
 }
 
 // renderPlanEvidence builds the plan README's `## Plan Completion Evidence`
@@ -174,7 +217,7 @@ func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today st
 // entry for each completed phase, each citing its own checkpoint and final
 // review — the exact shape internal/rules/headings.go's
 // completedPhaseIdentitiesCheck requires.
-func renderPlanEvidence(planDir, plan, today string, groups []phaseGroup, closed map[string]bool) (string, bool) {
+func renderPlanEvidence(planDir, plan, today string, groups []phaseGroup, closed map[string]bool) (string, bool, error) {
 	var completed []phaseGroup
 	for _, ph := range groups {
 		if allClosed(ph.Nodes, closed) {
@@ -182,14 +225,17 @@ func renderPlanEvidence(planDir, plan, today string, groups []phaseGroup, closed
 		}
 	}
 	if len(completed) != len(groups) || len(groups) == 0 {
-		return "", false
+		return "", false, nil
 	}
 	var identities strings.Builder
 	ok := true
 	for _, ph := range completed {
 		rev := phaseCheckpoint(ph.Nodes)
 		phaseDocRel := "Plans/" + plan + "/" + ph.Doc
-		review, found := findPhaseReview(planDir, phaseDocRel, rev)
+		review, found, err := findPhaseReview(planDir, phaseDocRel, rev)
+		if err != nil {
+			return "", false, err
+		}
 		if !found {
 			ok = false
 			continue
@@ -197,11 +243,11 @@ func renderPlanEvidence(planDir, plan, today string, groups []phaseGroup, closed
 		fmt.Fprintf(&identities, "- `%d`: `%s`; review: `Plans/%s`\n", ph.Ordinal, rev, review.Rel)
 	}
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "- Verified: %s\n\n", today)
 	b.WriteString("### Completed phase identities\n")
 	b.WriteString(identities.String())
-	return strings.TrimRight(b.String(), "\n") + "\n", true
+	return strings.TrimRight(b.String(), "\n") + "\n", true, nil
 }
