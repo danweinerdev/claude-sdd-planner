@@ -224,58 +224,31 @@ func applyWaivers(r *Root, diags []Diagnostic) []Diagnostic {
 // subject to the registry meta-test's example requirement, which is what proves
 // each one actually fires and actually stays quiet.
 //
-// It must not call Run: these rules are invoked *by* Run, so doing so would
-// recurse forever. Instead it evaluates the rules a second time through
-// runBare, which is the same rule sweep with the waiver rules themselves
-// excluded — enough to know which codes fire on which artifacts, which is all
-// staleness (SDD177) depends on. Malformedness (SDD176) needs no findings at
-// all, only the waiver text.
+// The evaluator never calls these callbacks: runWith derives both codes from
+// its own single sweep (waiverFindings). They exist for direct invocation of
+// one rule in isolation, where they evaluate the registry once, memoized per
+// Root, and apply waivers to a COPY of that result so the first code's pass
+// cannot re-tag findings the second code still needs to see as errors.
 func waiverDiagnostics(r *Root, code string, emit func(Diagnostic)) {
-	for _, d := range applyWaivers(r, bareOnce(r)) {
-		if d.Code == code {
-			emit(d)
-		}
+	for _, d := range waiverFindings(r, bareOnce(r), []*Rule{{Code: code}}) {
+		emit(d)
 	}
 }
 
-// bareOnce is runBare memoized per Root. Both waiver rules need the same
-// sweep, and each recomputing it made `sdd validate` evaluate every rule three
-// times over (and a lifecycle transition six times) on a root where one sweep
-// already dominates the runtime.
-//
-// Safe because a Root is immutable once loaded: LoadRoot/LoadRootRepo build it
-// and the rules only read from it. Callers that need fresh results build a new
-// Root, which is exactly what the transition verbs already do.
+// bareOnce is the registry's ordinary sweep memoized per Root, for the direct
+// invocation path above. Safe because a Root is immutable once loaded and the
+// memo is only ever read through a copy.
 func bareOnce(r *Root) []Diagnostic {
 	if !r.bareComputed {
-		r.bareDiagnostics = runBare(r)
+		r.bareDiagnostics = evaluate(r, All())
 		r.bareComputed = true
 	}
 	return r.bareDiagnostics
 }
 
-// waiverRuleCodes are the rules implemented by waiverDiagnostics. runBare skips
-// them to break the recursion described above.
+// waiverRuleCodes are the bookkeeping rules; evaluate skips them so the
+// ordinary sweep never recurses into itself.
 var waiverRuleCodes = map[string]bool{"SDD176": true, "SDD177": true}
-
-// runBare is Run without the waiver-bookkeeping rules.
-func runBare(r *Root) []Diagnostic {
-	var out []Diagnostic
-	emit := func(d Diagnostic) { out = append(out, d) }
-	for _, rule := range All() {
-		if rule.CheckRoot != nil && !waiverRuleCodes[rule.Code] {
-			rule.CheckRoot(r, emit)
-		}
-	}
-	for _, a := range r.Artifacts {
-		for _, rule := range All() {
-			if rule.Check != nil && !waiverRuleCodes[rule.Code] {
-				rule.Check(a, emit)
-			}
-		}
-	}
-	return out
-}
 
 func init() {
 	Register(&Rule{

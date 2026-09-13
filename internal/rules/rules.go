@@ -164,21 +164,11 @@ func Codes() []string {
 // oracle and every internal caller that asks "what does this root actually
 // violate?" wants this. Use RunWithWaivers for the reporting path, where a
 // human's declared exceptions apply.
-func Run(r *Root) []Diagnostic {
-	var out []Diagnostic
-	emit := func(d Diagnostic) { out = append(out, d) }
-	for _, rule := range All() {
-		if rule.CheckRoot != nil {
-			rule.CheckRoot(r, emit)
-		}
-	}
-	for _, a := range r.Artifacts {
-		for _, rule := range All() {
-			if rule.Check != nil {
-				rule.Check(a, emit)
-			}
-		}
-	}
+func Run(r *Root) []Diagnostic { return runWith(r, All()) }
+
+// sortStrict orders diagnostics the way Run always has: path, line, code,
+// message.
+func sortStrict(out []Diagnostic) {
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Path != out[j].Path {
 			return out[i].Path < out[j].Path
@@ -191,7 +181,6 @@ func Run(r *Root) []Diagnostic {
 		}
 		return out[i].Message < out[j].Message
 	})
-	return out
 }
 
 // RunWithWaivers evaluates every rule, then applies the accepted exceptions
@@ -202,16 +191,7 @@ func Run(r *Root) []Diagnostic {
 // Waiver bookkeeping runs here rather than inside individual rules so no rule
 // can forget to honor an exception, and so the set of waivable codes is decided
 // in one place.
-func RunWithWaivers(r *Root) []Diagnostic {
-	// runBare rather than Run: Run includes the SDD176/177 rules, which compute
-	// the same bookkeeping internally, so using it here would report every
-	// waiver problem twice.
-	diags := runBare(r)
-	diags = append(diags, applyWaivers(r, diags)...)
-	diags = demoteRetiredFindings(r, diags)
-	SortDiagnostics(diags)
-	return diags
-}
+func RunWithWaivers(r *Root) []Diagnostic { return runWithWaiversWith(r, All()) }
 
 // demoteRetiredFindings re-tags findings ON a superseded or archived artifact
 // as Waived: still reported, no longer invalidating.
