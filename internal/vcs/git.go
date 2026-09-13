@@ -1,13 +1,15 @@
 package vcs
 
 import (
-	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 func init() {
@@ -28,9 +30,12 @@ type gitRepo struct {
 }
 
 // probeGit implements the git portion of shared/vcs-detection.md's detection
-// algorithm (steps 1-5). It returns nil — never an error — when dir is not a
-// git repository at all, so Detect falls through to the next probe.
-func probeGit(dir string) Repo {
+// algorithm (steps 1-5). It returns (nil, nil) when dir is not a git
+// repository at all, so Detect falls through to the next probe, and an
+// operational error when git itself could not answer: a directory with no
+// `.git` marker is undecidable without a working git, and a directory with
+// one cannot resolve its root.
+func probeGit(dir string) (Repo, error) {
 	if isDir(filepath.Join(dir, ".bare")) {
 		return newGitRepo(dir, GitBare)
 	}
@@ -40,19 +45,31 @@ func probeGit(dir string) Repo {
 	if isDir(filepath.Join(dir, ".git")) {
 		return newGitRepo(dir, Git)
 	}
-	if out, err := runGit(dir, "rev-parse", "--is-bare-repository"); err == nil && strings.TrimSpace(string(out)) == "true" {
+	out, err := runGit(dir, "rev-parse", "--is-bare-repository")
+	if errors.Is(err, ErrOperational) {
+		return nil, err
+	}
+	if err == nil && strings.TrimSpace(string(out)) == "true" {
 		return newGitRepo(dir, GitBare)
 	}
-	if _, err := runGit(dir, "rev-parse", "--git-dir"); err == nil {
+	_, err = runGit(dir, "rev-parse", "--git-dir")
+	if errors.Is(err, ErrOperational) {
+		return nil, err
+	}
+	if err == nil {
 		return newGitRepo(dir, Git)
 	}
-	return nil
+	return nil, nil
 }
 
-func newGitRepo(dir string, kind Kind) Repo {
+func newGitRepo(dir string, kind Kind) (Repo, error) {
 	root := dir
 	if kind != GitBare {
-		if out, err := runGit(dir, "rev-parse", "--show-toplevel"); err == nil {
+		out, err := runGit(dir, "rev-parse", "--show-toplevel")
+		if errors.Is(err, ErrOperational) {
+			return nil, err
+		}
+		if err == nil {
 			if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
 				root = trimmed
 			}
@@ -62,22 +79,35 @@ func newGitRepo(dir string, kind Kind) Repo {
 	// check; git reports the long-form, forward-slash spelling while the OS
 	// side may be short-named (Windows 8.3) or unresolved (/tmp on macOS).
 	// Canonicalize once here so callers compare like with like.
-	return &gitRepo{kind: kind, dir: dir, root: CanonPath(filepath.FromSlash(root))}
+	return &gitRepo{kind: kind, dir: dir, root: CanonPath(filepath.FromSlash(root))}, nil
 }
 
-// runGit builds an argv slice and execs git directly — never a shell — so no
-// path or revision string can be interpreted as a second command.
+// runGit builds an argv slice and runs git through the bounded runner —
+// never a shell — so no path or revision string can be interpreted as a
+// second command. A nonzero git exit comes back as an ordinary error the
+// operation adapter interprets; every other failure (no git, permission,
+// deadline, output overflow, drain) wraps ErrOperational.
 func runGit(dir string, args ...string) ([]byte, error) {
 	full := append([]string{"-C", dir}, args...)
-	cmd := exec.Command("git", full...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	res, err := procexec.Run(context.Background(), "git", full, procexec.Policy{})
 	if err != nil {
-		return stdout.Bytes(), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		var pe *procexec.Error
+		if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+			return nil, fmt.Errorf("git %s: exit %d: %s", strings.Join(args, " "), pe.ExitCode, strings.TrimSpace(pe.Stderr))
+		}
+		return nil, fmt.Errorf("%w: git %s: %v", ErrOperational, strings.Join(args, " "), err)
 	}
-	return stdout.Bytes(), nil
+	return res.Stdout, nil
+}
+
+// absent maps a failed object query to its authoritative answer: an
+// operational failure stays operational; a git exit means the object is not
+// there.
+func absent(err error, what string) error {
+	if errors.Is(err, ErrOperational) {
+		return err
+	}
+	return fmt.Errorf("%w: %s", ErrNotFound, what)
 }
 
 func (g *gitRepo) Kind() Kind   { return g.kind }
@@ -88,7 +118,7 @@ func (g *gitRepo) RevisionSyntaxValid(s string) bool { return gitHex40.MatchStri
 func (g *gitRepo) RevisionExists(rev string) (bool, error) {
 	out, err := runGit(g.root, "cat-file", "-t", rev)
 	if err != nil {
-		return false, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return false, absent(err, rev)
 	}
 	return strings.TrimSpace(string(out)) == "commit", nil
 }
@@ -96,27 +126,31 @@ func (g *gitRepo) RevisionExists(rev string) (bool, error) {
 func (g *gitRepo) Head() (string, error) {
 	out, err := runGit(g.root, "rev-parse", "HEAD")
 	if err != nil {
-		return "", fmt.Errorf("%w: HEAD: %v", ErrNotFound, err)
+		return "", absent(err, "HEAD: "+err.Error())
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
 func (g *gitRepo) IsAncestor(ancestor, descendant string) (bool, error) {
-	cmd := exec.Command("git", "-C", g.root, "merge-base", "--is-ancestor", ancestor, descendant)
-	err := cmd.Run()
+	_, err := procexec.Run(context.Background(), "git",
+		[]string{"-C", g.root, "merge-base", "--is-ancestor", ancestor, descendant}, procexec.Policy{})
 	if err == nil {
 		return true, nil
 	}
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-		return false, nil
+	var pe *procexec.Error
+	if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+		if pe.ExitCode == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("git merge-base --is-ancestor %s %s: exit %d: %s", ancestor, descendant, pe.ExitCode, strings.TrimSpace(pe.Stderr))
 	}
-	return false, fmt.Errorf("git merge-base --is-ancestor %s %s: %w", ancestor, descendant, err)
+	return false, fmt.Errorf("%w: git merge-base --is-ancestor %s %s: %v", ErrOperational, ancestor, descendant, err)
 }
 
 func (g *gitRepo) Parents(rev string) ([]string, error) {
 	out, err := runGit(g.root, "show", "-s", "--format=%P", rev)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return nil, absent(err, rev)
 	}
 	fields := strings.Fields(string(out))
 	return fields, nil
@@ -125,7 +159,7 @@ func (g *gitRepo) Parents(rev string) ([]string, error) {
 func (g *gitRepo) FileAt(rev, relPath string) ([]byte, error) {
 	out, err := runGit(g.root, "show", rev+":"+relPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s:%s", ErrNotFound, rev, relPath)
+		return nil, absent(err, rev+":"+relPath)
 	}
 	return out, nil
 }
@@ -136,7 +170,7 @@ func (g *gitRepo) TrackedPaths(rev string, prefixes []string) ([]string, error) 
 	args = append(args, prefixes...)
 	out, err := runGit(g.root, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return nil, absent(err, rev)
 	}
 	var paths []string
 	for _, p := range strings.Split(string(out), "\x00") {
@@ -151,7 +185,7 @@ func (g *gitRepo) TrackedPaths(rev string, prefixes []string) ([]string, error) 
 func (g *gitRepo) FileInIndex(relPath string) ([]byte, error) {
 	out, err := runGit(g.root, "show", ":"+relPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: :%s", ErrNotFound, relPath)
+		return nil, absent(err, ":"+relPath)
 	}
 	return out, nil
 }
@@ -159,7 +193,7 @@ func (g *gitRepo) FileInIndex(relPath string) ([]byte, error) {
 func (g *gitRepo) ChangedPaths(rev string) ([]string, error) {
 	out, err := runGit(g.root, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "-m", "-z", rev)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, rev)
+		return nil, absent(err, rev)
 	}
 	var paths []string
 	for _, p := range strings.Split(string(out), "\x00") {
@@ -173,7 +207,7 @@ func (g *gitRepo) ChangedPaths(rev string) ([]string, error) {
 func (g *gitRepo) RevisionsAfter(rev string) ([]string, error) {
 	out, err := runGit(g.root, "rev-list", rev+"..HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s..HEAD", ErrNotFound, rev)
+		return nil, absent(err, rev+"..HEAD")
 	}
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {

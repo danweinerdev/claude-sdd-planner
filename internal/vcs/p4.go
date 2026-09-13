@@ -1,13 +1,15 @@
 package vcs
 
 import (
-	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 func init() {
@@ -45,13 +47,23 @@ type p4Repo struct{ root string }
 // it, and no test asserts positive Perforce detection (that would need a
 // live server, which CI does not have — the knob makes a P4-configured
 // workstation behave like CI, not differently from it).
-func probeP4(dir string) Repo {
+func probeP4(dir string) (Repo, error) {
 	if os.Getenv("SDD_VCS_DISABLE_P4") != "" {
-		return nil
+		return nil, nil
 	}
 	out, err := runP4(dir, "info")
 	if err != nil {
-		return nil
+		// A missing p4 client is the ordinary state of a git workstation
+		// and means "not Perforce" here; any other inability (deadline,
+		// overflow, permission) is operational.
+		var pe *procexec.Error
+		if errors.As(err, &pe) && pe.Cause == procexec.CauseUnavailable {
+			return nil, nil
+		}
+		if errors.Is(err, ErrOperational) {
+			return nil, err
+		}
+		return nil, nil
 	}
 	clientRoot := ""
 	for _, line := range strings.Split(string(out), "\n") {
@@ -61,18 +73,18 @@ func probeP4(dir string) Repo {
 		}
 	}
 	if clientRoot == "" {
-		return nil
+		return nil, nil
 	}
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	// Canonicalize both sides: the client spec's root and the probed dir can
 	// spell the same directory differently (8.3 short names, symlinks).
 	if !pathWithin(CanonPath(clientRoot), CanonPath(absDir)) {
-		return nil
+		return nil, nil
 	}
-	return &p4Repo{root: dir}
+	return &p4Repo{root: dir}, nil
 }
 
 // pathWithin reports whether dir equals root or lives beneath it, comparing
@@ -85,17 +97,20 @@ func pathWithin(root, dir string) bool {
 	return len(dir) == len(root) || dir[len(root)] == filepath.Separator || root[len(root)-1] == filepath.Separator
 }
 
+// runP4 runs p4 through the bounded runner. A nonzero p4 exit is an ordinary
+// error; every other failure wraps ErrOperational, except that the runner's
+// typed error is preserved so probeP4 can tell an absent client apart.
 func runP4(dir string, args ...string) ([]byte, error) {
 	full := append([]string{"-d", dir}, args...)
-	cmd := exec.Command("p4", full...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	res, err := procexec.Run(context.Background(), "p4", full, procexec.Policy{})
 	if err != nil {
-		return stdout.Bytes(), fmt.Errorf("p4 %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		var pe *procexec.Error
+		if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+			return nil, fmt.Errorf("p4 %s: exit %d: %s", strings.Join(args, " "), pe.ExitCode, strings.TrimSpace(pe.Stderr))
+		}
+		return nil, fmt.Errorf("%w: p4 %s: %w", ErrOperational, strings.Join(args, " "), err)
 	}
-	return stdout.Bytes(), nil
+	return res.Stdout, nil
 }
 
 func (p *p4Repo) Kind() Kind   { return Perforce }

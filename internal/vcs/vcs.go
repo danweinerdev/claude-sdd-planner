@@ -116,39 +116,67 @@ type Repo interface {
 // returns nil: an undetectable or unsupported directory yields the None adapter,
 // whose operations all report ErrUnsupported, so callers need no nil check and
 // cannot accidentally treat "no VCS" as "checks passed".
+//
+// Detect cannot report that a probe failed to run; DetectChecked can. When
+// detection fails operationally, Detect returns an Unavailable adapter whose
+// every operation reports that failure, so the inability is never erased into
+// a plain tree. Callers whose outcome depends on detection should use
+// DetectChecked (Designs/TestSuiteReliability DD-10).
 func Detect(dir string) Repo {
+	r, err := DetectChecked(dir)
+	if err != nil {
+		return Unavailable{Dir: dir, Err: err}
+	}
+	return r
+}
+
+// DetectChecked is Detect with the failure distinguished from the answer: a
+// probe that could not run returns (nil, err) wrapping ErrOperational, while
+// a directory under no supported VCS still returns NoRepo with a nil error.
+// Operational failures are never memoized.
+func DetectChecked(dir string) (Repo, error) {
 	if memoEnabled {
 		detectMu.Lock()
 		r, ok := detectCache[dir]
 		detectMu.Unlock()
 		if ok {
-			return r
+			return r, nil
 		}
 	}
-	r := memoize(detect(dir))
+	probed, err := detect(dir)
+	if err != nil {
+		return nil, err
+	}
+	r := memoize(probed)
 	if memoEnabled {
 		detectMu.Lock()
 		detectCache[dir] = r
 		detectMu.Unlock()
 	}
-	return r
+	return r, nil
 }
 
-func detect(dir string) Repo {
+func detect(dir string) (Repo, error) {
 	for _, probe := range probes {
-		if r := probe(dir); r != nil {
-			return r
+		r, err := probe(dir)
+		if err != nil {
+			return nil, err
+		}
+		if r != nil {
+			return r, nil
 		}
 	}
-	return NoRepo{Dir: dir}
+	return NoRepo{Dir: dir}, nil
 }
 
-// probes are consulted in order; the first non-nil result wins. Adapters
-// register here from their own files so adding a VCS touches no shared code.
-var probes []func(dir string) Repo
+// probes are consulted in order; the first non-nil result wins. A probe
+// returns (nil, nil) when dir is not its kind of repository and a non-nil
+// error only when it could not decide. Adapters register here from their own
+// files so adding a VCS touches no shared code.
+var probes []func(dir string) (Repo, error)
 
 // RegisterProbe adds a detection probe. Called from adapter init functions.
-func RegisterProbe(p func(dir string) Repo) { probes = append(probes, p) }
+func RegisterProbe(p func(dir string) (Repo, error)) { probes = append(probes, p) }
 
 // NoRepo is the adapter for a directory under no version control. Every history
 // operation reports ErrUnsupported rather than a negative answer, because
@@ -191,3 +219,42 @@ func (n NoRepo) FileInIndex(string) ([]byte, error) {
 func (n NoRepo) Clean() (bool, []string, error) {
 	return false, nil, fmt.Errorf("%w: no VCS detected at %s", ErrUnsupported, n.Dir)
 }
+
+// ErrOperational means the VCS could not be consulted at all: the executable
+// is missing or unrunnable, the command timed out, its output overflowed, or
+// its pipes could not be drained. It is never an answer about the repository
+// and must never be read as absence (ErrNotFound) or as "no VCS" (NoRepo).
+var ErrOperational = errors.New("vcs operation could not run")
+
+// Unavailable is the adapter Detect returns when detection itself could not
+// run. It is not NoRepo: nothing is known about the directory. Every
+// operation reports the operational failure, so an unchecked caller that
+// keeps going still cannot read the outcome as a clean, absent, or plain
+// tree result.
+type Unavailable struct {
+	Dir string
+	Err error
+}
+
+// UnavailableKind is the Kind reported by an Unavailable adapter.
+const UnavailableKind Kind = "unavailable"
+
+func (u Unavailable) Kind() Kind                      { return UnavailableKind }
+func (u Unavailable) Root() string                    { return u.Dir }
+func (u Unavailable) RevisionSyntaxValid(string) bool { return false }
+func (u Unavailable) fail() error {
+	if errors.Is(u.Err, ErrOperational) {
+		return u.Err
+	}
+	return fmt.Errorf("%w: %v", ErrOperational, u.Err)
+}
+func (u Unavailable) RevisionExists(string) (bool, error)             { return false, u.fail() }
+func (u Unavailable) Head() (string, error)                           { return "", u.fail() }
+func (u Unavailable) IsAncestor(string, string) (bool, error)         { return false, u.fail() }
+func (u Unavailable) Parents(string) ([]string, error)                { return nil, u.fail() }
+func (u Unavailable) FileAt(string, string) ([]byte, error)           { return nil, u.fail() }
+func (u Unavailable) TrackedPaths(string, []string) ([]string, error) { return nil, u.fail() }
+func (u Unavailable) FileInIndex(string) ([]byte, error)              { return nil, u.fail() }
+func (u Unavailable) ChangedPaths(string) ([]string, error)           { return nil, u.fail() }
+func (u Unavailable) RevisionsAfter(string) ([]string, error)         { return nil, u.fail() }
+func (u Unavailable) Clean() (bool, []string, error)                  { return false, nil, u.fail() }

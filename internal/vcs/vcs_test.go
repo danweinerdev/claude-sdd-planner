@@ -355,8 +355,8 @@ func TestP4UnsupportedOperations(t *testing.T) {
 // RPC paid per detection of every non-git fixture directory.
 func TestP4ProbeDisabledByEnv(t *testing.T) {
 	t.Setenv("SDD_VCS_DISABLE_P4", "1")
-	if r := probeP4(t.TempDir()); r != nil {
-		t.Fatalf("probeP4 must return nil when disabled, got %v", r.Kind())
+	if r, err := probeP4(t.TempDir()); r != nil || err != nil {
+		t.Fatalf("probeP4 must return nil, nil when disabled, got %v, %v", r, err)
 	}
 	if r := Detect(t.TempDir()); r.Kind() == Perforce {
 		t.Fatal("Detect fabricated a Perforce repo with the probe disabled")
