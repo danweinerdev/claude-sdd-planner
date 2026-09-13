@@ -1,4 +1,4 @@
-.PHONY: bump-patch bump-minor bump-major test \
+.PHONY: bump-patch bump-minor bump-major test test-pure \
         build build-release build-all gen-fixtures check-fixtures check-templates clean-build \
         plugins plugins-check
 
@@ -145,6 +145,31 @@ clean-build:
 # full coverage and does not claim that the upstream behavior has been fixed.
 test: check-templates
 	@go test -count=1 ./...
+
+# test-pure is a SUPPLEMENTARY fast selection, never a substitute for `test`.
+#
+# It runs the rules package's pure transformations — parsing, markdown
+# visibility, section and identifier extraction, waiver parsing and
+# application, diagnostic ordering, the evaluation sweep over a rule list —
+# which need no repository, no Git or Perforce binary, and no subprocess at
+# all. That makes it the selection to run while iterating on rule logic: it
+# finishes in well under a second where the full gate spawns hundreds of git
+# commands.
+#
+# What it deliberately does NOT cover is everything the authoritative gate
+# exists for: the real-SCM boundaries (detection, worktrees, staged versus
+# worktree versus history, absence versus execution failure, mutation
+# between validations) and every registered Good/Bad example. A green
+# `test-pure` is evidence about pure logic only — `make test` remains the
+# gate that a change is releasable.
+#
+# The selection is kept non-vacuous by TestPureSelectionInventory, which
+# pins the executed set to a declared list and re-runs it with an empty
+# PATH, and TestSCMBoundaryInventory, which fails if a mapped real-SCM
+# assertion is renamed or deleted. Both run in `make test` like any other
+# test, so this target cannot drift into matching nothing.
+test-pure:
+	@go test -count=1 -run '^TestPure' ./internal/rules/
 
 # --- Portable (OpenCode/Codex) tree --------------------------------------
 #
