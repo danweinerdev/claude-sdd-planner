@@ -22,6 +22,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
@@ -148,6 +149,21 @@ type Plan struct {
 	Amendments   []Amendment `json:"amendments"`
 }
 
+// Reach returns a review node's transitive dependency closure, excluding the
+// review node itself. A review of a diff legitimately covers everything it
+// depends on, not just the increment scope reviewScope derives (that scope
+// already subtracts regions ceded to inner GREEN full reviews) — so revise
+// and extend targets are validated against Reach, not against scope.
+func Reach(g *model.Graph, reviewNode string) map[string]bool {
+	adjacency := algorithms.Graph{}
+	for i := range g.Nodes {
+		adjacency[g.Nodes[i].ID] = g.Nodes[i].Deps
+	}
+	closure := algorithms.DependencyClosure(adjacency, reviewNode)
+	delete(closure, reviewNode)
+	return closure
+}
+
 // PlanAmendments validates every open finding and returns the amendments
 // they demand, or refuses with every problem named. It does not write.
 func PlanAmendments(g *model.Graph, reviewNode string, a *Artifact) (*Plan, error) {
@@ -169,10 +185,12 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 	if node.EffectiveRole() != model.RoleReview {
 		return nil, fmt.Errorf("graph amend: %q has role %q; amendments come from a review node's findings", reviewNode, node.EffectiveRole())
 	}
-	inScope := map[string]bool{}
-	for _, id := range scope {
-		inScope[id] = true
+	reach := Reach(g, reviewNode)
+	reachList := make([]string, 0, len(reach))
+	for id := range reach {
+		reachList = append(reachList, id)
 	}
+	sort.Strings(reachList)
 	existing := map[string]bool{}
 	for _, id := range g.NodeIDs() {
 		existing[id] = true
@@ -198,8 +216,12 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 				continue
 			}
 			for _, id := range f.Nodes {
-				if !inScope[id] {
-					addProblem("%s: names %q, which is outside %q's scope (%s)", f.ID, id, reviewNode, strings.Join(scope, ", "))
+				if !reach[id] {
+					addProblem("%s: names %q, which is outside %q's dependency closure (%s)", f.ID, id, reviewNode, strings.Join(reachList, ", "))
+					continue
+				}
+				if target := g.NodeByID(id); target != nil && (target.Gate.Type == model.GateReview || target.Gate.Type == model.GateCommand) {
+					addProblem("%s: names %q, which has gate type %q; revise/extend act on implementation nodes, not review or command nodes", f.ID, id, target.Gate.Type)
 					continue
 				}
 				if revised[id] {
@@ -242,12 +264,12 @@ func PlanAmendmentsInScope(g *model.Graph, reviewNode string, a *Artifact, scope
 			}
 			hangsOffScope := false
 			for _, dep := range n.Deps {
-				if inScope[dep] {
+				if reach[dep] {
 					hangsOffScope = true
 				}
 			}
 			if !hangsOffScope {
-				addProblem("%s: extend node %q must depend on at least one reviewed node (%s)", f.ID, n.ID, strings.Join(scope, ", "))
+				addProblem("%s: extend node %q must depend on at least one node in %q's dependency closure (%s)", f.ID, n.ID, reviewNode, strings.Join(reachList, ", "))
 				continue
 			}
 			// Sourced necessity: the finding is the demand. The citation

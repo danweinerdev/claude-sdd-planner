@@ -416,6 +416,72 @@ func TestRecordRefusesOutOfScopeFindingNodes(t *testing.T) {
 	}
 }
 
+// TestPlanAmendmentsScopeVsReach reproduces the top-level review shape
+// review-final -> full-gate (command) -> inner-review (GREEN, full) ->
+// impl: the increment scope subtracts the inner review's covered region,
+// leaving only full-gate, but a finding amending impl is still within
+// review-final's dependency closure and must be admitted.
+func TestPlanAmendmentsScopeVsReach(t *testing.T) {
+	impl := work("impl", nil, "src/impl.ext")
+	impl.Verification = pass(1)
+	inner := fullGate("inner-review", []string{"impl"})
+	inner.Verification = pass(2)
+	fullGateCmd := model.Node{ID: "full-gate", Contract: "runs the full gate", Deps: []string{"inner-review"},
+		Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1}
+	outer := fullGate("review-final", []string{"full-gate"})
+	_, planDir := fixture(t, 3, impl, inner, fullGateCmd, outer)
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+
+	scope, err := Scope(g, "review-final")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(scope, []string{"full-gate"}) {
+		t.Fatalf("increment scope must subtract the inner GREEN review's covered region: %v", scope)
+	}
+
+	art := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-01", Status: "open", Action: ActionRevise, Nodes: []string{"impl"},
+			Revise: map[string]any{"contract": "does impl, revised"}}},
+	}}
+	plan, err := PlanAmendmentsInScope(g, "review-final", art, scope)
+	if err != nil {
+		t.Fatalf("a revise of a node in the review's dependency closure must be admitted: %v", err)
+	}
+	if len(plan.Amendments) != 1 || plan.Amendments[0].Node != "impl" {
+		t.Fatalf("plan = %+v", plan.Amendments)
+	}
+
+	// A node truly outside the closure is still refused.
+	outsider := work("z", nil)
+	g.Nodes = append(g.Nodes, outsider)
+	artOutside := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-02", Status: "open", Action: ActionRevise, Nodes: []string{"z"},
+			Revise: map[string]any{"contract": "changed"}}},
+	}}
+	_, err = PlanAmendmentsInScope(g, "review-final", artOutside, scope)
+	if err == nil || !strings.Contains(err.Error(), "outside") || !strings.Contains(err.Error(), "F-02") {
+		t.Fatalf("a node outside the dependency closure must still refuse: %v", err)
+	}
+
+	// An extend depending on a closure node not in the increment scope
+	// (impl, covered by the inner GREEN review) is accepted.
+	artExtend := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-03", Status: "open", Action: ActionExtend, Node: map[string]any{
+			"id": "impl-followup", "contract": "handles the gap F-03 found", "deps": []any{"impl"},
+			"estimate": 1, "hazards": "untriaged",
+			"gate": map[string]any{"type": "tests", "tests": []any{map[string]any{"id": "test_followup", "file": "t.ext"}}},
+		}}},
+	}}
+	plan2, err := PlanAmendmentsInScope(g, "review-final", artExtend, scope)
+	if err != nil {
+		t.Fatalf("an extend hanging off an in-closure node must be admitted even outside the increment scope: %v", err)
+	}
+	if len(plan2.Amendments) != 1 || plan2.Amendments[0].Node != "impl-followup" {
+		t.Fatalf("plan2 = %+v", plan2.Amendments)
+	}
+}
+
 func TestRecordClaimDiscipline(t *testing.T) {
 	a := work("a", nil)
 	gate := fullGate("g1", []string{"a"})
