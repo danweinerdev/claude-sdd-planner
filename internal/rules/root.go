@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,6 +79,33 @@ type Root struct {
 	// serves every caller.
 	bareDiagnostics []Diagnostic
 	bareComputed    bool
+
+	// opFailures collects operational failures — the VCS could not be
+	// consulted — recorded by Repo() at detection and by the recording
+	// adapter it returns on every operation. The evaluator checks it after
+	// each rule callback and aborts, so a rule that ignores an adapter
+	// error cannot turn inability into findings (DD-10).
+	opMu       sync.Mutex
+	opFailures []error
+}
+
+// recordFailure appends an operational failure to the evaluation's collector.
+func (r *Root) recordFailure(err error) {
+	r.opMu.Lock()
+	defer r.opMu.Unlock()
+	r.opFailures = append(r.opFailures, err)
+}
+
+// OperationalFailure returns the first operational failure recorded on this
+// Root, or nil. A non-nil result means no finding computed on this Root is
+// authoritative.
+func (r *Root) OperationalFailure() error {
+	r.opMu.Lock()
+	defer r.opMu.Unlock()
+	if len(r.opFailures) == 0 {
+		return nil
+	}
+	return r.opFailures[0]
 }
 
 // ValidatedDecisionIndex returns the derived cross-plan reference index or an
@@ -126,18 +154,86 @@ type Artifact struct {
 // Repo returns the VCS adapter for dir, detecting at most once per directory
 // for this Root's lifetime (see repoCache). Rules must call this instead of
 // vcs.Detect directly.
+//
+// Detection is checked: a probe that could not run is recorded on the
+// evaluation's collector BEFORE an unavailable adapter is returned, so a
+// rule that only inspects Kind() and never calls a method still cannot
+// erase the failure. Operational failures are never cached. Every adapter
+// handed out is wrapped so its own operational errors are recorded too.
 func (r *Root) Repo(dir string) vcs.Repo {
 	r.repoMu.Lock()
 	defer r.repoMu.Unlock()
 	if repo, ok := r.repoCache[dir]; ok {
 		return repo
 	}
-	repo := vcs.Detect(dir)
+	detected, err := vcs.DetectChecked(dir)
+	if err != nil {
+		r.recordFailure(err)
+		return recordingRepo{Repo: vcs.Unavailable{Dir: dir, Err: err}, root: r}
+	}
+	repo := recordingRepo{Repo: detected, root: r}
 	if r.repoCache == nil {
 		r.repoCache = map[string]vcs.Repo{}
 	}
 	r.repoCache[dir] = repo
 	return repo
+}
+
+// recordingRepo decorates an adapter so any operation that fails
+// operationally is recorded on the owning Root before the error is returned
+// to rule code. Determinate answers (ErrNotFound, ErrUnsupported, negative
+// predicates) pass through untouched.
+type recordingRepo struct {
+	vcs.Repo
+	root *Root
+}
+
+func (rr recordingRepo) note(err error) error {
+	if err != nil && errors.Is(err, vcs.ErrOperational) {
+		rr.root.recordFailure(err)
+	}
+	return err
+}
+
+func (rr recordingRepo) RevisionExists(rev string) (bool, error) {
+	ok, err := rr.Repo.RevisionExists(rev)
+	return ok, rr.note(err)
+}
+func (rr recordingRepo) Head() (string, error) {
+	v, err := rr.Repo.Head()
+	return v, rr.note(err)
+}
+func (rr recordingRepo) IsAncestor(a, d string) (bool, error) {
+	ok, err := rr.Repo.IsAncestor(a, d)
+	return ok, rr.note(err)
+}
+func (rr recordingRepo) Parents(rev string) ([]string, error) {
+	v, err := rr.Repo.Parents(rev)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) FileAt(rev, rel string) ([]byte, error) {
+	v, err := rr.Repo.FileAt(rev, rel)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) TrackedPaths(rev string, prefixes []string) ([]string, error) {
+	v, err := rr.Repo.TrackedPaths(rev, prefixes)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) FileInIndex(rel string) ([]byte, error) {
+	v, err := rr.Repo.FileInIndex(rel)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) ChangedPaths(rev string) ([]string, error) {
+	v, err := rr.Repo.ChangedPaths(rev)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) RevisionsAfter(rev string) ([]string, error) {
+	v, err := rr.Repo.RevisionsAfter(rev)
+	return v, rr.note(err)
+}
+func (rr recordingRepo) Clean() (bool, []string, error) {
+	ok, dirty, err := rr.Repo.Clean()
+	return ok, dirty, rr.note(err)
 }
 
 // Kind returns the `type:` frontmatter field, or "" when absent/non-string.

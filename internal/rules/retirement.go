@@ -1,15 +1,17 @@
 package rules
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
@@ -25,17 +27,24 @@ func VerifyRetirementSource(planDir string, source model.RetirementSource) (mode
 		strings.ContainsAny(source.Path, "\\\x00") || (len(source.Path) > 1 && source.Path[1] == ':') {
 		return source, fmt.Errorf("historical source path %q must be canonical and repository-relative", source.Path)
 	}
-	repo := vcs.Detect(planDir)
+	repo, err := vcs.DetectChecked(planDir)
+	if err != nil {
+		return source, fmt.Errorf("historical Git source cannot be verified: %w", err)
+	}
 	if repo.Kind() != vcs.Git && repo.Kind() != vcs.GitWorktree && repo.Kind() != vcs.GitBare {
 		return source, fmt.Errorf("historical Git source cannot be verified: no Git repository contains the plan")
 	}
 	if !repo.RevisionSyntaxValid(source.Revision) {
-		cmd := exec.Command("git", "-C", repo.Root(), "rev-parse", "--verify", "--end-of-options", source.Revision+"^{commit}")
-		raw, err := cmd.Output()
+		res, err := procexec.Run(context.Background(), "git",
+			[]string{"-C", repo.Root(), "rev-parse", "--verify", "--end-of-options", source.Revision + "^{commit}"}, procexec.Policy{})
 		if err != nil {
-			return source, fmt.Errorf("historical revision %q is unavailable locally; supply/fetch the original history: %w", source.Revision, err)
+			var pe *procexec.Error
+			if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+				return source, fmt.Errorf("historical revision %q is unavailable locally; supply/fetch the original history: %w", source.Revision, err)
+			}
+			return source, fmt.Errorf("historical revision %q cannot be resolved: %w: %v", source.Revision, vcs.ErrOperational, err)
 		}
-		source.Revision = strings.TrimSpace(string(raw))
+		source.Revision = strings.TrimSpace(string(res.Stdout))
 	}
 	if !repo.RevisionSyntaxValid(source.Revision) {
 		return source, fmt.Errorf("historical revision did not resolve to an immutable Git commit")

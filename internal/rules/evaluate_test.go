@@ -70,7 +70,7 @@ func TestOrdinaryEvaluationOnce(t *testing.T) {
 	}
 	for _, mode := range []struct {
 		name string
-		run  func(*Root, []*Rule) []Diagnostic
+		run  func(*Root, []*Rule) ([]Diagnostic, error)
 	}{{"strict", runWith}, {"reporting", runWithWaiversWith}} {
 		t.Run(mode.name, func(t *testing.T) {
 			_, root := materializeRoot(t, files)
@@ -81,7 +81,9 @@ func TestOrdinaryEvaluationOnce(t *testing.T) {
 				Check:     func(a *Artifact, _ func(Diagnostic)) { artifactCalls[a.Rel]++ },
 			}
 			rules := []*Rule{counting, ruleByCode(t, "SDD020"), ruleByCode(t, "SDD176"), ruleByCode(t, "SDD177")}
-			mode.run(root, rules)
+			if _, err := mode.run(root, rules); err != nil {
+				t.Fatal(err)
+			}
 			if rootCalls != 1 {
 				t.Errorf("root rule invoked %d times, want exactly 1", rootCalls)
 			}
@@ -165,7 +167,10 @@ func TestStrictAndReportingSemanticsPreserved(t *testing.T) {
 
 				wantStrict := append(append([]Diagnostic(nil), ordinary...), oracleWaiverFindings(t, dir, ordinary, rules)...)
 				sortStrict(wantStrict)
-				gotStrict := runWith(freshRoot(t, dir), rules)
+				gotStrict, err := runWith(freshRoot(t, dir), rules)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if !reflect.DeepEqual(gotStrict, wantStrict) {
 					t.Errorf("strict mismatch\n got: %+v\nwant: %+v", gotStrict, wantStrict)
 				}
@@ -174,7 +179,10 @@ func TestStrictAndReportingSemanticsPreserved(t *testing.T) {
 				wantReporting = append(wantReporting, applyWaivers(freshRoot(t, dir), wantReporting)...)
 				wantReporting = demoteRetiredFindings(freshRoot(t, dir), wantReporting)
 				SortDiagnostics(wantReporting)
-				gotReporting := runWithWaiversWith(freshRoot(t, dir), rules)
+				gotReporting, err := runWithWaiversWith(freshRoot(t, dir), rules)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if !reflect.DeepEqual(gotReporting, wantReporting) {
 					t.Errorf("reporting mismatch\n got: %+v\nwant: %+v", gotReporting, wantReporting)
 				}

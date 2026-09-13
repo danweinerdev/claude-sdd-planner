@@ -164,7 +164,13 @@ func Codes() []string {
 // oracle and every internal caller that asks "what does this root actually
 // violate?" wants this. Use RunWithWaivers for the reporting path, where a
 // human's declared exceptions apply.
-func Run(r *Root) []Diagnostic { return runWith(r, All()) }
+func Run(r *Root) []Diagnostic {
+	d, err := runWith(r, All())
+	if err != nil {
+		return []Diagnostic{operationalDiagnostic(err)}
+	}
+	return d
+}
 
 // sortStrict orders diagnostics the way Run always has: path, line, code,
 // message.
@@ -191,7 +197,13 @@ func sortStrict(out []Diagnostic) {
 // Waiver bookkeeping runs here rather than inside individual rules so no rule
 // can forget to honor an exception, and so the set of waivable codes is decided
 // in one place.
-func RunWithWaivers(r *Root) []Diagnostic { return runWithWaiversWith(r, All()) }
+func RunWithWaivers(r *Root) []Diagnostic {
+	d, err := runWithWaiversWith(r, All())
+	if err != nil {
+		return []Diagnostic{operationalDiagnostic(err)}
+	}
+	return d
+}
 
 // demoteRetiredFindings re-tags findings ON a superseded or archived artifact
 // as Waived: still reported, no longer invalidating.

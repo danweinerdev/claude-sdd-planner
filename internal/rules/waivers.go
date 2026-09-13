@@ -240,7 +240,7 @@ func waiverDiagnostics(r *Root, code string, emit func(Diagnostic)) {
 // memo is only ever read through a copy.
 func bareOnce(r *Root) []Diagnostic {
 	if !r.bareComputed {
-		r.bareDiagnostics = evaluate(r, All())
+		r.bareDiagnostics, _ = evaluate(r, All()) // failure stays recorded on r
 		r.bareComputed = true
 	}
 	return r.bareDiagnostics

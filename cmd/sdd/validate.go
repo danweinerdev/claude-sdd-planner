@@ -100,9 +100,15 @@ func cmdValidate(o validateOpts) error {
 		return fmt.Errorf("validate: planning root contains no discoverable SDD artifacts")
 	}
 
-	diags := rules.RunWithWaivers(r)
+	evaluate := rules.RunWithWaiversChecked
 	if o.NoWaivers {
-		diags = rules.Run(r)
+		evaluate = rules.RunChecked
+	}
+	diags, err := evaluate(r)
+	if err != nil {
+		// Operational: the VCS could not be consulted, so nothing below is
+		// authoritative. Not a refusal (exit 1) and never a clean run.
+		return fmt.Errorf("validate: could not complete: %w", err)
 	}
 	rules.SortDiagnostics(diags)
 
@@ -161,7 +167,7 @@ func cmdValidate(o validateOpts) error {
 	}
 
 	if operational {
-		return fmt.Errorf("validate: decision authority could not be captured")
+		return fmt.Errorf("validate: could not complete: an operational finding was reported")
 	}
 	if !valid {
 		return &refusedError{n: countErrorsOut(out)}
