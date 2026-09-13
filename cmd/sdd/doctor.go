@@ -320,6 +320,15 @@ func checkHookBinary(root, source string) (path, problem string) {
 		}
 		return p, "absent, and no `sdd` on PATH — the hooks are a silent no-op; run `sdd provision`"
 	}
+	// The probe runs the pinned binary through the bounded runner, which
+	// refuses to launch anything on a platform with no containment adapter.
+	// Reporting that refusal as the binary's own failure would condemn a
+	// healthy installation for a property of the platform; doctor reports the
+	// blocker itself, and --check still fails on it
+	// (review 06-review-fixtures-57d4ffb F-01).
+	if ok, reason := procexec.ContainmentSupported(); !ok {
+		return p, "present, not probed: " + reason
+	}
 	if _, err := procexec.Run(context.Background(), p, []string{"version"}, hookProbePolicy); err != nil {
 		return p, "present but did not answer `version`: " + err.Error()
 	}

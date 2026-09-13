@@ -304,9 +304,28 @@ func TestDoctorProbeUsesOwnedRunner(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating blocking read source: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bin, "sdd"), []byte("#!/bin/sh\nread -r _ < "+fifo+"\n"), 0o755); err != nil {
+		// The stub records its own pid so the timeout path below can reap it.
+		// Reaching that path means the runner's bound did NOT hold, so the
+		// containment adapter cannot be relied on to have cleaned up — and a
+		// test proving processes leak must not itself leak one.
+		pidFile := filepath.Join(root, "stub.pid")
+		script := "#!/bin/sh\necho $$ > " + pidFile + "\nread -r _ < " + fifo + "\n"
+		if err := os.WriteFile(filepath.Join(bin, "sdd"), []byte(script), 0o755); err != nil {
 			t.Fatalf("writing fake hook binary: %v", err)
 		}
+		t.Cleanup(func() {
+			raw, err := os.ReadFile(pidFile)
+			if err != nil {
+				return
+			}
+			pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if err != nil || pid <= 0 {
+				return
+			}
+			if p, err := os.FindProcess(pid); err == nil {
+				p.Kill()
+			}
+		})
 
 		policy := hookProbePolicy
 		t.Cleanup(func() { hookProbePolicy = policy })
@@ -332,4 +351,81 @@ func TestDoctorProbeUsesOwnedRunner(t *testing.T) {
 			t.Fatalf("checkHookBinary did not return within %v against a hanging hook binary", bound)
 		}
 	})
+}
+
+// TestDoctorProbeSkipsWhenContainmentUnsupported pins the hook-binary probe's
+// behaviour on a platform with no containment adapter. procexec.Run refuses to
+// launch anything there, so probing unconditionally made doctor report every
+// healthy pinned binary on Windows as one that "did not answer `version`" —
+// a derived symptom masquerading as a broken installation
+// (review 06-review-fixtures-57d4ffb F-01). The probe must be skipped and
+// reported as not probed, mirroring the git-hook probe's wording.
+func TestDoctorProbeSkipsWhenContainmentUnsupported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the healthy fake hook binary is a POSIX shell script")
+	}
+	chdirTemp(t)
+
+	const reason = "windows: no process-containment adapter (the Windows Job Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan)"
+	restore := procexec.ContainmentProbe
+	t.Cleanup(func() { procexec.ContainmentProbe = restore })
+	procexec.ContainmentProbe = func() (bool, string) { return false, reason }
+
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatalf("creating bin dir: %v", err)
+	}
+	// The marker is the observation: a skipped probe never runs the binary,
+	// so asserting on the report alone would pass for an implementation that
+	// runs it and then discards the answer.
+	marker := filepath.Join(root, "ran")
+	script := "#!/bin/sh\n: > " + marker + "\necho 'sdd v9.9.9'\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "sdd"), []byte(script), 0o755); err != nil {
+		t.Fatalf("writing healthy fake hook binary: %v", err)
+	}
+	t.Setenv("CLAUDE_PLUGIN_ROOT", root)
+
+	for _, mode := range []struct {
+		name string
+		opts doctorOpts
+	}{
+		{"repair", doctorOpts{}},
+		{"check", doctorOpts{Check: true}},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			out, err := captureStdout(t, func() error { return cmdDoctor(mode.opts) })
+			if mode.opts.Check {
+				if code := exitCode(err); code == 0 {
+					t.Fatalf("doctor --check exit=%d err=%v, want nonzero for the missing adapter\n%s", code, err, out)
+				}
+			} else if err != nil {
+				t.Fatalf("doctor (repair mode) must still report, not fail: %v\n%s", err, out)
+			}
+
+			var line string
+			for _, l := range strings.Split(out, "\n") {
+				if strings.Contains(l, "hook binary:") {
+					line = l
+					break
+				}
+			}
+			if line == "" {
+				t.Fatalf("doctor printed no hook-binary line:\n%s", out)
+			}
+			if !strings.Contains(line, "not probed") || !strings.Contains(line, reason) {
+				t.Errorf("hook binary line = %q, want it to read as not probed with the platform reason", line)
+			}
+			for _, unwanted := range []string{"did not answer", "not executable"} {
+				if strings.Contains(line, unwanted) {
+					t.Errorf("hook binary line = %q, must not report a broken binary (%q)", line, unwanted)
+				}
+			}
+			if _, err := os.Stat(marker); err == nil {
+				t.Errorf("doctor executed the pinned binary on a platform with no containment adapter (marker %s exists)", marker)
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("stat marker: %v", err)
+			}
+		})
+	}
 }
