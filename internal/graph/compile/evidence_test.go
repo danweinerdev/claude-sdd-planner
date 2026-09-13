@@ -322,6 +322,88 @@ func (s stubRevisionRepo) TrackedPaths(string, []string) ([]string, error) {
 }
 func (s stubRevisionRepo) FileInIndex(string) ([]byte, error) { panic("unused") }
 
+// countingRevisionRepo wraps stubRevisionRepo and counts real
+// RevisionExists calls that reach it — used to assert revExistsMemoRepo's
+// per-revision memoization from outside the compile package's private type.
+type countingRevisionRepo struct {
+	stubRevisionRepo
+	calls *int
+}
+
+func (c countingRevisionRepo) RevisionExists(rev string) (bool, error) {
+	*c.calls++
+	return c.stubRevisionRepo.RevisionExists(rev)
+}
+
+// TestIdentityProbeRunsOncePerRevisionAndNotOnNoOp is the round-17
+// regression: renderPhaseDoc's identity probe (renderPhaseEvidence ->
+// identityRecheckLine -> RevisionExists) ran once per closed phase in BOTH
+// preflightViews and the write pass of one renderViews call, and again on
+// every subsequent no-op re-render. The probe must be memoized per revision
+// within one RenderViews call (both passes sharing it), and skipped
+// entirely when the render is a byte-identical no-op against the existing
+// frozen view.
+func TestIdentityProbeRunsOncePerRevisionAndNotOnNoOp(t *testing.T) {
+	root, planDir := evidencePlanFixture(t)
+	g := &model.Graph{Version: 1, Nodes: []model.Node{
+		closedNode("work-1", "01-core"),
+		closedNode("work-2", "01-core"),
+	}}
+	closed := map[string]bool{"work-1": true, "work-2": true}
+	evidenceReview(t, planDir, "P", "01-core.md", "review.md", evidenceRev)
+
+	var calls int
+	repo := &revExistsMemoRepo{Repo: countingRevisionRepo{
+		stubRevisionRepo: stubRevisionRepo{exists: true},
+		calls:            &calls,
+	}}
+
+	// First render: preflightViews and the write pass share repo, and both
+	// nodes share one checkpoint revision, so exactly one real probe must
+	// reach the underlying repo regardless of phase count or pass count.
+	if err := preflightViews(root, "P", "", repo, g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	// Drive the write pass directly (renderPhaseDoc + writeView), reusing
+	// the SAME repo value preflightViews just used, exactly as renderViews
+	// does internally.
+	for _, ph := range groupPhases(g, "P") {
+		content, err := renderPhaseDoc(planDir, "P", g, ph, "{DATE}", "{DATE}", "", repo, nil, closed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writeView(filepath.Join(planDir, ph.Doc), content, "P"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("first render: RevisionExists called %d times, want 1 (memoized per revision across both passes)", calls)
+	}
+
+	// Second render against the now-frozen, unchanged view: a no-op must
+	// not probe at all.
+	calls = 0
+	repo2 := &revExistsMemoRepo{Repo: countingRevisionRepo{
+		stubRevisionRepo: stubRevisionRepo{exists: true},
+		calls:            &calls,
+	}}
+	if err := preflightViews(root, "P", "", repo2, g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	for _, ph := range groupPhases(g, "P") {
+		content, err := renderPhaseDoc(planDir, "P", g, ph, "{DATE}", "{DATE}", "", repo2, nil, closed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writeView(filepath.Join(planDir, ph.Doc), content, "P"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("second (no-op) render: RevisionExists called %d times, want 0", calls)
+	}
+}
+
 // TestRenderedIdentityLineReportsRealCheck (review-execution 56815db-b F-01
 // item 3): the phase evidence's Identity recheck line must report the
 // outcome of a real revision-exists probe run at render time — matched when

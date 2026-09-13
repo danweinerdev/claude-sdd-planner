@@ -158,7 +158,7 @@ func findPhaseReview(planDir, phaseDocRel, want string) (*reviewArtifact, bool, 
 // (review-execution 56815db-b F-01 item 3).
 func identityRecheckLine(repo vcs.Repo, rev, today string) (string, error) {
 	if repo == nil {
-		return fmt.Sprintf("- Identity recheck: no recheck ran (no resolved target repository at render time)\n\n"), nil
+		return "- Identity recheck: no recheck ran (no resolved target repository at render time)\n\n", nil
 	}
 	exists, err := repo.RevisionExists(rev)
 	if err != nil && !errors.Is(err, vcs.ErrNotFound) {
@@ -178,17 +178,36 @@ func identityRecheckLine(repo vcs.Repo, rev, today string) (string, error) {
 // repo is the vcs.Repo resolved for repoRoot (nil when none was resolved),
 // used for the identity recheck's real probe.
 func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today string, repo vcs.Repo) (string, error) {
+	before, after, err := renderPhaseEvidenceHalves(planDir, plan, ph, repoRoot, today)
+	if err != nil {
+		return "", err
+	}
+	rev := phaseCheckpoint(ph.Nodes)
+	line, err := identityRecheckLine(repo, rev, today)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(before+line+after, "\n") + "\n", nil
+}
+
+// renderPhaseEvidenceHalves builds everything renderPhaseEvidence writes
+// EXCEPT the `- Identity recheck:` line — every part that costs only a
+// filesystem read, never a repository probe — split around where that line
+// belongs. Callers that want to know whether a probe is even necessary
+// (renderPhaseDoc's no-op short-circuit) compare `before`+`after` against
+// an existing rendering with ITS OWN identity-recheck line similarly
+// excised, before deciding whether to run identityRecheckLine at all
+// (review-execution ef1962e F-01 item 4).
+func renderPhaseEvidenceHalves(planDir, plan string, ph phaseGroup, repoRoot, today string) (before, after string, err error) {
 	rev := phaseCheckpoint(ph.Nodes)
 	var b strings.Builder
 	fmt.Fprintf(&b, "- Verified: %s\n", today)
 	fmt.Fprintf(&b, "- Repository: %s\n", vcs.CanonPath(repoRoot))
 	fmt.Fprintf(&b, "- VCS: git\n")
 	fmt.Fprintf(&b, "- Revision / checkpoint: `%s`\n", rev)
-	line, err := identityRecheckLine(repo, rev, today)
-	if err != nil {
-		return "", err
-	}
-	b.WriteString(line)
+	before = b.String()
+	b.Reset()
+
 	b.WriteString("| Command | Working directory | Result | Observable evidence |\n")
 	b.WriteString("| --- | --- | --- | --- |\n")
 	fmt.Fprintf(&b, "| `sdd graph status --plan %s` | . | PASS (exit 0) | phase %d: %d/%d node(s) closed (GREEN, covered by a passing frozen full review gate) |\n\n",
@@ -203,13 +222,14 @@ func renderPhaseEvidence(planDir, plan string, ph phaseGroup, repoRoot, today st
 	phaseDocRel := "Plans/" + plan + "/" + ph.Doc
 	review, found, err := findPhaseReview(planDir, phaseDocRel, rev)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if found {
 		reviewRev, _ := review.Meta["rev"].(string)
 		fmt.Fprintf(&b, "- Final aligned review: `Plans/%s`; frozen: %s\n", review.Rel, reviewRev)
 	}
-	return strings.TrimRight(b.String(), "\n") + "\n", nil
+	after = b.String()
+	return before, after, nil
 }
 
 // renderPlanEvidence builds the plan README's `## Plan Completion Evidence`

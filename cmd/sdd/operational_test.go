@@ -792,7 +792,6 @@ func TestSplitAmendAuditOperationalSourceExit(t *testing.T) {
 
 	t.Run("split", func(t *testing.T) {
 		root := splitAmendAuditOperationalFixture(t)
-		graphPath := filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
 		payload := filepath.Join(root, "children.json")
 		if err := os.WriteFile(payload, []byte(`{
   "version": 1,
@@ -821,7 +820,7 @@ func TestSplitAmendAuditOperationalSourceExit(t *testing.T) {
 		// may have mutated the graph (retired "big"), and before/after must
 		// be compared against the copy the shimmed run actually reads.
 		root = splitAmendAuditOperationalFixture(t)
-		graphPath = filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
+		graphPath := filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
 		before, err := os.ReadFile(graphPath)
 		if err != nil {
 			t.Fatal(err)

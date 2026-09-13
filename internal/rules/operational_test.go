@@ -2168,3 +2168,42 @@ func TestGraphPlanStatFailureIsOperational(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanGraphReadFailuresAreOperational is the round-17 regression:
+// planGraphIDs and planGraphJustifies folded any ReadFile/Unmarshal failure
+// into "not a graph plan" (ok=false), including a read failure that is NOT
+// not-exist (permission denied, a transient FS fault). Such a failure is an
+// inability to answer, not evidence of absence, and must be recorded as an
+// operational failure on the Root — never silently treated as "no graph",
+// which would let SDD096 report a spurious unknown-task diagnostic instead
+// of aborting.
+func TestPlanGraphReadFailuresAreOperational(t *testing.T) {
+	reviewFor := func(tracked string) string {
+		return replaceFirst(
+			reviewWithBlocks(
+				"\n  - id: F-01\n    severity: major\n    title: One\n    status: open\n",
+				"\n  - id: FU-01\n    finding: F-01\n    summary: S.\n    tracked_in: \""+tracked+"\"\n",
+				"### F-01 — one\n\nText.\n", ""),
+			`review_of: "Specs/Sample/README.md"`, `review_of: "Plans/Sample/README.md"`)
+	}
+	r := rootFrom(t, map[string]string{
+		"Retro/sample-review.md":         reviewFor("node-x"),
+		"Plans/Sample/README.md":         validPlan(false),
+		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"node-x"}, nil),
+	})
+
+	readErr := fmt.Errorf("read %s: permission denied", "Plans/Sample/Sample-Graph.json")
+	orig := readGraphFile
+	readGraphFile = func(name string) ([]byte, error) {
+		return nil, readErr
+	}
+	t.Cleanup(func() { readGraphFile = orig })
+
+	diags, err := runWith(r, allRules())
+	if !errors.Is(err, vcs.ErrOperational) {
+		t.Fatalf("runWith err = %v, want errors.Is(err, vcs.ErrOperational)", err)
+	}
+	if len(diags) != 0 {
+		t.Errorf("partial findings leaked past an operational read failure: %v", codesOf(diags))
+	}
+}

@@ -316,7 +316,12 @@ func writeReadmeStatusComplete(readme, expectDigest string) error {
 	if err := store.WriteAtomicExpecting(art.Path, updated, expectDigest); err != nil {
 		var conflict *store.ErrConcurrentWrite
 		if errors.As(err, &conflict) {
-			return fmt.Errorf("the rendered views were already written to %s, but the status flip was refused: %w", readme, err)
+			// A compare-and-swap conflict is a refused mutation (FR-03: exit
+			// 1), not an inability to run the operation (exit 2) — the
+			// message still names the views as already rendered so the
+			// caller knows the render succeeded before the flip lost the
+			// race (review-execution ef1962e F-01 item 5).
+			return &refusedError{n: 1, msg: fmt.Sprintf("the rendered views were already written to %s, but the status flip was refused: %s", readme, err)}
 		}
 		return err
 	}

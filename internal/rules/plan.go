@@ -288,10 +288,7 @@ func init() {
 		What: "a complete plan contains a phase entry whose doc is not complete",
 		CheckRoot: func(r *Root, emit func(Diagnostic)) {
 			for _, a := range r.Artifacts {
-				// A graph plan's phase closure is synced from the committed
-				// graph (a derived predicate), not cross-checked against
-				// this README's own phases[] status field.
-				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" || isGraphPlan(r, a) {
+				if a.Meta == nil || a.Kind() != "plan" || a.Status() != "complete" {
 					continue
 				}
 				for _, p := range asAnyList(a.Meta["phases"]) {
@@ -306,6 +303,15 @@ func init() {
 					}
 					target, ok := r.ByPath[path.Join(path.Dir(a.Rel), doc)]
 					if !ok || target.Status() == "complete" {
+						continue
+					}
+					// A graph plan's phase closure is synced from the
+					// committed graph (a derived predicate) ONLY for a
+					// phase doc that is itself a rendered projection of
+					// that graph -- a hand-authored phase doc beside a
+					// graph is still plan-author markdown and stays
+					// checked (review-execution ef1962e F-01).
+					if isGraphPlan(r, target) {
 						continue
 					}
 					emit(Diagnostic{

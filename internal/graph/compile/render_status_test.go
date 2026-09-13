@@ -320,3 +320,167 @@ func TestFrozenViewComparisonIgnoresHeadingShapedContract(t *testing.T) {
 		t.Fatal("refused populated-evidence-body change must not rewrite the file")
 	}
 }
+
+// TestVerifiedDatePlaceholderInContractSurvives is the round-17 regression:
+// fillDates' {VERIFIED_DATE} substitution ran over the whole rendered
+// document, so a node Contract containing that literal string was rewritten
+// along with the genuine evidence-section placeholder. The substitution must
+// be scoped to the `## Phase Completion Evidence` section the renderer
+// itself emits — a Contract carrying the literal must render unchanged
+// while the evidence section's own date is filled.
+func TestVerifiedDatePlaceholderInContractSurvives(t *testing.T) {
+	root, planDir := evidencePlanFixture(t)
+	trickyContract := "before {VERIFIED_DATE} after"
+	g := &model.Graph{Version: 1, Nodes: []model.Node{{
+		ID: "work", Contract: trickyContract, Phase: "01-core",
+		Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1,
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			Provenance: &model.Provenance{Kind: "git", Revision: evidenceRev}},
+	}}}
+	closed := map[string]bool{"work": true}
+	evidenceReview(t, planDir, "P", "01-core.md", "review.md", evidenceRev)
+
+	if _, err := renderViews(root, "P", "", g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	phaseDoc := rendererRead(t, filepath.Join(planDir, "01-core.md"))
+	if !strings.Contains(phaseDoc, "- Contract: "+trickyContract) {
+		t.Fatalf("Contract containing the literal {VERIFIED_DATE} must render unchanged:\n%s", phaseDoc)
+	}
+	evidenceIdx := strings.LastIndex(phaseDoc, "## Phase Completion Evidence")
+	if evidenceIdx < 0 {
+		t.Fatalf("expected a Phase Completion Evidence section:\n%s", phaseDoc)
+	}
+	if strings.Contains(phaseDoc[evidenceIdx:], "{VERIFIED_DATE}") {
+		t.Fatalf("the real evidence section's own date placeholder must be filled:\n%s", phaseDoc[evidenceIdx:])
+	}
+}
+
+// TestFrozenViewRefusalNamesMissingRepository is the round-17 regression:
+// when a frozen view's ONLY would-be difference is its Identity recheck
+// line regressing from a real probe result to "no recheck ran" (no target
+// repository resolved at render time), the refusal message must name the
+// missing repository as the cause — while still refusing the write.
+func TestFrozenViewRefusalNamesMissingRepository(t *testing.T) {
+	dir, rev := realGitRepo(t)
+	root, planDir := evidencePlanFixture(t)
+	g := &model.Graph{Version: 1, Nodes: []model.Node{closedNode("work", "01-core")}}
+	g.Nodes[0].Verification.Provenance.Revision = rev
+	closed := map[string]bool{"work": true}
+	evidenceReview(t, planDir, "P", "01-core.md", "review.md", rev)
+
+	// First render resolves a real repository: the identity line records a
+	// real matched probe.
+	if _, err := renderViews(root, "P", dir, g, nil, closed); err != nil {
+		t.Fatal(err)
+	}
+	frozen := rendererRead(t, filepath.Join(planDir, "01-core.md"))
+	if !strings.Contains(frozen, "— matched") {
+		t.Fatalf("expected a real matched probe line:\n%s", frozen)
+	}
+
+	// Second render passes the SAME repoRoot (so the Repository label is
+	// unchanged) but the directory no longer resolves as a git repository
+	// (its .git was removed) — the only would-be difference is the
+	// identity line regressing to "no recheck ran" — refused, and the
+	// message must name the missing repository.
+	if err := os.RemoveAll(filepath.Join(dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := renderViews(root, "P", dir, g, nil, closed)
+	if err == nil {
+		t.Fatal(`expected the regression to "no recheck ran" to be refused`)
+	}
+	if !strings.Contains(err.Error(), "no target repository resolved") {
+		t.Fatalf("refusal must name the missing repository as the cause: %v", err)
+	}
+	if rendererRead(t, filepath.Join(planDir, "01-core.md")) != frozen {
+		t.Fatal("refused render must not rewrite the file")
+	}
+}
+
+// TestRenderViewsReconcilesLegacyReadmeIdempotently is the round-17 item 9
+// regression: `sdd plan complete` (renderViews) against a real plan README
+// shaped like a pre-begin-marker render — `phases[]` entries carrying
+// `status: planned` and phase-slug titles, and a `## Graph View` section
+// with a `graph-view:end` marker but NO `graph-view:begin` (the shape an
+// older renderer left behind) — left the phases[] entries un-reconciled on
+// the first render (SDD058/SDD152 then fail validate) and orphaned a SECOND
+// graph-view section beside the first (one begin marker, two end markers),
+// so a second render refused with "malformed graph-view section (begin
+// without end)". A single render must: refresh every phases[] entry's
+// status and title from its now-written phase doc, replace the legacy
+// section in place (exactly one begin, one end marker), and be idempotent —
+// a second render is a byte-identical no-op.
+func TestRenderViewsReconcilesLegacyReadmeIdempotently(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Frontmatter shape and graph-view markers copied from the committed
+	// TestSuiteReliability/README.md fixture (git show HEAD at ef1962e);
+	// trimmed to two phases and this test's own prose.
+	legacyReadme := "---\n" +
+		"title: \"P\"\n" +
+		"type: plan\n" +
+		"status: active\n" +
+		"created: 2026-09-13\n" +
+		"updated: 2026-09-13\n" +
+		"tags: []\n" +
+		"related: []\n" +
+		"phases:\n" +
+		"  - id: 1\n" +
+		"    title: \"01-core\"\n" +
+		"    status: planned\n" +
+		"    doc: \"01-core.md\"\n" +
+		"  - id: 2\n" +
+		"    title: \"02-more\"\n" +
+		"    status: planned\n" +
+		"    doc: \"02-more.md\"\n" +
+		"---\n\n" +
+		"# P\n\n" +
+		"## Overview\n\nText.\n\n" +
+		"## Graph View\n\n" +
+		"<!-- GENERATED VIEW — source of truth: P-Graph.json. Regenerate with `sdd compile --plan P`. Edits here are overwritten. -->\n\n" +
+		"| Phase | Nodes | Doc |\n|---|---|---|\n" +
+		"| 1: 01-core | 1 | `01-core.md` |\n" +
+		"| 2: 02-more | 1 | `02-more.md` |\n\n" +
+		"2 node(s) total. The committed graph (`P-Graph.json`) is the source of\ntruth; these documents are projections.\n\n" +
+		"<!-- graph-view:end -->\n\n" +
+		"## Plan Completion Evidence\n\nPending — not complete.\n"
+	if err := os.WriteFile(filepath.Join(planDir, "README.md"), []byte(legacyReadme), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	g := &model.Graph{Version: 1, Nodes: []model.Node{
+		closedNode("work-1", "01-core"),
+		closedNode("work-2", "02-more"),
+	}}
+	closed := map[string]bool{"work-1": true, "work-2": true}
+
+	if _, err := renderViews(root, "P", "", g, nil, closed); err != nil {
+		t.Fatalf("first render (must reconcile the legacy README): %v", err)
+	}
+	first := rendererRead(t, filepath.Join(planDir, "README.md"))
+
+	if strings.Count(first, "graph-view:begin") != 1 || strings.Count(first, "graph-view:end") != 1 {
+		t.Fatalf("expected exactly one begin and one end marker after reconciling the legacy section:\n%s", first)
+	}
+	if strings.Contains(first, "status: planned") {
+		t.Fatalf("phases[] statuses must be refreshed from the now-written phase docs:\n%s", first)
+	}
+	if strings.Contains(first, `title: "01-core"`) || strings.Contains(first, `title: "02-more"`) {
+		t.Fatalf("phases[] titles must be reconciled to the phase docs' human titles, not left as slugs:\n%s", first)
+	}
+
+	// Idempotency: a second render against the now-reconciled README is a
+	// byte-identical no-op, never a "malformed graph-view section" refusal.
+	if _, err := renderViews(root, "P", "", g, nil, closed); err != nil {
+		t.Fatalf("second render must succeed (idempotent no-op): %v", err)
+	}
+	second := rendererRead(t, filepath.Join(planDir, "README.md"))
+	if first != second {
+		t.Fatalf("second render must be byte-identical to the first:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}

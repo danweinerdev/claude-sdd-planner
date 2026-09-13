@@ -140,24 +140,76 @@ func isGraphPlan(r *Root, a *Artifact) bool {
 	return true
 }
 
+// readGraphFile is the os.ReadFile indirection planGraph queries — a seam so
+// tests can inject an operational read failure (permission denied, a
+// transient FS error) without a real unreadable file. Production behavior is
+// unchanged: it is os.ReadFile.
+var readGraphFile = os.ReadFile
+
+// parsedGraph is the minimal decoding planGraphIDs and planGraphJustifies
+// both want — kept as one struct so a single read+parse (and its cache
+// entry) serves both callers.
+type parsedGraph struct {
+	Nodes []struct {
+		ID        string   `json:"id"`
+		Justifies []string `json:"justifies"`
+	} `json:"nodes"`
+	Retired []string `json:"retired"`
+}
+
+// planGraph loads and parses a plan's committed graph, memoized on r per
+// plan directory like isGraphPlanDir. Not-exist means "no graph" (nil, nil):
+// the ordinary, expected answer for a v1 plan or a malformed/absent graph
+// the compiler itself would refuse. Any OTHER read failure (permission
+// denied, a transient FS fault) is an inability to answer, not evidence of
+// absence — it is recorded on r's operational-failure collector via
+// recordFailure, the same path isGraphPlanDir uses, and reported back to the
+// caller so a diagnostic is never emitted from an aborted read.
+func planGraph(r *Root, plan *Artifact) (*parsedGraph, error) {
+	dir := filepath.Dir(plan.AbsPath)
+	r.graphPlanMu.Lock()
+	defer r.graphPlanMu.Unlock()
+	if v, ok := r.parsedGraphCache[dir]; ok {
+		return v, nil
+	}
+	raw, err := readGraphFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			if r.parsedGraphCache == nil {
+				r.parsedGraphCache = map[string]*parsedGraph{}
+			}
+			r.parsedGraphCache[dir] = nil
+			return nil, nil
+		}
+		opErr := fmt.Errorf("%w: read %s: %v", vcs.ErrOperational, dir, err)
+		r.recordFailure(opErr)
+		return nil, opErr
+	}
+	var g parsedGraph
+	if json.Unmarshal(raw, &g) != nil {
+		if r.parsedGraphCache == nil {
+			r.parsedGraphCache = map[string]*parsedGraph{}
+		}
+		r.parsedGraphCache[dir] = nil
+		return nil, nil
+	}
+	if r.parsedGraphCache == nil {
+		r.parsedGraphCache = map[string]*parsedGraph{}
+	}
+	r.parsedGraphCache[dir] = &g
+	return &g, nil
+}
+
 // planGraphIDs loads a plan's committed graph and returns every id that can
 // anchor a follow-up: live node ids AND the append-only retired register —
 // the tool's own tombstone place, which is what lets a frozen (immutable)
 // review's tracked_in survive an in-place graph rebuild that superseded its
-// v1 task.
-func planGraphIDs(plan *Artifact) (map[string]bool, bool) {
-	dir := filepath.Dir(plan.AbsPath)
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
-	if err != nil {
-		return nil, false
-	}
-	var g struct {
-		Nodes []struct {
-			ID string `json:"id"`
-		} `json:"nodes"`
-		Retired []string `json:"retired"`
-	}
-	if json.Unmarshal(raw, &g) != nil {
+// v1 task. (nil, false) when no graph exists, it does not parse, or the read
+// failed operationally (the failure is recorded on r; the caller must not
+// treat that as absence).
+func planGraphIDs(r *Root, plan *Artifact) (map[string]bool, bool) {
+	g, err := planGraph(r, plan)
+	if err != nil || g == nil {
 		return nil, false
 	}
 	ids := map[string]bool{}
@@ -172,22 +224,14 @@ func planGraphIDs(plan *Artifact) (map[string]bool, bool) {
 
 // planGraphJustifies loads a plan's committed graph (`<Plan>-Graph.json`
 // beside the README) and returns every node's justifies entries. (nil,
-// false) when no graph exists or it does not parse — the graph subsystem
-// owns malformed-graph refusals; traceability just falls back to the v1
-// harvest. Decoding is deliberately minimal and tolerant: this reader wants
-// citations, not the full model, and must not fail when the model grows.
-func planGraphJustifies(plan *Artifact) ([]string, bool) {
-	dir := filepath.Dir(plan.AbsPath)
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(dir)+"-Graph.json"))
-	if err != nil {
-		return nil, false
-	}
-	var g struct {
-		Nodes []struct {
-			Justifies []string `json:"justifies"`
-		} `json:"nodes"`
-	}
-	if json.Unmarshal(raw, &g) != nil {
+// false) when no graph exists, it does not parse, or the read failed
+// operationally (recorded on r) — the graph subsystem owns malformed-graph
+// refusals; traceability just falls back to the v1 harvest. Decoding is
+// deliberately minimal and tolerant: this reader wants citations, not the
+// full model, and must not fail when the model grows.
+func planGraphJustifies(r *Root, plan *Artifact) ([]string, bool) {
+	g, err := planGraph(r, plan)
+	if err != nil || g == nil {
 		return nil, false
 	}
 	var out []string

@@ -35,6 +35,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -50,6 +51,40 @@ import (
 // was closed. Its presence turns content-changing regeneration into a
 // refusal (DD-2's frozen-view invariant).
 const frozenViewMarker = "<!-- FROZEN VIEW — every node in this phase is closed: GREEN and covered by a passing frozen full review gate. This projection is history; a render that would change it is refused. -->"
+
+// revExistsMemoRepo memoizes RevisionExists per revision, local to one
+// renderViews call — production's vcs.EnableMemoization is opt-in and
+// process-lifetime, but renderViews must not depend on it: preflightViews
+// and the write pass both render every closed phase and would otherwise
+// probe the same checkpoint revision twice per phase, and sibling phases
+// sharing one checkpoint would probe it once per phase instead of once per
+// revision. Every other Repo method delegates straight through.
+type revExistsMemoRepo struct {
+	vcs.Repo
+	mu     sync.Mutex
+	cache  map[string]revExistsResult
+	probes int
+}
+
+type revExistsResult struct {
+	exists bool
+	err    error
+}
+
+func (m *revExistsMemoRepo) RevisionExists(rev string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if v, ok := m.cache[rev]; ok {
+		return v.exists, v.err
+	}
+	m.probes++
+	exists, err := m.Repo.RevisionExists(rev)
+	if m.cache == nil {
+		m.cache = map[string]revExistsResult{}
+	}
+	m.cache[rev] = revExistsResult{exists, err}
+	return exists, err
+}
 
 // now is the render-time clock every date stamp in this file reads,
 // exposed as a package-level variable so a test can advance it across a
@@ -261,14 +296,63 @@ func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created
 		box = "[x]"
 	}
 	fmt.Fprintf(&b, "- %s Every node in this phase is truly closed: a passing observation, and\n      coverage by a passing frozen full review gate (derived from the graph;\n      never checked off by hand).\n\n", box)
-	b.WriteString("## Phase Completion Evidence\n\n")
 	if frozen {
-		evidence, err := renderPhaseEvidence(planDir, plan, ph, repoRoot, "{VERIFIED_DATE}", repo)
+		before, after, err := renderPhaseEvidenceHalves(planDir, plan, ph, repoRoot, "{VERIFIED_DATE}")
 		if err != nil {
 			return "", err
 		}
-		b.WriteString(evidence)
+		// Skip the identity probe entirely when this render would be a
+		// byte-identical no-op: compare everything EXCEPT the identity-
+		// recheck line itself (the only piece a probe produces) against the
+		// existing on-disk frozen view with ITS OWN identity-recheck line
+		// similarly excised. Only when nothing else would change is the
+		// existing line reused verbatim instead of re-probing revision
+		// existence; any other difference (a node field, a review now
+		// covering the phase, ...) still falls through to a real probe, so
+		// the frozen-view refusal for a genuine change is never masked
+		// (review-execution ef1962e F-01 item 4).
+		// A nil repo never reaches identityRecheckLine's real probe branch
+		// (it renders "no recheck ran" unconditionally) — there is nothing
+		// to memoize, and reusing a stale existing line here would mask a
+		// resolution regression as a no-op instead of letting planWrite's
+		// frozen-view comparison see and refuse it (item 7).
+		if existing, rerr := os.ReadFile(filepath.Join(planDir, ph.Doc)); rerr == nil && repo != nil {
+			if existingCore, existingBody, found := stripPhaseEvidenceSection(string(existing)); found &&
+				strings.Contains(string(existing), frozenViewMarker) &&
+				strings.TrimSpace(existingBody) != "Pending — not complete." {
+				if loc := identityRecheckLineRe.FindStringIndex(existingBody); loc != nil {
+					existingLine := existingBody[loc[0]:loc[1]]
+					existingBefore := existingBody[:loc[0]]
+					existingAfter := existingBody[loc[1]:]
+					normalizeCore := func(s string) string {
+						return createdLineRe.ReplaceAllString(updatedLineRe.ReplaceAllString(s, "updated: {DATE}"), "created: {DATE}")
+					}
+					normalizeBefore := func(s string) string {
+						return verifiedLineRe.ReplaceAllString(s, "- Verified: {VERIFIED_DATE}")
+					}
+					wantCore := strings.TrimRight(b.String(), "\n")
+					if normalizeCore(wantCore) == normalizeCore(existingCore) &&
+						normalizeBefore(before) == normalizeBefore(existingBefore) &&
+						strings.TrimRight(after, "\n") == strings.TrimRight(existingAfter, "\n") {
+						b.WriteString("## Phase Completion Evidence\n\n")
+						b.WriteString(existingBefore)
+						b.WriteString(existingLine)
+						b.WriteString(existingAfter)
+						b.WriteByte('\n')
+						return b.String(), nil
+					}
+				}
+			}
+		}
+		b.WriteString("## Phase Completion Evidence\n\n")
+		rev := phaseCheckpoint(ph.Nodes)
+		line, err := identityRecheckLine(repo, rev, "{VERIFIED_DATE}")
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(strings.TrimRight(before+line+after, "\n") + "\n")
 	} else {
+		b.WriteString("## Phase Completion Evidence\n\n")
 		b.WriteString("Pending — not complete.\n")
 	}
 	return b.String(), nil
@@ -382,7 +466,49 @@ var (
 	// planEvidenceHeadingRe locates the evidence section the graph-view
 	// insertion must stay ahead of.
 	planEvidenceHeadingRe = regexp.MustCompile(`(?m)^## Plan Completion Evidence\s*$`)
+	// identityRecheckLineRe matches the single `- Identity recheck: ...`
+	// line (plus its trailing blank line) identityRecheckLine renders —
+	// the only piece of a phase's evidence body a real repository probe
+	// produces. renderPhaseDoc's no-op short-circuit excises exactly this
+	// span from both the wanted and existing evidence bodies before
+	// deciding whether the probe can be skipped.
+	identityRecheckLineRe = regexp.MustCompile(`(?m)^- Identity recheck:.*\n\n`)
+	// verifiedLineRe matches evidence's `- Verified: DATE` line, filled
+	// with the SAME `updated` stamp fillDates uses — normalizing it
+	// alongside created/updated lets renderPhaseDoc's no-op short-circuit
+	// compare a freshly rendered ({VERIFIED_DATE}-templated) evidence body
+	// against the existing on-disk (already date-filled) one.
+	verifiedLineRe = regexp.MustCompile(`(?m)^- Verified: (\S+)`)
+	// legacyGraphViewHeadingRe recognizes an orphaned `## Graph View`
+	// section left by a render that predates the begin marker: legacyGraphViewSpan
+	// uses it to find and replace the whole legacy span instead of
+	// upserting a second section alongside it.
+	legacyGraphViewHeadingRe = regexp.MustCompile(`(?m)^## Graph View\s*$`)
 )
+
+// legacyGraphViewSpan locates an orphaned `## Graph View` section that
+// carries no `graph-view:begin` marker (planReadmeUpdate's caller has
+// already confirmed graphViewBegin is absent) — the shape a render from
+// before the begin marker existed leaves behind: a `## Graph View` heading,
+// optionally followed later by a `graph-view:end` marker. found is false
+// when no such heading exists at all (a genuinely first render). When the
+// heading is found but no end marker follows it, the span extends to the
+// next depth<=2 heading (or EOF) exactly like nextH2HeadingRe's other
+// callers — the heading's own natural section extent.
+func legacyGraphViewSpan(src string) (start, end int, found bool) {
+	loc := legacyGraphViewHeadingRe.FindStringIndex(src)
+	if loc == nil {
+		return 0, 0, false
+	}
+	start = loc[0]
+	if endLoc := strings.Index(src[loc[1]:], graphViewEnd); endLoc >= 0 {
+		return start, loc[1] + endLoc + len(graphViewEnd), true
+	}
+	if rest := nextH2HeadingRe.FindStringIndex(src[loc[1]:]); rest != nil {
+		return start, loc[1] + rest[0], true
+	}
+	return start, len(src), true
+}
 
 // planWrite decides one view target's fate without writing: whether a write
 // is needed, and the exact bytes to write. It carries BOTH refusal rules —
@@ -448,6 +574,15 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 			filledContentBody := fillDates(contentEvidenceBody, created, prevUpdated)
 			if !existingPending && filledContentBody != existingEvidenceBody {
 				refuse = true
+				// When the ONLY difference is the identity-recheck line
+				// regressing from a real probe result to "no recheck ran",
+				// the cause is a repository that no longer resolves at
+				// render time — name that as the cause instead of the
+				// generic reopened-phase message, while still refusing
+				// (review-execution ef1962e F-01 item 7).
+				if noRecheckRegression(existingEvidenceBody, filledContentBody) {
+					return false, "", fmt.Errorf("compile: %s is a frozen view, and this render could not confirm the recorded revision still exists — no target repository resolved at render time, so its Identity recheck line would regress from a real probe result to \"no recheck ran\"; resolve the target repository (or delete the frozen view file explicitly and recompile if the phase was legitimately reopened) and try again", path)
+				}
 			}
 		}
 		if refuse {
@@ -455,6 +590,26 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 		}
 	}
 	return true, fillDates(content, created, today), nil
+}
+
+// noRecheckRegression reports whether existingBody and newBody differ ONLY
+// in their `- Identity recheck:` line, with the new line specifically
+// regressing to "no recheck ran" (no resolved target repository at render
+// time) from an existing line that reported a real probe outcome — the one
+// frozen-view refusal shape whose cause is a missing repository resolution,
+// not a genuine change to the projected history.
+func noRecheckRegression(existingBody, newBody string) bool {
+	newLoc := identityRecheckLineRe.FindStringIndex(newBody)
+	if newLoc == nil || !strings.Contains(newBody[newLoc[0]:newLoc[1]], "no recheck ran") {
+		return false
+	}
+	existingLoc := identityRecheckLineRe.FindStringIndex(existingBody)
+	if existingLoc == nil || strings.Contains(existingBody[existingLoc[0]:existingLoc[1]], "no recheck ran") {
+		return false
+	}
+	strippedExisting := existingBody[:existingLoc[0]] + existingBody[existingLoc[1]:]
+	strippedNew := newBody[:newLoc[0]] + newBody[newLoc[1]:]
+	return strippedExisting == strippedNew
 }
 
 // phaseEvidenceHeadingRe locates a phase doc's `## Phase Completion
@@ -498,27 +653,42 @@ func writeView(path, content, plan string) (wrote bool, err error) {
 
 // fillDates substitutes the renderer's date placeholders: the frontmatter
 // `created:`/`updated:` stamps (count=1 each — exactly one frontmatter
-// line), and every `{VERIFIED_DATE}` body placeholder (count=all) the
-// derived evidence section uses for its `Verified` and `Identity recheck`
-// dates. Reusing the same `updated` value as the evidence date means a
-// byte-identical re-render (nothing else changed) still stamps `updated`
-// exactly once and stays stable — the evidence date does not independently
-// drift across days the way a live time.Now() read at evidence-render time
-// would (which would defeat frozen-view byte-stability: a frozen view could
-// never be re-rendered as a no-op once a day passed).
+// line), and every `{VERIFIED_DATE}` placeholder (count=all) WITHIN the `##
+// Phase Completion Evidence` section only — never document-wide, because a
+// node's own Contract text (rendered verbatim in `## Nodes`, earlier in the
+// document) could legitimately contain that literal string and must survive
+// unchanged (review-execution ef1962e F-01 item 3). Reusing the same
+// `updated` value as the evidence date means a byte-identical re-render
+// (nothing else changed) still stamps `updated` exactly once and stays
+// stable — the evidence date does not independently drift across days the
+// way a live time.Now() read at evidence-render time would (which would
+// defeat frozen-view byte-stability: a frozen view could never be
+// re-rendered as a no-op once a day passed).
 func fillDates(content, created, updated string) string {
 	content = strings.Replace(content, "created: {DATE}", "created: "+created, 1)
 	content = strings.Replace(content, "updated: {DATE}", "updated: "+updated, 1)
-	return strings.ReplaceAll(content, "{VERIFIED_DATE}", updated)
+	core, body, found := stripPhaseEvidenceSection(content)
+	if !found {
+		// No `## Phase Completion Evidence` heading in content: either a
+		// bare evidence-body fragment a caller (planWrite's frozen-view
+		// comparison) is filling in isolation — never the whole document,
+		// so there is no Contract text this replace could clobber — or a
+		// document that genuinely carries no evidence section at all.
+		// Either way an unconditional replace is exactly right here.
+		return strings.ReplaceAll(content, "{VERIFIED_DATE}", updated)
+	}
+	filledBody := strings.ReplaceAll(body, "{VERIFIED_DATE}", updated)
+	return core + "\n\n## Phase Completion Evidence\n\n" + filledBody + "\n"
 }
 
 // preflightViews dry-runs every render target before anything is written:
 // both refusal rules (non-generated file in a target's place, frozen view
 // whose content would change) fire here, BEFORE the graph write, leaving
-// nothing half-done.
-func preflightViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
+// nothing half-done. repo is the caller's already-resolved evidence repo
+// (shared with the write pass so an identity probe memoized here is not
+// repeated there).
+func preflightViews(root, plan, repoRoot string, repo vcs.Repo, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
 	planDir := filepath.Join(root, "Plans", plan)
-	repo := resolveEvidenceRepo(repoRoot)
 	for _, ph := range groupPhases(g, plan) {
 		path := filepath.Join(planDir, ph.Doc)
 		content, err := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, repo, st, closed)
@@ -539,7 +709,11 @@ func preflightViews(root, plan, repoRoot string, g *model.Graph, st map[string]s
 // honest "no recheck ran" case identityRecheckLine renders rather than
 // fabricating a check. A detection failure that IS operational (the git
 // executable itself unavailable, ...) still resolves to vcs.Unavailable,
-// which correctly reports vcs.ErrOperational once actually probed.
+// which correctly reports vcs.ErrOperational once actually probed. The
+// returned repo memoizes RevisionExists per revision for the lifetime of
+// this Repo value — callers that render more than once (preflight, then
+// write) must resolve it ONCE and share the result so the memo covers both
+// passes.
 func resolveEvidenceRepo(repoRoot string) vcs.Repo {
 	if repoRoot == "" {
 		return nil
@@ -548,7 +722,7 @@ func resolveEvidenceRepo(repoRoot string) vcs.Repo {
 	if repo.Kind() == vcs.None {
 		return nil
 	}
-	return repo
+	return &revExistsMemoRepo{Repo: repo}
 }
 
 // RenderViews writes the phase views and updates the README projection.
@@ -566,21 +740,23 @@ func RenderViews(root, plan, repoRoot string, g *model.Graph, st map[string]stat
 func renderViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
 	planDir := filepath.Join(root, "Plans", plan)
 	groups := groupPhases(g, plan)
-	if err := preflightViews(root, plan, repoRoot, g, st, closed); err != nil {
-		return nil, err
-	}
-	// Determine ownership before writing phase files: a just-created marker
-	// must not retroactively authorize taking over an existing manual entry.
-	readmeBefore, err := os.ReadFile(filepath.Join(planDir, "README.md"))
-	if err != nil {
-		return nil, err
-	}
-	readme, readmeChanged, err := planReadmeUpdate(planDir, plan, groups, closed)
-	if err != nil {
+	// Resolved ONCE and shared with the write pass below, so a revision's
+	// identity probe (renderPhaseEvidence -> identityRecheckLine) is
+	// memoized across both passes rather than run twice per closed phase.
+	repo := resolveEvidenceRepo(repoRoot)
+	if err := preflightViews(root, plan, repoRoot, repo, g, st, closed); err != nil {
 		return nil, err
 	}
 
-	repo := resolveEvidenceRepo(repoRoot)
+	// Phase files are written FIRST: planReadmeUpdate's status/title
+	// reconciliation (refreshReadmePhaseStatuses) reads each phase doc from
+	// disk to confirm it carries the generated-view marker before touching
+	// its README entry — ownership it can only ever see once the doc
+	// exists. Reading the README before this loop (and writing it after,
+	// compare-and-swap against that read) still keeps a just-created
+	// marker from retroactively authorizing a takeover of an existing
+	// hand-authored entry: writeView's own frozen/marker refusals gate
+	// each phase file independently, before any of them lands.
 	var written []string
 	for _, ph := range groups {
 		path := filepath.Join(planDir, ph.Doc)
@@ -597,6 +773,15 @@ func renderViews(root, plan, repoRoot string, g *model.Graph, st map[string]stat
 		if wrote {
 			written = append(written, path)
 		}
+	}
+
+	readmeBefore, err := os.ReadFile(filepath.Join(planDir, "README.md"))
+	if err != nil {
+		return nil, err
+	}
+	readme, readmeChanged, err := planReadmeUpdate(planDir, plan, groups, closed)
+	if err != nil {
+		return nil, err
 	}
 
 	if readmeChanged {
@@ -642,6 +827,18 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 			return "", false, fmt.Errorf("compile: %s has a malformed graph-view section (begin without end)", path)
 		}
 		out = out[:begin] + section + out[end+len(graphViewEnd):]
+	} else if legacyBegin, legacyEnd, found := legacyGraphViewSpan(out); found {
+		// A pre-begin-marker render left an orphaned `## Graph View`
+		// section: a heading (optionally followed by `graph-view:end`, the
+		// only marker that predates the begin marker) with no matching
+		// begin. Upserting without recognizing this span would insert a
+		// SECOND section, leaving the document with one begin marker but
+		// two end markers — the next render's begin-anchored search then
+		// pairs the new begin with the OLD orphaned end (whichever comes
+		// first), reporting "begin without end". Replacing the whole
+		// legacy span in place is what upsert would have done had the
+		// begin marker always been there.
+		out = out[:legacyBegin] + section + out[legacyEnd:]
 	} else if i := planEvidenceHeadingRe.FindStringIndex(out); i != nil {
 		// Insert BEFORE the Plan Completion Evidence section, never after:
 		// evidence writers replace that section's whole extent (up to the
@@ -675,11 +872,14 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 	if m := updatedLineRe.FindStringSubmatch(src); m != nil {
 		prevUpdated = m[1]
 	}
-	// Byte-stability check: filling the {VERIFIED_DATE} placeholder with
-	// the PREVIOUS updated stamp and comparing against src tells whether
+	// Byte-stability check: filling the {VERIFIED_DATE} placeholder — WITHIN
+	// the `## Plan Completion Evidence` section only, never document-wide,
+	// because the plan's own free text could legitimately contain that
+	// literal string (review-execution ef1962e F-01 item 3) — with the
+	// PREVIOUS updated stamp and comparing against src tells whether
 	// anything besides the date actually changed — the same shape the
 	// phase docs' planWrite performs.
-	if strings.ReplaceAll(out, "{VERIFIED_DATE}", prevUpdated) == src {
+	if fillPlanEvidenceDate(out, prevUpdated) == src {
 		return "", false, nil
 	}
 	// A real change restamps the README's updated date (both the
@@ -687,7 +887,7 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 	// body carries) to today; an unchanged README is never touched, so
 	// idempotent re-renders stay byte-stable.
 	today := now().Format("2006-01-02")
-	out = strings.ReplaceAll(out, "{VERIFIED_DATE}", today)
+	out = fillPlanEvidenceDate(out, today)
 	end, err := readmeFrontmatterEnd(out)
 	if err != nil {
 		return "", false, err
@@ -700,6 +900,30 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 // evidence writer (this one included) replaces up to (SDD020's duplicate
 // check: exactly one visible `## Plan Completion Evidence` section).
 var nextH2HeadingRe = regexp.MustCompile(`(?m)^ {0,3}#{1,2}\s+`)
+
+// fillPlanEvidenceDate substitutes every `{VERIFIED_DATE}` placeholder
+// WITHIN the `## Plan Completion Evidence` section body only — the same
+// extent applyPlanEvidence writes to (heading to the next depth<=2 heading
+// or EOF) — never document-wide, because the plan's own free text (outside
+// the generated sections) could legitimately contain that literal string
+// (review-execution ef1962e F-01 item 3). A README with no such section is
+// returned unchanged.
+func fillPlanEvidenceDate(src, date string) string {
+	loc := planEvidenceHeadingRe.FindStringIndex(src)
+	if loc == nil {
+		return src
+	}
+	bodyStart := loc[1]
+	for bodyStart < len(src) && src[bodyStart] == '\n' {
+		bodyStart++
+	}
+	bodyEnd := len(src)
+	if rest := nextH2HeadingRe.FindStringIndex(src[bodyStart:]); rest != nil {
+		bodyEnd = bodyStart + rest[0]
+	}
+	filled := strings.ReplaceAll(src[bodyStart:bodyEnd], "{VERIFIED_DATE}", date)
+	return src[:bodyStart] + filled + src[bodyEnd:]
+}
 
 // applyPlanEvidence replaces the `## Plan Completion Evidence` section body
 // with the derived evidence once every phase in groups is closed and every

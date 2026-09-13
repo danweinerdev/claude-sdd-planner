@@ -135,7 +135,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	preview.Nodes = append(append([]model.Node(nil), g.Nodes...), p.Nodes...)
 	deriveFor := deriveClosure(repoRoot, sources, inRes)
 	pst, pclosed := deriveFor(&preview)
-	if err := preflightViews(root, plan, repoRoot, &preview, pst, pclosed); err != nil {
+	if err := preflightViews(root, plan, repoRoot, resolveEvidenceRepo(repoRoot), &preview, pst, pclosed); err != nil {
 		return nil, nil, err
 	}
 

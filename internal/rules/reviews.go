@@ -1175,7 +1175,7 @@ func init() {
 						// task records the old id via `sdd graph retire`
 						// rather than editing the review.
 						if planArt, ok := r.ByPath["Plans/"+plan+"/README.md"]; ok {
-							if ids, ok := planGraphIDs(planArt); ok {
+							if ids, ok := planGraphIDs(r, planArt); ok {
 								converted := taskNodeID(tracked)
 								if ids[tracked] || ids[converted] {
 									matches = append(matches, plan)

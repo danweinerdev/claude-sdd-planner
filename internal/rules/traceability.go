@@ -142,7 +142,7 @@ func traceabilityScan(r *Root) []traceabilityFinding {
 		// neither (compile refuses it anyway).
 		graphPlan := false
 		graphCited := map[string]bool{}
-		if justifies, ok := planGraphJustifies(plan); ok {
+		if justifies, ok := planGraphJustifies(r, plan); ok {
 			graphPlan = true
 			// Match graph compile's coverage boundary: transitive sources stay
 			// citable, but only directly related specs demand implementation.

@@ -113,6 +113,14 @@ type Root struct {
 	// one evaluation pass.
 	graphPlanMu    sync.Mutex
 	graphPlanCache map[string]bool
+
+	// parsedGraphCache memoizes planGraph's read+parse of a plan directory's
+	// `<Plan>-Graph.json` per plan directory, guarded by the same
+	// graphPlanMu (both caches key on plan directory and are populated by
+	// sibling filesystem reads). A nil value cached under a present key
+	// means "no graph" (absent or unparsable) as distinct from an uncached
+	// key.
+	parsedGraphCache map[string]*parsedGraph
 }
 
 // recordFailure appends an operational failure to the evaluation's collector.

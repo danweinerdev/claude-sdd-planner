@@ -344,6 +344,35 @@ Pending — not complete.
 `
 }
 
+// handAuthoredPlannedPhase renders a `status: planned` phase document —
+// genuinely incomplete, and not a rendered projection (no IsGeneratedView
+// marker) — so SDD059 (a complete plan containing an incomplete phase) must
+// still catch it beside a graph plan (review-execution ef1962e F-01).
+func handAuthoredPlannedPhase(planName, phaseOrdinal, title string) string {
+	return `---
+title: "` + title + `"
+type: phase
+plan: "` + planName + `"
+phase: ` + phaseOrdinal + `
+status: planned
+created: 2024-01-01
+updated: 2024-01-01
+deliverable: "Hand-authored."
+tasks: []
+---
+
+# Phase ` + phaseOrdinal + `: ` + title + `
+
+## Overview
+
+Hand-written, not rendered.
+
+## Acceptance Criteria
+
+- [ ] Works.
+`
+}
+
 // TestGraphPlanExemptionRequiresGeneratedView is the review-execution F-02
 // regression: the v1 completion-evidence exemption must key on the PER
 // DOCUMENT generated-view marker (IsGeneratedView), not on "this plan
@@ -352,9 +381,11 @@ Pending — not complete.
 // list, is still plan-author markdown — not a rendered projection — and
 // must still be held to the v1 rules the generated view is exempt from.
 func TestGraphPlanExemptionRequiresGeneratedView(t *testing.T) {
-	// The README registers BOTH phases, so SDD059/SDD158's plan-level
-	// phase-entry checks see phase 2 (the hand-authored doc) too.
-	twoPhaseReadme := strings.Replace(completeGraphPlanReadme("Sample", "01-core.md", "One"),
+	// The README registers all three phases, so SDD059/SDD158's plan-level
+	// phase-entry checks see phases 2 and 3 (the hand-authored docs) too.
+	// Phase 3's doc is genuinely incomplete (`status: planned`) and is not a
+	// generated view, so SDD059 must still catch it beside a graph plan.
+	threePhaseReadme := strings.Replace(completeGraphPlanReadme("Sample", "01-core.md", "One"),
 		`phases:
   - id: 1
     title: "One"
@@ -368,11 +399,16 @@ func TestGraphPlanExemptionRequiresGeneratedView(t *testing.T) {
   - id: 2
     title: "Two"
     status: complete
-    doc: "02-hand.md"`, 1)
+    doc: "02-hand.md"
+  - id: 3
+    title: "Three"
+    status: planned
+    doc: "03-hand.md"`, 1)
 	r := rootFrom(t, map[string]string{
-		"Plans/Sample/README.md":         twoPhaseReadme,
+		"Plans/Sample/README.md":         threePhaseReadme,
 		"Plans/Sample/01-core.md":        completeGeneratedPhaseView("Sample", "1", "One"),
 		"Plans/Sample/02-hand.md":        handAuthoredCompletePhase("Sample", "2", "Two", "02-hand.md"),
+		"Plans/Sample/03-hand.md":        handAuthoredPlannedPhase("Sample", "3", "Three"),
 		"Plans/Sample/Sample-Graph.json": graphPlanJSON([]string{"task-1-1"}, nil),
 	})
 
@@ -404,6 +440,19 @@ func TestGraphPlanExemptionRequiresGeneratedView(t *testing.T) {
 		if !found {
 			t.Errorf("hand-authored phase doc beside a graph plan: %s did not fire (all diagnostics: %v)", code, codesOf(diags))
 		}
+	}
+
+	// The README-versus-phase-doc status cross-check (SDD059) must fire for
+	// the hand-authored phase's disagreement even though the plan overall
+	// is a graph plan — only the generated view (01-core.md) is exempt.
+	found := false
+	for _, d := range byCode["SDD059"] {
+		if d.Path == "Plans/Sample/README.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("hand-authored phase doc beside a graph plan: SDD059 did not fire (all diagnostics: %v)", codesOf(diags))
 	}
 }
 

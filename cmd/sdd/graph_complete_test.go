@@ -341,6 +341,11 @@ func TestGraphCompleteStatusFlipIsCompareAndSwap(t *testing.T) {
 	if !strings.Contains(err.Error(), "already") {
 		t.Fatalf("refusal must say the views were already rendered when the flip was refused: %v", err)
 	}
+	// A compare-and-swap conflict is a refused mutation (FR-03: exit 1), not
+	// an inability to run the operation (exit 2).
+	if code := exitCode(err); code != 1 {
+		t.Fatalf("exitCode(err) = %d, want 1 (refused mutation, not exit 2)", code)
+	}
 
 	after, readErr := os.ReadFile(readme)
 	if readErr != nil {
