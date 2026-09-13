@@ -8,7 +8,7 @@ tags: []
 related: [Specs/Sample, Designs/Sample]
 phases:
   - id: 1
-    title: "01-example"
+    title: "Example"
     status: planned
     doc: "01-example.md"
 ---
@@ -43,7 +43,7 @@ None.
 
 | Phase | Nodes | Doc |
 |---|---|---|
-| 1: 01-example | 4 | `01-example.md` |
+| 1: Example | 4 | `01-example.md` |
 
 4 node(s) total. The committed graph (`SamplePlan-Graph.json`) is the source of
 truth; these documents are projections.

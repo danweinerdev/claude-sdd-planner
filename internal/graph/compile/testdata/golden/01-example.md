@@ -1,16 +1,16 @@
 ---
-title: "01-example"
+title: "Example"
 type: phase
 plan: "SamplePlan"
 phase: 1
 status: planned
 created: DATE
 updated: DATE
-deliverable: "Graph view: 4 node(s) under phase label 01-example"
+deliverable: "Graph view: 4 node(s) under phase label Example"
 tasks: []
 ---
 
-# Phase 1: 01-example
+# Phase 1: Example
 
 <!-- GENERATED VIEW — source of truth: SamplePlan-Graph.json. Regenerate with `sdd compile --plan SamplePlan`. Edits here are overwritten. -->
 

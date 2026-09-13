@@ -1042,6 +1042,196 @@ func TestAmbiguousBareCitationRefused(t *testing.T) {
 	}
 }
 
+// transitiveAmbiguityRoot reproduces the TestSuiteReliability shape (P-01):
+// the plan relates ONLY Designs/A directly; Designs/A relates Specs/A and
+// Designs/B; Specs/A and Designs/B both define names (FR-01, DD-1) that
+// collide with what the plan's own direct source, Designs/A, defines. An
+// unqualified citation must resolve against the plan's directly related
+// source (Designs/A) rather than refuse as ambiguous against the
+// transitively reached collision.
+func transitiveAmbiguityRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("planning-config.json", `{"planningRoot": "."}`)
+	write("Specs/A/README.md", `---
+title: "Spec A"
+type: spec
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [spec]
+related: []
+---
+
+# Spec A
+
+## Requirements
+
+- **FR-01**: Spec A's requirement one.
+
+## Acceptance Criteria
+
+- [ ] **AC-01**: Spec A's criterion one.
+`)
+	write("Designs/B/README.md", `---
+title: "Design B"
+type: design
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [design]
+related: []
+---
+
+# Design B
+
+## Design Decisions
+
+- **DD-1**: Design B's decision.
+  Context: b context. Decision: b decision. Rationale: b rationale.
+`)
+	write("Designs/A/README.md", `---
+title: "Design A"
+type: design
+status: approved
+created: 2026-08-01
+updated: 2026-08-01
+tags: [design]
+related: [Specs/A, Designs/B]
+---
+
+# Design A
+
+## Design Decisions
+
+- **DD-1**: Design A's own decision.
+  Context: a context. Decision: a decision. Rationale: a rationale.
+
+- **FR-01**: Design A also defines something that happens to share the
+  FR-01 spelling with Spec A, discovered only transitively.
+`)
+	write("Plans/SamplePlan/README.md", `---
+title: "Sample Plan"
+type: plan
+status: draft
+created: 2026-08-01
+updated: 2026-08-01
+tags: []
+related: [Designs/A]
+phases: []
+---
+
+# Sample Plan
+
+## Overview
+
+A fixture plan.
+
+## Non-Goals
+
+None.
+
+## Architecture
+
+Simple.
+
+## Key Decisions
+
+None.
+
+## Dependencies
+
+None.
+
+## Plan Completion Evidence
+
+Pending — not complete.
+`)
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	if _, err := gstore.Init(planDir); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// TestUnqualifiedCitationPrefersDirectSource: when the plan relates only one
+// source directly, and that source's own transitive related graph reaches
+// other sources that happen to define the same bare id NAME, an unqualified
+// citation resolves against the direct source, not against the transitive
+// collision — genuine ties among direct sources still refuse (P-01).
+func TestUnqualifiedCitationPrefersDirectSource(t *testing.T) {
+	root := transitiveAmbiguityRoot(t)
+	stage(t, root, `{
+  "version": 1,
+  "nodes": [
+    {"id": "w", "contract": "works", "justifies": ["FR-01", "DD-1"],
+     "gate": {"type": "tests", "tests": [{"id": "t", "file": "f.ext"}]}, "hazards": []},
+    {"id": "gate-final", "contract": "reviewed", "justifies": ["FR-01"], "deps": ["w"],
+     "gate": {"type": "review", "lanes": "full"}, "hazards": []}
+  ]
+}
+`)
+	result, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatalf("compile failed: %v", err)
+	}
+	if len(findings) > 0 {
+		joined := ""
+		for _, f := range findings {
+			joined += f.String() + "\n"
+		}
+		t.Fatalf("unqualified citations resolvable against the plan's direct source must compile:\n%s", joined)
+	}
+	hashes := result.Hashes["w"]
+	if hashes["FR-01"] == "" {
+		t.Fatalf("FR-01 must embed an intent fingerprint (resolved to Designs/A): %v", hashes)
+	}
+	if hashes["DD-1"] == "" {
+		t.Fatalf("DD-1 must embed an intent fingerprint (resolved to Designs/A): %v", hashes)
+	}
+
+	sources, err := identifierSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both FR-01 and DD-1 are also defined by transitively related sources
+	// (Specs/A and Designs/B respectively), but the plan directly relates
+	// only Designs/A — the direct source must win.
+	hit, _, ok := sources.resolveItem("FR-01")
+	if !ok || hit.SourceRel != "Designs/A/README.md" {
+		t.Fatalf("FR-01 must resolve to Designs/A (the plan's direct source), got %+v ok=%v", hit, ok)
+	}
+	hit, _, ok = sources.resolveItem("DD-1")
+	if !ok || hit.SourceRel != "Designs/A/README.md" {
+		t.Fatalf("DD-1 must resolve to Designs/A (the plan's direct source), got %+v ok=%v", hit, ok)
+	}
+
+	rep, err := Audit(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sc := range rep.Coverage {
+		if sc.Source != "Designs/A/README.md" {
+			continue
+		}
+		for _, fc := range sc.Families {
+			if (fc.Family == "FR" || fc.Family == "DD") && fc.Covered != 1 {
+				t.Fatalf("audit coverage must agree the citation resolved to Designs/A: %+v", fc)
+			}
+		}
+	}
+}
+
 // TestPerSpecACCoverageAndQualifiedCitations: qualified citations resolve,
 // coverage is per spec (one spec's citation never satisfies the other
 // spec's same-numbered criterion), and the qualified fingerprint embeds

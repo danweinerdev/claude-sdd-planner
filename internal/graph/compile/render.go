@@ -105,7 +105,7 @@ func groupPhases(g *model.Graph, plan string) []phaseGroup {
 		out = append(out, phaseGroup{
 			Ordinal: ordinal,
 			Label:   label,
-			Title:   title,
+			Title:   phaseTitle(title),
 			Doc:     fmt.Sprintf("%02d-%s.md", ordinal, viewSlug(title)),
 			Nodes:   byLabel[label],
 		})
@@ -115,6 +115,7 @@ func groupPhases(g *model.Graph, plan string) []phaseGroup {
 
 var slugCleanRe = regexp.MustCompile(`[^A-Za-z0-9]+`)
 var slugLeadingOrdinalRe = regexp.MustCompile(`^\d+-`)
+var titleWordSplitRe = regexp.MustCompile(`[-_]+`)
 
 // viewSlug turns a phase label into a filename component, dropping a leading
 // `NN-` so a label like "01-core" does not double-number the doc.
@@ -126,6 +127,30 @@ func viewSlug(label string) string {
 		s = "phase"
 	}
 	return s
+}
+
+// phaseTitle derives a human title from a raw phase label: strips a leading
+// numeric prefix (`01-hermetic-git` -> `hermetic-git`), splits on `-`/`_`,
+// and title-cases each word. The label itself (and the doc file stem
+// viewSlug derives from it) is untouched — only the rendered title changes,
+// so regenerating an existing plan does not move files.
+func phaseTitle(label string) string {
+	s := slugLeadingOrdinalRe.ReplaceAllString(label, "")
+	if s == "" {
+		return label
+	}
+	words := titleWordSplitRe.Split(s, -1)
+	var out []string
+	for _, w := range words {
+		if w == "" {
+			continue
+		}
+		out = append(out, strings.ToUpper(w[:1])+strings.ToLower(w[1:]))
+	}
+	if len(out) == 0 {
+		return label
+	}
+	return strings.Join(out, " ")
 }
 
 // phaseStatus projects a group's frontmatter status: `complete` only when

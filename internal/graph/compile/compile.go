@@ -237,12 +237,42 @@ type sourceSet struct {
 	// source exists but is not on the plan's related graph.
 	loaded  *rules.Root
 	planRel string
+	// directByID maps a bare id (e.g. "FR-01") to the reachable source(s),
+	// among the plan README's own DIRECTLY related sources, that define it.
+	// A bare citation prefers a direct source over a transitive one: the
+	// plan's own `related` list is a stronger claim of intent than a source
+	// reached only through a related design's own `related` graph.
+	directByID map[string][]string
 }
 
 // resolveItem resolves one citation spelling to its defining source's
 // fingerprintable item: unambiguous resolution AND extractable text, the
 // same bar the flat lookup set before qualified spellings existed.
+//
+// A bare (unqualified) id first checks the plan's DIRECTLY related sources:
+// when exactly one of them defines it, that source wins even if a
+// transitively related source (reached only through a related design's own
+// `related` list) also defines the name — the transitive source never
+// contributes to the ambiguity check in that case. When no direct source
+// defines the bare id, resolution falls back to the full transitive index,
+// which still refuses a genuine tie among direct sources (or among
+// transitive sources when none is direct) via the existing did-you-mean
+// path. Qualified spellings (`Specs/X:FR-01`, `X:FR-01`) always resolve
+// through the transitive index, unchanged.
 func (s *sourceSet) resolveItem(cited string) (rules.CitationHit, intent.Item, bool) {
+	if !strings.Contains(cited, ":") {
+		if direct := s.directByID[cited]; len(direct) == 1 {
+			sourceRel := direct[0]
+			if item, ok := s.items[sourceRel][cited]; ok {
+				return rules.CitationHit{
+					SourceRel: sourceRel,
+					Qualifier: rules.SourceQualifier(sourceRel),
+					ID:        cited,
+					Kind:      s.loaded.ByPath[sourceRel].Kind(),
+				}, item, true
+			}
+		}
+	}
 	hit, ok := s.index.Resolve(cited)
 	if !ok {
 		return rules.CitationHit{}, intent.Item{}, false
@@ -275,6 +305,16 @@ func (s *sourceSet) unrelatedHint(cited string) string {
 func (s *sourceSet) intentSnapshot() IntentSnapshot {
 	snap := IntentSnapshot{Items: map[string]intent.Item{}}
 	for _, key := range s.index.Keys() {
+		if _, item, ok := s.resolveItem(key); ok {
+			snap.Items[key] = item
+		}
+	}
+	// A bare id resolved against a direct source (resolveItem's own
+	// preference) may be transitively ambiguous and so absent from
+	// s.index.Keys(), which only enumerates the full transitive index's
+	// unambiguous keys. Walk directByID too, so the snapshot agrees with
+	// what compile actually embedded.
+	for key := range s.directByID {
 		if _, item, ok := s.resolveItem(key); ok {
 			snap.Items[key] = item
 		}
@@ -324,6 +364,20 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 	out.inputRepoRoot = loaded.RepoForArtifact(planArt.Rel)
 	out.planDir = filepath.Dir(planArt.AbsPath)
 	out.index = rules.BuildCitationIndex(loaded, planArt)
+	// directByID: bare id -> the plan README's own DIRECTLY related
+	// source(s) defining it. Built from the same index (so it never
+	// disagrees about what a source defines), scoped to the plan's own
+	// `related` list rather than the full transitive walk.
+	out.directByID = map[string][]string{}
+	for _, src := range rules.DirectRelatedSources(loaded, planArt) {
+		for _, family := range rules.IdentifierFamilies() {
+			for _, id := range out.index.DefinedBy(src.Rel, family) {
+				if !containsString(out.directByID[id], src.Rel) {
+					out.directByID[id] = append(out.directByID[id], src.Rel)
+				}
+			}
+		}
+	}
 	for _, src := range out.index.Sources() {
 		body := rules.CommentStripped(src.Body)
 		items := intent.Items(body)
