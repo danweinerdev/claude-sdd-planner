@@ -138,3 +138,80 @@ func TestAuthoritativeSCMAbsence(t *testing.T) {
 		t.Errorf("NoRepo.Head() = %v; want ErrUnsupported", err)
 	}
 }
+
+// initEmptyCheckedRepo creates a repository with no commits, so HEAD does not
+// resolve while git itself answers normally.
+func initEmptyCheckedRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmd := exec.Command("git", "-C", dir, "init", "-q", "-b", "main")
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	return dir
+}
+
+// countSubstr reports how many non-overlapping times sub occurs in s.
+func countSubstr(s, sub string) int { return strings.Count(s, sub) }
+
+// Review F-03: an absence error names the object once. Passing the raw git
+// error into absent() nests the failure text inside the ErrNotFound message,
+// and the CLI wraps it a third time when reporting.
+func TestAbsenceMessagesAreNotDoubled(t *testing.T) {
+	t.Setenv("SDD_VCS_DISABLE_P4", "1")
+
+	empty, err := DetectChecked(initEmptyCheckedRepo(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = empty.Head()
+	if !errors.Is(err, ErrNotFound) || errors.Is(err, ErrOperational) {
+		t.Fatalf("Head() on a commitless repository = %v; want ErrNotFound", err)
+	}
+	msg := err.Error()
+	if n := countSubstr(msg, ErrNotFound.Error()); n != 1 {
+		t.Errorf("Head() message contains %q %d times, want 1: %q", ErrNotFound.Error(), n, msg)
+	}
+	if n := countSubstr(msg, "git rev-parse"); n > 1 {
+		t.Errorf("Head() message repeats %q %d times: %q", "git rev-parse", n, msg)
+	}
+	if strings.Contains(msg, ErrNotFound.Error()+": HEAD: git") {
+		t.Errorf("Head() message nests the git failure inside the absence text: %q", msg)
+	}
+	if !strings.Contains(msg, "HEAD") {
+		t.Errorf("Head() message does not name HEAD: %q", msg)
+	}
+
+	repo, err := DetectChecked(initCheckedRepo(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bogus := strings.Repeat("b", 40)
+	cases := []struct {
+		name  string
+		ident string
+		call  func() error
+	}{
+		{"RevisionExists", bogus, func() error { _, err := repo.RevisionExists(bogus); return err }},
+		{"FileAt", "HEAD:missing.txt", func() error { _, err := repo.FileAt("HEAD", "missing.txt"); return err }},
+		{"Parents", bogus, func() error { _, err := repo.Parents(bogus); return err }},
+	}
+	for _, tc := range cases {
+		err := tc.call()
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: %v; want ErrNotFound", tc.name, err)
+			continue
+		}
+		m := err.Error()
+		if n := countSubstr(m, ErrNotFound.Error()); n != 1 {
+			t.Errorf("%s message contains the absence text %d times, want 1: %q", tc.name, n, m)
+		}
+		if n := countSubstr(m, tc.ident); n != 1 {
+			t.Errorf("%s message names %q %d times, want 1: %q", tc.name, tc.ident, n, m)
+		}
+		if strings.Contains(m, "exit ") {
+			t.Errorf("%s message carries the raw git failure: %q", tc.name, m)
+		}
+	}
+}

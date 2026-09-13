@@ -126,7 +126,7 @@ func (g *gitRepo) RevisionExists(rev string) (bool, error) {
 func (g *gitRepo) Head() (string, error) {
 	out, err := runGit(g.root, "rev-parse", "HEAD")
 	if err != nil {
-		return "", absent(err, "HEAD: "+err.Error())
+		return "", absent(err, "HEAD")
 	}
 	return strings.TrimSpace(string(out)), nil
 }
