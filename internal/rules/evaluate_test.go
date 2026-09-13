@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -201,4 +202,60 @@ func hasCode(ds []Diagnostic, code string) bool {
 		}
 	}
 	return false
+}
+
+// F-02: the waiver-bookkeeping memo on Root is shared mutable state reached
+// by the direct-invocation path (SDD176/SDD177 CheckRoot -> bareOnce). The
+// sibling memos on Root are locked; this one must be too, or a future caller
+// that evaluates rules concurrently gets a torn memo rather than a diagnosis.
+// Run under -race: an unguarded read-check-write reports a data race here.
+func TestWaiverMemoConcurrencySafe(t *testing.T) {
+	// A stale waiver (the artifact has since grown the sections SDD020 wanted),
+	// so the bookkeeping rules actually emit and the memo is really consulted.
+	_, root := materializeRoot(t, map[string]string{
+		"Research/topic.md": researchWaivedHead + researchComplete,
+		"Research/clean.md": researchClean,
+	})
+
+	const goroutines = 8
+	codes := []string{"SDD176", "SDD177"}
+	rules := map[string]*Rule{}
+	for _, code := range codes {
+		rules[code] = ruleByCode(t, code)
+	}
+
+	seen := make([][]Diagnostic, goroutines)
+	bare := make([][]Diagnostic, goroutines)
+	var start sync.WaitGroup
+	var done sync.WaitGroup
+	start.Add(1)
+	for i := range goroutines {
+		done.Add(1)
+		go func(i int) {
+			defer done.Done()
+			start.Wait() // every goroutine enters bareOnce together
+			var out []Diagnostic
+			emit := func(d Diagnostic) { out = append(out, d) }
+			for _, code := range codes {
+				rules[code].CheckRoot(root, emit)
+			}
+			sortStrict(out)
+			seen[i] = out
+			bare[i] = append([]Diagnostic(nil), bareOnce(root)...)
+		}(i)
+	}
+	start.Done()
+	done.Wait()
+
+	for i := 1; i < goroutines; i++ {
+		if !reflect.DeepEqual(seen[i], seen[0]) {
+			t.Errorf("goroutine %d saw different bookkeeping diagnostics\n got: %+v\nwant: %+v", i, seen[i], seen[0])
+		}
+		if !reflect.DeepEqual(bare[i], bare[0]) {
+			t.Errorf("goroutine %d saw a different memoized sweep (%d diagnostics, want %d)", i, len(bare[i]), len(bare[0]))
+		}
+	}
+	if len(seen[0]) == 0 {
+		t.Fatal("fixture emitted no waiver-bookkeeping diagnostics; the memo was never exercised")
+	}
 }

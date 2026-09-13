@@ -77,6 +77,16 @@ type Root struct {
 	// validates before and after — six. The sweep is a pure function of the
 	// loaded Root, which is never mutated after loading, so one evaluation
 	// serves every caller.
+	//
+	// bareMu makes this memo — like repoCache, opFailures and appendFindings,
+	// the other memos hung off a Root — safe for concurrent callers. Today's
+	// only production caller is the sequential sweep, so the lock is never
+	// contended; it is here so that a future concurrent caller of the direct
+	// invocation path (SDD176/SDD177 CheckRoot) gets one sweep rather than a
+	// torn memo. Holding it across evaluate() is deliberate: the point is that
+	// exactly one sweep runs, which is also what keeps the per-Artifact memos
+	// that sweep populates (sectionCache, definedIDs) single-writer.
+	bareMu          sync.Mutex
 	bareDiagnostics []Diagnostic
 	bareComputed    bool
 

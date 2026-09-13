@@ -236,9 +236,14 @@ func waiverDiagnostics(r *Root, code string, emit func(Diagnostic)) {
 }
 
 // bareOnce is the registry's ordinary sweep memoized per Root, for the direct
-// invocation path above. Safe because a Root is immutable once loaded and the
-// memo is only ever read through a copy.
+// invocation path above. A Root is immutable once loaded and every caller
+// reads the memo through a copy (waiverFindings copies before applyWaivers
+// re-tags), so the sweep's result is safe to share; bareMu is what makes
+// producing it safe, so concurrent callers run one sweep between them instead
+// of racing on the memo and on the per-Artifact caches the sweep fills.
 func bareOnce(r *Root) []Diagnostic {
+	r.bareMu.Lock()
+	defer r.bareMu.Unlock()
 	if !r.bareComputed {
 		r.bareDiagnostics, _ = evaluate(r, All()) // failure stays recorded on r
 		r.bareComputed = true
