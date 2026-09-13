@@ -2,6 +2,8 @@ package vcs
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -209,6 +211,113 @@ func TestDetectMemoized(t *testing.T) {
 		r2 := Detect(dir)
 		if r1 != r2 {
 			t.Fatalf("Detect should return the cached adapter for the same dir")
+		}
+	})
+}
+
+// FR-09 / AC-04 / DD-7: a transient operational failure must never become a
+// cached fact. Once git is back on PATH the next call answers from the
+// repository, and a detection probe that failed leaves no NoRepo behind.
+func TestOperationalFailureNotCached(t *testing.T) {
+	t.Setenv("SDD_VCS_DISABLE_P4", "1")
+	realPath := os.Getenv("PATH")
+	repo := initCheckedRepo(t)
+	emptyDir := t.TempDir()
+
+	withMemoization(t, func() {
+		live, err := DetectChecked(repo)
+		if err != nil {
+			t.Fatalf("baseline detection: %v", err)
+		}
+		head, err := live.Head()
+		if err != nil {
+			t.Fatalf("baseline Head: %v", err)
+		}
+		resetCaches()
+
+		// Operation-level: the first call fails operationally while git is
+		// off PATH; the cache must not serve that failure afterwards.
+		t.Setenv("PATH", emptyDir)
+		if _, err := live.RevisionExists(head); !errors.Is(err, ErrOperational) {
+			t.Fatalf("RevisionExists without git: %v, want ErrOperational", err)
+		}
+		if _, err := live.Head(); !errors.Is(err, ErrOperational) {
+			t.Fatalf("Head without git: %v, want ErrOperational", err)
+		}
+		if _, err := live.FileAt(head, "a.txt"); !errors.Is(err, ErrOperational) {
+			t.Fatalf("FileAt without git: %v, want ErrOperational", err)
+		}
+
+		t.Setenv("PATH", realPath)
+		if ok, err := live.RevisionExists(head); !ok || err != nil {
+			t.Errorf("RevisionExists after git returned = %v, %v; want true, nil "+
+				"— the operational failure was served from cache", ok, err)
+		}
+		if got, err := live.Head(); err != nil || got != head {
+			t.Errorf("Head after git returned = %q, %v; want %q, nil "+
+				"— the operational failure was served from cache", got, err, head)
+		}
+		if content, err := live.FileAt(head, "a.txt"); err != nil || string(content) != "a\n" {
+			t.Errorf("FileAt after git returned = %q, %v; want \"a\\n\", nil "+
+				"— the operational failure was served from cache", content, err)
+		}
+
+		// Detection-level: a probe that could not run must leave nothing
+		// cached, least of all a NoRepo/Unavailable verdict for a real repo.
+		resetCaches()
+		t.Setenv("PATH", emptyDir)
+		if r, err := DetectChecked(repo); !errors.Is(err, ErrOperational) || r != nil {
+			t.Fatalf("DetectChecked without git = %v, %v; want nil, ErrOperational", r, err)
+		}
+		t.Setenv("PATH", realPath)
+		r, err := DetectChecked(repo)
+		if err != nil {
+			t.Fatalf("DetectChecked after git returned: %v "+
+				"— the failed probe was served from cache", err)
+		}
+		if r.Kind() != Git {
+			t.Errorf("DetectChecked after git returned Kind() = %q, want %q "+
+				"— a failed probe was stored as a non-git verdict", r.Kind(), Git)
+		}
+	})
+}
+
+// FR-09 / DD-7: a determinate ErrNotFound stays cacheable — it is an answer,
+// not a failure — while whole-worktree state (Clean) stays uncached.
+func TestDeterminateAbsenceCached(t *testing.T) {
+	t.Setenv("SDD_VCS_DISABLE_P4", "1")
+	realPath := os.Getenv("PATH")
+	repo := initCheckedRepo(t)
+	emptyDir := t.TempDir()
+	bogus := strings.Repeat("b", 40)
+
+	withMemoization(t, func() {
+		live, err := DetectChecked(repo)
+		if err != nil {
+			t.Fatalf("baseline detection: %v", err)
+		}
+		if ok, err := live.RevisionExists(bogus); ok || !errors.Is(err, ErrNotFound) {
+			t.Fatalf("RevisionExists(bogus) = %v, %v; want false, ErrNotFound", ok, err)
+		}
+
+		// Removing git proves the second answer came from the cache: an
+		// uncached call would have to exec git and would fail operationally.
+		t.Setenv("PATH", emptyDir)
+		ok, err := live.RevisionExists(bogus)
+		if ok || !errors.Is(err, ErrNotFound) || errors.Is(err, ErrOperational) {
+			t.Errorf("cached RevisionExists(bogus) = %v, %v; want false, ErrNotFound "+
+				"— the determinate absence was not cached", ok, err)
+		}
+
+		// Clean() reports whole-worktree state and is never cached: with git
+		// gone it must fail operationally rather than replay an answer.
+		t.Setenv("PATH", realPath)
+		if clean, _, err := live.Clean(); err != nil || !clean {
+			t.Fatalf("baseline Clean() = %v, %v; want true, nil", clean, err)
+		}
+		t.Setenv("PATH", emptyDir)
+		if _, _, err := live.Clean(); !errors.Is(err, ErrOperational) {
+			t.Errorf("Clean() without git = %v; want ErrOperational — Clean must stay uncached", err)
 		}
 	})
 }

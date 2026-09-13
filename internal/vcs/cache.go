@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"errors"
 	"strings"
 	"sync"
 )
@@ -35,11 +36,19 @@ import (
 //     pass through uncached. Adding a new working-state query to Repo? It
 //     belongs on the uncached side of this decorator.
 //
-// Errors are cached too: ErrNotFound is a determinate answer, and an
-// environmental failure (binary missing, not a repository) does not heal
-// mid-process. Slice- and byte-valued results are copied on every return —
-// hit or miss — so no caller can mutate the cached answer another caller
-// will receive.
+// Only determinate outcomes are cached. A nil error, ErrNotFound ("this
+// revision/path does not exist"), and ErrUnsupported ("this adapter cannot
+// answer at all") are answers about the repository, so they are stored. An
+// operational failure — git unrunnable, a timeout, output overflow — is NOT
+// an answer and is never stored: it says the question could not be asked,
+// and the condition can clear within a process (a PATH that changes, a
+// transient exec failure). Caching one would turn a transient inability into
+// a permanent negative fact for the rest of the run, which is exactly the
+// confusion ErrOperational exists to prevent. Detection is subject to the
+// same rule: DetectChecked caches only a probe that ran (see vcs.go).
+//
+// Slice- and byte-valued results are copied on every return — hit or miss —
+// so no caller can mutate the cached answer another caller will receive.
 //
 // Memoization is opt-in via EnableMemoization, called once from cmd/sdd's
 // main. It is NOT enabled under `go test`: test suites and genfixtures build
@@ -120,10 +129,27 @@ func memo[T any](key string, fn func() (T, error)) (T, error) {
 		return v, e.err
 	}
 	v, err := fn()
-	memoMu.Lock()
-	memoCache[key] = memoEntry{val: v, err: err}
-	memoMu.Unlock()
+	if cacheable(err) {
+		memoMu.Lock()
+		memoCache[key] = memoEntry{val: v, err: err}
+		memoMu.Unlock()
+	}
 	return v, err
+}
+
+// cacheable reports whether an outcome is a determinate answer about the
+// repository and may therefore be remembered. Success and the two determinate
+// negatives qualify; an operational failure never does, and neither does an
+// error of unknown provenance — an answer we cannot classify is not one we
+// may replay.
+func cacheable(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, ErrOperational) {
+		return false
+	}
+	return errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnsupported)
 }
 
 // memoSlice is memo for slice-valued results, returning a fresh copy on
