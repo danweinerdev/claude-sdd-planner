@@ -28,16 +28,17 @@
 package regression
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
@@ -282,15 +283,30 @@ func prepare(root, scratch string) (string, error) {
 		}
 	}
 
-	for _, argv := range commands {
-		cmd := exec.Command(argv[0], argv[1:]...)
-		cmd.Dir = target
-		cmd.Env = append(os.Environ(), setupEnv...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("setup %v failed: %v\n%s", argv, err, out)
-		}
+	if err := runSetup(target, commands, setupPolicy); err != nil {
+		return "", err
 	}
 	return target, nil
+}
+
+// setupPolicy is the execution policy every fixture SETUP command runs
+// under. A test lowers it to prove the bound is real.
+var setupPolicy = procexec.Policy{}
+
+// runSetup runs a prepared root's SETUP commands through the bounded runner
+// (FR-13, FR-14, DD-2): no shell, a finite deadline, a bounded cleanup
+// allowance, and a finite output limit, so a hanging or over-producing
+// setup command fails within the runner's bounds instead of stalling the
+// package.
+func runSetup(dir string, commands [][]string, policy procexec.Policy) error {
+	policy.Dir = dir
+	policy.Env = append(os.Environ(), setupEnv...)
+	for _, argv := range commands {
+		if _, err := procexec.Run(context.Background(), argv[0], argv[1:], policy); err != nil {
+			return fmt.Errorf("setup %v failed: %w", argv, err)
+		}
+	}
+	return nil
 }
 
 func containsRepoPlaceholder(root string) (bool, error) {

@@ -1,17 +1,24 @@
 package rules
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 // prepared is one materialized example fixture: files written and Setup
@@ -49,15 +56,31 @@ func prepareExample(t *testing.T, ex Example) *prepared {
 			t.Fatal(err)
 		}
 	}
-	for _, args := range ex.Setup {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), setupEnv...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("setup command %v: %v\n%s", args, err, out)
-		}
+	if err := runSetup(dir, ex.Setup, setupPolicy); err != nil {
+		t.Fatal(err)
 	}
 	return &prepared{dir: dir, ex: ex}
+}
+
+// setupPolicy is the execution policy every fixture Setup command runs
+// under. A test lowers it to prove the bound is real.
+var setupPolicy = procexec.Policy{}
+
+// runSetup runs the fixture's Setup commands through the bounded runner
+// (FR-13, FR-14, DD-2): no shell, a finite deadline, a bounded cleanup
+// allowance, and a finite output limit, so a hanging or over-producing
+// setup command fails within the runner's bounds instead of stalling the
+// package. It is separate from prepareExample so a test can observe a setup
+// failure as a value rather than as the harness's t.Fatal.
+func runSetup(dir string, setup [][]string, policy procexec.Policy) error {
+	policy.Dir = dir
+	policy.Env = append(os.Environ(), setupEnv...)
+	for _, args := range setup {
+		if _, err := procexec.Run(context.Background(), args[0], args[1:], policy); err != nil {
+			return fmt.Errorf("setup command %v: %w", args, err)
+		}
+	}
+	return nil
 }
 
 // evaluatePrepared loads a fresh Root from the prepared fixture and runs
@@ -248,6 +271,82 @@ func TestValidationLeavesFixtureUnchanged(t *testing.T) {
 			after := snapshotFixture(t, p)
 			if !reflect.DeepEqual(before, after) {
 				t.Fatalf("validation changed the fixture:\nbefore %v\nafter  %v", before, after)
+			}
+		})
+	}
+}
+
+// FR-13 / FR-14 / DD-2: fixture setup runs through the bounded runner, so a
+// hanging or over-producing setup command fails inside the runner's own
+// bounds instead of stalling the package. The control case proves the path
+// still runs ordinary setup successfully.
+func TestFixtureSetupUsesOwnedRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hanging and flooding probes are POSIX shell commands")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+
+	const timeout = 300 * time.Millisecond
+	const cleanup = 500 * time.Millisecond
+
+	for _, tc := range []struct {
+		name   string
+		setup  [][]string
+		policy procexec.Policy
+		want   procexec.Cause // CauseUnknown means the setup must succeed
+	}{
+		{
+			name:   "ordinary setup succeeds",
+			setup:  [][]string{{"git", "init", "-q"}},
+			policy: procexec.Policy{Timeout: 30 * time.Second, Cleanup: cleanup},
+		},
+		{
+			name:   "a hanging setup command is bounded by the deadline",
+			setup:  [][]string{{"sh", "-c", "sleep 30"}},
+			policy: procexec.Policy{Timeout: timeout, Cleanup: cleanup},
+			want:   procexec.CauseDeadline,
+		},
+		{
+			name:   "a flooding setup command is bounded by the machine limit",
+			setup:  [][]string{{"sh", "-c", "yes | head -c 5000000"}},
+			policy: procexec.Policy{Timeout: 30 * time.Second, Cleanup: cleanup, MachineLimit: 1 << 20},
+			want:   procexec.CauseOverflow,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			done := make(chan error, 1)
+			go func() { done <- runSetup(dir, tc.setup, tc.policy) }()
+
+			// The bound under test is the runner's; this select only keeps a
+			// missing bound from hanging the package, and its expiry is the
+			// failure.
+			select {
+			case err := <-done:
+				if tc.want == procexec.CauseUnknown {
+					if err != nil {
+						t.Fatalf("ordinary setup failed: %v", err)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatalf("setup %v succeeded; want a %s failure", tc.setup, tc.want)
+				}
+				var pe *procexec.Error
+				if !errors.As(err, &pe) {
+					t.Fatalf("setup error is not a procexec *Error: %T: %v", err, err)
+				}
+				if pe.Cause != tc.want {
+					t.Fatalf("setup failed with cause %s, want %s: %v", pe.Cause, tc.want, err)
+				}
+				if !strings.Contains(err.Error(), tc.setup[0][0]) {
+					t.Errorf("error does not name the command %q: %v", tc.setup[0][0], err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("setup %v did not return within 5s; the runner's bound (timeout %v + cleanup %v) was not enforced",
+					tc.setup, tc.policy.Timeout, tc.policy.Cleanup)
 			}
 		})
 	}

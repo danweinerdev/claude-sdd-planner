@@ -1,10 +1,16 @@
 package regression
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 const (
@@ -191,4 +197,78 @@ func absFixtures(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return abs
+}
+
+// FR-13 / FR-14 / DD-2: the corpus prepare step runs fixture SETUP commands
+// through the bounded runner, so a hanging or over-producing setup command
+// fails inside the runner's own bounds instead of stalling the package.
+func TestCorpusPrepareUsesOwnedRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hanging and flooding probes are POSIX shell commands")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+
+	const cleanup = 500 * time.Millisecond
+
+	for _, tc := range []struct {
+		name     string
+		commands [][]string
+		policy   procexec.Policy
+		want     procexec.Cause // CauseUnknown means the setup must succeed
+	}{
+		{
+			name:     "ordinary setup succeeds",
+			commands: [][]string{{"git", "init", "-q"}},
+			policy:   procexec.Policy{Timeout: 30 * time.Second, Cleanup: cleanup},
+		},
+		{
+			name:     "a hanging setup command is bounded by the deadline",
+			commands: [][]string{{"sh", "-c", "sleep 30"}},
+			policy:   procexec.Policy{Timeout: 300 * time.Millisecond, Cleanup: cleanup},
+			want:     procexec.CauseDeadline,
+		},
+		{
+			name:     "a flooding setup command is bounded by the machine limit",
+			commands: [][]string{{"sh", "-c", "yes | head -c 5000000"}},
+			policy:   procexec.Policy{Timeout: 30 * time.Second, Cleanup: cleanup, MachineLimit: 1 << 20},
+			want:     procexec.CauseOverflow,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			done := make(chan error, 1)
+			go func() { done <- runSetup(dir, tc.commands, tc.policy) }()
+
+			// The bound under test is the runner's; this select only keeps a
+			// missing bound from hanging the package, and its expiry is the
+			// failure.
+			select {
+			case err := <-done:
+				if tc.want == procexec.CauseUnknown {
+					if err != nil {
+						t.Fatalf("ordinary setup failed: %v", err)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatalf("setup %v succeeded; want a %s failure", tc.commands, tc.want)
+				}
+				var pe *procexec.Error
+				if !errors.As(err, &pe) {
+					t.Fatalf("setup error is not a procexec *Error: %T: %v", err, err)
+				}
+				if pe.Cause != tc.want {
+					t.Fatalf("setup failed with cause %s, want %s: %v", pe.Cause, tc.want, err)
+				}
+				if !strings.Contains(err.Error(), tc.commands[0][0]) {
+					t.Errorf("error does not name the command %q: %v", tc.commands[0][0], err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("setup %v did not return within 5s; the runner's bound (timeout %v + cleanup %v) was not enforced",
+					tc.commands, tc.policy.Timeout, tc.policy.Cleanup)
+			}
+		})
+	}
 }
