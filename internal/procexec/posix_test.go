@@ -251,3 +251,56 @@ func TestGroupSweepPrecedesReap(t *testing.T) {
 		t.Fatalf("at the first group SIGKILL the leader was in state %q, want %q (exited but unreaped)", string(first.state), "Z")
 	}
 }
+
+// FR-14 / DD-4 (review F-01): a transient failure of the sweep's pre-kill
+// probe must not be recorded as a completed sweep. Under the pre-fix code
+// the probe's non-ESRCH error returned swept=true before any SIGKILL was
+// sent, and the post-reap path then only polled: the live descendant ran out
+// the whole cleanup allowance and the run reported that it had "survived
+// after SIGKILL" although none was ever issued.
+func TestTransientProbeFailureStillKills(t *testing.T) {
+	restore := signalGroup
+	var mu sync.Mutex
+	probeFailed := false
+	signalGroup = func(pgid int, sig syscall.Signal) error {
+		mu.Lock()
+		if sig == 0 && !probeFailed {
+			probeFailed = true
+			mu.Unlock()
+			return syscall.EPERM
+		}
+		mu.Unlock()
+		return restore(pgid, sig)
+	}
+	t.Cleanup(func() { signalGroup = restore })
+
+	exe, args, p := helperPolicy(t, "spawn-descendant-exit")
+	p.Cleanup = 700 * time.Millisecond
+
+	start := time.Now()
+	res, err := Run(context.Background(), exe, args, p)
+	elapsed := time.Since(start)
+
+	stdout := res.Stdout
+	var pe *Error
+	if errors.As(err, &pe) {
+		stdout = []byte(pe.Stdout)
+	}
+	grandchild := pidFrom(t, stdout)
+	killLater(t, grandchild)
+
+	if !waitDead(grandchild, p.Cleanup+2*time.Second) {
+		t.Errorf("grandchild %d survived: a failed pre-kill probe suppressed the SIGKILL", grandchild)
+	}
+	if err != nil && strings.Contains(err.Error(), "after SIGKILL") {
+		t.Errorf("error claims descendants survived a SIGKILL that was never sent: %v", err)
+	}
+	if elapsed > p.Cleanup+3*time.Second {
+		t.Errorf("returned after %v; the cleanup allowance must bound the run", elapsed)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !probeFailed {
+		t.Fatal("the stubbed probe never ran; the test did not exercise the pre-kill probe path")
+	}
+}

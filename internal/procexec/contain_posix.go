@@ -63,9 +63,12 @@ func groupPGID(cmd *exec.Cmd) (int, bool, error) {
 // reaping it, then kills any descendant still in the group. Holding the
 // leader as a zombie is what makes the kill safe: the pid it is signalling
 // is still owned by this command's leader, so -pgid cannot name a stranger.
-// It reports whether live descendants were found and killed. When the
-// platform cannot observe an exit without reaping, it reports that so the
-// caller keeps the documented post-reap fallback.
+// It reports whether live descendants were found and killed. swept is the
+// caller's licence to stop signalling, so it is reported only once a SIGKILL
+// has actually been attempted; when the platform cannot observe an exit
+// without reaping, or the pre-kill probe fails before any kill is sent, it
+// reports swept=false so the caller keeps the documented post-reap fallback
+// that still probes and kills (review F-01).
 func sweepGroupBeforeReap(cmd *exec.Cmd) (cleaned, swept bool, err error) {
 	pgid, ok, err := groupPGID(cmd)
 	if err != nil || !ok {
@@ -85,7 +88,12 @@ func sweepGroupBeforeReap(cmd *exec.Cmd) (cleaned, swept bool, err error) {
 		return false, true, nil // the leader zombie aside, the group is empty
 	}
 	if probe != nil {
-		return false, true, fmt.Errorf("containment: probe group %d: %w", pgid, probe)
+		// The probe failed before any SIGKILL was sent, so nothing has been
+		// swept: reporting otherwise would licence the caller to only poll a
+		// group that is still live and unsignalled. The failure is still an
+		// operational error, and the caller's post-reap fallback retries the
+		// probe and the kill within the cleanup allowance.
+		return false, false, fmt.Errorf("containment: probe group %d: %w", pgid, probe)
 	}
 	if killErr := signalGroup(pgid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
 		return false, true, fmt.Errorf("containment: kill group %d: %w", pgid, killErr)
@@ -94,11 +102,13 @@ func sweepGroupBeforeReap(cmd *exec.Cmd) (cleaned, swept bool, err error) {
 }
 
 // cleanupGroup runs after Wait reaped the direct child. When the pre-reap
-// sweep ran (swept), the leader's pid is now recyclable, so this only polls
-// the group for emptiness and never signals it again. When the sweep could
-// not run — the platform lacks WNOWAIT — it falls back to the original
-// probe-and-kill, which carries the residual pid-reuse window documented in
-// wnowait_other.go.
+// sweep ran (swept), a SIGKILL has already been delivered to the group and
+// the leader's pid is now recyclable, so this only polls the group for
+// emptiness and never signals it again — which is why the timeout there may
+// truthfully say the descendants survived a SIGKILL. When the sweep could
+// not run — the platform lacks WNOWAIT, or its pre-kill probe failed before
+// sending anything — it falls back to the original probe-and-kill, which
+// carries the residual pid-reuse window documented in wnowait_other.go.
 func cleanupGroup(cmd *exec.Cmd, allowance time.Duration, swept bool) (cleaned bool, err error) {
 	pgid, ok, err := groupPGID(cmd)
 	if err != nil || !ok {
