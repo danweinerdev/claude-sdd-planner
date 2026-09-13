@@ -37,7 +37,6 @@ type Policy struct {
 	Config    string // XDG_CONFIG_HOME
 	Global    string // GIT_CONFIG_GLOBAL: the policy's explicit settings
 	Templates string // GIT_TEMPLATE_DIR: empty, so no hooks are seeded
-	Hooks     string // core.hooksPath: empty, so ambient hooks never run
 }
 
 // GlobalConfig is the path of the policy-owned global gitconfig.
@@ -45,13 +44,16 @@ func (p Policy) GlobalConfig() string { return p.Global }
 
 // globalConfig is written to Policy.Global. Everything the workstation could
 // have turned on is turned off explicitly rather than merely not inherited,
-// and fixture-affecting defaults are pinned.
+// and fixture-affecting defaults are pinned. Hooks are not redirected here:
+// ambient hooks are excluded because the configs and templates that would
+// route to them are excluded, while a fixture's own repo-local hooks (the
+// doctor's post-rewrite capture, an intentional hooksPath) must keep
+// working.
 const globalConfig = `# Written by internal/testenv. Test-owned; never the user's configuration.
 [core]
 	fsmonitor = false
 	untrackedCache = false
 	autocrlf = false
-	hooksPath = %s
 [commit]
 	gpgsign = false
 [tag]
@@ -198,15 +200,14 @@ func Install() (Policy, func(), error) {
 		Config:    filepath.Join(root, "home", ".config"),
 		Global:    filepath.Join(root, "gitconfig"),
 		Templates: filepath.Join(root, "templates"),
-		Hooks:     filepath.Join(root, "hooks"),
 	}
-	for _, d := range []string{filepath.Join(p.Config, "git"), p.Templates, p.Hooks} {
+	for _, d := range []string{filepath.Join(p.Config, "git"), p.Templates} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			os.RemoveAll(root)
 			return Policy{}, nil, err
 		}
 	}
-	cfg := fmt.Sprintf(globalConfig, filepath.ToSlash(p.Hooks), FixtureBranch)
+	cfg := fmt.Sprintf(globalConfig, FixtureBranch)
 	if err := os.WriteFile(p.Global, []byte(cfg), 0o644); err != nil {
 		os.RemoveAll(root)
 		return Policy{}, nil, err
