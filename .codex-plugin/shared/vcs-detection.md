@@ -119,6 +119,28 @@ applicable `reverify` batch) regardless of lineage. If the first passing
 observation is recorded only after rebase, it already names the new commit and
 may need no lineage remap.
 
+### Reclaiming worktrees and branches
+
+Every worktree and branch created for a slice is temporary and is removed as soon
+as its use is complete: a node workspace once its green sync has been
+fast-forwarded into the primary branch, a scratch worktree for a parallel
+builder or a review lane once its commits are fast-forwarded or discarded, and
+an abandoned claim as soon as it is released. Never let them accumulate across
+nodes or rounds. On Git targets:
+
+- **Node workspaces**: after `git merge --ff-only`, `git branch -d graph/<id>-<suffix>`
+  and `sdd graph gc --plan <Name>`; `sdd graph release` reaps an idle workspace and
+  its branch itself. When a sandbox mount keeps `git worktree remove` from
+  deleting the directory, run `git worktree remove --force` followed by
+  `git worktree prune` outside the sandbox rather than leaving the entry behind.
+- **Scratch worktrees** (anything not tracked by the graph): `git worktree remove
+  --force <path>`, `git worktree prune`, then `git branch -d <branch>` once the
+  fast-forward is in place. Preserve the rewrite map first (above) if the tree
+  was rebased.
+- **Check before ending a session**: `git worktree list` shows only the primary
+  checkout and `git branch --list 'graph/*'` is empty. A stray entry is a defect
+  in the walk, not housekeeping for later.
+
 ## Special cases
 
 - **`git-bare`**: stop and tell the user to operate in a worktree instead. Most skills can't do meaningful work in a bare repo (no checked-out files).
