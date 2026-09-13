@@ -1,9 +1,9 @@
 ---
 title: "Test Suite Reliability"
 type: spec
-status: review
+status: approved
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-13
 tags: [testing, reliability, performance, git, graph]
 related: [Specs/SDD-Toolchain, Designs/SddGraph, Designs/TestSuiteReliability]
 ---
@@ -117,6 +117,6 @@ Evidence was collected on 2026-09-08 against baseline revision `7cf2572`. Paths 
 - In particular, Go `CommandContext` defaults to killing the direct child and leaves `WaitDelay` unset; it does not promise descendant cleanup. Windows console process groups are not Job Object containment. POSIX group signalling does not include descendants that leave the group.
 
 ## Open Questions
-- **Non-blocking — tuning:** Is another finite concurrency profile faster on the reference host? The initial profile and acceptance targets above are fixed proposed defaults; measurement may recommend a separately reviewed change, never silently widen a passing gate.
-- **Non-blocking — historical daemon provenance:** Which of the 95 observed daemons came from earlier tests? No requirement depends on attribution: prevention and owned-process lifecycle tests are mandatory, and unrelated daemons are never swept.
-- There are no unresolved architectural choices delegated to an external party. User approval of this specification and its design remains required before graph compilation and execution.
+- Is another finite concurrency profile faster on the reference host? — **non-blocking** — the initial profile and acceptance targets are fixed proposed defaults; measurement may recommend a separately reviewed change, never silently widen a passing gate.
+- Which of the 95 observed daemons came from earlier tests? — **non-blocking** — no requirement depends on attribution: prevention and owned-process lifecycle tests are mandatory, and unrelated daemons are never swept.
+- Which workstreams execute on a non-Windows host first? — **non-blocking** — `Plans/TestSuiteReliability` (2026-09-13) builds workstreams A-C and the POSIX parts of E; workstream D, Windows containment, telemetry and the `windows-reference-01` protocol are a follow-on plan, so the uncovered criteria are deferred by design, not forgotten.

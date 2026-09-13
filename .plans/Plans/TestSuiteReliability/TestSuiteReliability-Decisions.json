@@ -1,0 +1,78 @@
+[
+  {
+    "id": "pd-7f39c654",
+    "date": "2026-09-13",
+    "statement": "**DD-1**: Install hermeticity at the test process boundary, not only in setup helpers. Context: FR-01 through FR-03, AC-01. Options: helper-only environment, production-wide override, package-lifetime test policy. Choose test policy installed before parallel work, with explicit child environments and separate child processes for configuration-behavior tests. Canonicalize environment keys case-insensitively on Windows; remove inherited repository-routing/config-injection entries; retain platform launch essentials. Use a temporary home, XDG/config paths, empty template/hooks directories and platform-correct null handling. Explicitly disable fsmonitor, maintenance, prompts, signing and accidental filters; pin fixture identity/time/line-ending/branch settings to the existing frozen-fixture contract. The code under test inherits this same policy without importing test packages. A hostile fake host config is created under test ownership; never inspect or modify the real user's configuration to prove isolation.",
+    "source": "Designs/TestSuiteReliability:DD-1"
+  },
+  {
+    "id": "pd-7d0be684",
+    "date": "2026-09-13",
+    "statement": "**DD-2**: One bounded runner with small platform adapters and explicit execution policy. Context: FR-13 through FR-17, AC-06 through AC-09. Options: scattered command wrappers or one shared owner. Choose `procexec` because setup and VCS reads need the same admission, output and lifecycle guarantees. Resolve executable paths before launch using the intended child search path, retaining Go's executable-path security behavior. Default command lifetime includes admission and execution within 30 seconds; cleanup/drain receives at most 5 additional seconds, clipped to the enclosing deadline. Long-running compiler/test helpers use explicit finite policies. All `Start` successes are paired with `Wait`/platform-equivalent reaping. Do not rely on `CommandContext` alone to clean descendants, and never retry mutations.",
+    "source": "Designs/TestSuiteReliability:DD-2"
+  },
+  {
+    "id": "pd-e6f9cda2",
+    "date": "2026-09-13",
+    "statement": "**DD-3**: Windows containment is a Job Object enrolled before user code runs. Context: FR-14, AC-06 and the Win32 contract pins in the spec. Options: console process group only, post-start assignment with an escape race, or suspended-create/enroll/resume. Choose suspended-create/enroll/resume with kill-on-job-close and neither breakaway flag enabled. This requires a real Windows launch path retaining the primary thread/process handles; merely setting `CREATE_SUSPENDED` on `exec.Cmd` without owning a resume handle is not an implementation. The adapter may use the existing `golang.org/x/sys/windows` dependency. Failed assignment closes/reaps the suspended child and reports operational failure. Nested-job compatibility is tested on Windows; incompatible hosts fail explicitly, not by disabling containment. Limit inherited handles to intended standard streams and owner protocol handles. Close the last job handle only after final ownership/cleanup accounting.",
+    "source": "Designs/TestSuiteReliability:DD-3"
+  },
+  {
+    "id": "pd-9e0405e6",
+    "date": "2026-09-13",
+    "statement": "**DD-4**: POSIX containment covers owned group-staying descendants, not arbitrary escaping daemons. Context: FR-14, AC-06. Options: process-table/name sweeps or a process group established atomically at spawn. Choose a separate owned group, signal only its validated positive PGID through negative-group signalling, retain ownership until cleanup, and reap direct children. A process group is not a sandbox: `setsid`/group-escaping descendants are outside this adapter's supported contract and are prevented in ordinary Git fixtures by disabling background services. Tests of lifecycle use known cooperative helper processes. No broad kill, no signalling PGID zero/one, and no assumption that `kill(pid, 0)` proves reaping. Normal parent success still triggers supported-descendant cleanup. Detectable containment/cleanup failures fail the operation.",
+    "source": "Designs/TestSuiteReliability:DD-4"
+  },
+  {
+    "id": "pd-ce4ef228",
+    "date": "2026-09-13",
+    "statement": "**DD-5**: Budget root command domains and serialize SCM within delegated child domains. Context: FR-10 through FR-12, AC-05. Options: CPU-sized pools, network/global broker, or fixed package scheduling plus per-package root-domain admission. Choose two package processes, four parallel cases, four corpus workers and four active SCM root domains per package: at most eight concurrently admitted SCM trees under the full profile. The semaphore is local to the owning package process. An admitted child `sdd`/helper tree keeps its parent's slot until cleanup; descendants inherit a validated test-only domain descriptor and a serial SCM policy, not a fresh four-slot pool. The child never acquires the parent's in-memory semaphore. A nested child transfers the active serial domain while its parent waits; sibling nested calls serialize locally. In-process validation uses the package runner directly. Tests exercise attempted concurrent descendant calls, nesting and failed handoff; unknown/invalid delegation fails rather than inventing an independent budget. Root-domain owner identity and release responsibility are explicit; inherited children cannot release a parent's slot. No production graph frontier/scheduling behavior changes.",
+    "source": "Designs/TestSuiteReliability:DD-5"
+  },
+  {
+    "id": "pd-656ba235",
+    "date": "2026-09-13",
+    "statement": "**DD-6**: Preserve ordinary evaluation and reporting semantics while removing repeated work. Context: FR-07 through FR-09, AC-04. Options: generic registry dependency framework or typed local reuse. Choose a private ordinary-evaluation function plus strict/reporting post-processing. It runs each root rule once and each artifact rule once per applicable artifact, excluding waiver bookkeeping rules from that ordinary pass. Waiver rules remain registered with Good/Bad examples, but their findings are derived from the single ordinary result. Strict mode retains ordinary findings plus waiver-bookkeeping findings; reporting applies the existing waiver and retired-artifact rules. Family findings such as append-only history are cached in a typed evaluation-local scope and filtered by code, not rescanned per code. Existing canonical sorting remains. An isolated rule-order test passes a local rule list to the evaluator rather than mutating the global registry during parallel tests.",
+    "source": "Designs/TestSuiteReliability:DD-6"
+  },
+  {
+    "id": "pd-647fa01d",
+    "date": "2026-09-13",
+    "statement": "**DD-7**: Cache scope follows the existing immutable-root contract. Context: FR-08, FR-09, AC-04. Options: process-global memoization or evaluation-local family results. Choose evaluation-local results; a fresh evaluation receives fresh family-scan state and callers reload `Root` after external mutation. Retain existing safe detection/parsing caches; do not toggle global memoization in tests. No new long-lived immutable-object cache is required initially. If profiling later justifies one within this scope, repository plus resolved object ID is the key; never HEAD/index/worktree aliases or transient operational errors. Concurrent evaluations must not share mutable family state. Existing `internal/vcs/cache.go` also caches errors today. As part of checked-error migration, operational failures are not cached, including failed detection; determinate negatives remain cacheable only within a scope valid for the queried identity/state. A failed checked probe is never stored as `NoRepo`. Existing mutable-index invalidation must remain effective and is covered by before/after lifecycle and reload tests.",
+    "source": "Designs/TestSuiteReliability:DD-7"
+  },
+  {
+    "id": "pd-2b8651ee",
+    "date": "2026-09-13",
+    "statement": "**DD-8**: Prepare once, reload four times, and keep independent construction tests. Context: FR-04 through FR-06, AC-02 and AC-03. Options: delete repetitions, reuse loaded root, or reuse only immutable fixture construction. Choose construction reuse within one example case and four independently loaded roots. Compare full ordered diagnostic values. Independently construct selected representative Git and non-Git fixtures to test construction reproducibility, normalizing only enumerated root aliases; preserve deterministic commit identities. Add read-only assertions over fixture bytes, index and HEAD. Extract/test existing pure transformations at their current package seam, retain real adapter integration tests, and select explicitly named `TestPure` tests with a nonzero executed-test inventory. A coverage map associates old assertions with new tests; removals without mapped equivalents fail review/inventory checks.",
+    "source": "Designs/TestSuiteReliability:DD-8"
+  },
+  {
+    "id": "pd-31090f96",
+    "date": "2026-09-13",
+    "statement": "**DD-9**: Output policies distinguish machine data from bounded diagnostics. Context: FR-15 and FR-17, AC-07 and AC-09. Options: unbounded `CombinedOutput`, stop-reading limits, or bounded writers with cancellation/drain. Choose bounded writers: a default 64 KiB retained diagnostic excerpt per stream with a truncation flag while draining, and an explicit finite machine-output limit per operation (initial 64 MiB, overrideable by a finite caller policy). Machine overflow cancels and returns an incomplete-result operational error, never parsed success. Large valid-output tests cover content well above the diagnostic limit and below the machine limit. `WaitDelay`/platform-equivalent limits inherited-pipe hangs; the total cleanup allowance is shared, not restarted for each resource. Redaction occurs at report serialization, not by deleting fields from semantic comparisons.",
+    "source": "Designs/TestSuiteReliability:DD-9"
+  },
+  {
+    "id": "pd-2226930f",
+    "date": "2026-09-13",
+    "statement": "**DD-10**: Operational errors must survive every adapter and validation boundary. Context: FR-16, AC-08. Options: wrap every Git error as `ErrNotFound`, or distinguish authoritative predicates from inability to run them. Choose checked detection and error-returning evaluation. Use documented command exit/status or structured object/index queries to establish genuine absence; do not classify arbitrary exit 128 or English stderr as absence. Explicit negative ancestry remains false without operational error. Missing Git during required detection is operational, while successful detection of a non-repository remains the supported plain-tree result. Audit existing `continue`, fallback and `ErrNotFound` branches in append-only/evidence/cache/graph paths. (The former `internal/dlg` ledger helpers named by an earlier draft were removed with the global decision ledger; per-plan decisions are plain JSON with no Git execution.) Inventory also names `internal/graph/provider/provider.go`'s `execRunner` and `cmd/sdd/doctor.go`'s direct command seam; validation-critical failures propagate, while purely informational doctor output reports inability rather than asserting absence. The CLI uses its established operational exit 2 pathway and does not waive, demote or cache operational failures. No production successful JSON/text shape changes. For rule plumbing, choose the evaluation-scope collector and recording Repo decorator described in Interfaces, rather than changing every registered callback signature. It preserves the registry model while making ignored operation errors visible to the evaluator. Abort at the first completed callback with an operational failure, discard partial public findings, and skip waiver/demotion processing. Error-returning entry points migrate together with their authoritative callers; no intermediate slice may turn a failure back into an empty successful result. Direct-execution and collector-bypass tests are required at the graph seams too. The concrete bypass audit also includes direct detection in `internal/rules/retirement.go`, failed `Clean()` handling in `internal/graph/sync/sync.go`, and `gitCapable`-style early-return branches. Detection-time recording occurs before returning any unavailable adapter, so a capability check cannot erase the failure by avoiding its methods. Until DD-6 removes the nested `bareOnce` waiver sweep, that nested sweep shares the enclosing evaluation's collector and cannot clear or replace its error; the intermediate operational-propagation slice includes a regression test for this nesting.",
+    "source": "Designs/TestSuiteReliability:DD-10"
+  },
+  {
+    "id": "pd-44444375",
+    "date": "2026-09-13",
+    "statement": "**DD-11**: Reports and benchmarks prove work performed, not elapsed cache hits. Context: FR-17, NFR-02 through NFR-04, AC-09 and AC-10. A per-process sink writes owner-tagged JSON events to a test-owned location; concurrent writers serialize locally and separate process files are aggregated after completion, never concurrently appended without coordination. Records include starts, root domains, queue/run/cleanup durations, result and cleanup class, output truncation and sanitized category/argv. Distinguish peak admitted root trees from total descendant/process counts. Missing/truncated report data is an incomplete measurement. No environment values or unredacted absolute paths enter planning artifacts. The full gate remains complete; a supplementary pure selection is never accepted as full verification.",
+    "source": "Designs/TestSuiteReliability:DD-11"
+  },
+  {
+    "id": "pd-4c883a6f",
+    "date": "2026-09-13",
+    "statement": "Plans/TestSuiteReliability builds workstreams A-C and the POSIX-verifiable parts of E of Specs/TestSuiteReliability on a Linux host, related through Designs/TestSuiteReliability; workstream D (FR-10 to FR-12), Windows Job Object containment (DD-3), FR-17 telemetry (DD-11) and the windows-reference-01 performance protocol (NFR-02 to NFR-04, AC-05, AC-09, AC-10) belong to a follow-on plan executed on a Windows host."
+  },
+  {
+    "id": "pd-52a6f11c",
+    "date": "2026-09-13",
+    "statement": "Owned execution on this plan is the internal/procexec runner with POSIX process-group containment (DD-2, DD-4); a platform without a containment adapter fails explicitly rather than running uncontained."
+  }
+]

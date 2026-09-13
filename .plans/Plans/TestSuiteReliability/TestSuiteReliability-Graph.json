@@ -1,0 +1,723 @@
+{
+  "version": 1,
+  "seq_counter": 0,
+  "nodes": [
+    {
+      "id": "test-git-policy",
+      "contract": "internal/testenv installs a hermetic Git policy for a test process: a hostile temporary system/global config and config-injection variables cannot enable a fsmonitor or hook sentinel, fixture identity/time/branch settings are explicit, the null config path is platform-correct, and an intentional explicit fixture setting still takes effect.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-01",
+        "Specs/TestSuiteReliability:FR-02",
+        "Specs/TestSuiteReliability:FR-03",
+        "Designs/TestSuiteReliability:DD-1"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-1": "sha256:60f3cf418e72e456bfe181efec37929107218116fe41622d48d377734b809dde",
+        "Specs/TestSuiteReliability:FR-01": "sha256:36886bd95e5dad840286514df88b4c5902846fe8820fd9069b9ce1473c2c138b",
+        "Specs/TestSuiteReliability:FR-02": "sha256:7500000d32548a49a8e2f3dc92b8193cd735efcf2c904a240af01b7534614c3c",
+        "Specs/TestSuiteReliability:FR-03": "sha256:615f74ccc32688aa37911ea1ccd31e46a085bb5f61276a57eb81bf4832320174"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestHermeticGitPolicy",
+            "file": "internal/testenv/testenv_test.go"
+          },
+          {
+            "id": "TestIntentionalGitConfig",
+            "file": "internal/testenv/testenv_test.go"
+          },
+          {
+            "id": "TestNullConfigPathIsPlatformCorrect",
+            "file": "internal/testenv/testenv_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/testenv/testenv.go",
+        "internal/testenv/testenv_test.go"
+      ],
+      "estimate": 2,
+      "phase": "01-hermetic-git"
+    },
+    {
+      "id": "child-validation-hermetic",
+      "contract": "Under a hostile ambient Git configuration, in-process validation in internal/rules and tools/regression and a child sdd validate process leave the sentinel untouched and use only the fixture repository, because each package's TestMain installs the policy before parallel tests and child processes receive an explicit environment.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-01",
+        "Specs/TestSuiteReliability:FR-03",
+        "Specs/TestSuiteReliability:AC-01",
+        "Designs/TestSuiteReliability:DD-1"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-1": "sha256:60f3cf418e72e456bfe181efec37929107218116fe41622d48d377734b809dde",
+        "Specs/TestSuiteReliability:AC-01": "sha256:ef3032b753607f2d51e777d6b5a6d72c40b1b25b0112850490718a68a8a64b1e",
+        "Specs/TestSuiteReliability:FR-01": "sha256:36886bd95e5dad840286514df88b4c5902846fe8820fd9069b9ce1473c2c138b",
+        "Specs/TestSuiteReliability:FR-03": "sha256:615f74ccc32688aa37911ea1ccd31e46a085bb5f61276a57eb81bf4832320174"
+      },
+      "deps": [
+        "test-git-policy"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestInProcessValidationHermetic",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestChildValidationHermetic",
+            "file": "cmd/sdd/hermetic_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint"
+      ],
+      "artifacts": [
+        "internal/rules/main_test.go",
+        "internal/rules/hermetic_test.go",
+        "cmd/sdd/main_test.go",
+        "cmd/sdd/hermetic_test.go",
+        "tools/regression/main_test.go",
+        "internal/vcs/main_test.go"
+      ],
+      "estimate": 2,
+      "phase": "01-hermetic-git"
+    },
+    {
+      "id": "prepare-once-determinism",
+      "contract": "Each Bad example's determinism case prepares files and Git history exactly once, evaluates four independently loaded roots, compares complete ordered diagnostics (code, severity, path, line, message, correction, implicated, waived reason) so a drifting message fails even when codes match, and leaves fixture bytes, index and HEAD unchanged.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-04",
+        "Specs/TestSuiteReliability:FR-05",
+        "Specs/TestSuiteReliability:AC-02",
+        "Designs/TestSuiteReliability:DD-8"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-8": "sha256:45c699ef44dd74775f88a12db2d44bbced2698ea72963acd6dae93b01ddf0626",
+        "Specs/TestSuiteReliability:AC-02": "sha256:78cf895a47cfb0257f08ebd4961a28a2e490f597de420c1be23cec0a8ef979c2",
+        "Specs/TestSuiteReliability:FR-04": "sha256:030cc4077abdc62decd73777be4b9539991d3c307bfa3cd8f973a0f87da3152c",
+        "Specs/TestSuiteReliability:FR-05": "sha256:bcb2a10dd9b7246adf95b0f468f33ef4cb2e1f98c58497dfabbcdc00486731ba"
+      },
+      "deps": [
+        "test-git-policy"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestDeterminismPreparationCount",
+            "file": "internal/rules/harness_test.go"
+          },
+          {
+            "id": "TestCompleteDiagnosticComparison",
+            "file": "internal/rules/harness_test.go",
+            "satisfies": [
+              "deterministic-replay"
+            ]
+          },
+          {
+            "id": "TestValidationLeavesFixtureUnchanged",
+            "file": "internal/rules/harness_test.go"
+          },
+          {
+            "id": "TestRunIsDeterministic",
+            "file": "internal/rules/rules_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "deterministic-replay"
+      ],
+      "artifacts": [
+        "internal/rules/rules_test.go",
+        "internal/rules/harness_test.go"
+      ],
+      "estimate": 2,
+      "phase": "02-determinism"
+    },
+    {
+      "id": "fixture-reproducibility",
+      "contract": "Two independently constructed real-Git fixtures of the same example produce identical complete diagnostics after enumerated root-alias normalization, and evaluating a local rule list in reversed registration order produces the same canonical diagnostics as registry order.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-05",
+        "Specs/TestSuiteReliability:AC-02",
+        "Designs/TestSuiteReliability:DD-8"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-8": "sha256:45c699ef44dd74775f88a12db2d44bbced2698ea72963acd6dae93b01ddf0626",
+        "Specs/TestSuiteReliability:AC-02": "sha256:78cf895a47cfb0257f08ebd4961a28a2e490f597de420c1be23cec0a8ef979c2",
+        "Specs/TestSuiteReliability:FR-05": "sha256:bcb2a10dd9b7246adf95b0f468f33ef4cb2e1f98c58497dfabbcdc00486731ba"
+      },
+      "deps": [
+        "prepare-once-determinism",
+        "single-pass-evaluation"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestIndependentFixtureReproducibility",
+            "file": "internal/rules/reproducibility_test.go"
+          },
+          {
+            "id": "TestRuleOrderIndependence",
+            "file": "internal/rules/reproducibility_test.go",
+            "satisfies": [
+              "order-sensitive"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "order-sensitive"
+      ],
+      "artifacts": [
+        "internal/rules/reproducibility_test.go"
+      ],
+      "estimate": 1,
+      "phase": "02-determinism"
+    },
+    {
+      "id": "pure-selection",
+      "contract": "A documented `make test-pure` selection executes a nonzero declared inventory of TestPure* cases with no SCM on PATH and zero process starts, and an inventory test proves every relocated real-SCM boundary assertion still executes in the full suite.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-06",
+        "Specs/TestSuiteReliability:AC-03",
+        "Designs/TestSuiteReliability:DD-8"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-8": "sha256:45c699ef44dd74775f88a12db2d44bbced2698ea72963acd6dae93b01ddf0626",
+        "Specs/TestSuiteReliability:AC-03": "sha256:aaba7e4a8021746895868f3e2d95fdb3965c9d0bd4d8c4c2437384eb91516b1c",
+        "Specs/TestSuiteReliability:FR-06": "sha256:f3b3586095c64cbb6b996ad370d1c8f5629ec2f35ecfc392a02a6a3b81a001d3"
+      },
+      "deps": [
+        "prepare-once-determinism"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestPureSelectionInventory",
+            "file": "internal/rules/inventory_test.go"
+          },
+          {
+            "id": "TestSCMBoundaryInventory",
+            "file": "internal/rules/inventory_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/rules/pure_test.go",
+        "internal/rules/inventory_test.go",
+        "Makefile",
+        "CLAUDE.md"
+      ],
+      "estimate": 2,
+      "phase": "02-determinism"
+    },
+    {
+      "id": "single-pass-evaluation",
+      "contract": "One ordinary evaluation runs each root rule once and each artifact rule once per applicable artifact; SDD176/SDD177 derive from that single result instead of a second sweep; strict Run and reporting RunWithWaivers keep their distinct semantics and canonical order, proven against the frozen corpus expectations.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-07",
+        "Specs/TestSuiteReliability:AC-04",
+        "Designs/TestSuiteReliability:DD-6"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-6": "sha256:8c240ac9914acd3778d69ef804035c56f13a8aaa35e271001543ad34f2626085",
+        "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3",
+        "Specs/TestSuiteReliability:FR-07": "sha256:ca16f57eb4b0ff6c7510f68e686c13bb77c944f9dd717bebedc2539ef00e462f"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestOrdinaryEvaluationOnce",
+            "file": "internal/rules/evaluate_test.go"
+          },
+          {
+            "id": "TestStrictAndReportingSemanticsPreserved",
+            "file": "internal/rules/evaluate_test.go",
+            "satisfies": [
+              "derives-state"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "derives-state"
+      ],
+      "artifacts": [
+        "internal/rules/rules.go",
+        "internal/rules/waivers.go",
+        "internal/rules/evaluate.go",
+        "internal/rules/evaluate_test.go"
+      ],
+      "estimate": 3,
+      "phase": "03-single-pass"
+    },
+    {
+      "id": "append-only-scan-once",
+      "contract": "The append-only history scan runs once per evaluation and distributes its findings to SDD154, SDD155, SDD156 and SDD164; family results are evaluation-local, so a newly loaded root after a HEAD, index or worktree change observes the new state.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-08",
+        "Specs/TestSuiteReliability:FR-09",
+        "Specs/TestSuiteReliability:AC-04",
+        "Designs/TestSuiteReliability:DD-6",
+        "Designs/TestSuiteReliability:DD-7"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-6": "sha256:8c240ac9914acd3778d69ef804035c56f13a8aaa35e271001543ad34f2626085",
+        "Designs/TestSuiteReliability:DD-7": "sha256:e2950cabd1e9dbc0fe3a1b7e23143ddb83bc5c28749410292beee3a71e4e2495",
+        "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3",
+        "Specs/TestSuiteReliability:FR-08": "sha256:e5e2db08ceec191c426f232442ae67c57623bb818b7671a6716d6b79432982a4",
+        "Specs/TestSuiteReliability:FR-09": "sha256:32114fa8f016f541ebd28374bb74b8449c776d8dc7ad37fb15782809493d1080"
+      },
+      "deps": [
+        "single-pass-evaluation"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestAppendOnlyScanOnce",
+            "file": "internal/rules/appendonly_scan_test.go"
+          },
+          {
+            "id": "TestReloadSeesSCMMutation",
+            "file": "internal/rules/appendonly_scan_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/rules/appendonly.go",
+        "internal/rules/root.go",
+        "internal/rules/appendonly_scan_test.go"
+      ],
+      "estimate": 2,
+      "phase": "03-single-pass"
+    },
+    {
+      "id": "bounded-runner",
+      "contract": "internal/procexec runs a resolved argv without a shell under a context deadline (default 30s) plus a bounded cleanup/drain allowance (5s, clipped to the enclosing deadline), retains a 64 KiB diagnostic excerpt per stream with a truncation flag while draining, enforces a finite machine-output limit whose overflow returns an incomplete-result error never parsed as success, and returns typed causes for unavailable executable, deadline, access failure, nonzero exit, overflow and drain failure.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-13",
+        "Specs/TestSuiteReliability:FR-15",
+        "Designs/TestSuiteReliability:DD-2",
+        "Designs/TestSuiteReliability:DD-9"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-2": "sha256:df0ffe90c0819e1cc3ce9a697cab3996bb2d69e62282dc7144ad6281fb35d427",
+        "Designs/TestSuiteReliability:DD-9": "sha256:ee1a6a8f1443d39b2e43507d1e52246a4622ab469114fd9d5e3422b164ff08a2",
+        "Specs/TestSuiteReliability:FR-13": "sha256:36b2b32325dedaee5e7e7faa0165dc8c849a3e2e5ef93a08327d30b91424b7f8",
+        "Specs/TestSuiteReliability:FR-15": "sha256:2b623a70b436b05718b2328a537def82e169dd977068f11ee01170217bddcfaf"
+      },
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestDeadlineIsOperational",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestOutputOverflow",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestLargeMachineOutput",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestStderrDrain",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestTypedCauses",
+            "file": "internal/procexec/procexec_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/procexec/procexec.go",
+        "internal/procexec/policy.go",
+        "internal/procexec/errors.go",
+        "internal/procexec/procexec_test.go",
+        "internal/procexec/helper_test.go"
+      ],
+      "estimate": 3,
+      "phase": "04-owned-execution"
+    },
+    {
+      "id": "posix-containment",
+      "contract": "On POSIX the runner starts each command in its own process group, signals only that validated positive group on deadline or cancellation, reaps direct children, cleans group-staying descendants on normal completion too, leaves an unrelated sentinel process alive, and reports a detectable containment or cleanup failure as an operational error; platforms without a containment adapter fail explicitly.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-14",
+        "Specs/TestSuiteReliability:AC-06",
+        "Designs/TestSuiteReliability:DD-4"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-4": "sha256:86582b2d1d859d33a61f2c48ff77ba3e2f07cb1a296ff79f485c673ac997dfde",
+        "Specs/TestSuiteReliability:AC-06": "sha256:1d98d5cc74d4af379807028ec072ff362e415e5d1b285becdb0b4dcf245b00f7",
+        "Specs/TestSuiteReliability:FR-14": "sha256:7c8264d5c9a39eefe11d4c293c9e5413489c870cc24f03e28f39dda8c029f131"
+      },
+      "deps": [
+        "bounded-runner"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestOwnedProcessLifecycle",
+            "file": "internal/procexec/posix_test.go",
+            "satisfies": [
+              "concurrent-access"
+            ]
+          },
+          {
+            "id": "TestEarlyExitInheritedPipes",
+            "file": "internal/procexec/posix_test.go"
+          },
+          {
+            "id": "TestContainmentFailure",
+            "file": "internal/procexec/posix_test.go"
+          }
+        ]
+      },
+      "hazards": [
+        "concurrent-access"
+      ],
+      "artifacts": [
+        "internal/procexec/contain_posix.go",
+        "internal/procexec/contain_other.go",
+        "internal/procexec/posix_test.go"
+      ],
+      "estimate": 3,
+      "phase": "04-owned-execution"
+    },
+    {
+      "id": "fixture-runners-owned",
+      "contract": "The rules example harness and the regression corpus prepare step launch fixture commands through procexec with the hermetic policy, so a hanging or over-producing setup command fails within the runner's bounds instead of stalling the package.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-13",
+        "Specs/TestSuiteReliability:FR-14",
+        "Designs/TestSuiteReliability:DD-2"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-2": "sha256:df0ffe90c0819e1cc3ce9a697cab3996bb2d69e62282dc7144ad6281fb35d427",
+        "Specs/TestSuiteReliability:FR-13": "sha256:36b2b32325dedaee5e7e7faa0165dc8c849a3e2e5ef93a08327d30b91424b7f8",
+        "Specs/TestSuiteReliability:FR-14": "sha256:7c8264d5c9a39eefe11d4c293c9e5413489c870cc24f03e28f39dda8c029f131"
+      },
+      "deps": [
+        "bounded-runner",
+        "prepare-once-determinism"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestFixtureSetupUsesOwnedRunner",
+            "file": "internal/rules/harness_test.go"
+          },
+          {
+            "id": "TestCorpusPrepareUsesOwnedRunner",
+            "file": "tools/regression/corpus_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/rules/harness_test.go",
+        "tools/regression/corpus.go",
+        "tools/regression/corpus_test.go"
+      ],
+      "estimate": 1,
+      "phase": "04-owned-execution"
+    },
+    {
+      "id": "checked-detection",
+      "contract": "vcs exposes checked detection returning (Repo, error): a missing or unrunnable git during a required probe is an operational error, never NoRepo, while a directory that is genuinely not a repository still yields NoRepo; runGit executes through procexec and a missing blob, path or revision still returns ErrNotFound after a successful query.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-16",
+        "Specs/TestSuiteReliability:AC-08",
+        "Designs/TestSuiteReliability:DD-10"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
+        "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
+        "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
+      },
+      "deps": [
+        "bounded-runner"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestVCSOperationalErrors",
+            "file": "internal/vcs/checked_test.go"
+          },
+          {
+            "id": "TestAuthoritativeSCMAbsence",
+            "file": "internal/vcs/checked_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/vcs/vcs.go",
+        "internal/vcs/git.go",
+        "internal/vcs/p4.go",
+        "internal/vcs/checked_test.go"
+      ],
+      "estimate": 2,
+      "phase": "05-propagation"
+    },
+    {
+      "id": "cache-error-policy",
+      "contract": "The vcs memoization decorator never caches an operational failure or a failed detection; a determinate ErrNotFound remains cacheable; a probe that fails is never stored as NoRepo.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-09",
+        "Specs/TestSuiteReliability:AC-04",
+        "Designs/TestSuiteReliability:DD-7"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-7": "sha256:e2950cabd1e9dbc0fe3a1b7e23143ddb83bc5c28749410292beee3a71e4e2495",
+        "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3",
+        "Specs/TestSuiteReliability:FR-09": "sha256:32114fa8f016f541ebd28374bb74b8449c776d8dc7ad37fb15782809493d1080"
+      },
+      "deps": [
+        "checked-detection"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestOperationalFailureNotCached",
+            "file": "internal/vcs/cache_test.go"
+          },
+          {
+            "id": "TestDeterminateAbsenceCached",
+            "file": "internal/vcs/cache_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/vcs/cache.go",
+        "internal/vcs/cache_test.go"
+      ],
+      "estimate": 1,
+      "phase": "05-propagation"
+    },
+    {
+      "id": "propagation-validator",
+      "contract": "Validation owns an operational-failure collector: Root.Repo records a failed checked detection before returning an unavailable adapter, the evaluator aborts after the first callback that recorded a failure and discards partial findings, retirement uses checked detection, and `sdd validate` exits 2 with the cause instead of 0 or 1 when git cannot run.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-16",
+        "Specs/TestSuiteReliability:AC-08",
+        "Designs/TestSuiteReliability:DD-10"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
+        "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
+        "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
+      },
+      "deps": [
+        "checked-detection",
+        "single-pass-evaluation"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          }
+        ]
+      },
+      "hazards": [
+        "user-entrypoint"
+      ],
+      "artifacts": [
+        "internal/rules/root.go",
+        "internal/rules/evaluate.go",
+        "internal/rules/retirement.go",
+        "internal/rules/operational_test.go",
+        "cmd/sdd/validate.go",
+        "cmd/sdd/operational_test.go"
+      ],
+      "estimate": 3,
+      "phase": "05-propagation"
+    },
+    {
+      "id": "propagation-graph-callers",
+      "contract": "Graph sync, the graph provider, remap-revisions, review evidence and evidence add use checked detection and surface a failed Clean() or probe as an operational exit 2, never as a clean tree, a plain-tree fallback or a skipped check.",
+      "justifies": [
+        "Specs/TestSuiteReliability:FR-16",
+        "Specs/TestSuiteReliability:AC-08",
+        "Designs/TestSuiteReliability:DD-10"
+      ],
+      "intent_hashes": {
+        "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
+        "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
+        "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
+      },
+      "deps": [
+        "propagation-validator"
+      ],
+      "gate": {
+        "type": "tests",
+        "tests": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ]
+      },
+      "hazards": [],
+      "artifacts": [
+        "internal/graph/sync/sync.go",
+        "internal/graph/sync/operational_test.go",
+        "internal/graph/provider/provider.go",
+        "internal/graph/provider/operational_test.go",
+        "internal/graph/ops/remap.go",
+        "cmd/sdd/review.go",
+        "cmd/sdd/evidence.go",
+        "cmd/sdd/operational_test.go"
+      ],
+      "estimate": 2,
+      "phase": "05-propagation"
+    },
+    {
+      "id": "review-fixtures",
+      "contract": "The hermetic-Git, determinism and single-pass slices survive a full four-lane review of their aggregate diff.",
+      "justifies": [
+        "Specs/TestSuiteReliability:AC-01",
+        "Specs/TestSuiteReliability:AC-02",
+        "Specs/TestSuiteReliability:AC-03",
+        "Specs/TestSuiteReliability:AC-04"
+      ],
+      "intent_hashes": {
+        "Specs/TestSuiteReliability:AC-01": "sha256:ef3032b753607f2d51e777d6b5a6d72c40b1b25b0112850490718a68a8a64b1e",
+        "Specs/TestSuiteReliability:AC-02": "sha256:78cf895a47cfb0257f08ebd4961a28a2e490f597de420c1be23cec0a8ef979c2",
+        "Specs/TestSuiteReliability:AC-03": "sha256:aaba7e4a8021746895868f3e2d95fdb3965c9d0bd4d8c4c2437384eb91516b1c",
+        "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3"
+      },
+      "deps": [
+        "child-validation-hermetic",
+        "fixture-reproducibility",
+        "pure-selection",
+        "append-only-scan-once"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "06-acceptance"
+    },
+    {
+      "id": "review-execution",
+      "contract": "The owned-execution and operational-propagation slices survive a full four-lane review of their aggregate diff.",
+      "justifies": [
+        "Specs/TestSuiteReliability:AC-06",
+        "Specs/TestSuiteReliability:AC-07",
+        "Specs/TestSuiteReliability:AC-08"
+      ],
+      "intent_hashes": {
+        "Specs/TestSuiteReliability:AC-06": "sha256:1d98d5cc74d4af379807028ec072ff362e415e5d1b285becdb0b4dcf245b00f7",
+        "Specs/TestSuiteReliability:AC-07": "sha256:06dc77e7b4ce9a52e99c95421df305368dcf06176bc0c2e8835db0a5de03f878",
+        "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff"
+      },
+      "deps": [
+        "posix-containment",
+        "fixture-runners-owned",
+        "cache-error-policy",
+        "propagation-graph-callers"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "06-acceptance"
+    },
+    {
+      "id": "full-gate",
+      "role": "integration-acceptance",
+      "contract": "The complete uncached Go suite, go vet, the template gate and the portable drift/leak gates pass offline with the frozen corpus expectations unchanged.",
+      "justifies": [
+        "Specs/TestSuiteReliability:AC-11",
+        "Specs/TestSuiteReliability:NFR-01",
+        "Specs/TestSuiteReliability:NFR-05"
+      ],
+      "intent_hashes": {
+        "Specs/TestSuiteReliability:AC-11": "sha256:5651f352f395c12ec9474d44607d83db9dd1a6ff3c07f6374b6980f10fc7e1e4",
+        "Specs/TestSuiteReliability:NFR-01": "sha256:3fc1ac9dced7f1c12ddbfcbb4e5eb99de4bd0fe3fc47c2f862db3a0f75033ff1",
+        "Specs/TestSuiteReliability:NFR-05": "sha256:a3c8161ee98a333065ed006ea4f6e4c5837e6e063530571a7b5eb8e9a823deaa"
+      },
+      "deps": [
+        "review-fixtures",
+        "review-execution"
+      ],
+      "gate": {
+        "type": "command",
+        "command": "go vet ./... \u0026\u0026 make test"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "06-acceptance"
+    },
+    {
+      "id": "review-final",
+      "contract": "The whole plan diff survives a final full four-lane review whose aggregate diff digest matches the integrated tree.",
+      "justifies": [
+        "Specs/TestSuiteReliability:AC-12"
+      ],
+      "intent_hashes": {
+        "Specs/TestSuiteReliability:AC-12": "sha256:d2c5fa615e28d35dca1cb995e3f352fde94f36d4b1b48b48818d946f4a769893"
+      },
+      "deps": [
+        "full-gate"
+      ],
+      "gate": {
+        "type": "review",
+        "lanes": "full"
+      },
+      "hazards": [],
+      "estimate": 1,
+      "phase": "06-acceptance"
+    }
+  ]
+}
