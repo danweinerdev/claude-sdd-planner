@@ -687,3 +687,244 @@ func TestRetireAndCompileOperationalSourceExit(t *testing.T) {
 		}
 	})
 }
+
+// splitAmendAuditOperationalFixture builds a git-backed planning root whose
+// graph carries a retirement source pinned to a real historical commit (so
+// VerifyRetirementSource's detection succeeds and only the RevisionExists
+// probe is left for the n-shot git shim to fail operationally) alongside a
+// live "big"/"helper"/"feature-gate" shape mirroring
+// internal/graph/ops/amend_test.go's fixtureRoot: enough live structure that
+// `graph split` has a node to retire and `graph amend` has an admissible
+// review gate to revise. `graph audit` needs neither and reads the same
+// graph read-only.
+func splitAmendAuditOperationalFixture(t *testing.T) (root string) {
+	t.Helper()
+	root = t.TempDir()
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"-C", dir, "-c", "user.name=SDD Test", "-c", "user.email=sdd@example.invalid"}, args...)
+		out, err := exec.Command(gitExe, argv...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("planning-config.json", `{"planningRoot":"."}`)
+	write("Specs/Sample/README.md",
+		"---\ntitle: \"Sample Spec\"\ntype: spec\nstatus: approved\ncreated: 2026-08-01\nupdated: 2026-08-01\n"+
+			"tags: [spec]\nrelated: []\n---\n\n# Sample Spec\n\n## Acceptance Criteria\n\n- [ ] **AC-01**: The API answers.\n")
+	write("Plans/SamplePlan/README.md",
+		"---\ntitle: \"Sample Plan\"\ntype: plan\nstatus: draft\ncreated: 2026-08-01\nupdated: 2026-08-01\n"+
+			"tags: []\nrelated: [Specs/Sample]\nphases: []\n---\n\n# Sample Plan\n")
+	write("old.md", "---\ntasks:\n  - id: \"1.1\"\n---\n")
+
+	git(root, "init", "-q", "-b", "main")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "base")
+	rev := git(root, "rev-parse", "HEAD")
+
+	graph := `{"version":1,"nodes":[` +
+		`{"id":"big","contract":"does too much","justifies":["AC-01"],` +
+		`"gate":{"type":"tests","tests":[{"id":"test_big","file":"t.ext","satisfies":["external-format"]}]},` +
+		`"hazards":["external-format"],"estimate":3,"phase":"01-core","deps":["helper"]},` +
+		`{"id":"helper","contract":"helps","justifies":["AC-01"],` +
+		`"gate":{"type":"tests","tests":[{"id":"test_helper","file":"t.ext"}]},"hazards":[],"estimate":1},` +
+		`{"id":"feature-gate","contract":"survives review","justifies":["AC-01"],` +
+		`"gate":{"type":"review"},"hazards":[],"estimate":1,"deps":["big"]}` +
+		`],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+	write("Plans/SamplePlan/SamplePlan-Graph.json", graph)
+
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "graph")
+	return root
+}
+
+// TestSplitAmendAuditOperationalSourceExit (review-execution F-01): the
+// shared graph validation behind `graph split`, `graph amend`, and
+// `graph audit` (compile.Sources.Validate, called from ops.splitWith,
+// ops.AmendFromReview, and compile.Audit) discards VerifyRetirementSource's
+// operational error today (anchor.go:97's `findings, _ :=
+// semanticFindings(...)`), so an unanswered historical-commit probe is
+// folded into an ordinary (or absent) finding rather than surfaced as
+// operational. This test documents that defect red: once Validate
+// propagates the error and every caller checks it, split and amend must
+// exit 2 before their before/after comparison runs (and before any write),
+// and audit's report must name the operational failure instead of
+// presenting OK/clean.
+func TestSplitAmendAuditOperationalSourceExit(t *testing.T) {
+	bin := stressBinary(t)
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+
+	base := []string{"SDD_VCS_DISABLE_P4=1", "HOME=" + t.TempDir(),
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull}
+	run := func(dir, path string, args ...string) (int, string) {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		cmd.Env = append(append([]string{}, base...), "PATH="+path)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatalf("running sdd %s: %v", strings.Join(args, " "), err)
+		}
+		return code, string(out)
+	}
+
+	t.Run("split", func(t *testing.T) {
+		root := splitAmendAuditOperationalFixture(t)
+		graphPath := filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
+		payload := filepath.Join(root, "children.json")
+		if err := os.WriteFile(payload, []byte(`{
+  "version": 1,
+  "nodes": [
+    {"id": "big-parse", "contract": "parses the input", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "test_parse", "file": "t.ext", "satisfies": ["external-format"]}]},
+     "hazards": ["external-format"]},
+    {"id": "big-render", "contract": "renders the output", "justifies": ["AC-01"],
+     "gate": {"type": "tests", "tests": [{"id": "test_render", "file": "t.ext"}]},
+     "hazards": []}
+  ]
+}
+`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		args := []string{"graph", "split", "--plan", "SamplePlan", "--node", "big", "--file", payload}
+
+		// Control: git available. The split may succeed or refuse, but it
+		// must never be operational (exit 2) — establishing the fixture
+		// itself is not the cause.
+		if code, out := run(root, filepath.Dir(gitExe), args...); code == 2 {
+			t.Fatalf("control with git exited 2 (operational):\n%s", out)
+		}
+
+		// Fresh fixture for the shimmed run: the control invocation above
+		// may have mutated the graph (retired "big"), and before/after must
+		// be compared against the copy the shimmed run actually reads.
+		root = splitAmendAuditOperationalFixture(t)
+		graphPath = filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
+		before, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		installNShotGitShim(t, 3)
+		shimPath := os.Getenv("PATH")
+		code, out := run(root, shimPath, args...)
+		if code != 2 {
+			t.Fatalf("without a working git: exit %d, want 2 (operational)\n%s", code, out)
+		}
+		low := strings.ToLower(out)
+		if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+			t.Errorf("the operational exit must name the cause; got:\n%s", out)
+		}
+		after, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Errorf("an operational retirement-source verification must not let split write; graph changed:\nbefore:\n%s\nafter:\n%s",
+				before, after)
+		}
+	})
+
+	t.Run("amend", func(t *testing.T) {
+		root := splitAmendAuditOperationalFixture(t)
+		graphPath := filepath.Join(root, "Plans", "SamplePlan", "SamplePlan-Graph.json")
+
+		var b strings.Builder
+		b.WriteString("---\ntitle: \"Gate review\"\ntype: review\nstatus: resolved\nreview_of: \"Plans/SamplePlan/README.md\"\n")
+		b.WriteString("frozen: true\nverdict: Amend\nreview_mode: single-agent\nlane_results:\n")
+		for _, lane := range model.ReviewLanes {
+			b.WriteString("  - lane: " + lane + "\n    result: PASS/Aligned\n    evidence: \"looked\"\n")
+		}
+		b.WriteString("findings:\n  - id: F-01\n    severity: major\n    title: \"big ignores archived rows\"\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: \"does too much, and excludes archived rows\"\n")
+		b.WriteString("---\n\n# Gate review\n\nBody.\n")
+		reviewRel := "Plans/SamplePlan/reviews/01-sample-review.md"
+		reviewPath := filepath.Join(root, filepath.FromSlash(reviewRel))
+		if err := os.MkdirAll(filepath.Dir(reviewPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(reviewPath, []byte(b.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		args := []string{"graph", "amend", "--plan", "SamplePlan", "--node", "feature-gate",
+			"--from-review", reviewRel, "--dry-run"}
+
+		// Control: git available, --dry-run so it never mutates the fixture.
+		// The amend may succeed (print a preview) or refuse, but it must
+		// never be operational (exit 2) — establishing the fixture itself
+		// is not the cause.
+		if code, out := run(root, filepath.Dir(gitExe), args...); code == 2 {
+			t.Fatalf("control with git exited 2 (operational):\n%s", out)
+		}
+		before, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		installNShotGitShim(t, 3)
+		shimPath := os.Getenv("PATH")
+		code, out := run(root, shimPath, args...)
+		if code != 2 {
+			t.Fatalf("without a working git: exit %d, want 2 (operational)\n%s", code, out)
+		}
+		low := strings.ToLower(out)
+		if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+			t.Errorf("the operational exit must name the cause; got:\n%s", out)
+		}
+		after, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Errorf("an operational retirement-source verification must not let amend write; graph changed:\nbefore:\n%s\nafter:\n%s",
+				before, after)
+		}
+	})
+
+	t.Run("audit", func(t *testing.T) {
+		root := splitAmendAuditOperationalFixture(t)
+		args := []string{"graph", "audit", "--plan", "SamplePlan", "--json"}
+
+		// Control: git available. Audit may report OK or not, but it must
+		// never be operational (exit 2) — establishing the fixture itself
+		// is not the cause.
+		if code, out := run(root, filepath.Dir(gitExe), args...); code == 2 {
+			t.Fatalf("control with git exited 2 (operational):\n%s", out)
+		}
+
+		installNShotGitShim(t, 3)
+		shimPath := os.Getenv("PATH")
+		code, out := run(root, shimPath, args...)
+		if code != 2 {
+			t.Fatalf("without a working git: exit %d, want 2 (operational)\n%s", code, out)
+		}
+		low := strings.ToLower(out)
+		if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+			t.Errorf("the operational exit must name the cause; got:\n%s", out)
+		}
+		if strings.Contains(out, `"ok": true`) || strings.Contains(out, `"ok":true`) {
+			t.Errorf("an operational failure must not be reported as an OK audit result:\n%s", out)
+		}
+	})
+}

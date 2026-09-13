@@ -121,7 +121,10 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 		Schema: g.Version,
 		Counts: AuditCounts{Gates: map[string]int{}, Hazards: map[string]int{}},
 	}
-	rep.Findings = sources.Validate(g)
+	rep.Findings, err = sources.Validate(g)
+	if err != nil {
+		return nil, err
+	}
 	if len(rep.Findings) > 0 {
 		rep.OK = false
 	}

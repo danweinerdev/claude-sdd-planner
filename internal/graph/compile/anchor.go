@@ -88,14 +88,13 @@ func (s *Sources) InputResolver() *InputResolver {
 
 // Validate runs the semantic pass over g, treating every node as stored (an
 // empty proposal against it) — the same gate compile applies, including the
-// missing-fingerprint guard, against this snapshot.
-func (s *Sources) Validate(g *model.Graph) []Finding {
-	// Out of this task's scope (compile.go:452/retirement.go:53 only): keeps
-	// today's lossy behavior for Validate's other callers (audit, amend,
-	// reverify) unchanged — an operational retirement-source failure here
-	// still folds into an ordinary finding rather than propagating.
-	findings, _ := semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set, s.inRes)
-	return findings
+// missing-fingerprint guard, against this snapshot. The returned error is
+// non-nil only when a retirement source could not be verified operationally
+// (network, filesystem or process trouble, not a genuine finding); every
+// caller must check it before trusting the finding list, never read an
+// unanswered probe as a clean or ordinary result.
+func (s *Sources) Validate(g *model.Graph) ([]Finding, error) {
+	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set, s.inRes)
 }
 
 // CitationKind classifies one justification against the snapshot: how it

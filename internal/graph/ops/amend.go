@@ -98,12 +98,18 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	before := sources.Validate(g)
+	before, err := sources.Validate(g)
+	if err != nil {
+		return nil, err
+	}
 	rebuilt, seq, err := applyAmendments(g, plan, o.By, sources, o.RepoRoot)
 	if err != nil {
 		return nil, err
 	}
-	after := sources.Validate(rebuilt)
+	after, err := sources.Validate(rebuilt)
+	if err != nil {
+		return nil, err
+	}
 	if introduced := introducedFindings(before, after); len(introduced) > 0 {
 		var b strings.Builder
 		b.WriteString("graph amend: refused — the amendment would introduce findings compile refuses:\n")

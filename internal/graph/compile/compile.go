@@ -177,7 +177,7 @@ func Validate(root, repoRoot, plan string, g *model.Graph) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sources.Validate(g), nil
+	return sources.Validate(g)
 }
 
 // selectProposal picks the compile input: the assembled proposal when it

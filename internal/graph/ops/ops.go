@@ -90,12 +90,18 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 	// baseline that another writer may have moved.
 	var res *SplitResult
 	if _, err := update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
-		before := sources.Validate(fresh)
+		before, err := sources.Validate(fresh)
+		if err != nil {
+			return err
+		}
 		rebuilt, splitRes, err := applySplit(fresh, nodeID, p, digest.New(repoRoot).Artifact)
 		if err != nil {
 			return err
 		}
-		after := sources.Validate(rebuilt)
+		after, err := sources.Validate(rebuilt)
+		if err != nil {
+			return err
+		}
 		if introduced := introducedFindings(before, after); len(introduced) > 0 {
 			var b strings.Builder
 			b.WriteString("graph split: refused — the split would introduce findings compile refuses:\n")
