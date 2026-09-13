@@ -122,3 +122,22 @@ func TestProvisionUsesOwnedRunner(t *testing.T) {
 		}
 	})
 }
+
+// TestGitOutputRendersStderrOnce pins the diagnostic shape of a failed git.
+// procexec.Error.Error() already renders the stderr excerpt, so appending it
+// again printed the fatal line twice in every doctor report that hit a
+// non-repository (review 06-review-fixtures-63da43f F-01).
+func TestGitOutputRendersStderrOnce(t *testing.T) {
+	if _, err := procexec.LookPath("git", nil); err != nil {
+		t.Skipf("git is not available: %v", err)
+	}
+	dir := t.TempDir()
+	_, err := gitOutput(dir, "rev-parse", "--is-bare-repository")
+	if err == nil {
+		t.Fatal("gitOutput succeeded in a non-repository; expected a failure to inspect")
+	}
+	const phrase = "not a git repository"
+	if n := strings.Count(strings.ToLower(err.Error()), phrase); n != 1 {
+		t.Fatalf("%q occurs %d times in the error, want exactly 1:\n%s", phrase, n, err)
+	}
+}

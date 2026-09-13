@@ -354,13 +354,10 @@ var gitPolicy = procexec.Policy{}
 func gitOutput(cwd string, args ...string) (string, error) {
 	res, err := procexec.Run(context.Background(), "git", append([]string{"-C", cwd}, args...), gitPolicy)
 	if err != nil {
-		// The stderr text stays in the message: callers classify a git
-		// refusal by reading it (resolvePostRewrite matches "not a git
-		// repository"), and %w keeps procexec's typed cause reachable.
-		var pe *procexec.Error
-		if errors.As(err, &pe) {
-			return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(pe.Stderr))
-		}
+		// procexec.Error already renders its stderr excerpt, so the wrap adds
+		// only the command context. Callers still classify a git refusal by
+		// reading the message (resolvePostRewrite matches "not a git
+		// repository"), and %w keeps the typed cause reachable.
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(res.Stdout)), nil

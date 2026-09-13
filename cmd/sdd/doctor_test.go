@@ -2,12 +2,17 @@ package main
 
 import (
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
@@ -241,4 +246,90 @@ func TestDoctorReportsMissingContainmentAdapter(t *testing.T) {
 	if !strings.Contains(out, "process-containment adapter") {
 		t.Errorf("doctor --check does not name the missing adapter:\n%s", out)
 	}
+}
+
+// TestDoctorProbeUsesOwnedRunner pins doctor's own child-process discipline.
+// The AST guard in internal/provision cannot see this file, so doctor's
+// hook-binary probe was still forking an uncontained, unbounded child on the
+// one command a user runs when nothing works (review 06-review-fixtures-63da43f F-01).
+func TestDoctorProbeUsesOwnedRunner(t *testing.T) {
+	t.Run("no direct os/exec", func(t *testing.T) {
+		fset := token.NewFileSet()
+		const name = "doctor.go"
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+		for _, imp := range file.Imports {
+			path, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				t.Fatalf("%s: unquoting import %s: %v", name, imp.Path.Value, err)
+			}
+			if path == "os/exec" {
+				t.Errorf("%s:%d imports os/exec; doctor's probes must go through procexec under a policy",
+					name, fset.Position(imp.Pos()).Line)
+			}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			ident, ok := sel.X.(*ast.Ident)
+			if !ok || ident.Name != "exec" {
+				return true
+			}
+			t.Errorf("%s:%d calls exec.%s; use procexec.Run under a policy instead",
+				name, fset.Position(call.Pos()).Line, sel.Sel.Name)
+			return true
+		})
+	})
+
+	t.Run("hanging hook binary is bounded", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("the fake hook binary is a POSIX shell script")
+		}
+		root := t.TempDir()
+		bin := filepath.Join(root, "bin")
+		if err := os.MkdirAll(bin, 0o755); err != nil {
+			t.Fatalf("creating bin dir: %v", err)
+		}
+		// A read from a fifo nobody writes blocks in the kernel, so the stub
+		// hangs without burning CPU while the deadline runs down.
+		fifo, err := blockingReadSource(filepath.Join(root, "block.fifo"))
+		if err != nil {
+			t.Fatalf("creating blocking read source: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bin, "sdd"), []byte("#!/bin/sh\nread -r _ < "+fifo+"\n"), 0o755); err != nil {
+			t.Fatalf("writing fake hook binary: %v", err)
+		}
+
+		policy := hookProbePolicy
+		t.Cleanup(func() { hookProbePolicy = policy })
+		hookProbePolicy = procexec.Policy{Timeout: 300 * time.Millisecond, Cleanup: 500 * time.Millisecond}
+
+		type outcome struct{ path, problem string }
+		done := make(chan outcome, 1)
+		go func() {
+			p, problem := checkHookBinary(root, "CLAUDE_PLUGIN_ROOT")
+			done <- outcome{p, problem}
+		}()
+
+		bound := hookProbePolicy.Timeout + hookProbePolicy.Cleanup + 3*time.Second
+		select {
+		case got := <-done:
+			if got.problem == "" {
+				t.Fatalf("checkHookBinary reported a healthy binary for a hanging probe; want a bounded failure (path %q)", got.path)
+			}
+			if !strings.Contains(got.problem, procexec.CauseDeadline.String()) {
+				t.Fatalf("problem = %q, want it to name the %v cause", got.problem, procexec.CauseDeadline)
+			}
+		case <-time.After(bound):
+			t.Fatalf("checkHookBinary did not return within %v against a hanging hook binary", bound)
+		}
+	})
 }

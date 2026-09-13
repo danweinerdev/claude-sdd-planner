@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -294,6 +294,13 @@ func checkHooksFile(root, source string, repair bool) (path, problem string) {
 		"; restart the session for it to take effect"
 }
 
+// hookProbePolicy bounds the hook-binary probe. Doctor is the command a user
+// runs when nothing works, so a pinned binary that hangs must be reported as
+// a bounded failure rather than hang doctor itself; the defaults are
+// procexec's (review 06-review-fixtures-63da43f F-01). A test narrows it to
+// prove the bound.
+var hookProbePolicy = procexec.Policy{}
+
 func checkHookBinary(root, source string) (path, problem string) {
 	// A portable (Codex/OpenCode) runtime does not set CLAUDE_PLUGIN_ROOT and
 	// carries no hooks or pinned binary. Its installation path is irrelevant:
@@ -307,14 +314,14 @@ func checkHookBinary(root, source string) (path, problem string) {
 	}
 	p := filepath.Join(root, "bin", name)
 	if _, err := os.Stat(p); err != nil {
-		if onPath, lookErr := exec.LookPath("sdd"); lookErr == nil {
+		if onPath, lookErr := procexec.LookPath("sdd", nil); lookErr == nil {
 			return p, "absent — the hooks will use " + onPath +
 				" from PATH instead; run `sdd provision` to pin this plugin's binary"
 		}
 		return p, "absent, and no `sdd` on PATH — the hooks are a silent no-op; run `sdd provision`"
 	}
-	if err := exec.Command(p, "version").Run(); err != nil {
-		return p, "present but not executable: " + err.Error()
+	if _, err := procexec.Run(context.Background(), p, []string{"version"}, hookProbePolicy); err != nil {
+		return p, "present but did not answer `version`: " + err.Error()
 	}
 	return p, ""
 }
