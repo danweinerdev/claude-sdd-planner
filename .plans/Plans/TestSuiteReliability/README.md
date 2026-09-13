@@ -1,7 +1,7 @@
 ---
 title: "Test Suite Reliability"
 type: plan
-status: approved
+status: active
 created: 2026-09-13
 updated: 2026-09-13
 tags: [testing, reliability, git, graph, dogfood]
