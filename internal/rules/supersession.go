@@ -70,7 +70,7 @@ func init() {
 				// Only LIVE artifacts are held to this. A superseded design
 				// naturally still references its own era's artifacts, and a
 				// debrief or retro is a historical record by definition.
-				if a.Meta == nil || !isLiveArtifact(a) || isSupersededArtifact(a) {
+				if a.Meta == nil || !isLiveArtifact(a) || isSupersededArtifact(a) || reviewOfRetiredPlan(r, a) {
 					continue
 				}
 				related, ok := a.Meta["related"].([]any)
@@ -115,4 +115,36 @@ func init() {
 			"Designs/Live/README.md": validDesign("Text."),
 		}}},
 	})
+}
+
+// reviewOfRetiredPlan reports whether a review artifact reviews a document
+// of a plan that is archived or complete. Such a review is frozen history:
+// it related to the specs and designs that governed the work when it was
+// done, and retiring those later does not make the review "live" work that
+// must re-relate.
+func reviewOfRetiredPlan(r *Root, a *Artifact) bool {
+	if a.Kind() != "review" {
+		return false
+	}
+	ref, _ := a.Meta["review_of"].(string)
+	target := resolveRef(r, ref)
+	if target == nil {
+		return false
+	}
+	plan := target
+	if target.Kind() == "phase" {
+		if name := metaStr(target.Meta, "plan"); name != "" {
+			if p, ok := r.ByPath["Plans/"+name+"/README.md"]; ok {
+				plan = p
+			}
+		}
+	}
+	if plan.Kind() != "plan" {
+		return false
+	}
+	switch plan.Status() {
+	case "archived", "complete":
+		return true
+	}
+	return false
 }

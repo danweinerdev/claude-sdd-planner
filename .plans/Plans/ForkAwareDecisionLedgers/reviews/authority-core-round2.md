@@ -1,7 +1,7 @@
 ---
 title: "Authority core review, round 2"
 type: review
-status: archived
+status: resolved
 created: 2026-09-11
 updated: 2026-09-11
 tags: [review]

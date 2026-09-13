@@ -1,7 +1,7 @@
 ---
 title: "Authority core review"
 type: review
-status: archived
+status: resolved
 created: 2026-09-10
 updated: 2026-09-11
 tags: [review]

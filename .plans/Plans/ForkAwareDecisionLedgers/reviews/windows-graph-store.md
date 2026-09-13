@@ -1,7 +1,7 @@
 ---
 title: "Phase review: 04-integration"
 type: review
-status: archived
+status: resolved
 created: 2026-09-11
 updated: 2026-09-11
 tags: [review]

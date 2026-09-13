@@ -105,6 +105,12 @@ func init() {
 				if kind := a.Kind(); kind != "plan" && kind != "phase" {
 					continue
 				}
+				// A completed or archived plan's text is history: the
+				// decisions it cites were current when it closed
+				// (PlanDecisions DD-12). Only open work is asked to move.
+				if !openWork(r, a) {
+					continue
+				}
 				index := BuildCitationIndex(r, a)
 				body := citationBody(a)
 				seen := map[string]bool{}
