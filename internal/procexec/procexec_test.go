@@ -154,3 +154,39 @@ func TestTypedCauses(t *testing.T) {
 		t.Fatal("success must report a positive run duration")
 	}
 }
+
+// Review F-01: on a platform with no containment adapter the refusal must be
+// legible as exactly that. The seam is the only way to reach the path from a
+// supported build — GOOS cannot be flipped at runtime — but the assertion is
+// about the error a Windows user would actually see: a containment cause
+// carrying ErrNoContainmentAdapter, naming the platform and the adapter, and
+// never reading as a missing executable.
+func TestUnsupportedPlatformRefusalIsDistinct(t *testing.T) {
+	restore := ContainmentProbe
+	t.Cleanup(func() { ContainmentProbe = restore })
+	ContainmentProbe = func() (bool, string) {
+		return false, "windows: no process-containment adapter (the Windows Job Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan)"
+	}
+
+	if ok, reason := ContainmentSupported(); ok || reason == "" {
+		t.Fatalf("ContainmentSupported() = (%v, %q), want unsupported with a reason", ok, reason)
+	}
+
+	exe, args, p := helperPolicy(t, "exit")
+	_, err := Run(context.Background(), exe, args, p)
+	if !IsCause(err, CauseContainment) {
+		t.Fatalf("Run on an uncontainable platform = %v, want CauseContainment", err)
+	}
+	if !errors.Is(err, ErrNoContainmentAdapter) {
+		t.Fatalf("refusal %v does not wrap ErrNoContainmentAdapter", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"windows", "adapter", "Job Object"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal %q does not name %q", msg, want)
+		}
+	}
+	if strings.Contains(msg, "executable file not found") {
+		t.Errorf("refusal reads as a missing executable: %q", msg)
+	}
+}

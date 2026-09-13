@@ -246,7 +246,7 @@ func (u Unavailable) fail() error {
 	if errors.Is(u.Err, ErrOperational) {
 		return u.Err
 	}
-	return fmt.Errorf("%w: %v", ErrOperational, u.Err)
+	return fmt.Errorf("%w: %w", ErrOperational, u.Err)
 }
 func (u Unavailable) RevisionExists(string) (bool, error)             { return false, u.fail() }
 func (u Unavailable) Head() (string, error)                           { return "", u.fail() }

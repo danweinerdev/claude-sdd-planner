@@ -35,6 +35,12 @@ type Result struct {
 func Run(ctx context.Context, name string, args []string, p Policy) (Result, error) {
 	p = p.withDefaults()
 	argv := append([]string{name}, args...)
+	// A platform with no containment adapter refuses before anything else, so
+	// the user is told what is actually wrong instead of learning that some
+	// executable could not be found (review F-01).
+	if ok, _ := ContainmentSupported(); !ok {
+		return Result{}, &Error{Cause: CauseContainment, Argv: argv, Err: errNoAdapter()}
+	}
 	var stdout *machineWriter
 	fail := func(c Cause, err error, stderr *excerptWriter) (Result, error) {
 		e := &Error{Cause: c, Argv: argv, Err: err}

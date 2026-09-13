@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/provision"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
@@ -49,6 +50,10 @@ type doctorReport struct {
 	// GitignoreSuggestion is advice, not a finding: an unignored lock sidecar
 	// is untidy, never incorrect.
 	GitignoreSuggestion string `json:"gitignore_suggestion,omitempty"`
+	// ContainmentBlocker names the missing process-containment adapter on a
+	// platform that has none. It is the root cause of every VCS-aware verb
+	// failing there, so doctor reports it ahead of anything it implies.
+	ContainmentBlocker string `json:"containment_blocker,omitempty"`
 }
 
 // cmdDoctor reports the binary's own identity, the resolved planning root (or
@@ -65,6 +70,10 @@ type doctorOpts struct {
 func cmdDoctor(o doctorOpts) error {
 
 	rep := doctorReport{Version: version.Version}
+	containmentOK, containmentReason := procexec.ContainmentSupported()
+	if !containmentOK {
+		rep.ContainmentBlocker = containmentReason
+	}
 	pluginRoot, pluginSource := claudePluginRoot()
 	rep.PluginRoot, rep.PluginRootSource = pluginRoot, pluginSource
 	rep.HookBinary, rep.HookBinaryError = checkHookBinary(pluginRoot, pluginSource)
@@ -134,6 +143,10 @@ func cmdDoctor(o doctorOpts) error {
 		printDoctorReport(rep)
 	}
 
+	if !containmentOK && o.Check {
+		return &refusedError{n: 1, msg: "doctor: " + containmentReason +
+			"; every command this binary runs is refused until that adapter lands"}
+	}
 	if gitHookErr != nil {
 		return fmt.Errorf("doctor: %w", gitHookErr)
 	}
@@ -198,6 +211,10 @@ func printDoctorReport(r doctorReport) {
 		if r.GitPostRewriteWarning != "" {
 			fmt.Printf("    warning: %s\n", r.GitPostRewriteWarning)
 		}
+	}
+	if r.ContainmentBlocker != "" {
+		fmt.Printf("  BLOCKER: %s\n", r.ContainmentBlocker)
+		fmt.Println("    every command this binary runs (git, p4) is refused until that adapter lands")
 	}
 	if r.PlanningRootError != "" {
 		fmt.Printf("  planning root: ERROR: %s\n", r.PlanningRootError)

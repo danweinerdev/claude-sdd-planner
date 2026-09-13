@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 func TestClaudePluginRootSkipsPortableInstallation(t *testing.T) {
@@ -206,5 +208,37 @@ func TestDoctorNoGitIsExplicitNoOp(t *testing.T) {
 	}
 	if !strings.Contains(out, "no-git") || !strings.Contains(out, "no repository hook") {
 		t.Fatalf("doctor did not explain no-Git no-op:\n%s", out)
+	}
+}
+
+// Review F-01: doctor is the one command a user runs to learn why nothing
+// works. On a platform with no containment adapter it must say so as a
+// blocker naming the follow-on plan, and `--check` must fail on it — silence
+// there is what left Windows users with an unexplained "git could not run".
+func TestDoctorReportsMissingContainmentAdapter(t *testing.T) {
+	t.Setenv("CLAUDE_PLUGIN_ROOT", "")
+	chdirTemp(t)
+	restore := procexec.ContainmentProbe
+	t.Cleanup(func() { procexec.ContainmentProbe = restore })
+	procexec.ContainmentProbe = func() (bool, string) {
+		return false, "windows: no process-containment adapter (the Windows Job Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan)"
+	}
+
+	out, err := captureStdout(t, func() error { return cmdDoctor(doctorOpts{}) })
+	if err != nil {
+		t.Fatalf("doctor (repair mode) must still report, not fail: %v\n%s", err, out)
+	}
+	for _, want := range []string{"windows", "process-containment adapter", "Job Object"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor report does not name %q:\n%s", want, out)
+		}
+	}
+
+	out, err = captureStdout(t, func() error { return cmdDoctor(doctorOpts{Check: true}) })
+	if code := exitCode(err); code == 0 {
+		t.Fatalf("doctor --check exit=%d err=%v, want nonzero for the missing adapter\n%s", code, err, out)
+	}
+	if !strings.Contains(out, "process-containment adapter") {
+		t.Errorf("doctor --check does not name the missing adapter:\n%s", out)
 	}
 }

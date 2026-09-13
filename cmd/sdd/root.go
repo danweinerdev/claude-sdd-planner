@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -697,6 +698,21 @@ func exitCode(err error) int {
 		return 1
 	}
 	return 2
+}
+
+// diagnose renders err for the user, naming the platform when the real cause
+// is that this build has no process-containment adapter. Without it the same
+// failure reaches every VCS-aware verb as "git could not run", which sends a
+// Windows user hunting for a Git installation they already have (review F-01).
+func diagnose(err error) string {
+	if errors.Is(err, procexec.ErrNoContainmentAdapter) {
+		_, reason := procexec.ContainmentSupported()
+		if reason == "" {
+			reason = "this platform has no process-containment adapter"
+		}
+		return "unsupported platform: " + reason + ": " + err.Error()
+	}
+	return err.Error()
 }
 
 func usageHint(err error) bool {

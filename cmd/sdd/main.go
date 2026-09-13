@@ -34,7 +34,7 @@ func main() {
 	root.SetArgs(os.Args[1:])
 	err := root.Execute()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sdd: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sdd: %s\n", diagnose(err))
 		// Cobra already printed the suggestion for an unknown command; for a
 		// malformed invocation, point at the right help rather than dumping
 		// the whole usage block.

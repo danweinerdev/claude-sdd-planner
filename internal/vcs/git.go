@@ -95,7 +95,7 @@ func runGit(dir string, args ...string) ([]byte, error) {
 		if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
 			return nil, fmt.Errorf("git %s: exit %d: %s", strings.Join(args, " "), pe.ExitCode, strings.TrimSpace(pe.Stderr))
 		}
-		return nil, fmt.Errorf("%w: git %s: %v", ErrOperational, strings.Join(args, " "), err)
+		return nil, fmt.Errorf("%w: git %s: %w", ErrOperational, strings.Join(args, " "), err)
 	}
 	return res.Stdout, nil
 }
@@ -144,7 +144,7 @@ func (g *gitRepo) IsAncestor(ancestor, descendant string) (bool, error) {
 		}
 		return false, fmt.Errorf("git merge-base --is-ancestor %s %s: exit %d: %s", ancestor, descendant, pe.ExitCode, strings.TrimSpace(pe.Stderr))
 	}
-	return false, fmt.Errorf("%w: git merge-base --is-ancestor %s %s: %v", ErrOperational, ancestor, descendant, err)
+	return false, fmt.Errorf("%w: git merge-base --is-ancestor %s %s: %w", ErrOperational, ancestor, descendant, err)
 }
 
 func (g *gitRepo) Parents(rev string) ([]string, error) {

@@ -22,6 +22,10 @@ import (
 // that calls setsid escapes this contract, which ordinary Git fixtures
 // prevent by disabling background services.
 
+// platformContainmentSupported: POSIX process groups are the adapter
+// (Designs/TestSuiteReliability DD-4).
+func platformContainmentSupported() (bool, string) { return true, "" }
+
 // signalGroup sends sig to the whole group. It is a variable so a test can
 // simulate a refused signal; production never replaces it.
 var signalGroup = func(pgid int, sig syscall.Signal) error { return syscall.Kill(-pgid, sig) }
