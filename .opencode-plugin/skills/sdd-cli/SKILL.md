@@ -68,6 +68,8 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Inspect an artifact (frontmatter, digest) | `sdd show <path> [--json]` |
 | List artifacts by type | `sdd list [spec\|design\|plan\|research] [--root PATH] [--json]` |
 | Find the next actionable plan task | `sdd next [PLAN-PATH] [--json]` |
+| Claim the frontier head under a lease | `sdd next --plan P --claim --by WHO [--json]` |
+| Reprint the current holder's claim payload without claiming | `sdd next --plan P --show --by WHO [--json]` |
 | Create/replace an artifact from a proposal | `sdd apply <path> [--create] [--expect DIGEST]` (proposal on stdin) |
 | Replace one section only | `sdd section set <path> --heading "## Overview" [--expect DIGEST]` (body on stdin) |
 | Start a new artifact from its template | `sdd template <type> [--out PATH]` |
@@ -85,6 +87,9 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
 | Copy related designs' DD bullets into the plan's decisions file without compiling a proposal | `sdd decide sync --plan P [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
+| Edit a node's declared artifact write set (holder-only) | `sdd graph set-artifacts --plan P --node N --by WHO [--add PATH]... [--remove PATH]... [--json]` |
+| Record an observation from a test report or command result | `sdd graph sync --plan P --node N --by WHO --report FILE \| --command-exit N --command-log FILE [--verbose] [--json]` |
+| Fold one report against every unclaimed, non-review node | `sdd graph reverify --plan P --report FILE \| --command-exit N --command-log FILE [--all] [--verbose] [--json]` |
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |
 | Record Git old→new revision lineage without changing proof | `sdd graph remap-revisions --plan P --map FILE --expect-digest D [--dry-run] [--json]` (omit the digest for preview) |
 | Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
