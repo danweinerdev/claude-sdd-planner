@@ -116,6 +116,40 @@ func Detect(repoRoot, planDir string) Provider {
 	return p
 }
 
+// IdleWorkspace reports whether a claimed workspace has no work worth
+// keeping: no commits beyond the mainline it was allocated from, and no
+// uncommitted changes. Only git worktrees can be non-idle (p4 and plain
+// providers hand back handle == "", the shared tree, which release never
+// tears down); every other provider reports idle with no reason to give a
+// release command a workspace-specific "keep it" line for. branch names the
+// worktree's checked-out branch, for diagnostics, when it can be read.
+func IdleWorkspace(p Provider, handle string) (idle bool, reason, branch string, err error) {
+	g, ok := p.(*gitProvider)
+	if !ok || handle == "" {
+		return true, "", "", nil
+	}
+	dir := g.absDir(handle)
+	if out, branchErr := g.run(g.repoRoot, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD"); branchErr == nil {
+		branch = strings.TrimSpace(string(out))
+	}
+	repo := vcs.Detect(dir)
+	clean, dirty, err := repo.Clean()
+	if err != nil {
+		return false, "", branch, fmt.Errorf("checking workspace %s for uncommitted changes: %w", handle, err)
+	}
+	if !clean {
+		return false, fmt.Sprintf("uncommitted changes (%s)", strings.Join(dirty, ", ")), branch, nil
+	}
+	head, err := g.run(g.repoRoot, "git", "-C", dir, "rev-parse", "HEAD")
+	if err != nil {
+		return false, "", branch, fmt.Errorf("reading workspace %s HEAD: %w", handle, err)
+	}
+	if _, err := g.run(g.repoRoot, "git", "merge-base", "--is-ancestor", strings.TrimSpace(string(head)), "HEAD"); err != nil {
+		return false, "commits not yet merged into the mainline", branch, nil
+	}
+	return true, "", branch, nil
+}
+
 // DetectChecked is Detect with the failure distinguished from the answer: a
 // detection probe that could not run returns (nil, err) wrapping
 // vcs.ErrOperational, while a directory under no supported VCS still returns

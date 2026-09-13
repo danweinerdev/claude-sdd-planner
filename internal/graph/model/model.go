@@ -423,7 +423,12 @@ type Verification struct {
 	IntentHashes map[string]string `json:"intent_hashes,omitempty"`
 	ReportDigest string            `json:"report_digest,omitempty"`
 	Isolation    string            `json:"isolation"`
-	Provenance   *Provenance       `json:"provenance,omitempty"`
+	// IsolationDirtyPaths names the untracked or modified paths sync
+	// observed in the workspace when Isolation is shared-dirty — the cause
+	// behind a later `reasons.isolation`, best-effort (nil when the VCS
+	// could not be asked, e.g. p4/plain).
+	IsolationDirtyPaths []string    `json:"isolation_dirty_paths,omitempty"`
+	Provenance          *Provenance `json:"provenance,omitempty"`
 }
 
 // AcknowledgementRecord is one recorded judgment that a citation's or

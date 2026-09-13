@@ -355,7 +355,7 @@ func claimableFixture(t *testing.T) string {
 func TestNext_Show_ReprintsHolderPayloadWithoutClaiming(t *testing.T) {
 	claimableFixture(t)
 
-	if handled, err := graphNext("Plans/Demo", true, "tester", true); !handled || err != nil {
+	if handled, err := graphNext("Plans/Demo", true, "tester", "", true); !handled || err != nil {
 		t.Fatalf("claim: handled=%v err=%v", handled, err)
 	}
 

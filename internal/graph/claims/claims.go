@@ -118,6 +118,55 @@ const claimAttempts = 8
 // A nil error with a nil Claimed cannot happen: refusals are errors that
 // explain the frontier (state counts, active claims, capacity).
 func Claim(planDir string, o Options) (*Claimed, error) {
+	return claim(planDir, o, selectCandidate)
+}
+
+// ClaimNode claims exactly nodeID if it is currently claimable, otherwise
+// refuses with the derived reason the node itself carries (not READY,
+// claimed by someone else, a review gate not yet clear, etc.) rather than
+// the frontier-wide explanation Claim gives when nothing is claimable.
+func ClaimNode(planDir, nodeID string, o Options) (*Claimed, error) {
+	return claim(planDir, o, func(g *model.Graph, o Options) (string, string) {
+		return selectNode(g, o, nodeID)
+	})
+}
+
+// selectNode reports whether nodeID is claimable and, if not, why — naming
+// the node's own derived state and claim rather than the frontier-wide
+// summary selectCandidate's explain string gives.
+func selectNode(g *model.Graph, o Options, nodeID string) (string, string) {
+	n := g.NodeByID(nodeID)
+	if n == nil {
+		return "", fmt.Sprintf("node %q does not exist", nodeID)
+	}
+	if n.Claim != nil {
+		return "", fmt.Sprintf("%q is already claimed by %q", nodeID, n.Claim.By)
+	}
+	derived := states.Derive(o.StatesInputs(g))
+	ns := derived[nodeID]
+	if !ns.OnFrontier {
+		if ns.State != states.Ready {
+			return "", fmt.Sprintf("%q is %s, not READY", nodeID, ns.State)
+		}
+		return "", fmt.Sprintf("%q is READY but not on the frontier (a dependency is not GREEN)", nodeID)
+	}
+	set, explain := selectableSet(g, o)
+	if !set[nodeID] {
+		if explain != "" {
+			return "", fmt.Sprintf("%q is not claimable: %s", nodeID, explain)
+		}
+		for _, a := range n.Artifacts {
+			return "", fmt.Sprintf("%q is not claimable: its artifact %q is claimed by an active node", nodeID, a)
+		}
+		return "", fmt.Sprintf("%q is not claimable", nodeID)
+	}
+	return nodeID, ""
+}
+
+// claim runs the shared CAS/allocate cycle against whatever candidate
+// select picks — the heaviest frontier node for Claim, or one fixed node id
+// for ClaimNode.
+func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (string, string)) (*Claimed, error) {
 	o.fill()
 	graphPath := gstore.PathFor(planDir)
 
@@ -127,7 +176,7 @@ func Claim(planDir string, o Options) (*Claimed, error) {
 			return nil, err
 		}
 		reclaimed := expireLapsed(g, o.Now())
-		candidate, explain := selectCandidate(g, o)
+		candidate, explain := selectFn(g, o)
 		if candidate == "" {
 			return nil, fmt.Errorf("graph claim: nothing claimable — %s", explain)
 		}

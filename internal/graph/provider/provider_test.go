@@ -183,6 +183,79 @@ func TestGitProviderReleaseDeletesEmptyBranch(t *testing.T) {
 	}
 }
 
+// TestIdleWorkspaceReportsIdleWithNoWork: a freshly allocated worktree with
+// no commits and no edits is idle, so `graph release` can safely reap it the
+// same way `graph gc` does.
+func TestIdleWorkspaceReportsIdleWithNoWork(t *testing.T) {
+	repoRoot, planDir := gitFixture(t)
+	p := Detect(repoRoot, planDir)
+	ws, err := p.Allocate("node-idle")
+	if err != nil {
+		t.Fatalf("allocate: %v", err)
+	}
+	idle, reason, branch, err := IdleWorkspace(p, ws.Handle)
+	if err != nil {
+		t.Fatalf("idle workspace: %v", err)
+	}
+	if !idle {
+		t.Fatalf("a freshly allocated worktree with no commits and no edits must be idle, got reason %q", reason)
+	}
+	if !strings.HasPrefix(branch, "graph/node-idle-") {
+		t.Fatalf("branch name expected, got %q", branch)
+	}
+}
+
+// TestIdleWorkspaceReportsWorkForUncommittedEdits: an edited-but-uncommitted
+// worktree is not idle — release must keep it rather than force-remove it.
+func TestIdleWorkspaceReportsWorkForUncommittedEdits(t *testing.T) {
+	repoRoot, planDir := gitFixture(t)
+	p := Detect(repoRoot, planDir)
+	ws, err := p.Allocate("node-dirty")
+	if err != nil {
+		t.Fatalf("allocate: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws.Dir, "work.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idle, reason, _, err := IdleWorkspace(p, ws.Handle)
+	if err != nil {
+		t.Fatalf("idle workspace: %v", err)
+	}
+	if idle {
+		t.Fatal("an uncommitted edit must NOT be reported idle")
+	}
+	if !strings.Contains(reason, "work.txt") {
+		t.Fatalf("reason must name the uncommitted path, got %q", reason)
+	}
+}
+
+// TestIdleWorkspaceReportsWorkForUnmergedCommits: a worktree with committed
+// but unmerged work is not idle.
+func TestIdleWorkspaceReportsWorkForUnmergedCommits(t *testing.T) {
+	repoRoot, planDir := gitFixture(t)
+	p := Detect(repoRoot, planDir)
+	ws, err := p.Allocate("node-committed")
+	if err != nil {
+		t.Fatalf("allocate: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws.Dir, "work.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, ws.Dir, "add", ".")
+	gitOK(t, ws.Dir, "commit", "-q", "-m", "node work")
+
+	idle, reason, _, err := IdleWorkspace(p, ws.Handle)
+	if err != nil {
+		t.Fatalf("idle workspace: %v", err)
+	}
+	if idle {
+		t.Fatal("an unmerged commit must NOT be reported idle")
+	}
+	if !strings.Contains(reason, "not yet merged") {
+		t.Fatalf("reason must name the unmerged cause, got %q", reason)
+	}
+}
+
 func TestGitProviderBacksClaimsEndToEnd(t *testing.T) {
 	repoRoot, planDir := gitFixture(t)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -413,6 +414,47 @@ func (dirtyProvider) Release(string) error                         { return nil 
 func (dirtyProvider) PruneMergedBranches() ([]string, error)       { return nil, nil }
 func (dirtyProvider) Isolation(string, int) string                 { return model.IsolationSharedDirty }
 func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
+
+// TestSharedDirtyPassRecordsIsolationDirtyPaths: shared-dirty isolation's
+// cause — untracked or modified paths in the shared tree — is captured on
+// the observation itself, best-effort, so a later `graph show` can say why,
+// not just that.
+func TestSharedDirtyPassRecordsIsolationDirtyPaths(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	n := testsNode("a", "test_a")
+	n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+	planDir, repoRoot := fixture(t, n)
+	syncGitOK(t, repoRoot, "init", "-q")
+	syncGitOK(t, repoRoot, "config", "user.email", "t@example.com")
+	syncGitOK(t, repoRoot, "config", "user.name", "t")
+	syncGitOK(t, repoRoot, "add", ".")
+	syncGitOK(t, repoRoot, "commit", "-q", "-m", "base")
+	if err := os.WriteFile(filepath.Join(repoRoot, "stray.txt"), []byte("w"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := `<testsuite><testcase name="test_a"/></testsuite>`
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder",
+		Provider: dirtyProvider{}})
+	if err != nil || !res.Recorded {
+		t.Fatalf("shared-dirty pass records provisionally: %+v %v", res, err)
+	}
+	if len(res.Observation.IsolationDirtyPaths) != 1 || res.Observation.IsolationDirtyPaths[0] != "stray.txt" {
+		t.Fatalf("the untracked path must be captured on the observation: %+v", res.Observation.IsolationDirtyPaths)
+	}
+}
+
+func syncGitOK(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
 
 func TestSharedDirtyPassRecordsProvisionally(t *testing.T) {
 	n := testsNode("a", "test_a")

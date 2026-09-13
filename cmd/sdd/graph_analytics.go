@@ -270,7 +270,7 @@ func graphStatusCmd() *cobra.Command {
 				if n.Claim != nil {
 					l.Claimed = n.Claim.By
 				}
-				l.Reasons = staleReasonsFor(ns)
+				l.Reasons = staleReasonsFor(n, ns)
 				l.Advisories = ns.AnchorAdvisory
 				lines = append(lines, l)
 			}
@@ -342,7 +342,7 @@ func graphShowCmd() *cobra.Command {
 					Reasons     *staleReasons        `json:"reasons,omitempty"`
 					Advisories  []string             `json:"advisories,omitempty"`
 					Lineage     *revisionLineageView `json:"revision_lineage,omitempty"`
-				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, staleReasonsFor(ns), ns.AnchorAdvisory, nodeRevisionLineage(ctx.g, n)})
+				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, staleReasonsFor(n, ns), ns.AnchorAdvisory, nodeRevisionLineage(ctx.g, n)})
 			}
 			w := c.OutOrStdout()
 			if brief {
@@ -388,6 +388,17 @@ func graphShowCmd() *cobra.Command {
 			}
 			if ns.SeqStale {
 				fmt.Fprintln(w, "  SEQ-STALE: legacy observation (no dependency digests); a dependency re-verified after it — re-sync to record what this node exercises")
+			}
+			if ns.IsolationStale {
+				var cause string
+				if n.Verification != nil {
+					cause = isolationCauseText(n.Verification.IsolationDirtyPaths)
+				}
+				if cause != "" {
+					fmt.Fprintf(w, "  ISOLATION-STALE: recorded shared-dirty — %s (re-sync from a clean tree or isolated workspace)\n", cause)
+				} else {
+					fmt.Fprintln(w, "  ISOLATION-STALE: recorded shared-dirty (re-sync from a clean tree or isolated workspace)")
+				}
 			}
 			if len(ns.DependencyStale) > 0 {
 				fmt.Fprintf(w, "  DEPENDENCY-STALE: %s changed since this run exercised it (re-run the gate)\n", strings.Join(ns.DependencyStale, ", "))
@@ -576,16 +587,37 @@ type staleReasons struct {
 	Seq        bool     `json:"seq,omitempty"`
 	Revision   bool     `json:"revision,omitempty"`
 	Isolation  bool     `json:"isolation,omitempty"`
+	// IsolationCause names why: the untracked or modified paths sync
+	// observed in the shared tree when it recorded shared-dirty isolation
+	// (best-effort; nil when the VCS could not be asked).
+	IsolationCause []string `json:"isolation_cause,omitempty"`
+}
+
+// isolationCauseText renders IsolationCause the way printUntracked renders
+// its bucket: every path up to five, then a count of the rest — the console
+// line stays a cause, not a wall of paths.
+func isolationCauseText(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	if len(paths) <= 5 {
+		return strings.Join(paths, ", ")
+	}
+	return strings.Join(paths[:5], ", ") + fmt.Sprintf(" … (%d more)", len(paths)-5)
 }
 
 // staleReasonsFor returns nil for a node that is not STALE or REV-INCOMPATIBLE.
-func staleReasonsFor(ns states.NodeState) *staleReasons {
+func staleReasonsFor(n *model.Node, ns states.NodeState) *staleReasons {
 	if ns.State != states.Stale && !ns.RevIncompatible {
 		return nil
 	}
-	return &staleReasons{
+	r := &staleReasons{
 		Dependency: ns.DependencyStale, Digest: ns.DigestStale, Intent: ns.IntentStale,
 		Input: ns.InputStale, Review: ns.ReviewStale, Seq: ns.SeqStale,
 		Revision: ns.RevIncompatible, Isolation: ns.IsolationStale,
 	}
+	if ns.IsolationStale && n.Verification != nil {
+		r.IsolationCause = n.Verification.IsolationDirtyPaths
+	}
+	return r
 }

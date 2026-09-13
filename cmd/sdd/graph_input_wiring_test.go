@@ -68,7 +68,7 @@ func TestNextRefusesMissingInputBeforeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = graphNext("Plans/Demo", true, "tester", true)
+	_, err = graphNext("Plans/Demo", true, "tester", "", true)
 	if exitCode(err) != 1 {
 		t.Fatalf("missing required input must refuse with exit 1, got %v", err)
 	}

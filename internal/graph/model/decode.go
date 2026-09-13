@@ -74,7 +74,7 @@ var (
 	inputKeys        = []string{"root", "path", "section"}
 	inputSectionKeys = []string{"heading_path"}
 	claimKeys        = []string{"by", "lease_expires", "workspace"}
-	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "provenance"}
+	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "isolation_dirty_paths", "provenance"}
 	ackKeys          = []string{"seq", "node", "kind", "key", "old", "new", "by"}
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
@@ -822,6 +822,9 @@ func (d *decoder) verification(path string, raw any) *Verification {
 	default:
 		d.errf(path+".isolation", "%q is not an isolation level; valid levels are %q, %q, %q",
 			v.Isolation, IsolationClean, IsolationSharedDirty, IsolationAsserted)
+	}
+	if iv, present := obj["isolation_dirty_paths"]; present {
+		v.IsolationDirtyPaths = d.stringList(path+".isolation_dirty_paths", iv)
 	}
 	if pv, present := obj["provenance"]; present {
 		v.Provenance = d.provenance(path+".provenance", pv)

@@ -338,7 +338,7 @@ findings; exit 2 means validation could not run.`,
 
 func nextCmd() *cobra.Command {
 	var jsonOut, claim, show bool
-	var by, plan string
+	var by, plan, node string
 	c := &cobra.Command{
 		Use:   "next [plan-path]",
 		Short: "Report current state and the literal next command to run",
@@ -370,7 +370,7 @@ func nextCmd() *cobra.Command {
 					// Graph-executed plans route to the frontier scheduler; v1
 					// markdown plans keep the report untouched (D-0022's v1
 					// clause).
-					if handled, err := graphNext(planPath, claim, by, jsonOut); handled {
+					if handled, err := graphNext(planPath, claim, by, node, jsonOut); handled {
 						return err
 					}
 				}
@@ -381,6 +381,9 @@ func nextCmd() *cobra.Command {
 			if show {
 				return fmt.Errorf("next: --show requires a plan with a committed graph (run `sdd graph init` / `sdd compile` first)")
 			}
+			if node != "" {
+				return fmt.Errorf("next: --node requires a plan with a committed graph (run `sdd graph init` / `sdd compile` first)")
+			}
 			return cmdNext(planPath, jsonOut)
 		},
 	}
@@ -389,6 +392,7 @@ func nextCmd() *cobra.Command {
 	c.Flags().BoolVar(&show, "show", false, "reprint the current holder's claim payload(s) without claiming")
 	c.Flags().StringVar(&by, "by", "", "claimant identity for --claim/--show (default: a generated agent id for --claim)")
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/), resolved against the planning root")
+	c.Flags().StringVar(&node, "node", "", "with --claim, claim exactly this node id instead of the frontier head; refuses with the derived reason if it is not claimable")
 	return c
 }
 

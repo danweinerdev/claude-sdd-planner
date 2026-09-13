@@ -432,14 +432,26 @@ func graphSetArtifactsCmd() *cobra.Command {
 					count = len(n.Artifacts)
 				}
 			}
+			written, refused, rerenderErr := rerenderViewsAfterEdit(planDir, plan)
 			if asJSON {
 				return writeJSON(struct {
-					OK        bool   `json:"ok"`
-					Node      string `json:"node"`
-					Artifacts int    `json:"artifacts"`
-				}{true, node, count})
+					OK            bool     `json:"ok"`
+					Node          string   `json:"node"`
+					Artifacts     int      `json:"artifacts"`
+					ViewsRendered []string `json:"views_rendered,omitempty"`
+					ViewsRefused  bool     `json:"views_refused,omitempty"`
+					RerenderError string   `json:"rerender_error,omitempty"`
+				}{true, node, count, written, refused, errString(rerenderErr)})
 			}
 			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", count, node)
+			switch {
+			case refused:
+				fmt.Fprintln(c.OutOrStdout(), "the rendered views could not be refreshed now (a phase view is frozen); it will refresh at the next closing render")
+			case rerenderErr != nil:
+				fmt.Fprintf(c.OutOrStdout(), "warning: the rendered views could not be refreshed: %v\n", rerenderErr)
+			case len(written) > 0:
+				fmt.Fprintf(c.OutOrStdout(), "rendered views refreshed: %s\n", strings.Join(relPaths(written), ", "))
+			}
 			return nil
 		},
 	}
@@ -451,6 +463,56 @@ func graphSetArtifactsCmd() *cobra.Command {
 	c.Flags().StringArrayVar(&remove, "remove", nil, "artifact path to remove from the current declared set (repeatable)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
+}
+
+// rerenderViewsAfterEdit re-renders the plan's phase views through the
+// compiler's normal entry point right after a declared-artifact edit, so
+// the rendered docs reflect the new write-set immediately rather than only
+// at the next full compile. A frozen phase view refuses the re-render
+// (RenderViews is preflighted, so this never leaves a partial write); that
+// refusal is reported, not treated as a set-artifacts failure — the view
+// still refreshes at the next closing render.
+func rerenderViewsAfterEdit(planDir, plan string) (written []string, refused bool, err error) {
+	root, repoRoot, rootsErr := resolveRoots(".", "")
+	if rootsErr != nil {
+		return nil, false, rootsErr
+	}
+	g, loadErr := gstore.Load(gstore.PathFor(planDir))
+	if loadErr != nil {
+		return nil, false, loadErr
+	}
+	sources, srcErr := gcompile.NewSources(root, repoRoot, plan)
+	if srcErr != nil {
+		return nil, false, srcErr
+	}
+	snap := sources.IntentSnapshot()
+	digester := digest.New(repoRoot)
+	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
+		CurrentIntentHashes: snap.Hashes(),
+		CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
+	closed := greview.Closed(g, st)
+	written, err = gcompile.RenderViews(root, plan, repoRoot, g, st, closed)
+	if err != nil {
+		return nil, true, err
+	}
+	return written, false, nil
+}
+
+// relPaths trims paths to their Plans/... suffix for a shorter console
+// line; JSON output carries the full paths written unmodified.
+func relPaths(paths []string) []string {
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		out[i] = relPath(p)
+	}
+	return out
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // graphRehashCmd acknowledges judged-cosmetic intent drift by re-embedding
@@ -644,19 +706,19 @@ func graphSyncCmd() *cobra.Command {
 }
 
 // printUntracked prints the untracked bucket: a whole-package report can
-// carry hundreds of ids no node declares, which buries the line that
-// matters (`recorded ... at seq N`). The full list is always in --json;
-// on the console it truncates to a count plus the first five ids unless
-// verbose is set.
+// carry hundreds — sometimes thousands — of ids no node declares, which
+// buries the line that matters (`recorded ... at seq N`) under a wall of
+// test names. The full list is always in --json; on the console it prints a
+// one-line count unless verbose is set.
 func printUntracked(w io.Writer, ids []string, verbose bool) {
 	if len(ids) == 0 {
 		return
 	}
-	if verbose || len(ids) <= 5 {
+	if verbose {
 		fmt.Fprintf(w, "untracked: %s\n", strings.Join(ids, ", "))
 		return
 	}
-	fmt.Fprintf(w, "untracked: %s … (%d more)\n", strings.Join(ids[:5], ", "), len(ids)-5)
+	fmt.Fprintf(w, "untracked: %d test id(s) not declared by any node\n", len(ids))
 }
 
 // graphRetireCmd tombstones an id that never became a graph node — most
@@ -809,7 +871,7 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 					case o.Skipped != "":
 						fmt.Fprintf(w, "  %-28s skipped: %s\n", o.Node, o.Skipped)
 					case o.ExpectedAbsence:
-						fmt.Fprintf(w, "  %-28s not yet run: %s\n", o.Node, o.Refused)
+						fmt.Fprintf(w, "  %-28s skipped: not yet run: %s\n", o.Node, o.Refused)
 					default:
 						fmt.Fprintf(w, "  %-28s refused: %s\n", o.Node, o.Refused)
 					}
@@ -1104,7 +1166,7 @@ func compileCmd() *cobra.Command {
 // text, tests, hazards, workspace) so the agent needs no other reads to
 // start (Designs/SddGraph § The execution loop). Returns handled=false when
 // the plan has no committed graph, so v1 plans fall through untouched.
-func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, error) {
+func graphNext(planPath string, claim bool, by, nodeID string, jsonOut bool) (bool, error) {
 	readme, err := resolvePlanReadme(planPath)
 	if err != nil {
 		return false, nil // let the v1 path report the resolution problem
@@ -1112,6 +1174,9 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	planDir := filepath.Dir(readme)
 	if _, err := os.Stat(gstore.PathFor(planDir)); err != nil {
 		return false, nil
+	}
+	if nodeID != "" && !claim {
+		return true, fmt.Errorf("next: --node requires --claim")
 	}
 	plan := filepath.Base(planDir)
 	root, repoRoot, err := resolveRoots(".", "")
@@ -1211,7 +1276,7 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf("next: %w", err)
 	}
-	claimed, err := claims.Claim(planDir, claims.Options{
+	claimOpts := claims.Options{
 		By: by, TTL: ttl, StatesInputs: statesInputs, Provider: provider.ForClaims(prov),
 		ValidateCandidate: func(n *model.Node) error {
 			for _, spec := range n.Inputs {
@@ -1221,7 +1286,13 @@ func graphNext(planPath string, claim bool, by string, jsonOut bool) (bool, erro
 			}
 			return nil
 		},
-	})
+	}
+	var claimed *claims.Claimed
+	if nodeID != "" {
+		claimed, err = claims.ClaimNode(planDir, nodeID, claimOpts)
+	} else {
+		claimed, err = claims.Claim(planDir, claimOpts)
+	}
 	if err != nil {
 		return true, err
 	}
@@ -1374,9 +1445,14 @@ func graphReleaseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Graceful abandonment tears the workspace down (unlike lease
-			// EXPIRY, which preserves it for post-mortem).
+			// Graceful abandonment reaps an IDLE workspace (no commits beyond
+			// its base, no uncommitted changes) the same way `graph gc` does;
+			// a workspace carrying real work is kept, explicitly, alongside
+			// its branch (unlike lease EXPIRY, which always preserves for
+			// post-mortem regardless of idleness).
 			cleaned := false
+			kept := false
+			var keepReason, branch string
 			if workspace != "" {
 				_, repoRoot, rootsErr := resolveRoots(".", "")
 				if rootsErr != nil {
@@ -1386,7 +1462,14 @@ func graphReleaseCmd() *cobra.Command {
 				if detErr != nil {
 					return fmt.Errorf("release: %w", detErr)
 				}
-				if relErr := prov.Release(workspace); relErr == nil {
+				idle, reason, br, idleErr := provider.IdleWorkspace(prov, workspace)
+				branch = br
+				if idleErr != nil {
+					fmt.Fprintf(c.ErrOrStderr(), "warning: could not determine whether workspace %s is idle: %v\n", workspace, idleErr)
+				} else if !idle {
+					kept = true
+					keepReason = reason
+				} else if relErr := prov.Release(workspace); relErr == nil {
 					cleaned = true
 				} else {
 					fmt.Fprintf(c.ErrOrStderr(), "warning: workspace %s could not be removed: %v\n", workspace, relErr)
@@ -1394,16 +1477,26 @@ func graphReleaseCmd() *cobra.Command {
 			}
 			if asJSON {
 				return writeJSON(struct {
-					OK        bool   `json:"ok"`
-					Node      string `json:"node"`
-					Workspace string `json:"workspace,omitempty"`
-					Cleaned   bool   `json:"workspace_cleaned,omitempty"`
-				}{true, args[0], workspace, cleaned})
+					OK         bool   `json:"ok"`
+					Node       string `json:"node"`
+					Workspace  string `json:"workspace,omitempty"`
+					Branch     string `json:"branch,omitempty"`
+					Cleaned    bool   `json:"workspace_cleaned,omitempty"`
+					Kept       bool   `json:"workspace_kept,omitempty"`
+					KeepReason string `json:"keep_reason,omitempty"`
+				}{true, args[0], workspace, branch, cleaned, kept, keepReason})
 			}
 			fmt.Fprintf(c.OutOrStdout(), "released %s back to the frontier\n", args[0])
-			if workspace != "" && cleaned {
+			switch {
+			case workspace != "" && cleaned:
 				fmt.Fprintf(c.OutOrStdout(), "workspace removed: %s\n", workspace)
-			} else if workspace != "" {
+			case workspace != "" && kept:
+				fmt.Fprintf(c.OutOrStdout(), "workspace and branch kept (%s): %s", keepReason, workspace)
+				if branch != "" {
+					fmt.Fprintf(c.OutOrStdout(), " (%s)", branch)
+				}
+				fmt.Fprintln(c.OutOrStdout())
+			case workspace != "":
 				fmt.Fprintf(c.OutOrStdout(), "workspace left in place: %s\n", workspace)
 			}
 			return nil

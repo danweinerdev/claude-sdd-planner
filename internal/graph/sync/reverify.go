@@ -190,6 +190,7 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 			res.Skips++
 		case out.ExpectedAbsence:
 			// Reported, not a violation: see ExpectedAbsence's doc comment.
+			res.Skips++
 		default:
 			res.Refusals++
 		}

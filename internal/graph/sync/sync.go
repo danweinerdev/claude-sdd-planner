@@ -227,6 +227,19 @@ func Run(o Options) (*Result, error) {
 			digestRoot = filepath.Join(o.RepoRoot, filepath.FromSlash(handle))
 		}
 	}
+	var isolationDirtyPaths []string
+	if isolation == model.IsolationSharedDirty {
+		// Best-effort: name the cause behind the shared-dirty classification
+		// (untracked or modified paths in the shared tree) so a later
+		// `reasons.isolation` can say why, not just that. A VCS that cannot
+		// answer (p4, plain) or an operational read failure leaves this nil
+		// — the isolation classification itself is unaffected.
+		if repo := vcs.Detect(digestRoot); repo != nil {
+			if _, dirty, cleanErr := repo.Clean(); cleanErr == nil {
+				isolationDirtyPaths = dirty
+			}
+		}
+	}
 	digester := digest.New(digestRoot)
 	artifactDigests := map[string]string{}
 	for _, a := range node.Artifacts {
@@ -349,16 +362,17 @@ func Run(o Options) (*Result, error) {
 		fresh.SeqCounter++
 		seq := fresh.SeqCounter
 		v := &model.Verification{
-			Result:            result,
-			Seq:               seq,
-			ContractRev:       node.EffectiveContractRev(),
-			ArtifactDigests:   artifactDigests,
-			DependencyDigests: dependencyDigests,
-			InputHashes:       runInputs,
-			IntentHashes:      runIntent,
-			ReportDigest:      reportDigest,
-			Isolation:         isolation,
-			Provenance:        provenance,
+			Result:              result,
+			Seq:                 seq,
+			ContractRev:         node.EffectiveContractRev(),
+			ArtifactDigests:     artifactDigests,
+			DependencyDigests:   dependencyDigests,
+			InputHashes:         runInputs,
+			IntentHashes:        runIntent,
+			ReportDigest:        reportDigest,
+			Isolation:           isolation,
+			IsolationDirtyPaths: isolationDirtyPaths,
+			Provenance:          provenance,
 		}
 		n.Verification = v
 		// red_seq: the first observed failure per declared test, recorded
