@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "seq_counter": 131,
+  "seq_counter": 494,
   "nodes": [
     {
       "id": "test-git-policy",
@@ -43,7 +43,7 @@
       "phase": "01-hermetic-git",
       "verification": {
         "result": "pass",
-        "seq": 29,
+        "seq": 484,
         "contract_rev": 1,
         "artifact_digests": {
           "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
@@ -55,11 +55,11 @@
           "Specs/TestSuiteReliability:FR-02": "sha256:7500000d32548a49a8e2f3dc92b8193cd735efcf2c904a240af01b7534614c3c",
           "Specs/TestSuiteReliability:FR-03": "sha256:615f74ccc32688aa37911ea1ccd31e46a085bb5f61276a57eb81bf4832320174"
         },
-        "report_digest": "sha256:d5b3c8a4e5e99e0a59b698ad312badf18761ba626d8d825c8f8aa742140cf28f",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "183bdedfa8b59a0bcaf0b446b9735119b48d0759"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -70,14 +70,14 @@
     },
     {
       "id": "child-validation-hermetic",
-      "contract": "Under a hostile ambient Git configuration, in-process validation in internal/rules and tools/regression and a child sdd validate process leave the sentinel untouched and use only the fixture repository, because each package's TestMain installs the policy before parallel tests and child processes receive an explicit environment; fixture setup commands run by the rules harness inherit the policy's global configuration instead of overriding it, so a prepared fixture reads core.fsmonitor=false and commit.gpgsign=false.",
+      "contract": "Under a hostile ambient Git configuration, in-process validation in internal/rules and tools/regression and a child sdd validate process leave the sentinel untouched and use only the fixture repository, because each package's TestMain installs the policy before parallel tests and child processes receive an explicit environment; fixture setup commands run by the rules harness inherit the policy's global configuration instead of overriding it, so a prepared fixture reads core.fsmonitor=false and commit.gpgsign=false; every test package in the module that can spawn a process installs the same TestMain, and an inventory test refuses a package without it — the inventory resolves packages by import path only: a test package is spawning when any of its test sources import os/exec or the module's procexec package, or when the package or its test sources transitively import (within the module) a package whose production sources import either, so identifier names, string literals and comments play no part and wrappers, import aliases, concatenated binary names, variable-named spawners and helper packages cannot escape; a synthetic-module proof covers each of those shapes.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-01",
         "Specs/TestSuiteReliability:FR-03",
         "Specs/TestSuiteReliability:AC-01",
         "Designs/TestSuiteReliability:DD-1"
       ],
-      "contract_rev": 3,
+      "contract_rev": 6,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-1": "sha256:60f3cf418e72e456bfe181efec37929107218116fe41622d48d377734b809dde",
         "Specs/TestSuiteReliability:AC-01": "sha256:ef3032b753607f2d51e777d6b5a6d72c40b1b25b0112850490718a68a8a64b1e",
@@ -108,6 +108,18 @@
           {
             "id": "TestCorpusSetupInheritsPolicy",
             "file": "tools/regression/corpus_test.go"
+          },
+          {
+            "id": "TestGitSpawningTestPackagesInstallPolicy",
+            "file": "internal/testenv/adoption_test.go"
+          },
+          {
+            "id": "TestGitSpawnInventoryFollowsIndirection",
+            "file": "internal/testenv/adoption_test.go"
+          },
+          {
+            "id": "TestSpawnInventoryIsImportBased",
+            "file": "internal/testenv/adoption_test.go"
           }
         ]
       },
@@ -125,26 +137,54 @@
         "internal/rules/rules_test.go",
         "internal/rules/harness_test.go",
         "tools/regression/corpus.go",
-        "tools/regression/corpus_test.go"
+        "tools/regression/corpus_test.go",
+        "internal/graph/compile/main_env_test.go",
+        "internal/graph/convert/main_env_test.go",
+        "internal/graph/intent/main_env_test.go",
+        "internal/graph/model/main_env_test.go",
+        "internal/graph/review/main_env_test.go",
+        "internal/graph/ops/main_env_test.go",
+        "internal/graph/provider/main_env_test.go",
+        "internal/graph/sync/main_env_test.go",
+        "internal/hook/main_env_test.go",
+        "internal/provision/main_env_test.go",
+        "internal/testenv/adoption_test.go",
+        "internal/graph/proposal/main_env_test.go",
+        "tools/testgate/main_env_test.go",
+        "internal/procexec/helper_test.go"
       ],
       "estimate": 2,
       "phase": "01-hermetic-git",
       "verification": {
         "result": "pass",
-        "seq": 84,
-        "contract_rev": 3,
+        "seq": 485,
+        "contract_rev": 6,
         "artifact_digests": {
           "cmd/sdd/hermetic_test.go": "sha256:593b608ddddfcc7929ca0253c5b1c058af538941f779da9fd918b94a668fb05c",
           "cmd/sdd/main_env_test.go": "sha256:fe20aae6c155182e92d5d9514a066a8520b7f59bc71ba71e5a2ad0cb2f36da94",
-          "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+          "internal/graph/compile/main_env_test.go": "sha256:9a0946a0d0535f4287e71234e7dd5e0599edbb169b28413dd684a3488c01ab92",
+          "internal/graph/convert/main_env_test.go": "sha256:4d9cf2e52c5f270f4350e2be718fd799bb52d136cf290381d0e05d2bafa12826",
+          "internal/graph/intent/main_env_test.go": "sha256:d9ba24802823ce1212976e52137fb8e1339b6b3710fb22e01bdd8279d291de05",
+          "internal/graph/model/main_env_test.go": "sha256:5880371d59bf995b458dfe737812305bbdd4dd291c021473516dfc51b83b554d",
+          "internal/graph/ops/main_env_test.go": "sha256:bcc0c81abe174ed99c46abf779a0554049176d9e2db808e765248e315cec504f",
+          "internal/graph/proposal/main_env_test.go": "sha256:8f303aebe721fe528ddda300e125f9f62d30d13c8c737e726047f5e3284579c7",
+          "internal/graph/provider/main_env_test.go": "sha256:5f72c3e0c5c9564dd4d1b9a5640ba58aac41f8f5fee0fa04c3e7a0da7ead47d2",
+          "internal/graph/review/main_env_test.go": "sha256:8f8f19b122e78e01641c8d45d7fefaa2f3fb6a67c0ce03e957410602383b7ea5",
+          "internal/graph/sync/main_env_test.go": "sha256:d6d8188ae9ca53cb56b1cb596e4a4bbb5588b75f90847304aa6502174b590583",
+          "internal/hook/main_env_test.go": "sha256:7410ff6f8643cc87b6d5510e1bd73120ff23674502e96ddbcfd42b339d6e4620",
+          "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
+          "internal/provision/main_env_test.go": "sha256:b93ab1dc99ec33c0960d510a37b908a500c5ac5e06b9aff1e124871b968cc39c",
+          "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
           "internal/rules/hermetic_test.go": "sha256:94ac8d8807edcd1bea0c9422ca41f352c70590718719c949eab81504a4e8b37d",
           "internal/rules/main_env_test.go": "sha256:d4623ff4bb2569a60bb4a37f81d261c83cd4cda143545c807135ce9e2dc92c52",
-          "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433",
+          "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a",
+          "internal/testenv/adoption_test.go": "sha256:668e1105e751441dac01e089addf5065dc274e4379d65b58c938f5b2512c9d88",
           "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
           "internal/vcs/main_env_test.go": "sha256:3c8b6a0b45c9a5b627c8629c3cb18fc8208828970eb90ad4c984fa6b6b791a21",
           "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
           "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47",
-          "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97"
+          "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97",
+          "tools/testgate/main_env_test.go": "sha256:0a523517a747c2df6e5ab74a3ce35acea8fb3a30b2f2bb521d050971ba23ca0e"
         },
         "dependency_digests": {
           "test-git-policy": {
@@ -158,28 +198,32 @@
           "Specs/TestSuiteReliability:FR-01": "sha256:36886bd95e5dad840286514df88b4c5902846fe8820fd9069b9ce1473c2c138b",
           "Specs/TestSuiteReliability:FR-03": "sha256:615f74ccc32688aa37911ea1ccd31e46a085bb5f61276a57eb81bf4832320174"
         },
-        "report_digest": "sha256:7a96ffab28dbdf70027900c28a5939b9de80c6d127d3e691f7a32e954db8b8ed",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "facd924bd5e6f6001bb79578b6d1c78ad122e9cc"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
         "TestChildValidationHermetic": 54,
         "TestFixtureSetupInheritsPolicy": 52,
-        "TestInProcessValidationHermetic": 54
+        "TestGitSpawnInventoryFollowsIndirection": 181,
+        "TestGitSpawningTestPackagesInstallPolicy": 157,
+        "TestInProcessValidationHermetic": 54,
+        "TestSpawnInventoryIsImportBased": 246
       }
     },
     {
       "id": "prepare-once-determinism",
-      "contract": "Each Bad example's determinism case prepares files and Git history exactly once, evaluates four independently loaded roots, compares complete ordered diagnostics (code, severity, path, line, message, correction, implicated, waived reason) so a drifting message fails even when codes match, and leaves fixture bytes, index and HEAD unchanged.",
+      "contract": "Each Bad example's determinism case prepares files and Git history exactly once, evaluates four independently loaded roots, compares complete ordered diagnostics (code, severity, path, line, message, correction, implicated, waived reason) so a drifting message fails even when codes match, and leaves fixture bytes, index and HEAD unchanged; two evaluations of distinct fresh roots inside one process, in either order, produce identical diagnostics because no memo keyed by a root-relative path or artifact identity outlives its Root.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-04",
         "Specs/TestSuiteReliability:FR-05",
         "Specs/TestSuiteReliability:AC-02",
         "Designs/TestSuiteReliability:DD-8"
       ],
+      "contract_rev": 2,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-8": "sha256:45c699ef44dd74775f88a12db2d44bbced2698ea72963acd6dae93b01ddf0626",
         "Specs/TestSuiteReliability:AC-02": "sha256:78cf895a47cfb0257f08ebd4961a28a2e490f597de420c1be23cec0a8ef979c2",
@@ -210,6 +254,10 @@
           {
             "id": "TestRunIsDeterministic",
             "file": "internal/rules/rules_test.go"
+          },
+          {
+            "id": "TestFreshRootsAreIndependentInProcess",
+            "file": "internal/rules/harness_test.go"
           }
         ]
       },
@@ -224,11 +272,11 @@
       "phase": "02-determinism",
       "verification": {
         "result": "pass",
-        "seq": 66,
-        "contract_rev": 1,
+        "seq": 486,
+        "contract_rev": 2,
         "artifact_digests": {
-          "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-          "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+          "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+          "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
         },
         "dependency_digests": {
           "test-git-policy": {
@@ -242,16 +290,17 @@
           "Specs/TestSuiteReliability:FR-04": "sha256:030cc4077abdc62decd73777be4b9539991d3c307bfa3cd8f973a0f87da3152c",
           "Specs/TestSuiteReliability:FR-05": "sha256:bcb2a10dd9b7246adf95b0f468f33ef4cb2e1f98c58497dfabbcdc00486731ba"
         },
-        "report_digest": "sha256:7ee6d806de359326ef60377c9866c61d4815752044eabdc9f28190079c143408",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "4d10f1512f70b05c759139a48a2076aec7a8ae62"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
         "TestCompleteDiagnosticComparison": 12,
         "TestDeterminismPreparationCount": 12,
+        "TestFreshRootsAreIndependentInProcess": 208,
         "TestValidationLeavesFixtureUnchanged": 12
       }
     },
@@ -298,22 +347,22 @@
       "phase": "02-determinism",
       "verification": {
         "result": "pass",
-        "seq": 67,
+        "seq": 487,
         "contract_rev": 1,
         "artifact_digests": {
           "internal/rules/reproducibility_test.go": "sha256:85dd1fc3193402055fccdd78d00b29f7ff85adec954f48df3393229882d091d2"
         },
         "dependency_digests": {
           "prepare-once-determinism": {
-            "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-            "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+            "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+            "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
           },
           "single-pass-evaluation": {
-            "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+            "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
             "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-            "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-            "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-            "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+            "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+            "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+            "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
           }
         },
         "intent_hashes": {
@@ -321,11 +370,11 @@
           "Specs/TestSuiteReliability:AC-02": "sha256:78cf895a47cfb0257f08ebd4961a28a2e490f597de420c1be23cec0a8ef979c2",
           "Specs/TestSuiteReliability:FR-05": "sha256:bcb2a10dd9b7246adf95b0f468f33ef4cb2e1f98c58497dfabbcdc00486731ba"
         },
-        "report_digest": "sha256:7ee6d806de359326ef60377c9866c61d4815752044eabdc9f28190079c143408",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "4d10f1512f70b05c759139a48a2076aec7a8ae62"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -372,18 +421,18 @@
       "phase": "02-determinism",
       "verification": {
         "result": "pass",
-        "seq": 82,
+        "seq": 490,
         "contract_rev": 1,
         "artifact_digests": {
-          "CLAUDE.md": "sha256:d2fa68066c4ee467784e8f80caff36c3d1ecfcd012518abe7b0faec531fe3771",
-          "Makefile": "sha256:edbeaac51588a8aafa1045cd1a58fc60bd254444f0eb5e7d263a1d685929fb7b",
-          "internal/rules/inventory_test.go": "sha256:68ed4fa623e4b2aeffa62ee56f465e86af4f7fb9db86dd13959697513652cbc6",
+          "CLAUDE.md": "sha256:6adfec6fbef33522455fb6411225a55d52677ffbd9008e52f845711c74bcb212",
+          "Makefile": "sha256:5d96ca17aecec685d72a7ff7f8e193cdb642dbfb637950f6bc7ae3f83cf12562",
+          "internal/rules/inventory_test.go": "sha256:3f2f73f6ac7374c591c90c900282525d0415a838fc25fc76ec815f540231f30c",
           "internal/rules/pure_test.go": "sha256:aa94de2eea04ccc9d2df1dd564334e7d342215ecb4a55ecdb7dcb7257481cd68"
         },
         "dependency_digests": {
           "prepare-once-determinism": {
-            "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-            "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+            "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+            "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
           }
         },
         "intent_hashes": {
@@ -391,11 +440,11 @@
           "Specs/TestSuiteReliability:AC-03": "sha256:aaba7e4a8021746895868f3e2d95fdb3965c9d0bd4d8c4c2437384eb91516b1c",
           "Specs/TestSuiteReliability:FR-06": "sha256:f3b3586095c64cbb6b996ad370d1c8f5629ec2f35ecfc392a02a6a3b81a001d3"
         },
-        "report_digest": "sha256:484c4cceb9f4df83dfbc7deb886d5375c13f97d226fc96670e3567a35870d8f7",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "facd924bd5e6f6001bb79578b6d1c78ad122e9cc"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -450,25 +499,25 @@
       "phase": "03-single-pass",
       "verification": {
         "result": "pass",
-        "seq": 59,
+        "seq": 479,
         "contract_rev": 2,
         "artifact_digests": {
-          "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+          "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
           "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-          "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-          "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-          "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+          "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+          "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+          "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
         },
         "intent_hashes": {
           "Designs/TestSuiteReliability:DD-6": "sha256:8c240ac9914acd3778d69ef804035c56f13a8aaa35e271001543ad34f2626085",
           "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3",
           "Specs/TestSuiteReliability:FR-07": "sha256:ca16f57eb4b0ff6c7510f68e686c13bb77c944f9dd717bebedc2539ef00e462f"
         },
-        "report_digest": "sha256:733590bee623d00563eb983bddc9ab0dfeef8a75c8a439eb72ec1c7e373b675a",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "4d10f1512f70b05c759139a48a2076aec7a8ae62"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -519,20 +568,20 @@
       "phase": "03-single-pass",
       "verification": {
         "result": "pass",
-        "seq": 63,
+        "seq": 480,
         "contract_rev": 1,
         "artifact_digests": {
           "internal/rules/appendonly.go": "sha256:76f97d6167247ff5ebfe1c03e8c32ad6c2b9281679fe15543ed360202da15b0d",
           "internal/rules/appendonly_scan_test.go": "sha256:e1ea7a16e08cde96fe0f267d2830c88edfa025ecb2b58bfe405e99f4c9d3d2b9",
-          "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b"
+          "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488"
         },
         "dependency_digests": {
           "single-pass-evaluation": {
-            "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+            "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
             "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-            "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-            "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-            "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+            "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+            "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+            "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
           }
         },
         "intent_hashes": {
@@ -542,11 +591,11 @@
           "Specs/TestSuiteReliability:FR-08": "sha256:e5e2db08ceec191c426f232442ae67c57623bb818b7671a6716d6b79432982a4",
           "Specs/TestSuiteReliability:FR-09": "sha256:32114fa8f016f541ebd28374bb74b8449c776d8dc7ad37fb15782809493d1080"
         },
-        "report_digest": "sha256:7ee6d806de359326ef60377c9866c61d4815752044eabdc9f28190079c143408",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "4d10f1512f70b05c759139a48a2076aec7a8ae62"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -556,13 +605,14 @@
     },
     {
       "id": "bounded-runner",
-      "contract": "internal/procexec runs a resolved argv without a shell under a context deadline (default 30s) plus a bounded cleanup/drain allowance (5s, clipped to the enclosing deadline), retains a 64 KiB diagnostic excerpt per stream with a truncation flag while draining, enforces a finite machine-output limit whose overflow returns an incomplete-result error never parsed as success, and returns typed causes for unavailable executable, deadline, access failure, nonzero exit, overflow and drain failure.",
+      "contract": "internal/procexec runs a resolved argv without a shell under a context deadline (default 30s) plus a bounded cleanup/drain allowance (5s, clipped to the enclosing deadline), retains a 64 KiB diagnostic excerpt per stream with a truncation flag while draining, enforces a finite machine-output limit whose overflow returns an incomplete-result error never parsed as success, returns typed causes for unavailable executable, deadline, access failure, nonzero exit, overflow and drain failure, and never re-executes a command on its own: a mutating command that fails ambiguously runs exactly once per Run call.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-13",
         "Specs/TestSuiteReliability:FR-15",
         "Designs/TestSuiteReliability:DD-2",
         "Designs/TestSuiteReliability:DD-9"
       ],
+      "contract_rev": 2,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-2": "sha256:df0ffe90c0819e1cc3ce9a697cab3996bb2d69e62282dc7144ad6281fb35d427",
         "Designs/TestSuiteReliability:DD-9": "sha256:ee1a6a8f1443d39b2e43507d1e52246a4622ab469114fd9d5e3422b164ff08a2",
@@ -591,6 +641,10 @@
           {
             "id": "TestTypedCauses",
             "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestMutationNotRetried",
+            "file": "internal/procexec/procexec_test.go"
           }
         ]
       },
@@ -606,14 +660,14 @@
       "phase": "04-owned-execution",
       "verification": {
         "result": "pass",
-        "seq": 122,
-        "contract_rev": 1,
+        "seq": 475,
+        "contract_rev": 2,
         "artifact_digests": {
           "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-          "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+          "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
           "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-          "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+          "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
         },
         "intent_hashes": {
           "Designs/TestSuiteReliability:DD-2": "sha256:df0ffe90c0819e1cc3ce9a697cab3996bb2d69e62282dc7144ad6281fb35d427",
@@ -621,16 +675,17 @@
           "Specs/TestSuiteReliability:FR-13": "sha256:36b2b32325dedaee5e7e7faa0165dc8c849a3e2e5ef93a08327d30b91424b7f8",
           "Specs/TestSuiteReliability:FR-15": "sha256:2b623a70b436b05718b2328a537def82e169dd977068f11ee01170217bddcfaf"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
         "TestDeadlineIsOperational": 1,
         "TestLargeMachineOutput": 1,
+        "TestMutationNotRetried": 154,
         "TestOutputOverflow": 1,
         "TestStderrDrain": 1,
         "TestTypedCauses": 1
@@ -706,25 +761,25 @@
       "phase": "04-owned-execution",
       "verification": {
         "result": "pass",
-        "seq": 121,
+        "seq": 478,
         "contract_rev": 5,
         "artifact_digests": {
           "go.mod": "sha256:c98e94956cd09de090105a8ba9e4aee87d6cb7a82a14faf0a4563adfac5b6777",
           "internal/procexec/contain_other.go": "sha256:80fbc64d3d67bb177e5f52d0cdcb279e2cf038f7bc6b5dfab5021233ad839e41",
           "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
-          "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+          "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
           "internal/procexec/posix_test.go": "sha256:cb39958be6568d4ca3edbfa4004f25da9d3e54d98c8026d3eb326a78623e1677",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
           "internal/procexec/wnowait_linux.go": "sha256:993c6912c8a3191859073fbb6ccaeb540300c674737efba4fda07a22da43d939",
           "internal/procexec/wnowait_other.go": "sha256:6dbea938414ad76e81964f79a8aa7a725f803c4bfbd760254501760555d75992"
         },
         "dependency_digests": {
           "bounded-runner": {
             "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-            "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
             "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-            "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-            "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+            "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+            "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
           }
         },
         "intent_hashes": {
@@ -732,12 +787,11 @@
           "Specs/TestSuiteReliability:AC-06": "sha256:1d98d5cc74d4af379807028ec072ff362e415e5d1b285becdb0b4dcf245b00f7",
           "Specs/TestSuiteReliability:FR-14": "sha256:7c8264d5c9a39eefe11d4c293c9e5413489c870cc24f03e28f39dda8c029f131"
         },
-        "report_digest": "sha256:a828a2c0428d30236ddca8c39ba47ff198f10ba119bcda0d5d3191c5b5ab46a7",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff",
-          "worktree": ".plans/Plans/TestSuiteReliability/.graph/ws-posix-containment"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -790,24 +844,24 @@
       "phase": "04-owned-execution",
       "verification": {
         "result": "pass",
-        "seq": 127,
+        "seq": 488,
         "contract_rev": 1,
         "artifact_digests": {
-          "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+          "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
           "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
           "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47"
         },
         "dependency_digests": {
           "bounded-runner": {
             "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-            "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
             "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-            "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-            "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+            "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+            "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
           },
           "prepare-once-determinism": {
-            "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-            "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+            "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+            "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
           }
         },
         "intent_hashes": {
@@ -815,11 +869,11 @@
           "Specs/TestSuiteReliability:FR-13": "sha256:36b2b32325dedaee5e7e7faa0165dc8c849a3e2e5ef93a08327d30b91424b7f8",
           "Specs/TestSuiteReliability:FR-14": "sha256:7c8264d5c9a39eefe11d4c293c9e5413489c870cc24f03e28f39dda8c029f131"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -829,13 +883,13 @@
     },
     {
       "id": "checked-detection",
-      "contract": "vcs exposes checked detection returning (Repo, error): a missing or unrunnable git during a required probe is an operational error, never NoRepo, while a directory that is genuinely not a repository still yields NoRepo; runGit executes through procexec and a missing blob, path or revision still returns ErrNotFound after a successful query.",
+      "contract": "vcs exposes checked detection returning (Repo, error): a missing or unrunnable SCM binary during a required probe is an operational error, never NoRepo, while a directory that is genuinely not a repository still yields NoRepo; runGit and runP4 execute through procexec, and in both adapters a missing blob, path or revision returns ErrNotFound only after a successful query — an ErrOperational from the runner is never rewrapped as ErrNotFound by RevisionExists, FileAt or ChangedPaths, so the memoization decorator cannot cache a transient failure as absence.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-16",
         "Specs/TestSuiteReliability:AC-08",
         "Designs/TestSuiteReliability:DD-10"
       ],
-      "contract_rev": 2,
+      "contract_rev": 3,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
         "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
@@ -858,6 +912,10 @@
           {
             "id": "TestAbsenceMessagesAreNotDoubled",
             "file": "internal/vcs/checked_test.go"
+          },
+          {
+            "id": "TestP4OperationalErrorsAreNotAbsence",
+            "file": "internal/vcs/checked_test.go"
           }
         ]
       },
@@ -873,22 +931,22 @@
       "phase": "05-propagation",
       "verification": {
         "result": "pass",
-        "seq": 123,
-        "contract_rev": 2,
+        "seq": 476,
+        "contract_rev": 3,
         "artifact_digests": {
-          "internal/vcs/checked_test.go": "sha256:3ae9efc60f5b949e64a7fb68cc217a6105a0459e18a171b07779a2c2e5081464",
+          "internal/vcs/checked_test.go": "sha256:2311b0490dc52017f6384446a7b5e6a6d7c4281cbc3f041d36543633f0d4b9c6",
           "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
-          "internal/vcs/p4.go": "sha256:363c9a8af4c0f8479ffa0d2bd95591957c46bba54b1efc45f72b386879726087",
+          "internal/vcs/p4.go": "sha256:3a18858cf3ee323d6cf0f04c31f73b8ef8a208fa56da7f5a6d9b84cbf09751ee",
           "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7",
           "internal/vcs/vcs_test.go": "sha256:8161dc0943e8610a89900523f30fb5d508cd3549af05974ee909cdc23d3dae4e"
         },
         "dependency_digests": {
           "bounded-runner": {
             "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-            "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
             "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-            "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-            "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+            "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+            "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
           }
         },
         "intent_hashes": {
@@ -896,15 +954,16 @@
           "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
           "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
-        "TestAbsenceMessagesAreNotDoubled": 50
+        "TestAbsenceMessagesAreNotDoubled": 50,
+        "TestP4OperationalErrorsAreNotAbsence": 158
       }
     },
     {
@@ -945,7 +1004,7 @@
       "phase": "05-propagation",
       "verification": {
         "result": "pass",
-        "seq": 124,
+        "seq": 477,
         "contract_rev": 1,
         "artifact_digests": {
           "internal/vcs/cache.go": "sha256:d5b23c79a04881847f2ab1266ce049f244f0043127d7479f77498efc61d036cf",
@@ -953,9 +1012,9 @@
         },
         "dependency_digests": {
           "checked-detection": {
-            "internal/vcs/checked_test.go": "sha256:3ae9efc60f5b949e64a7fb68cc217a6105a0459e18a171b07779a2c2e5081464",
+            "internal/vcs/checked_test.go": "sha256:2311b0490dc52017f6384446a7b5e6a6d7c4281cbc3f041d36543633f0d4b9c6",
             "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
-            "internal/vcs/p4.go": "sha256:363c9a8af4c0f8479ffa0d2bd95591957c46bba54b1efc45f72b386879726087",
+            "internal/vcs/p4.go": "sha256:3a18858cf3ee323d6cf0f04c31f73b8ef8a208fa56da7f5a6d9b84cbf09751ee",
             "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7",
             "internal/vcs/vcs_test.go": "sha256:8161dc0943e8610a89900523f30fb5d508cd3549af05974ee909cdc23d3dae4e"
           }
@@ -965,11 +1024,11 @@
           "Specs/TestSuiteReliability:AC-04": "sha256:a44fc0ddb699b5a4be838b2b50ab99266890fd5b123caa52cb59c706b3971ca3",
           "Specs/TestSuiteReliability:FR-09": "sha256:32114fa8f016f541ebd28374bb74b8449c776d8dc7ad37fb15782809493d1080"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -978,12 +1037,13 @@
     },
     {
       "id": "propagation-validator",
-      "contract": "Validation owns an operational-failure collector: Root.Repo records a failed checked detection before returning an unavailable adapter, the evaluator aborts after the first callback that recorded a failure and discards partial findings, retirement uses checked detection, and `sdd validate` exits 2 with the cause instead of 0 or 1 when git cannot run.",
+      "contract": "Validation owns an operational-failure collector: Root.Repo records a failed checked detection before returning an unavailable adapter, the evaluator aborts after the first callback that recorded a failure and discards partial findings, retirement uses checked detection, VerifyRetirementSource wraps a failed post-detection RevisionExists so ErrOperational survives errors.Is, the retirement rule records an operational VerifyRetirementSource failure on the Root and stays silent instead of emitting it as a retirement problem, and the exported retirement-problems entry point never discards an operational failure — it returns it as an error alongside the substantive problems so no caller can read an unanswered verification as a clean result; every repository query made from a rule callback in internal/rules that can emit or suppress a diagnostic — RevisionExists, IsAncestor, Clean, Head, RevisionsAfter, ChangedPaths and FileAt, including the review-committed check and the lifecycle-normalized content loads behind the intent comparison and the planning-revision load — emits an absence or state diagnostic only when the query succeeded and answered negatively (or the revision syntax is unsupported) and stays silent on ErrOperational, which the collector already holds; an operational plan lookup inside the evidence-committed checks suppresses only the plan-state contribution, never a content diagnostic computed without the repository, where content completeness includes the presence of the evidence heading; the v1 completion-evidence rules SDD059, SDD070, SDD157, SDD158, SDD166 and SDD167 do not apply to a graph plan README whose directory carries the plan graph nor to a phase document that is a generated view of that graph, while a hand-authored phase document beside a graph is still held to them, and the graph-plan predicate is evaluated once per plan directory per Root and treats a graph-file stat failure that is not not-exist as an operational failure recorded on the Root, never as absence; and `sdd validate` exits 2 with the cause instead of 0 or 1 when git or p4 cannot run.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-16",
         "Specs/TestSuiteReliability:AC-08",
         "Designs/TestSuiteReliability:DD-10"
       ],
+      "contract_rev": 8,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
         "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
@@ -1010,6 +1070,46 @@
             "satisfies": [
               "user-entrypoint"
             ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRepoQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestContentQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestMissingEvidenceHeadingSurvivesPlanLookupFailure",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementRuleFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProblemsReturnsOperationalError",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestGraphPlanExemptionRequiresGeneratedView",
+            "file": "internal/rules/graphviews_test.go"
+          },
+          {
+            "id": "TestGraphPlanStatFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
           }
         ]
       },
@@ -1022,36 +1122,50 @@
         "internal/rules/retirement.go",
         "internal/rules/operational_test.go",
         "cmd/sdd/validate.go",
-        "cmd/sdd/operational_test.go"
+        "cmd/sdd/operational_test.go",
+        "internal/rules/evidence.go",
+        "internal/rules/phasereview.go",
+        "internal/rules/graphviews.go",
+        "internal/rules/headings.go",
+        "internal/rules/plan.go",
+        "internal/rules/fixtures.go",
+        "internal/rules/graphviews_test.go"
       ],
       "estimate": 3,
       "phase": "05-propagation",
       "verification": {
         "result": "pass",
-        "seq": 125,
-        "contract_rev": 1,
+        "seq": 481,
+        "contract_rev": 8,
         "artifact_digests": {
-          "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+          "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
           "cmd/sdd/validate.go": "sha256:52e979cf6cec0df0e6ddedb8dfc8a8b1bd1bbbb8722b7829daa367a68860a472",
-          "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
-          "internal/rules/operational_test.go": "sha256:455c18d5c685d5a541b2c883cf16504d20b7a58c49d1af1085e7b5e5e05b2d4f",
-          "internal/rules/retirement.go": "sha256:67c2423adbc1193b351c089999a5d75a90fe9f19e78a00758aa996b05b2da02d",
-          "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b"
+          "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
+          "internal/rules/evidence.go": "sha256:d040fa3ca0f2b77e74d14e7c86d8d5458932929255162e588b1ad32483083b18",
+          "internal/rules/fixtures.go": "sha256:c7c2ae30da24ff3ded501e9b4a2e998b6c1d7de371fa54448a6e3109aa9701a4",
+          "internal/rules/graphviews.go": "sha256:ddbd76fe56bf08f67a9b31f73dcb656ccc0791adbd4ae8aa04b5af721cccecdc",
+          "internal/rules/graphviews_test.go": "sha256:7712024b2bfed1b3502bb8975828eae12ed61b769c1e12a2de1f7c530e35b2af",
+          "internal/rules/headings.go": "sha256:0c93a1b5f3f5f75d905f783f18648c919a8b6b4de0853989cc8879909f909932",
+          "internal/rules/operational_test.go": "sha256:1365e3b726810ca38638cdee9b6e126bdd5ddfc5891ca0dd073b3fd53166efec",
+          "internal/rules/phasereview.go": "sha256:ef1897bc5ba1d8960ae13ff9a465d199483cffa21da575fa5807494921e06748",
+          "internal/rules/plan.go": "sha256:4f5068a6cf3c0ca0163e6d792cc7f092daa6c13465124aec46b3bfbf0cd3b637",
+          "internal/rules/retirement.go": "sha256:74d59bbbf6b7ce87a8225733925d9241a579c1ff4eb027f319fd8da483cc727e",
+          "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488"
         },
         "dependency_digests": {
           "checked-detection": {
-            "internal/vcs/checked_test.go": "sha256:3ae9efc60f5b949e64a7fb68cc217a6105a0459e18a171b07779a2c2e5081464",
+            "internal/vcs/checked_test.go": "sha256:2311b0490dc52017f6384446a7b5e6a6d7c4281cbc3f041d36543633f0d4b9c6",
             "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
-            "internal/vcs/p4.go": "sha256:363c9a8af4c0f8479ffa0d2bd95591957c46bba54b1efc45f72b386879726087",
+            "internal/vcs/p4.go": "sha256:3a18858cf3ee323d6cf0f04c31f73b8ef8a208fa56da7f5a6d9b84cbf09751ee",
             "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7",
             "internal/vcs/vcs_test.go": "sha256:8161dc0943e8610a89900523f30fb5d508cd3549af05974ee909cdc23d3dae4e"
           },
           "single-pass-evaluation": {
-            "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+            "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
             "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-            "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-            "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-            "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+            "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+            "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+            "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
           }
         },
         "intent_hashes": {
@@ -1059,27 +1173,38 @@
           "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
           "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
+        "TestContentQueryFailuresAreOperational": 338,
+        "TestGraphPlanExemptionRequiresGeneratedView": 452,
+        "TestGraphPlanStatFailureIsOperational": 452,
+        "TestIdentityQueryFailuresAreOperational": 209,
         "TestIgnoredRepoErrorAbortsEvaluation": 9,
+        "TestMissingEvidenceHeadingSurvivesPlanLookupFailure": 362,
+        "TestP4IdentityQueryFailureIsOperational": 182,
+        "TestRepoQueryFailuresAreOperational": 300,
         "TestRetirementDetectionFailureIsOperational": 9,
+        "TestRetirementProbeFailureIsOperational": 209,
+        "TestRetirementProblemsReturnsOperationalError": 386,
+        "TestRetirementRuleFailureIsOperational": 362,
         "TestValidationOperationalExit": 9
       }
     },
     {
       "id": "propagation-graph-callers",
-      "contract": "Graph sync, the graph provider, remap-revisions, review evidence and evidence add use checked detection and surface a failed Clean() or probe as an operational exit 2, never as a clean tree, a plain-tree fallback or a skipped check.",
+      "contract": "Graph sync, the graph provider, remap-revisions, review evidence and evidence add use checked detection and surface a failed Clean() or probe as an operational exit 2, never as a clean tree, a plain-tree fallback or a skipped check; remap-revisions treats a RevisionExists error that is not ErrNotFound as an operational failure and never reports it as a revision that is not an available commit; every rules sweep run by a cmd/sdd verb — the lifecycle transition gate's before and after sweeps and the review-resolve freeze gate — goes through the checked evaluation entry points and exits 2 with the cause when the sweep is operational, so an operational diagnostic is never deduplicated or path-filtered into an empty result and no status or frozen flag is written; graph compile and graph retire consume the retirement-problems entry point's operational error, so an unanswered retirement-source verification refuses the compile or the retire with exit 2 and writes nothing; the shared graph validation behind graph split, graph amend and graph audit returns that operational error rather than discarding it, so split and amend refuse with exit 2 before their before/after comparison and audit reports the operational failure instead of a clean result; and the graph-plan closing path — plan complete, phase complete and the view renderer they share — keeps the same discipline: a graph-store or reviews-directory read that fails for any reason other than not-exist is an operational exit 2 and never routes a graph plan down the v1 completion path or renders a missing review, the rendered identity line states only what was actually checked (a revision-exists probe run at render time, or that no recheck ran), the plan-level evidence date derives from the stable updated stamp so an unchanged closed plan re-renders byte-identically across days, the frozen-view comparison anchors the evidence section on the writer-controlled boundary rather than the first heading-shaped line and refuses when an already-rendered evidence body would change, and the README status flip is a compare-and-swap against the bytes the renderer just wrote so a concurrent writer is refused rather than overwritten.",
       "justifies": [
         "Specs/TestSuiteReliability:FR-16",
         "Specs/TestSuiteReliability:AC-08",
         "Designs/TestSuiteReliability:DD-10"
       ],
+      "contract_rev": 7,
       "intent_hashes": {
         "Designs/TestSuiteReliability:DD-10": "sha256:8dbdacf49910ff34765a1c309c4565e60cf75b30d701abfcec2f1f8df2fa44d5",
         "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
@@ -1102,6 +1227,54 @@
           {
             "id": "TestLifecycleVerbsOperationalExit",
             "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          },
+          {
+            "id": "TestTransitionGateOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestReviewResolveOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRetireAndCompileOperationalSourceExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestSplitAmendAuditOperationalSourceExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestGraphCompleteReadFailuresAreOperational",
+            "file": "cmd/sdd/graph_complete_test.go"
+          },
+          {
+            "id": "TestGraphPhaseCompleteRefusesAndDryRuns",
+            "file": "cmd/sdd/graph_complete_test.go"
+          },
+          {
+            "id": "TestGraphCompleteStatusFlipIsCompareAndSwap",
+            "file": "cmd/sdd/graph_complete_test.go"
+          },
+          {
+            "id": "TestFindPhaseReviewReadFailuresAreOperational",
+            "file": "internal/graph/compile/evidence_test.go"
+          },
+          {
+            "id": "TestRenderedIdentityLineReportsRealCheck",
+            "file": "internal/graph/compile/evidence_test.go"
+          },
+          {
+            "id": "TestPlanEvidenceIsDayStable",
+            "file": "internal/graph/compile/evidence_test.go"
+          },
+          {
+            "id": "TestFrozenViewComparisonIgnoresHeadingShapedContract",
+            "file": "internal/graph/compile/render_status_test.go"
           }
         ]
       },
@@ -1117,21 +1290,45 @@
         "cmd/sdd/operational_test.go",
         "internal/graph/ops/ops.go",
         "internal/graph/review/review.go",
-        "cmd/sdd/graph.go"
+        "cmd/sdd/graph.go",
+        "internal/graph/compile/compile.go",
+        "internal/graph/compile/anchor.go",
+        "internal/graph/ops/retirement.go",
+        "internal/graph/compile/audit.go",
+        "internal/graph/ops/amend.go",
+        "cmd/sdd/graph_complete.go",
+        "cmd/sdd/graph_complete_test.go",
+        "cmd/sdd/transition.go",
+        "internal/graph/compile/render.go",
+        "internal/graph/compile/evidence.go",
+        "internal/graph/compile/evidence_test.go",
+        "internal/graph/compile/render_status_test.go"
       ],
       "estimate": 2,
       "phase": "05-propagation",
       "verification": {
         "result": "pass",
-        "seq": 126,
-        "contract_rev": 1,
+        "seq": 482,
+        "contract_rev": 7,
         "artifact_digests": {
           "cmd/sdd/evidence.go": "sha256:1c999f0383a753cdc9b3dd6c17d97e30a34617857837e0e08ade3f53f0567bd2",
           "cmd/sdd/graph.go": "sha256:8f524f26782d314deb58a37fc723a36cc456f29eec2c46f53b0bb146dcb98fd5",
-          "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+          "cmd/sdd/graph_complete.go": "sha256:87fbdfd2df715e7ba1771a1bbabbb054059c531e775413eed31982eb6da3d720",
+          "cmd/sdd/graph_complete_test.go": "sha256:8720b576ea671f25a6091faed5eb6a52e030f28a4a7052e7e181cba84d19b563",
+          "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
           "cmd/sdd/review.go": "sha256:5273d3582b774ec5390187da163077505b6c9e9aebe5daca159f60541ff1e9da",
-          "internal/graph/ops/ops.go": "sha256:4cb8a39600d149a5c67d74133828694485941f9df2cbcf3e3b368f468525dcdd",
-          "internal/graph/ops/remap.go": "sha256:1c18581fe343551676e4489f9f5baaa0828c2bce286abe6afc3a6dca1d67872f",
+          "cmd/sdd/transition.go": "sha256:77f53fa512dbc43bbb5d5f7db6f16b7cbb1eb16686dd19ee3067a7c69ef0ce6e",
+          "internal/graph/compile/anchor.go": "sha256:945a0c16e7a7714bc98af92d67860f1894ce810251f3d91941ad05d781500acb",
+          "internal/graph/compile/audit.go": "sha256:61095ba7cb8f33e0345d026df287cf99cb8898fc8f915843a4c5f187a12ea1eb",
+          "internal/graph/compile/compile.go": "sha256:abae439126a7d27039f4a753f80eaf72249d7255755a09d745d44c2cf805ed30",
+          "internal/graph/compile/evidence.go": "sha256:21524b2e89a5df17b679ed6461ae23b39b047fbde00a854fe98b272dc8e8cc03",
+          "internal/graph/compile/evidence_test.go": "sha256:496fabfbbf21aa60c3db8914270dd643dc467ed7a41b959a8d20c0dc687e124d",
+          "internal/graph/compile/render.go": "sha256:e26d2eb047b83d28e5fc5de3706c438e6cca0565fac27b2f16a9173e5d54af46",
+          "internal/graph/compile/render_status_test.go": "sha256:ee15203a379ab6eb502c958db155f74f4d10f57feccac14a91038bc4f793bb7a",
+          "internal/graph/ops/amend.go": "sha256:bd8a80bee31677ccd19a2ee483c4bfd19c5fbdc0837ee14f6f2ec1f652efe6b5",
+          "internal/graph/ops/ops.go": "sha256:f13dc943e9557c537d623bbe9b29e0fc3083a981bda95af6aed399f8704610d4",
+          "internal/graph/ops/remap.go": "sha256:ce6fa1a8015ddbef0e265d94bdbfd1bd16ed4fa496ae84b969fc32fd6cc7b244",
+          "internal/graph/ops/retirement.go": "sha256:6a74231fbbd141a3f87bbc5116a3ede9b769eda3d35f5ab05460701b2c149455",
           "internal/graph/provider/operational_test.go": "sha256:c0004d85d90c9c87dc5d35354933d43d41e9241bebfefde739a5789e62fd7806",
           "internal/graph/provider/provider.go": "sha256:9c8fd6a2cd53d07c8d94602259b409495400d893a286092177af68b382ac156e",
           "internal/graph/review/review.go": "sha256:9f978c6fa07a8170962a1a0a3fa1701e40331ba9bc01e18bcfe34bcdd9a5b1eb",
@@ -1140,12 +1337,19 @@
         },
         "dependency_digests": {
           "propagation-validator": {
-            "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+            "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
             "cmd/sdd/validate.go": "sha256:52e979cf6cec0df0e6ddedb8dfc8a8b1bd1bbbb8722b7829daa367a68860a472",
-            "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
-            "internal/rules/operational_test.go": "sha256:455c18d5c685d5a541b2c883cf16504d20b7a58c49d1af1085e7b5e5e05b2d4f",
-            "internal/rules/retirement.go": "sha256:67c2423adbc1193b351c089999a5d75a90fe9f19e78a00758aa996b05b2da02d",
-            "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b"
+            "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
+            "internal/rules/evidence.go": "sha256:d040fa3ca0f2b77e74d14e7c86d8d5458932929255162e588b1ad32483083b18",
+            "internal/rules/fixtures.go": "sha256:c7c2ae30da24ff3ded501e9b4a2e998b6c1d7de371fa54448a6e3109aa9701a4",
+            "internal/rules/graphviews.go": "sha256:ddbd76fe56bf08f67a9b31f73dcb656ccc0791adbd4ae8aa04b5af721cccecdc",
+            "internal/rules/graphviews_test.go": "sha256:7712024b2bfed1b3502bb8975828eae12ed61b769c1e12a2de1f7c530e35b2af",
+            "internal/rules/headings.go": "sha256:0c93a1b5f3f5f75d905f783f18648c919a8b6b4de0853989cc8879909f909932",
+            "internal/rules/operational_test.go": "sha256:1365e3b726810ca38638cdee9b6e126bdd5ddfc5891ca0dd073b3fd53166efec",
+            "internal/rules/phasereview.go": "sha256:ef1897bc5ba1d8960ae13ff9a465d199483cffa21da575fa5807494921e06748",
+            "internal/rules/plan.go": "sha256:4f5068a6cf3c0ca0163e6d792cc7f092daa6c13465124aec46b3bfbf0cd3b637",
+            "internal/rules/retirement.go": "sha256:74d59bbbf6b7ce87a8225733925d9241a579c1ff4eb027f319fd8da483cc727e",
+            "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488"
           }
         },
         "intent_hashes": {
@@ -1153,12 +1357,24 @@
           "Specs/TestSuiteReliability:AC-08": "sha256:b98e36b2a9a983e82afd95585109edfebd85451cff3fc71f7f5546580770a0ff",
           "Specs/TestSuiteReliability:FR-16": "sha256:bba95e9eba43fb5a885e4fef9fe73912425bbd77b4e291126adc74c2cabc4e53"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
+      },
+      "red_seqs": {
+        "TestFindPhaseReviewReadFailuresAreOperational": 470,
+        "TestFrozenViewComparisonIgnoresHeadingShapedContract": 470,
+        "TestGraphCompleteReadFailuresAreOperational": 470,
+        "TestGraphCompleteStatusFlipIsCompareAndSwap": 470,
+        "TestRemapRevisionsQueryFailureIsOperational": 185,
+        "TestRenderedIdentityLineReportsRealCheck": 470,
+        "TestRetireAndCompileOperationalSourceExit": 388,
+        "TestReviewResolveOperationalSweepExits": 364,
+        "TestSplitAmendAuditOperationalSourceExit": 410,
+        "TestTransitionGateOperationalSweepExits": 340
       }
     },
     {
@@ -1193,48 +1409,61 @@
       "phase": "06-acceptance",
       "verification": {
         "result": "pass",
-        "seq": 130,
+        "seq": 492,
         "contract_rev": 1,
         "artifact_digests": {
-          "CLAUDE.md": "sha256:d2fa68066c4ee467784e8f80caff36c3d1ecfcd012518abe7b0faec531fe3771",
-          "Makefile": "sha256:edbeaac51588a8aafa1045cd1a58fc60bd254444f0eb5e7d263a1d685929fb7b",
+          "CLAUDE.md": "sha256:6adfec6fbef33522455fb6411225a55d52677ffbd9008e52f845711c74bcb212",
+          "Makefile": "sha256:5d96ca17aecec685d72a7ff7f8e193cdb642dbfb637950f6bc7ae3f83cf12562",
           "cmd/sdd/doctor.go": "sha256:f1bd62ae1bb93b24047871858ddf816988ee07f968e098d53c0aee6db06b2967",
           "cmd/sdd/doctor_test.go": "sha256:49f8fd43a0a84e7e4cf94f6262b57539dfb949fa8c3d98efc299958712eecbbc",
           "cmd/sdd/hermetic_test.go": "sha256:593b608ddddfcc7929ca0253c5b1c058af538941f779da9fd918b94a668fb05c",
           "cmd/sdd/hook_probe_other_test.go": "sha256:3c04a7eea6bdd105e7a1582f27cfb3597847a41f934e43572e942f353a1eca35",
           "cmd/sdd/hook_probe_unix_test.go": "sha256:f90fdac3a78bfd663d991dd34c1ad46b49a49ae7a1b04678bc1367cdda36e800",
           "cmd/sdd/main_env_test.go": "sha256:fe20aae6c155182e92d5d9514a066a8520b7f59bc71ba71e5a2ad0cb2f36da94",
+          "internal/graph/compile/main_env_test.go": "sha256:9a0946a0d0535f4287e71234e7dd5e0599edbb169b28413dd684a3488c01ab92",
+          "internal/graph/convert/main_env_test.go": "sha256:4d9cf2e52c5f270f4350e2be718fd799bb52d136cf290381d0e05d2bafa12826",
+          "internal/graph/intent/main_env_test.go": "sha256:d9ba24802823ce1212976e52137fb8e1339b6b3710fb22e01bdd8279d291de05",
+          "internal/graph/model/main_env_test.go": "sha256:5880371d59bf995b458dfe737812305bbdd4dd291c021473516dfc51b83b554d",
+          "internal/graph/ops/main_env_test.go": "sha256:bcc0c81abe174ed99c46abf779a0554049176d9e2db808e765248e315cec504f",
+          "internal/graph/proposal/main_env_test.go": "sha256:8f303aebe721fe528ddda300e125f9f62d30d13c8c737e726047f5e3284579c7",
+          "internal/graph/provider/main_env_test.go": "sha256:5f72c3e0c5c9564dd4d1b9a5640ba58aac41f8f5fee0fa04c3e7a0da7ead47d2",
+          "internal/graph/review/main_env_test.go": "sha256:8f8f19b122e78e01641c8d45d7fefaa2f3fb6a67c0ce03e957410602383b7ea5",
+          "internal/graph/sync/main_env_test.go": "sha256:d6d8188ae9ca53cb56b1cb596e4a4bbb5588b75f90847304aa6502174b590583",
+          "internal/hook/main_env_test.go": "sha256:7410ff6f8643cc87b6d5510e1bd73120ff23674502e96ddbcfd42b339d6e4620",
           "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-          "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+          "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
           "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-          "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb",
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+          "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216",
           "internal/provision/git_post_rewrite.go": "sha256:75bdb54d21a67d5882b8798a0d97dd94ecd6c2f8447e42182610c92a70b953e4",
+          "internal/provision/main_env_test.go": "sha256:b93ab1dc99ec33c0960d510a37b908a500c5ac5e06b9aff1e124871b968cc39c",
           "internal/provision/owned_runner_other_test.go": "sha256:d273ffe819932a5eefee6afd9cccfea79f7185a497807ac2360bfec79e46c50c",
           "internal/provision/owned_runner_test.go": "sha256:403791a3a180567c808c8b7bede30c1d27759038067589fcf08cdb0d5daa8451",
           "internal/provision/owned_runner_unix_test.go": "sha256:400c4e0eae92be03ec7e2a49e7822eae4b31cb0a0b70aa3d3a531297514e45d1",
           "internal/provision/provision.go": "sha256:2a00acf1e37e72e1da79014b242dd68a4dd851de75f8776d54ee21cc3ba7b6e3",
           "internal/rules/appendonly.go": "sha256:76f97d6167247ff5ebfe1c03e8c32ad6c2b9281679fe15543ed360202da15b0d",
           "internal/rules/appendonly_scan_test.go": "sha256:e1ea7a16e08cde96fe0f267d2830c88edfa025ecb2b58bfe405e99f4c9d3d2b9",
-          "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+          "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
           "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-          "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+          "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
           "internal/rules/hermetic_test.go": "sha256:94ac8d8807edcd1bea0c9422ca41f352c70590718719c949eab81504a4e8b37d",
-          "internal/rules/inventory_test.go": "sha256:68ed4fa623e4b2aeffa62ee56f465e86af4f7fb9db86dd13959697513652cbc6",
+          "internal/rules/inventory_test.go": "sha256:3f2f73f6ac7374c591c90c900282525d0415a838fc25fc76ec815f540231f30c",
           "internal/rules/main_env_test.go": "sha256:d4623ff4bb2569a60bb4a37f81d261c83cd4cda143545c807135ce9e2dc92c52",
           "internal/rules/pure_test.go": "sha256:aa94de2eea04ccc9d2df1dd564334e7d342215ecb4a55ecdb7dcb7257481cd68",
           "internal/rules/reproducibility_test.go": "sha256:85dd1fc3193402055fccdd78d00b29f7ff85adec954f48df3393229882d091d2",
-          "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-          "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-          "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433",
-          "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c",
+          "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+          "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+          "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a",
+          "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638",
+          "internal/testenv/adoption_test.go": "sha256:668e1105e751441dac01e089addf5065dc274e4379d65b58c938f5b2512c9d88",
           "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
           "internal/testenv/testenv_test.go": "sha256:3c7c9be7d15979250daaf7d436c6495efecc76b1c5aa3c74cabe51caf45a3158",
           "internal/vcs/main_env_test.go": "sha256:3c8b6a0b45c9a5b627c8629c3cb18fc8208828970eb90ad4c984fa6b6b791a21",
           "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
           "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47",
           "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97",
-          "tools/testgate/race_test.go": "sha256:f569488a8da857db96b468b687ae09cb3fad2e8ca2253554833478ae39627102"
+          "tools/testgate/main_env_test.go": "sha256:0a523517a747c2df6e5ab74a3ce35acea8fb3a30b2f2bb521d050971ba23ca0e",
+          "tools/testgate/race_test.go": "sha256:9a9b83c84c0b08a40aece3ba9a0d05f845c336a0e20547cd9f543a2268933852"
         },
         "reviewed": {
           "append-only-scan-once": {
@@ -1242,33 +1471,47 @@
             "artifact_digests": {
               "internal/rules/appendonly.go": "sha256:76f97d6167247ff5ebfe1c03e8c32ad6c2b9281679fe15543ed360202da15b0d",
               "internal/rules/appendonly_scan_test.go": "sha256:e1ea7a16e08cde96fe0f267d2830c88edfa025ecb2b58bfe405e99f4c9d3d2b9",
-              "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b"
+              "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488"
             }
           },
           "bounded-runner": {
-            "contract_rev": 1,
+            "contract_rev": 2,
             "artifact_digests": {
               "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-              "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+              "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
               "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-              "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-              "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+              "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+              "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
             }
           },
           "child-validation-hermetic": {
-            "contract_rev": 3,
+            "contract_rev": 6,
             "artifact_digests": {
               "cmd/sdd/hermetic_test.go": "sha256:593b608ddddfcc7929ca0253c5b1c058af538941f779da9fd918b94a668fb05c",
               "cmd/sdd/main_env_test.go": "sha256:fe20aae6c155182e92d5d9514a066a8520b7f59bc71ba71e5a2ad0cb2f36da94",
-              "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+              "internal/graph/compile/main_env_test.go": "sha256:9a0946a0d0535f4287e71234e7dd5e0599edbb169b28413dd684a3488c01ab92",
+              "internal/graph/convert/main_env_test.go": "sha256:4d9cf2e52c5f270f4350e2be718fd799bb52d136cf290381d0e05d2bafa12826",
+              "internal/graph/intent/main_env_test.go": "sha256:d9ba24802823ce1212976e52137fb8e1339b6b3710fb22e01bdd8279d291de05",
+              "internal/graph/model/main_env_test.go": "sha256:5880371d59bf995b458dfe737812305bbdd4dd291c021473516dfc51b83b554d",
+              "internal/graph/ops/main_env_test.go": "sha256:bcc0c81abe174ed99c46abf779a0554049176d9e2db808e765248e315cec504f",
+              "internal/graph/proposal/main_env_test.go": "sha256:8f303aebe721fe528ddda300e125f9f62d30d13c8c737e726047f5e3284579c7",
+              "internal/graph/provider/main_env_test.go": "sha256:5f72c3e0c5c9564dd4d1b9a5640ba58aac41f8f5fee0fa04c3e7a0da7ead47d2",
+              "internal/graph/review/main_env_test.go": "sha256:8f8f19b122e78e01641c8d45d7fefaa2f3fb6a67c0ce03e957410602383b7ea5",
+              "internal/graph/sync/main_env_test.go": "sha256:d6d8188ae9ca53cb56b1cb596e4a4bbb5588b75f90847304aa6502174b590583",
+              "internal/hook/main_env_test.go": "sha256:7410ff6f8643cc87b6d5510e1bd73120ff23674502e96ddbcfd42b339d6e4620",
+              "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
+              "internal/provision/main_env_test.go": "sha256:b93ab1dc99ec33c0960d510a37b908a500c5ac5e06b9aff1e124871b968cc39c",
+              "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
               "internal/rules/hermetic_test.go": "sha256:94ac8d8807edcd1bea0c9422ca41f352c70590718719c949eab81504a4e8b37d",
               "internal/rules/main_env_test.go": "sha256:d4623ff4bb2569a60bb4a37f81d261c83cd4cda143545c807135ce9e2dc92c52",
-              "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433",
+              "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a",
+              "internal/testenv/adoption_test.go": "sha256:668e1105e751441dac01e089addf5065dc274e4379d65b58c938f5b2512c9d88",
               "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
               "internal/vcs/main_env_test.go": "sha256:3c8b6a0b45c9a5b627c8629c3cb18fc8208828970eb90ad4c984fa6b6b791a21",
               "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
               "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47",
-              "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97"
+              "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97",
+              "tools/testgate/main_env_test.go": "sha256:0a523517a747c2df6e5ab74a3ce35acea8fb3a30b2f2bb521d050971ba23ca0e"
             }
           },
           "fixture-reproducibility": {
@@ -1278,10 +1521,10 @@
             }
           },
           "prepare-once-determinism": {
-            "contract_rev": 1,
+            "contract_rev": 2,
             "artifact_digests": {
-              "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-              "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+              "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+              "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
             }
           },
           "provision-owned-execution": {
@@ -1291,7 +1534,7 @@
               "cmd/sdd/doctor_test.go": "sha256:49f8fd43a0a84e7e4cf94f6262b57539dfb949fa8c3d98efc299958712eecbbc",
               "cmd/sdd/hook_probe_other_test.go": "sha256:3c04a7eea6bdd105e7a1582f27cfb3597847a41f934e43572e942f353a1eca35",
               "cmd/sdd/hook_probe_unix_test.go": "sha256:f90fdac3a78bfd663d991dd34c1ad46b49a49ae7a1b04678bc1367cdda36e800",
-              "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
+              "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
               "internal/provision/git_post_rewrite.go": "sha256:75bdb54d21a67d5882b8798a0d97dd94ecd6c2f8447e42182610c92a70b953e4",
               "internal/provision/owned_runner_other_test.go": "sha256:d273ffe819932a5eefee6afd9cccfea79f7185a497807ac2360bfec79e46c50c",
               "internal/provision/owned_runner_test.go": "sha256:403791a3a180567c808c8b7bede30c1d27759038067589fcf08cdb0d5daa8451",
@@ -1302,28 +1545,28 @@
           "pure-selection": {
             "contract_rev": 1,
             "artifact_digests": {
-              "CLAUDE.md": "sha256:d2fa68066c4ee467784e8f80caff36c3d1ecfcd012518abe7b0faec531fe3771",
-              "Makefile": "sha256:edbeaac51588a8aafa1045cd1a58fc60bd254444f0eb5e7d263a1d685929fb7b",
-              "internal/rules/inventory_test.go": "sha256:68ed4fa623e4b2aeffa62ee56f465e86af4f7fb9db86dd13959697513652cbc6",
+              "CLAUDE.md": "sha256:6adfec6fbef33522455fb6411225a55d52677ffbd9008e52f845711c74bcb212",
+              "Makefile": "sha256:5d96ca17aecec685d72a7ff7f8e193cdb642dbfb637950f6bc7ae3f83cf12562",
+              "internal/rules/inventory_test.go": "sha256:3f2f73f6ac7374c591c90c900282525d0415a838fc25fc76ec815f540231f30c",
               "internal/rules/pure_test.go": "sha256:aa94de2eea04ccc9d2df1dd564334e7d342215ecb4a55ecdb7dcb7257481cd68"
             }
           },
           "race-gate": {
-            "contract_rev": 1,
+            "contract_rev": 2,
             "artifact_digests": {
-              "CLAUDE.md": "sha256:d2fa68066c4ee467784e8f80caff36c3d1ecfcd012518abe7b0faec531fe3771",
-              "Makefile": "sha256:edbeaac51588a8aafa1045cd1a58fc60bd254444f0eb5e7d263a1d685929fb7b",
-              "tools/testgate/race_test.go": "sha256:f569488a8da857db96b468b687ae09cb3fad2e8ca2253554833478ae39627102"
+              "CLAUDE.md": "sha256:6adfec6fbef33522455fb6411225a55d52677ffbd9008e52f845711c74bcb212",
+              "Makefile": "sha256:5d96ca17aecec685d72a7ff7f8e193cdb642dbfb637950f6bc7ae3f83cf12562",
+              "tools/testgate/race_test.go": "sha256:9a9b83c84c0b08a40aece3ba9a0d05f845c336a0e20547cd9f543a2268933852"
             }
           },
           "single-pass-evaluation": {
             "contract_rev": 2,
             "artifact_digests": {
-              "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+              "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
               "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-              "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-              "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-              "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+              "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+              "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+              "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
             }
           },
           "test-git-policy": {
@@ -1334,11 +1577,11 @@
             }
           }
         },
-        "report_digest": "sha256:8b5f019ce700c1f4c4128da00c4f3f3eeff1206032a7951a28af52e9b44d393d",
+        "report_digest": "sha256:78a01b31f3d19fc44dbda95f0dc66324312e80fa9742f0fb17e6439712ac71d0",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       }
     },
@@ -1371,22 +1614,34 @@
       "phase": "06-acceptance",
       "verification": {
         "result": "pass",
-        "seq": 131,
+        "seq": 493,
         "contract_rev": 1,
         "artifact_digests": {
           "cmd/sdd/doctor.go": "sha256:f1bd62ae1bb93b24047871858ddf816988ee07f968e098d53c0aee6db06b2967",
           "cmd/sdd/doctor_test.go": "sha256:49f8fd43a0a84e7e4cf94f6262b57539dfb949fa8c3d98efc299958712eecbbc",
           "cmd/sdd/evidence.go": "sha256:1c999f0383a753cdc9b3dd6c17d97e30a34617857837e0e08ade3f53f0567bd2",
           "cmd/sdd/graph.go": "sha256:8f524f26782d314deb58a37fc723a36cc456f29eec2c46f53b0bb146dcb98fd5",
+          "cmd/sdd/graph_complete.go": "sha256:87fbdfd2df715e7ba1771a1bbabbb054059c531e775413eed31982eb6da3d720",
+          "cmd/sdd/graph_complete_test.go": "sha256:8720b576ea671f25a6091faed5eb6a52e030f28a4a7052e7e181cba84d19b563",
           "cmd/sdd/main.go": "sha256:3cf8b18b0142b1e22056a3bbe582a70f8001a2fa250d5b01c786b140a94c3307",
-          "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+          "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
           "cmd/sdd/review.go": "sha256:5273d3582b774ec5390187da163077505b6c9e9aebe5daca159f60541ff1e9da",
           "cmd/sdd/root.go": "sha256:bc3f1f670b129a06b2aa24f03112a2583e8527cfb8b4f3ee0c3974f4d77767b7",
           "cmd/sdd/root_test.go": "sha256:6500af3581e1bc7b462fb267c94c262112b25837d65ef3637c9e7945cea1c192",
+          "cmd/sdd/transition.go": "sha256:77f53fa512dbc43bbb5d5f7db6f16b7cbb1eb16686dd19ee3067a7c69ef0ce6e",
           "cmd/sdd/validate.go": "sha256:52e979cf6cec0df0e6ddedb8dfc8a8b1bd1bbbb8722b7829daa367a68860a472",
           "go.mod": "sha256:c98e94956cd09de090105a8ba9e4aee87d6cb7a82a14faf0a4563adfac5b6777",
-          "internal/graph/ops/ops.go": "sha256:4cb8a39600d149a5c67d74133828694485941f9df2cbcf3e3b368f468525dcdd",
-          "internal/graph/ops/remap.go": "sha256:1c18581fe343551676e4489f9f5baaa0828c2bce286abe6afc3a6dca1d67872f",
+          "internal/graph/compile/anchor.go": "sha256:945a0c16e7a7714bc98af92d67860f1894ce810251f3d91941ad05d781500acb",
+          "internal/graph/compile/audit.go": "sha256:61095ba7cb8f33e0345d026df287cf99cb8898fc8f915843a4c5f187a12ea1eb",
+          "internal/graph/compile/compile.go": "sha256:abae439126a7d27039f4a753f80eaf72249d7255755a09d745d44c2cf805ed30",
+          "internal/graph/compile/evidence.go": "sha256:21524b2e89a5df17b679ed6461ae23b39b047fbde00a854fe98b272dc8e8cc03",
+          "internal/graph/compile/evidence_test.go": "sha256:496fabfbbf21aa60c3db8914270dd643dc467ed7a41b959a8d20c0dc687e124d",
+          "internal/graph/compile/render.go": "sha256:e26d2eb047b83d28e5fc5de3706c438e6cca0565fac27b2f16a9173e5d54af46",
+          "internal/graph/compile/render_status_test.go": "sha256:ee15203a379ab6eb502c958db155f74f4d10f57feccac14a91038bc4f793bb7a",
+          "internal/graph/ops/amend.go": "sha256:bd8a80bee31677ccd19a2ee483c4bfd19c5fbdc0837ee14f6f2ec1f652efe6b5",
+          "internal/graph/ops/ops.go": "sha256:f13dc943e9557c537d623bbe9b29e0fc3083a981bda95af6aed399f8704610d4",
+          "internal/graph/ops/remap.go": "sha256:ce6fa1a8015ddbef0e265d94bdbfd1bd16ed4fa496ae84b969fc32fd6cc7b244",
+          "internal/graph/ops/retirement.go": "sha256:6a74231fbbd141a3f87bbc5116a3ede9b769eda3d35f5ab05460701b2c149455",
           "internal/graph/provider/operational_test.go": "sha256:c0004d85d90c9c87dc5d35354933d43d41e9241bebfefde739a5789e62fd7806",
           "internal/graph/provider/provider.go": "sha256:9c8fd6a2cd53d07c8d94602259b409495400d893a286092177af68b382ac156e",
           "internal/graph/review/review.go": "sha256:9f978c6fa07a8170962a1a0a3fa1701e40331ba9bc01e18bcfe34bcdd9a5b1eb",
@@ -1396,29 +1651,36 @@
           "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
           "internal/procexec/containment.go": "sha256:4be90438ca42eb05f17182285a06cd3dad4420cc348cc7d27fc5c9e351ddaf80",
           "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-          "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+          "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
           "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
           "internal/procexec/posix_test.go": "sha256:cb39958be6568d4ca3edbfa4004f25da9d3e54d98c8026d3eb326a78623e1677",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-          "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb",
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+          "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216",
           "internal/procexec/wnowait_linux.go": "sha256:993c6912c8a3191859073fbb6ccaeb540300c674737efba4fda07a22da43d939",
           "internal/procexec/wnowait_other.go": "sha256:6dbea938414ad76e81964f79a8aa7a725f803c4bfbd760254501760555d75992",
-          "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+          "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
           "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-          "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-          "internal/rules/operational_test.go": "sha256:455c18d5c685d5a541b2c883cf16504d20b7a58c49d1af1085e7b5e5e05b2d4f",
-          "internal/rules/retirement.go": "sha256:67c2423adbc1193b351c089999a5d75a90fe9f19e78a00758aa996b05b2da02d",
-          "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-          "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-          "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433",
-          "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c",
+          "internal/rules/evidence.go": "sha256:d040fa3ca0f2b77e74d14e7c86d8d5458932929255162e588b1ad32483083b18",
+          "internal/rules/fixtures.go": "sha256:c7c2ae30da24ff3ded501e9b4a2e998b6c1d7de371fa54448a6e3109aa9701a4",
+          "internal/rules/graphviews.go": "sha256:ddbd76fe56bf08f67a9b31f73dcb656ccc0791adbd4ae8aa04b5af721cccecdc",
+          "internal/rules/graphviews_test.go": "sha256:7712024b2bfed1b3502bb8975828eae12ed61b769c1e12a2de1f7c530e35b2af",
+          "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+          "internal/rules/headings.go": "sha256:0c93a1b5f3f5f75d905f783f18648c919a8b6b4de0853989cc8879909f909932",
+          "internal/rules/operational_test.go": "sha256:1365e3b726810ca38638cdee9b6e126bdd5ddfc5891ca0dd073b3fd53166efec",
+          "internal/rules/phasereview.go": "sha256:ef1897bc5ba1d8960ae13ff9a465d199483cffa21da575fa5807494921e06748",
+          "internal/rules/plan.go": "sha256:4f5068a6cf3c0ca0163e6d792cc7f092daa6c13465124aec46b3bfbf0cd3b637",
+          "internal/rules/retirement.go": "sha256:74d59bbbf6b7ce87a8225733925d9241a579c1ff4eb027f319fd8da483cc727e",
+          "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+          "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+          "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a",
+          "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638",
           "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
           "internal/testenv/testenv_test.go": "sha256:3c7c9be7d15979250daaf7d436c6495efecc76b1c5aa3c74cabe51caf45a3158",
           "internal/vcs/cache.go": "sha256:d5b23c79a04881847f2ab1266ce049f244f0043127d7479f77498efc61d036cf",
           "internal/vcs/cache_test.go": "sha256:76df9fc86f96fd9d3e78f0c743d0cb1c287ea1ac5b23c7adf9a68a45c9fecde7",
-          "internal/vcs/checked_test.go": "sha256:3ae9efc60f5b949e64a7fb68cc217a6105a0459e18a171b07779a2c2e5081464",
+          "internal/vcs/checked_test.go": "sha256:2311b0490dc52017f6384446a7b5e6a6d7c4281cbc3f041d36543633f0d4b9c6",
           "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
-          "internal/vcs/p4.go": "sha256:363c9a8af4c0f8479ffa0d2bd95591957c46bba54b1efc45f72b386879726087",
+          "internal/vcs/p4.go": "sha256:3a18858cf3ee323d6cf0f04c31f73b8ef8a208fa56da7f5a6d9b84cbf09751ee",
           "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7",
           "internal/vcs/vcs_test.go": "sha256:8161dc0943e8610a89900523f30fb5d508cd3549af05974ee909cdc23d3dae4e",
           "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
@@ -1426,13 +1688,13 @@
         },
         "reviewed": {
           "bounded-runner": {
-            "contract_rev": 1,
+            "contract_rev": 2,
             "artifact_digests": {
               "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-              "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+              "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
               "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-              "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-              "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+              "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+              "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
             }
           },
           "cache-error-policy": {
@@ -1443,11 +1705,11 @@
             }
           },
           "checked-detection": {
-            "contract_rev": 2,
+            "contract_rev": 3,
             "artifact_digests": {
-              "internal/vcs/checked_test.go": "sha256:3ae9efc60f5b949e64a7fb68cc217a6105a0459e18a171b07779a2c2e5081464",
+              "internal/vcs/checked_test.go": "sha256:2311b0490dc52017f6384446a7b5e6a6d7c4281cbc3f041d36543633f0d4b9c6",
               "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
-              "internal/vcs/p4.go": "sha256:363c9a8af4c0f8479ffa0d2bd95591957c46bba54b1efc45f72b386879726087",
+              "internal/vcs/p4.go": "sha256:3a18858cf3ee323d6cf0f04c31f73b8ef8a208fa56da7f5a6d9b84cbf09751ee",
               "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7",
               "internal/vcs/vcs_test.go": "sha256:8161dc0943e8610a89900523f30fb5d508cd3549af05974ee909cdc23d3dae4e"
             }
@@ -1455,7 +1717,7 @@
           "fixture-runners-owned": {
             "contract_rev": 1,
             "artifact_digests": {
-              "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+              "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
               "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
               "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47"
             }
@@ -1466,29 +1728,41 @@
               "go.mod": "sha256:c98e94956cd09de090105a8ba9e4aee87d6cb7a82a14faf0a4563adfac5b6777",
               "internal/procexec/contain_other.go": "sha256:80fbc64d3d67bb177e5f52d0cdcb279e2cf038f7bc6b5dfab5021233ad839e41",
               "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
-              "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+              "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
               "internal/procexec/posix_test.go": "sha256:cb39958be6568d4ca3edbfa4004f25da9d3e54d98c8026d3eb326a78623e1677",
-              "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
+              "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
               "internal/procexec/wnowait_linux.go": "sha256:993c6912c8a3191859073fbb6ccaeb540300c674737efba4fda07a22da43d939",
               "internal/procexec/wnowait_other.go": "sha256:6dbea938414ad76e81964f79a8aa7a725f803c4bfbd760254501760555d75992"
             }
           },
           "prepare-once-determinism": {
-            "contract_rev": 1,
+            "contract_rev": 2,
             "artifact_digests": {
-              "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
-              "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433"
+              "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
+              "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a"
             }
           },
           "propagation-graph-callers": {
-            "contract_rev": 1,
+            "contract_rev": 7,
             "artifact_digests": {
               "cmd/sdd/evidence.go": "sha256:1c999f0383a753cdc9b3dd6c17d97e30a34617857837e0e08ade3f53f0567bd2",
               "cmd/sdd/graph.go": "sha256:8f524f26782d314deb58a37fc723a36cc456f29eec2c46f53b0bb146dcb98fd5",
-              "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+              "cmd/sdd/graph_complete.go": "sha256:87fbdfd2df715e7ba1771a1bbabbb054059c531e775413eed31982eb6da3d720",
+              "cmd/sdd/graph_complete_test.go": "sha256:8720b576ea671f25a6091faed5eb6a52e030f28a4a7052e7e181cba84d19b563",
+              "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
               "cmd/sdd/review.go": "sha256:5273d3582b774ec5390187da163077505b6c9e9aebe5daca159f60541ff1e9da",
-              "internal/graph/ops/ops.go": "sha256:4cb8a39600d149a5c67d74133828694485941f9df2cbcf3e3b368f468525dcdd",
-              "internal/graph/ops/remap.go": "sha256:1c18581fe343551676e4489f9f5baaa0828c2bce286abe6afc3a6dca1d67872f",
+              "cmd/sdd/transition.go": "sha256:77f53fa512dbc43bbb5d5f7db6f16b7cbb1eb16686dd19ee3067a7c69ef0ce6e",
+              "internal/graph/compile/anchor.go": "sha256:945a0c16e7a7714bc98af92d67860f1894ce810251f3d91941ad05d781500acb",
+              "internal/graph/compile/audit.go": "sha256:61095ba7cb8f33e0345d026df287cf99cb8898fc8f915843a4c5f187a12ea1eb",
+              "internal/graph/compile/compile.go": "sha256:abae439126a7d27039f4a753f80eaf72249d7255755a09d745d44c2cf805ed30",
+              "internal/graph/compile/evidence.go": "sha256:21524b2e89a5df17b679ed6461ae23b39b047fbde00a854fe98b272dc8e8cc03",
+              "internal/graph/compile/evidence_test.go": "sha256:496fabfbbf21aa60c3db8914270dd643dc467ed7a41b959a8d20c0dc687e124d",
+              "internal/graph/compile/render.go": "sha256:e26d2eb047b83d28e5fc5de3706c438e6cca0565fac27b2f16a9173e5d54af46",
+              "internal/graph/compile/render_status_test.go": "sha256:ee15203a379ab6eb502c958db155f74f4d10f57feccac14a91038bc4f793bb7a",
+              "internal/graph/ops/amend.go": "sha256:bd8a80bee31677ccd19a2ee483c4bfd19c5fbdc0837ee14f6f2ec1f652efe6b5",
+              "internal/graph/ops/ops.go": "sha256:f13dc943e9557c537d623bbe9b29e0fc3083a981bda95af6aed399f8704610d4",
+              "internal/graph/ops/remap.go": "sha256:ce6fa1a8015ddbef0e265d94bdbfd1bd16ed4fa496ae84b969fc32fd6cc7b244",
+              "internal/graph/ops/retirement.go": "sha256:6a74231fbbd141a3f87bbc5116a3ede9b769eda3d35f5ab05460701b2c149455",
               "internal/graph/provider/operational_test.go": "sha256:c0004d85d90c9c87dc5d35354933d43d41e9241bebfefde739a5789e62fd7806",
               "internal/graph/provider/provider.go": "sha256:9c8fd6a2cd53d07c8d94602259b409495400d893a286092177af68b382ac156e",
               "internal/graph/review/review.go": "sha256:9f978c6fa07a8170962a1a0a3fa1701e40331ba9bc01e18bcfe34bcdd9a5b1eb",
@@ -1497,24 +1771,31 @@
             }
           },
           "propagation-validator": {
-            "contract_rev": 1,
+            "contract_rev": 8,
             "artifact_digests": {
-              "cmd/sdd/operational_test.go": "sha256:be70e4310e0058bff2ecf51d4a3348a383cfb0826b3f9d189f1a68bff796693e",
+              "cmd/sdd/operational_test.go": "sha256:ec785fc15a807d5b5d81cdaddcfd485e1714546abfa9060cd9818dd7bd976d01",
               "cmd/sdd/validate.go": "sha256:52e979cf6cec0df0e6ddedb8dfc8a8b1bd1bbbb8722b7829daa367a68860a472",
-              "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
-              "internal/rules/operational_test.go": "sha256:455c18d5c685d5a541b2c883cf16504d20b7a58c49d1af1085e7b5e5e05b2d4f",
-              "internal/rules/retirement.go": "sha256:67c2423adbc1193b351c089999a5d75a90fe9f19e78a00758aa996b05b2da02d",
-              "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b"
+              "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
+              "internal/rules/evidence.go": "sha256:d040fa3ca0f2b77e74d14e7c86d8d5458932929255162e588b1ad32483083b18",
+              "internal/rules/fixtures.go": "sha256:c7c2ae30da24ff3ded501e9b4a2e998b6c1d7de371fa54448a6e3109aa9701a4",
+              "internal/rules/graphviews.go": "sha256:ddbd76fe56bf08f67a9b31f73dcb656ccc0791adbd4ae8aa04b5af721cccecdc",
+              "internal/rules/graphviews_test.go": "sha256:7712024b2bfed1b3502bb8975828eae12ed61b769c1e12a2de1f7c530e35b2af",
+              "internal/rules/headings.go": "sha256:0c93a1b5f3f5f75d905f783f18648c919a8b6b4de0853989cc8879909f909932",
+              "internal/rules/operational_test.go": "sha256:1365e3b726810ca38638cdee9b6e126bdd5ddfc5891ca0dd073b3fd53166efec",
+              "internal/rules/phasereview.go": "sha256:ef1897bc5ba1d8960ae13ff9a465d199483cffa21da575fa5807494921e06748",
+              "internal/rules/plan.go": "sha256:4f5068a6cf3c0ca0163e6d792cc7f092daa6c13465124aec46b3bfbf0cd3b637",
+              "internal/rules/retirement.go": "sha256:74d59bbbf6b7ce87a8225733925d9241a579c1ff4eb027f319fd8da483cc727e",
+              "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488"
             }
           },
           "single-pass-evaluation": {
             "contract_rev": 2,
             "artifact_digests": {
-              "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+              "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
               "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-              "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-              "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-              "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+              "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+              "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+              "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
             }
           },
           "test-git-policy": {
@@ -1536,18 +1817,18 @@
               "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
               "internal/procexec/containment.go": "sha256:4be90438ca42eb05f17182285a06cd3dad4420cc348cc7d27fc5c9e351ddaf80",
               "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-              "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-              "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb",
+              "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+              "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216",
               "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
               "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7"
             }
           }
         },
-        "report_digest": "sha256:1f14cc335a3c8c8b51ab3fe9670c99e57a29b3d74b73e38052713e8470911a4e",
+        "report_digest": "sha256:7e3c3c5fd54ec8b3b6dcd16ff0d90ad885b335750819f6d6e35dcc4365c61f61",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       }
     },
@@ -1575,7 +1856,28 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "06-acceptance"
+      "phase": "06-acceptance",
+      "verification": {
+        "result": "pass",
+        "seq": 151,
+        "contract_rev": 1,
+        "dependency_digests": {
+          "review-execution": {},
+          "review-fixtures": {}
+        },
+        "intent_hashes": {
+          "Specs/TestSuiteReliability:AC-11": "sha256:5651f352f395c12ec9474d44607d83db9dd1a6ff3c07f6374b6980f10fc7e1e4",
+          "Specs/TestSuiteReliability:NFR-01": "sha256:3fc1ac9dced7f1c12ddbfcbb4e5eb99de4bd0fe3fc47c2f862db3a0f75033ff1",
+          "Specs/TestSuiteReliability:NFR-05": "sha256:a3c8161ee98a333065ed006ea4f6e4c5837e6e063530571a7b5eb8e9a823deaa"
+        },
+        "report_digest": "sha256:efdbf69fa9fb7a5451197aa708fe743dde65e2174e8b84f2e7e7729a2d8622f3",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "faaf81a383bdd44734d9e45d168fa0bb7b8018c2",
+          "worktree": ".plans/Plans/TestSuiteReliability/.graph/ws-full-gate"
+        }
+      }
     },
     {
       "id": "review-final",
@@ -1595,7 +1897,23 @@
       },
       "hazards": [],
       "estimate": 1,
-      "phase": "06-acceptance"
+      "phase": "06-acceptance",
+      "verification": {
+        "result": "pass",
+        "seq": 494,
+        "contract_rev": 1,
+        "reviewed": {
+          "full-gate": {
+            "contract_rev": 1
+          }
+        },
+        "report_digest": "sha256:15953f01c865b09acbb40752d08dff495b253d6149d1bc2e124c842228281ec5",
+        "isolation": "clean",
+        "provenance": {
+          "kind": "git",
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
+        }
+      }
     },
     {
       "id": "unsupported-platform-diagnostic",
@@ -1650,7 +1968,7 @@
       "estimate": 1,
       "verification": {
         "result": "pass",
-        "seq": 129,
+        "seq": 491,
         "contract_rev": 2,
         "artifact_digests": {
           "cmd/sdd/doctor.go": "sha256:f1bd62ae1bb93b24047871858ddf816988ee07f968e098d53c0aee6db06b2967",
@@ -1662,8 +1980,8 @@
           "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
           "internal/procexec/containment.go": "sha256:4be90438ca42eb05f17182285a06cd3dad4420cc348cc7d27fc5c9e351ddaf80",
           "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-          "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb",
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+          "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216",
           "internal/vcs/git.go": "sha256:875050c5a1c9ffce78edc3fddfddb092503057dc0a1b4af049a657d6a05c3a89",
           "internal/vcs/vcs.go": "sha256:2e0e3ee75882867aa4d4da04e0744e63750ffe73e06ad329029d3d97232249b7"
         },
@@ -1672,9 +1990,9 @@
             "go.mod": "sha256:c98e94956cd09de090105a8ba9e4aee87d6cb7a82a14faf0a4563adfac5b6777",
             "internal/procexec/contain_other.go": "sha256:80fbc64d3d67bb177e5f52d0cdcb279e2cf038f7bc6b5dfab5021233ad839e41",
             "internal/procexec/contain_posix.go": "sha256:f9714dcbefd182f79096c6cbf9f5b379f858e101d4dc0a12f4949b0aafd918fe",
-            "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
             "internal/procexec/posix_test.go": "sha256:cb39958be6568d4ca3edbfa4004f25da9d3e54d98c8026d3eb326a78623e1677",
-            "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
+            "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
             "internal/procexec/wnowait_linux.go": "sha256:993c6912c8a3191859073fbb6ccaeb540300c674737efba4fda07a22da43d939",
             "internal/procexec/wnowait_other.go": "sha256:6dbea938414ad76e81964f79a8aa7a725f803c4bfbd760254501760555d75992"
           }
@@ -1682,11 +2000,11 @@
         "intent_hashes": {
           "Plans/TestSuiteReliability/reviews/06-review-execution-421dd78:F-01": "sha256:bf0e67de98b43b5a20bbee647835638340658f2b608eb399f43d114fe9590f3b"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -1697,11 +2015,11 @@
     },
     {
       "id": "race-gate",
-      "contract": "make test runs go test -race over the shared-state packages (internal/rules, internal/procexec, internal/vcs, internal/graph/sync, internal/graph/ops, internal/graph/provider, tools/regression) through a test-race target it depends on, so a removed memo or containment lock fails the standard gate; a gate test parses the Makefile and refuses a test recipe that does not invoke the race target over those packages.",
+      "contract": "make test runs go vet ./... and go test -race over the shared-state packages (internal/rules, internal/procexec, internal/vcs, internal/graph/sync, internal/graph/ops, internal/graph/provider, tools/regression) through vet and test-race targets it depends on, so a vet finding, a removed memo or a containment lock fails the standard gate; gate tests parse the Makefile and refuse a test recipe that does not invoke the vet target or the race target over those packages.",
       "justifies": [
         "Plans/TestSuiteReliability/reviews/06-review-fixtures-4d10f15:F-01"
       ],
-      "contract_rev": 1,
+      "contract_rev": 2,
       "origin": {
         "review": "Plans/TestSuiteReliability/reviews/06-review-fixtures-4d10f15.md",
         "finding": "F-01"
@@ -1718,6 +2036,10 @@
           {
             "id": "TestMakeTestRunsRaceDetector",
             "file": "tools/testgate/race_test.go"
+          },
+          {
+            "id": "TestMakeTestRunsVet",
+            "file": "tools/testgate/race_test.go"
           }
         ]
       },
@@ -1730,35 +2052,35 @@
       "estimate": 1,
       "verification": {
         "result": "pass",
-        "seq": 74,
-        "contract_rev": 1,
+        "seq": 483,
+        "contract_rev": 2,
         "artifact_digests": {
-          "CLAUDE.md": "sha256:d2fa68066c4ee467784e8f80caff36c3d1ecfcd012518abe7b0faec531fe3771",
-          "Makefile": "sha256:edbeaac51588a8aafa1045cd1a58fc60bd254444f0eb5e7d263a1d685929fb7b",
-          "tools/testgate/race_test.go": "sha256:f569488a8da857db96b468b687ae09cb3fad2e8ca2253554833478ae39627102"
+          "CLAUDE.md": "sha256:6adfec6fbef33522455fb6411225a55d52677ffbd9008e52f845711c74bcb212",
+          "Makefile": "sha256:5d96ca17aecec685d72a7ff7f8e193cdb642dbfb637950f6bc7ae3f83cf12562",
+          "tools/testgate/race_test.go": "sha256:9a9b83c84c0b08a40aece3ba9a0d05f845c336a0e20547cd9f543a2268933852"
         },
         "dependency_digests": {
           "single-pass-evaluation": {
-            "internal/rules/evaluate.go": "sha256:0db6c8b268444a167a9a9de0fdc3d1720c025ef695421abec8abc978ad1ef89f",
+            "internal/rules/evaluate.go": "sha256:1c9725eee49d23319cc3c52e584f4acc5d88714b36208b41e625bf1f2050c906",
             "internal/rules/evaluate_test.go": "sha256:2b2dd31be22bfd3bd85551865b75e2e712ef5ed546a8b997b50da68e73d750c8",
-            "internal/rules/root.go": "sha256:eb4ee698efbef6a610823accf3e3cd4cffcc12e04ff44a565cad3e412a24d55b",
-            "internal/rules/rules.go": "sha256:828a06a84acfc99cd7d27b35e01bd893eb947c40a1dfc394f47fa59a70c33225",
-            "internal/rules/waivers.go": "sha256:e994e3daec8037ecd69748f0b72560f15c5894dbf1887f33311c673a87f3872c"
+            "internal/rules/root.go": "sha256:16ccf58d74a85125f902b118f64fa45a9519cddcbc4d1bb9fca7f4b815522488",
+            "internal/rules/rules.go": "sha256:d5172f64a4444632b30bd537f21ff8bd7708329d4093ce7ef496aef764be5a10",
+            "internal/rules/waivers.go": "sha256:486dd62a8c448dcaf15e614ae378b4bf9331ba0d34b7506e0cdee0955cd20638"
           }
         },
         "intent_hashes": {
           "Plans/TestSuiteReliability/reviews/06-review-fixtures-4d10f15:F-01": "sha256:042bb27e87300f9722b9c71f135ad73a6a55b2da2c4d8b759f5a47510a0a2bfe"
         },
-        "report_digest": "sha256:a045e978e6be48ad8bd36574a96d67308302d0e41f7f1a0a3e545863072a3178",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "85aa4f5d39bb547b18479f2c4d1282fc7a005d3f",
-          "worktree": ".plans/Plans/TestSuiteReliability/.graph/ws-race-gate"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
-        "TestMakeTestRunsRaceDetector": 73
+        "TestMakeTestRunsRaceDetector": 73,
+        "TestMakeTestRunsVet": 153
       }
     },
     {
@@ -1816,14 +2138,14 @@
       "estimate": 1,
       "verification": {
         "result": "pass",
-        "seq": 128,
+        "seq": 489,
         "contract_rev": 3,
         "artifact_digests": {
           "cmd/sdd/doctor.go": "sha256:f1bd62ae1bb93b24047871858ddf816988ee07f968e098d53c0aee6db06b2967",
           "cmd/sdd/doctor_test.go": "sha256:49f8fd43a0a84e7e4cf94f6262b57539dfb949fa8c3d98efc299958712eecbbc",
           "cmd/sdd/hook_probe_other_test.go": "sha256:3c04a7eea6bdd105e7a1582f27cfb3597847a41f934e43572e942f353a1eca35",
           "cmd/sdd/hook_probe_unix_test.go": "sha256:f90fdac3a78bfd663d991dd34c1ad46b49a49ae7a1b04678bc1367cdda36e800",
-          "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
+          "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
           "internal/provision/git_post_rewrite.go": "sha256:75bdb54d21a67d5882b8798a0d97dd94ecd6c2f8447e42182610c92a70b953e4",
           "internal/provision/owned_runner_other_test.go": "sha256:d273ffe819932a5eefee6afd9cccfea79f7185a497807ac2360bfec79e46c50c",
           "internal/provision/owned_runner_test.go": "sha256:403791a3a180567c808c8b7bede30c1d27759038067589fcf08cdb0d5daa8451",
@@ -1833,33 +2155,47 @@
         "dependency_digests": {
           "bounded-runner": {
             "internal/procexec/errors.go": "sha256:14dcae0362d64f35ecc1e73c1f757dcd95211dbb6203f663107953dc372b1739",
-            "internal/procexec/helper_test.go": "sha256:41f93b188f3b065e311d1f3ba66e84075f89394c62cfccec88fbb75b507088ac",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
             "internal/procexec/policy.go": "sha256:07a22faeff7ad78d0a8ea8e3f81642a7fc1d70230efa860cbfe0efa61bf370e7",
-            "internal/procexec/procexec.go": "sha256:d1b6339fef24d5a8bbf2773e1aa47868ae493bee6ced37c104228c4af6fca500",
-            "internal/procexec/procexec_test.go": "sha256:7feeef243b077bae0f56d39e846926d30a6e2f95d7382a801a882e55cb59f6cb"
+            "internal/procexec/procexec.go": "sha256:6ef9d1341f16f910409daa878d50fe81b38fb9039a6b446049a34c9b8fdb6b46",
+            "internal/procexec/procexec_test.go": "sha256:95a62cf74cfdec3d7a8853fd752bfd1275077108452a7fa82a3b8e1176ccd216"
           },
           "child-validation-hermetic": {
             "cmd/sdd/hermetic_test.go": "sha256:593b608ddddfcc7929ca0253c5b1c058af538941f779da9fd918b94a668fb05c",
             "cmd/sdd/main_env_test.go": "sha256:fe20aae6c155182e92d5d9514a066a8520b7f59bc71ba71e5a2ad0cb2f36da94",
-            "internal/rules/harness_test.go": "sha256:05b46dd47f59a2e8d1df317ee165824b148ba303a09207529896b6d3e0c72216",
+            "internal/graph/compile/main_env_test.go": "sha256:9a0946a0d0535f4287e71234e7dd5e0599edbb169b28413dd684a3488c01ab92",
+            "internal/graph/convert/main_env_test.go": "sha256:4d9cf2e52c5f270f4350e2be718fd799bb52d136cf290381d0e05d2bafa12826",
+            "internal/graph/intent/main_env_test.go": "sha256:d9ba24802823ce1212976e52137fb8e1339b6b3710fb22e01bdd8279d291de05",
+            "internal/graph/model/main_env_test.go": "sha256:5880371d59bf995b458dfe737812305bbdd4dd291c021473516dfc51b83b554d",
+            "internal/graph/ops/main_env_test.go": "sha256:bcc0c81abe174ed99c46abf779a0554049176d9e2db808e765248e315cec504f",
+            "internal/graph/proposal/main_env_test.go": "sha256:8f303aebe721fe528ddda300e125f9f62d30d13c8c737e726047f5e3284579c7",
+            "internal/graph/provider/main_env_test.go": "sha256:5f72c3e0c5c9564dd4d1b9a5640ba58aac41f8f5fee0fa04c3e7a0da7ead47d2",
+            "internal/graph/review/main_env_test.go": "sha256:8f8f19b122e78e01641c8d45d7fefaa2f3fb6a67c0ce03e957410602383b7ea5",
+            "internal/graph/sync/main_env_test.go": "sha256:d6d8188ae9ca53cb56b1cb596e4a4bbb5588b75f90847304aa6502174b590583",
+            "internal/hook/main_env_test.go": "sha256:7410ff6f8643cc87b6d5510e1bd73120ff23674502e96ddbcfd42b339d6e4620",
+            "internal/procexec/helper_test.go": "sha256:b8f062de5c711e168dafa06618f2faaa8d3f8b6ead5f16b0f3f92cd087ca57dc",
+            "internal/provision/main_env_test.go": "sha256:b93ab1dc99ec33c0960d510a37b908a500c5ac5e06b9aff1e124871b968cc39c",
+            "internal/rules/harness_test.go": "sha256:a11e6a2ba3656e46999655be655d581c5ba2414ed979a9f62b1ea1c4ac79a142",
             "internal/rules/hermetic_test.go": "sha256:94ac8d8807edcd1bea0c9422ca41f352c70590718719c949eab81504a4e8b37d",
             "internal/rules/main_env_test.go": "sha256:d4623ff4bb2569a60bb4a37f81d261c83cd4cda143545c807135ce9e2dc92c52",
-            "internal/rules/rules_test.go": "sha256:aa39537d69e8d198040ca4d53eaabee5971286c2d7606d6add174d2ce9db7433",
+            "internal/rules/rules_test.go": "sha256:5596052e703be85f8dfe505309993e9a849cfaf5986225efcfe67c8edc74207a",
+            "internal/testenv/adoption_test.go": "sha256:668e1105e751441dac01e089addf5065dc274e4379d65b58c938f5b2512c9d88",
             "internal/testenv/testenv.go": "sha256:98c26777f0112e97c791b0cd6a857e8d67efe527b247456576323515843f3d06",
             "internal/vcs/main_env_test.go": "sha256:3c8b6a0b45c9a5b627c8629c3cb18fc8208828970eb90ad4c984fa6b6b791a21",
             "tools/regression/corpus.go": "sha256:13600cfb91590c086e90c714dc2ab7e9ea47edec18a2284404da245c5cd3f572",
             "tools/regression/corpus_test.go": "sha256:7f016ba59ed2f11b3cb5bf0a91d38551cbbb88474b8b2e66b1224d797624af47",
-            "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97"
+            "tools/regression/main_env_test.go": "sha256:38fe13da8a46f2849ec09d4b8f7616edcaecd039c89db0b3496c9cfdaf651d97",
+            "tools/testgate/main_env_test.go": "sha256:0a523517a747c2df6e5ab74a3ce35acea8fb3a30b2f2bb521d050971ba23ca0e"
           }
         },
         "intent_hashes": {
           "Plans/TestSuiteReliability/reviews/06-review-fixtures-facd924-b:F-01": "sha256:6fc4377ccfab9f05ac0546cfc0a7cd6a35b881787c2ee16e55de0ee2364c957c"
         },
-        "report_digest": "sha256:d152a5e4cb40144df7334ec135294d323300bf9dadf08bf082898849fa27f428",
+        "report_digest": "sha256:299d1ffa5b0a5aff93d00bae91903b79b97413f58ac221660f5ff8960ec591aa",
         "isolation": "clean",
         "provenance": {
           "kind": "git",
-          "revision": "c5a8018b9a59115ee07e8abcdca9822683b6a0ff"
+          "revision": "3554448493ec74ae41630eb3f40727076c4224d9"
         }
       },
       "red_seqs": {
@@ -2142,6 +2478,795 @@
           "TestOwnedProcessLifecycle": 56,
           "TestResolvedProbeFailureIsNotAnError": 106,
           "TestTransientProbeFailureStillKills": 87
+        }
+      }
+    },
+    {
+      "seq": 152,
+      "review": "review-final",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-final-faaf81a.md",
+      "report_digest": "sha256:63f19c0d0ec6ce05360251a223106ff1f56848e3b4aa849afd5a02b0d4fe1698",
+      "revised": [
+        "bounded-runner",
+        "checked-detection",
+        "child-validation-hermetic",
+        "race-gate"
+      ],
+      "preimage_tests": {
+        "bounded-runner": [
+          {
+            "id": "TestDeadlineIsOperational",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestOutputOverflow",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestLargeMachineOutput",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestStderrDrain",
+            "file": "internal/procexec/procexec_test.go"
+          },
+          {
+            "id": "TestTypedCauses",
+            "file": "internal/procexec/procexec_test.go"
+          }
+        ],
+        "checked-detection": [
+          {
+            "id": "TestVCSOperationalErrors",
+            "file": "internal/vcs/checked_test.go"
+          },
+          {
+            "id": "TestAuthoritativeSCMAbsence",
+            "file": "internal/vcs/checked_test.go"
+          },
+          {
+            "id": "TestAbsenceMessagesAreNotDoubled",
+            "file": "internal/vcs/checked_test.go"
+          }
+        ],
+        "child-validation-hermetic": [
+          {
+            "id": "TestInProcessValidationHermetic",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestChildValidationHermetic",
+            "file": "cmd/sdd/hermetic_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestFixtureSetupInheritsPolicy",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestCorpusSetupInheritsPolicy",
+            "file": "tools/regression/corpus_test.go"
+          }
+        ],
+        "race-gate": [
+          {
+            "id": "TestMakeTestRunsRaceDetector",
+            "file": "tools/testgate/race_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "bounded-runner": {
+          "TestDeadlineIsOperational": 1,
+          "TestLargeMachineOutput": 1,
+          "TestOutputOverflow": 1,
+          "TestStderrDrain": 1,
+          "TestTypedCauses": 1
+        },
+        "checked-detection": {
+          "TestAbsenceMessagesAreNotDoubled": 50
+        },
+        "child-validation-hermetic": {
+          "TestChildValidationHermetic": 54,
+          "TestFixtureSetupInheritsPolicy": 52,
+          "TestInProcessValidationHermetic": 54
+        },
+        "race-gate": {
+          "TestMakeTestRunsRaceDetector": 73
+        }
+      }
+    },
+    {
+      "seq": 179,
+      "review": "review-fixtures",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-fixtures-7ee8ef6.md",
+      "report_digest": "sha256:fbfb8ae11882719053369b1ec0b0966a74b6d03e364e54a96184360c54503faa",
+      "revised": [
+        "child-validation-hermetic"
+      ],
+      "preimage_tests": {
+        "child-validation-hermetic": [
+          {
+            "id": "TestInProcessValidationHermetic",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestChildValidationHermetic",
+            "file": "cmd/sdd/hermetic_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestFixtureSetupInheritsPolicy",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestCorpusSetupInheritsPolicy",
+            "file": "tools/regression/corpus_test.go"
+          },
+          {
+            "id": "TestGitSpawningTestPackagesInstallPolicy",
+            "file": "internal/testenv/adoption_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "child-validation-hermetic": {
+          "TestChildValidationHermetic": 54,
+          "TestFixtureSetupInheritsPolicy": 52,
+          "TestGitSpawningTestPackagesInstallPolicy": 157,
+          "TestInProcessValidationHermetic": 54
+        }
+      }
+    },
+    {
+      "seq": 180,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-7ee8ef6.md",
+      "report_digest": "sha256:b37028f1854f1c9a7a60800d8b12477b00fedd52c78b46fb4f59221f993da7ae",
+      "revised": [
+        "propagation-graph-callers",
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ],
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-validator": {
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 206,
+      "review": "review-fixtures",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-fixtures-4d65872.md",
+      "report_digest": "sha256:7a1c228079d9f3ad50feca218c51b6b9c218e0e20bc2af83d43987faf5fb5c25",
+      "revised": [
+        "child-validation-hermetic",
+        "prepare-once-determinism"
+      ],
+      "preimage_tests": {
+        "child-validation-hermetic": [
+          {
+            "id": "TestInProcessValidationHermetic",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestChildValidationHermetic",
+            "file": "cmd/sdd/hermetic_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestFixtureSetupInheritsPolicy",
+            "file": "internal/rules/hermetic_test.go"
+          },
+          {
+            "id": "TestCorpusSetupInheritsPolicy",
+            "file": "tools/regression/corpus_test.go"
+          },
+          {
+            "id": "TestGitSpawningTestPackagesInstallPolicy",
+            "file": "internal/testenv/adoption_test.go"
+          },
+          {
+            "id": "TestGitSpawnInventoryFollowsIndirection",
+            "file": "internal/testenv/adoption_test.go"
+          }
+        ],
+        "prepare-once-determinism": [
+          {
+            "id": "TestDeterminismPreparationCount",
+            "file": "internal/rules/harness_test.go"
+          },
+          {
+            "id": "TestCompleteDiagnosticComparison",
+            "file": "internal/rules/harness_test.go",
+            "satisfies": [
+              "deterministic-replay"
+            ]
+          },
+          {
+            "id": "TestValidationLeavesFixtureUnchanged",
+            "file": "internal/rules/harness_test.go"
+          },
+          {
+            "id": "TestRunIsDeterministic",
+            "file": "internal/rules/rules_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "child-validation-hermetic": {
+          "TestChildValidationHermetic": 54,
+          "TestFixtureSetupInheritsPolicy": 52,
+          "TestGitSpawnInventoryFollowsIndirection": 181,
+          "TestGitSpawningTestPackagesInstallPolicy": 157,
+          "TestInProcessValidationHermetic": 54
+        },
+        "prepare-once-determinism": {
+          "TestCompleteDiagnosticComparison": 12,
+          "TestDeterminismPreparationCount": 12,
+          "TestValidationLeavesFixtureUnchanged": 12
+        }
+      }
+    },
+    {
+      "seq": 207,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-4d65872.md",
+      "report_digest": "sha256:0e8c8c0a19774364e18e1b1db2b182525e9e65a98ec46ebcc930a883e48a2407",
+      "revised": [
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-validator": {
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 267,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-b4a8456.md",
+      "report_digest": "sha256:7bb3f0280f2f8a3ae702275b75f2dd1f3686e0bb34c6e4ecff3097a71aa75e6f",
+      "revised": [
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-validator": {
+          "TestIdentityQueryFailuresAreOperational": 209,
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestRetirementProbeFailureIsOperational": 209,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 322,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-e12884d.md",
+      "report_digest": "sha256:7a37ed9a2fd203dfde4203a02218824ec1310530d5e88e365a271a092ab24598",
+      "revised": [
+        "propagation-graph-callers",
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          }
+        ],
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRepoQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-graph-callers": {
+          "TestRemapRevisionsQueryFailureIsOperational": 185
+        },
+        "propagation-validator": {
+          "TestIdentityQueryFailuresAreOperational": 209,
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRepoQueryFailuresAreOperational": 300,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestRetirementProbeFailureIsOperational": 209,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 361,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-a917c60.md",
+      "report_digest": "sha256:3fb6045e2bdf1b0227aa7e2c1a8600d87cf8d543c790c60fe805b1a134b27f33",
+      "revised": [
+        "propagation-graph-callers",
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          },
+          {
+            "id": "TestTransitionGateOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ],
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRepoQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestContentQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-graph-callers": {
+          "TestRemapRevisionsQueryFailureIsOperational": 185,
+          "TestTransitionGateOperationalSweepExits": 340
+        },
+        "propagation-validator": {
+          "TestContentQueryFailuresAreOperational": 338,
+          "TestIdentityQueryFailuresAreOperational": 209,
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRepoQueryFailuresAreOperational": 300,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestRetirementProbeFailureIsOperational": 209,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 385,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-ed86c14.md",
+      "report_digest": "sha256:a9d4359fc05a3a986a8cf28c9e392f7d52d8a7bf52678e2a0e7a32e344e4a8cc",
+      "revised": [
+        "propagation-graph-callers",
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          },
+          {
+            "id": "TestTransitionGateOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestReviewResolveOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ],
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRepoQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestContentQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestMissingEvidenceHeadingSurvivesPlanLookupFailure",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementRuleFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-graph-callers": {
+          "TestRemapRevisionsQueryFailureIsOperational": 185,
+          "TestReviewResolveOperationalSweepExits": 364,
+          "TestTransitionGateOperationalSweepExits": 340
+        },
+        "propagation-validator": {
+          "TestContentQueryFailuresAreOperational": 338,
+          "TestIdentityQueryFailuresAreOperational": 209,
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestMissingEvidenceHeadingSurvivesPlanLookupFailure": 362,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRepoQueryFailuresAreOperational": 300,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestRetirementProbeFailureIsOperational": 209,
+          "TestRetirementRuleFailureIsOperational": 362,
+          "TestValidationOperationalExit": 9
+        }
+      }
+    },
+    {
+      "seq": 409,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-dcbe2cd.md",
+      "report_digest": "sha256:eefc6fc2f4693a66c85fc196e248429a327a51a93fdbe245e471da7eae301bf5",
+      "revised": [
+        "propagation-graph-callers"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          },
+          {
+            "id": "TestTransitionGateOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestReviewResolveOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRetireAndCompileOperationalSourceExit",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-graph-callers": {
+          "TestRemapRevisionsQueryFailureIsOperational": 185,
+          "TestRetireAndCompileOperationalSourceExit": 388,
+          "TestReviewResolveOperationalSweepExits": 364,
+          "TestTransitionGateOperationalSweepExits": 340
+        }
+      }
+    },
+    {
+      "seq": 451,
+      "review": "review-execution",
+      "artifact": "Plans/TestSuiteReliability/reviews/06-review-execution-56815db-b.md",
+      "report_digest": "sha256:d911707117465e330784769909124179d73ca7bbce276054fd1f3fcc8fb0b3fb",
+      "revised": [
+        "propagation-graph-callers",
+        "propagation-validator"
+      ],
+      "preimage_tests": {
+        "propagation-graph-callers": [
+          {
+            "id": "TestSyncCleanFailureIsOperational",
+            "file": "internal/graph/sync/operational_test.go"
+          },
+          {
+            "id": "TestProviderDetectionFailureIsOperational",
+            "file": "internal/graph/provider/operational_test.go"
+          },
+          {
+            "id": "TestLifecycleVerbsOperationalExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRemapRevisionsQueryFailureIsOperational",
+            "file": "internal/graph/ops/operational_test.go"
+          },
+          {
+            "id": "TestTransitionGateOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestReviewResolveOperationalSweepExits",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestRetireAndCompileOperationalSourceExit",
+            "file": "cmd/sdd/operational_test.go"
+          },
+          {
+            "id": "TestSplitAmendAuditOperationalSourceExit",
+            "file": "cmd/sdd/operational_test.go"
+          }
+        ],
+        "propagation-validator": [
+          {
+            "id": "TestIgnoredRepoErrorAbortsEvaluation",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementDetectionFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestValidationOperationalExit",
+            "file": "cmd/sdd/operational_test.go",
+            "satisfies": [
+              "user-entrypoint"
+            ]
+          },
+          {
+            "id": "TestP4IdentityQueryFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestIdentityQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProbeFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRepoQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestContentQueryFailuresAreOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestMissingEvidenceHeadingSurvivesPlanLookupFailure",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementRuleFailureIsOperational",
+            "file": "internal/rules/operational_test.go"
+          },
+          {
+            "id": "TestRetirementProblemsReturnsOperationalError",
+            "file": "internal/rules/operational_test.go"
+          }
+        ]
+      },
+      "preimage_red_seqs": {
+        "propagation-graph-callers": {
+          "TestRemapRevisionsQueryFailureIsOperational": 185,
+          "TestRetireAndCompileOperationalSourceExit": 388,
+          "TestReviewResolveOperationalSweepExits": 364,
+          "TestSplitAmendAuditOperationalSourceExit": 410,
+          "TestTransitionGateOperationalSweepExits": 340
+        },
+        "propagation-validator": {
+          "TestContentQueryFailuresAreOperational": 338,
+          "TestIdentityQueryFailuresAreOperational": 209,
+          "TestIgnoredRepoErrorAbortsEvaluation": 9,
+          "TestMissingEvidenceHeadingSurvivesPlanLookupFailure": 362,
+          "TestP4IdentityQueryFailureIsOperational": 182,
+          "TestRepoQueryFailuresAreOperational": 300,
+          "TestRetirementDetectionFailureIsOperational": 9,
+          "TestRetirementProbeFailureIsOperational": 209,
+          "TestRetirementProblemsReturnsOperationalError": 386,
+          "TestRetirementRuleFailureIsOperational": 362,
+          "TestValidationOperationalExit": 9
         }
       }
     }

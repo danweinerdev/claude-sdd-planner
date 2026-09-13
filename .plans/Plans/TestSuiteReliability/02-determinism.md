@@ -1,22 +1,24 @@
 ---
-title: "02-determinism"
+title: "Determinism"
 type: phase
 plan: "TestSuiteReliability"
 phase: 2
-status: planned
+status: complete
 created: 2026-09-13
 updated: 2026-09-13
-deliverable: "Graph view: 3 node(s) under phase label 02-determinism"
+deliverable: "Graph view: 3 node(s) under phase label Determinism"
 tasks: []
 ---
 
-# Phase 2: 02-determinism
+# Phase 2: Determinism
 
 <!-- GENERATED VIEW — source of truth: TestSuiteReliability-Graph.json. Regenerate with `sdd compile --plan TestSuiteReliability`. Edits here are overwritten. -->
 
+<!-- FROZEN VIEW — every node in this phase is closed: GREEN and covered by a passing frozen full review gate. This projection is history; a render that would change it is refused. -->
+
 ## Overview
 
-Rendered view of 3 node(s) from the plan graph (schema v1, seq 0).
+Rendered view of 3 node(s) from the plan graph (schema v1, seq 494).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -24,15 +26,15 @@ full review gates and is never stored or hand-edited here.
 
 ### prepare-once-determinism
 
-- Contract: Each Bad example's determinism case prepares files and Git history exactly once, evaluates four independently loaded roots, compares complete ordered diagnostics (code, severity, path, line, message, correction, implicated, waived reason) so a drifting message fails even when codes match, and leaves fixture bytes, index and HEAD unchanged.
+- Contract: Each Bad example's determinism case prepares files and Git history exactly once, evaluates four independently loaded roots, compares complete ordered diagnostics (code, severity, path, line, message, correction, implicated, waived reason) so a drifting message fails even when codes match, and leaves fixture bytes, index and HEAD unchanged; two evaluations of distinct fresh roots inside one process, in either order, produce identical diagnostics because no memo keyed by a root-relative path or artifact identity outlives its Root.
 - Justifies: `Specs/TestSuiteReliability:FR-04`, `Specs/TestSuiteReliability:FR-05`, `Specs/TestSuiteReliability:AC-02`, `Designs/TestSuiteReliability:DD-8`
 - Depends on: `test-git-policy`
-- Gate: tests — `TestDeterminismPreparationCount` in internal/rules/harness_test.go; `TestCompleteDiagnosticComparison` in internal/rules/harness_test.go (satisfies deterministic-replay); `TestValidationLeavesFixtureUnchanged` in internal/rules/harness_test.go; `TestRunIsDeterministic` in internal/rules/rules_test.go
+- Gate: tests — `TestDeterminismPreparationCount` in internal/rules/harness_test.go; `TestCompleteDiagnosticComparison` in internal/rules/harness_test.go (satisfies deterministic-replay); `TestValidationLeavesFixtureUnchanged` in internal/rules/harness_test.go; `TestRunIsDeterministic` in internal/rules/rules_test.go; `TestFreshRootsAreIndependentInProcess` in internal/rules/harness_test.go
 - Hazards: deterministic-replay
 - Artifacts: internal/rules/rules_test.go, internal/rules/harness_test.go
 - Estimate: 2
-- Observation: none yet
-- Closure: open — state BLOCKED
+- Observation: **pass** at seq 486 — isolation clean, provenance git 3554448493ec
+- Closure: **closed** — GREEN and covered by a passing frozen full review gate
 
 ### fixture-reproducibility
 
@@ -43,8 +45,8 @@ full review gates and is never stored or hand-edited here.
 - Hazards: order-sensitive
 - Artifacts: internal/rules/reproducibility_test.go
 - Estimate: 1
-- Observation: none yet
-- Closure: open — state BLOCKED
+- Observation: **pass** at seq 487 — isolation clean, provenance git 3554448493ec
+- Closure: **closed** — GREEN and covered by a passing frozen full review gate
 
 ### pure-selection
 
@@ -55,15 +57,25 @@ full review gates and is never stored or hand-edited here.
 - Hazards: none (explicit claim)
 - Artifacts: internal/rules/pure_test.go, internal/rules/inventory_test.go, Makefile, CLAUDE.md
 - Estimate: 2
-- Observation: none yet
-- Closure: open — state BLOCKED
+- Observation: **pass** at seq 490 — isolation clean, provenance git 3554448493ec
+- Closure: **closed** — GREEN and covered by a passing frozen full review gate
 
 ## Acceptance Criteria
 
-- [ ] Every node in this phase is truly closed: a passing observation, and
+- [x] Every node in this phase is truly closed: a passing observation, and
       coverage by a passing frozen full review gate (derived from the graph;
       never checked off by hand).
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-09-13
+- Repository: /home/daniel/Development/Code/claude-sdd-planner
+- VCS: git
+- Revision / checkpoint: `3554448493ec74ae41630eb3f40727076c4224d9`
+- Identity recheck: revision-exists probe for `3554448493ec74ae41630eb3f40727076c4224d9` at 2026-09-13T00:00:00 — matched
+
+| Command | Working directory | Result | Observable evidence |
+| --- | --- | --- | --- |
+| `sdd graph status --plan TestSuiteReliability` | . | PASS (exit 0) | phase 2: 3/3 node(s) closed (GREEN, covered by a passing frozen full review gate) |
+
+### Completed task identities

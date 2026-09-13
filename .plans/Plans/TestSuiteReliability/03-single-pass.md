@@ -1,22 +1,24 @@
 ---
-title: "03-single-pass"
+title: "Single Pass"
 type: phase
 plan: "TestSuiteReliability"
 phase: 3
-status: planned
+status: complete
 created: 2026-09-13
 updated: 2026-09-13
-deliverable: "Graph view: 2 node(s) under phase label 03-single-pass"
+deliverable: "Graph view: 2 node(s) under phase label Single Pass"
 tasks: []
 ---
 
-# Phase 3: 03-single-pass
+# Phase 3: Single Pass
 
 <!-- GENERATED VIEW — source of truth: TestSuiteReliability-Graph.json. Regenerate with `sdd compile --plan TestSuiteReliability`. Edits here are overwritten. -->
 
+<!-- FROZEN VIEW — every node in this phase is closed: GREEN and covered by a passing frozen full review gate. This projection is history; a render that would change it is refused. -->
+
 ## Overview
 
-Rendered view of 2 node(s) from the plan graph (schema v1, seq 0).
+Rendered view of 2 node(s) from the plan graph (schema v1, seq 494).
 Observations shown are raw records; completion-grade closure derives from
 full review gates and is never stored or hand-edited here.
 
@@ -27,12 +29,12 @@ full review gates and is never stored or hand-edited here.
 - Contract: One ordinary evaluation runs each root rule once and each artifact rule once per applicable artifact; SDD176/SDD177 derive from that single result instead of a second sweep; strict Run and reporting RunWithWaivers keep their distinct semantics and canonical order, proven against the frozen corpus expectations.
 - Justifies: `Specs/TestSuiteReliability:FR-07`, `Specs/TestSuiteReliability:AC-04`, `Designs/TestSuiteReliability:DD-6`
 - Depends on: (nothing)
-- Gate: tests — `TestOrdinaryEvaluationOnce` in internal/rules/evaluate_test.go; `TestStrictAndReportingSemanticsPreserved` in internal/rules/evaluate_test.go (satisfies derives-state)
+- Gate: tests — `TestOrdinaryEvaluationOnce` in internal/rules/evaluate_test.go; `TestStrictAndReportingSemanticsPreserved` in internal/rules/evaluate_test.go (satisfies derives-state); `TestWaiverMemoConcurrencySafe` in internal/rules/evaluate_test.go
 - Hazards: derives-state
-- Artifacts: internal/rules/rules.go, internal/rules/waivers.go, internal/rules/evaluate.go, internal/rules/evaluate_test.go
+- Artifacts: internal/rules/rules.go, internal/rules/waivers.go, internal/rules/evaluate.go, internal/rules/evaluate_test.go, internal/rules/root.go
 - Estimate: 3
-- Observation: none yet
-- Closure: open — state READY
+- Observation: **pass** at seq 479 — isolation clean, provenance git 3554448493ec
+- Closure: **closed** — GREEN and covered by a passing frozen full review gate
 
 ### append-only-scan-once
 
@@ -43,15 +45,25 @@ full review gates and is never stored or hand-edited here.
 - Hazards: none (explicit claim)
 - Artifacts: internal/rules/appendonly.go, internal/rules/root.go, internal/rules/appendonly_scan_test.go
 - Estimate: 2
-- Observation: none yet
-- Closure: open — state BLOCKED
+- Observation: **pass** at seq 480 — isolation clean, provenance git 3554448493ec
+- Closure: **closed** — GREEN and covered by a passing frozen full review gate
 
 ## Acceptance Criteria
 
-- [ ] Every node in this phase is truly closed: a passing observation, and
+- [x] Every node in this phase is truly closed: a passing observation, and
       coverage by a passing frozen full review gate (derived from the graph;
       never checked off by hand).
 
 ## Phase Completion Evidence
 
-Pending — not complete.
+- Verified: 2026-09-13
+- Repository: /home/daniel/Development/Code/claude-sdd-planner
+- VCS: git
+- Revision / checkpoint: `3554448493ec74ae41630eb3f40727076c4224d9`
+- Identity recheck: revision-exists probe for `3554448493ec74ae41630eb3f40727076c4224d9` at 2026-09-13T00:00:00 — matched
+
+| Command | Working directory | Result | Observable evidence |
+| --- | --- | --- | --- |
+| `sdd graph status --plan TestSuiteReliability` | . | PASS (exit 0) | phase 3: 2/2 node(s) closed (GREEN, covered by a passing frozen full review gate) |
+
+### Completed task identities

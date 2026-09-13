@@ -1,35 +1,35 @@
 ---
 title: "Test Suite Reliability"
 type: plan
-status: active
+status: complete
 created: 2026-09-13
 updated: 2026-09-13
 tags: [testing, reliability, git, graph, dogfood]
 related: [Designs/TestSuiteReliability]
 phases:
   - id: 1
-    title: "01-hermetic-git"
-    status: planned
+    title: "Hermetic Git"
+    status: complete
     doc: "01-hermetic-git.md"
   - id: 2
-    title: "02-determinism"
-    status: planned
+    title: "Determinism"
+    status: complete
     doc: "02-determinism.md"
   - id: 3
-    title: "03-single-pass"
-    status: planned
+    title: "Single Pass"
+    status: complete
     doc: "03-single-pass.md"
   - id: 4
-    title: "04-owned-execution"
-    status: planned
+    title: "Owned Execution"
+    status: complete
     doc: "04-owned-execution.md"
   - id: 5
-    title: "05-propagation"
-    status: planned
+    title: "Propagation"
+    status: complete
     doc: "05-propagation.md"
   - id: 6
-    title: "06-acceptance"
-    status: planned
+    title: "Acceptance"
+    status: complete
     doc: "06-acceptance.md"
 # Replace `phases: []` with mappings in this exact shape:
 #   - id: 1
@@ -109,20 +109,23 @@ Recorded in `TestSuiteReliability-Decisions.json`. The design's `DD-1` through `
 - The `sdd` binary built from this branch (`2.10.0-sdd-redesign-4` or later) on PATH for child-process tests and the `post-rewrite` capture hook.
 - Assumptions: this host is Linux, so POSIX lifecycle tests run natively and Windows evidence is out of scope; the `internal/dlg` package the earlier design draft named no longer exists on this branch.
 
+<!-- graph-view:begin — generated section, do not edit -->
+
 ## Graph View
 
 <!-- GENERATED VIEW — source of truth: TestSuiteReliability-Graph.json. Regenerate with `sdd compile --plan TestSuiteReliability`. Edits here are overwritten. -->
 
 | Phase | Nodes | Doc |
 |---|---|---|
-| 1: 01-hermetic-git | 2 | `01-hermetic-git.md` |
-| 2: 02-determinism | 3 | `02-determinism.md` |
-| 3: 03-single-pass | 2 | `03-single-pass.md` |
-| 4: 04-owned-execution | 3 | `04-owned-execution.md` |
-| 5: 05-propagation | 4 | `05-propagation.md` |
-| 6: 06-acceptance | 4 | `06-acceptance.md` |
+| 1: Hermetic Git | 2 | `01-hermetic-git.md` |
+| 2: Determinism | 3 | `02-determinism.md` |
+| 3: Single Pass | 2 | `03-single-pass.md` |
+| 4: Owned Execution | 3 | `04-owned-execution.md` |
+| 5: Propagation | 4 | `05-propagation.md` |
+| 6: Acceptance | 4 | `06-acceptance.md` |
+| 7: Ungrouped | 3 | `07-Ungrouped.md` |
 
-18 node(s) total. The committed graph (`TestSuiteReliability-Graph.json`) is the source of
+21 node(s) total. The committed graph (`TestSuiteReliability-Graph.json`) is the source of
 truth; these documents are projections.
 
 <!-- graph-view:end -->
