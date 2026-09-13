@@ -33,11 +33,6 @@ import (
 //     carries it, so a rename or deletion fails rather than silently
 //     reducing coverage.
 
-// pureSelectionPattern is the selector `make test-pure` uses. The Makefile
-// target and this test must agree; TestPureSelectionInventory asserts the
-// declared inventory is exactly what the pattern matches.
-const pureSelectionPattern = "^TestPure"
-
 // pureInventory is the declared set of pure test cases. It is written out
 // rather than derived so that adding or removing a TestPure case is a
 // deliberate edit to this list, reviewable in the diff that makes it.
