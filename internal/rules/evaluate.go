@@ -134,7 +134,7 @@ func waiverFindings(r *Root, ordinary []Diagnostic, rules []*Rule) []Diagnostic 
 // RunChecked is Run with the operational failure distinguished from the
 // findings: when the VCS could not be consulted, it returns (nil, err)
 // wrapping vcs.ErrOperational and no partial findings.
-func RunChecked(r *Root) ([]Diagnostic, error) { return runWith(r, All()) }
+func RunChecked(r *Root) ([]Diagnostic, error) { return runWith(r, allRules()) }
 
 // RunWithWaiversChecked is RunWithWaivers with the same distinction.
-func RunWithWaiversChecked(r *Root) ([]Diagnostic, error) { return runWithWaiversWith(r, All()) }
+func RunWithWaiversChecked(r *Root) ([]Diagnostic, error) { return runWithWaiversWith(r, allRules()) }
