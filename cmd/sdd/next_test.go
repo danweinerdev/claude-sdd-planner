@@ -1,9 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
 // chdirTemp creates a fresh planning root, chdirs into it for the duration
@@ -256,5 +262,170 @@ func TestNext_RuleF_PlanComplete(t *testing.T) {
 	}
 	if e.Command != "" {
 		t.Errorf("command should be empty, got %q", e.Command)
+	}
+}
+
+// TestNext_PlanFlag_ResolvesLikeGraphStatus: `--plan <Name>` resolves the
+// plan directory against the planning root the same way `graph status
+// --plan` does, so `sdd next --plan <Name>` works from the repository root
+// regardless of the caller's CWD-relative path (P-04).
+func TestNext_PlanFlag_ResolvesLikeGraphStatus(t *testing.T) {
+	dispositionFixture(t)
+
+	out, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"next", "--plan", "Demo", "--json"})
+		return root.Execute()
+	})
+	if err != nil {
+		t.Fatalf("next --plan Demo: %v\n%s", err, out)
+	}
+	var got struct {
+		Plan string `json:"plan"`
+	}
+	if jsonErr := json.Unmarshal([]byte(out), &got); jsonErr != nil {
+		t.Fatalf("unmarshal %q: %v", out, jsonErr)
+	}
+	if got.Plan != "Demo" {
+		t.Fatalf("plan = %q, want %q", got.Plan, "Demo")
+	}
+}
+
+// TestNext_PositionalPathNotFound: a positional path that does not resolve
+// must say so and suggest --plan, not the misleading "no committed graph"
+// message that reads as though a graph command failed internally (P-04).
+func TestNext_PositionalPathNotFound(t *testing.T) {
+	chdirTemp(t)
+
+	_, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"next", "Plans/DoesNotExist"})
+		return root.Execute()
+	})
+	if err == nil {
+		t.Fatal("expected a not-found error")
+	}
+	if !strings.Contains(err.Error(), "not found") || !strings.Contains(err.Error(), "--plan") {
+		t.Fatalf("error must say the path was not found and suggest --plan, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "no committed graph") {
+		t.Fatalf("error must not claim a graph problem for a path that doesn't exist: %v", err)
+	}
+}
+
+// TestNext_PlanFlagAndPositional_MutuallyExclusive: --plan and a positional
+// path are two ways to say the same thing; combining them is ambiguous.
+func TestNext_PlanFlagAndPositional_MutuallyExclusive(t *testing.T) {
+	dispositionFixture(t)
+
+	_, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"next", "Plans/Demo", "--plan", "Demo"})
+		return root.Execute()
+	})
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected a mutually-exclusive error, got: %v", err)
+	}
+}
+
+// claimableFixture is dispositionFixture with its GREEN nodes replaced by
+// one claimable node, so --claim (and therefore --show) has a live claim to
+// exercise without a git repository.
+func claimableFixture(t *testing.T) string {
+	t.Helper()
+	root := dispositionFixture(t)
+	graphPath := gstore.PathFor(filepath.Join(root, "Plans", "Demo"))
+	if _, err := gstore.Update(graphPath, func(g *model.Graph) error {
+		g.Nodes = []model.Node{{
+			ID: "candidate", Contract: "does the thing", Justifies: []string{"D-0001"},
+			Gate:    model.Gate{Type: model.GateCommand, Command: "true"},
+			Hazards: model.Hazards{}, Estimate: 1,
+		}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// TestNext_Show_ReprintsHolderPayloadWithoutClaiming: --show must not claim
+// a node; it only reprints the payload of what the holder already has
+// (P-06b) — re-running --claim to re-read a payload otherwise claims a
+// second node.
+func TestNext_Show_ReprintsHolderPayloadWithoutClaiming(t *testing.T) {
+	claimableFixture(t)
+
+	if handled, err := graphNext("Plans/Demo", true, "tester", true); !handled || err != nil {
+		t.Fatalf("claim: handled=%v err=%v", handled, err)
+	}
+
+	graphPath := gstore.PathFor(filepath.Join("Plans", "Demo"))
+	before, err := os.ReadFile(graphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		handled, err := graphNextShow("Plans/Demo", "tester", true)
+		if !handled {
+			t.Fatal("graphNextShow must handle a plan with a committed graph")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("show: %v\n%s", err, out)
+	}
+
+	after, err := os.ReadFile(graphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("--show must not mutate the graph (no new claim)")
+	}
+
+	var got struct {
+		Plan  string `json:"plan"`
+		By    string `json:"by"`
+		Nodes []struct {
+			Node struct {
+				ID string `json:"id"`
+			} `json:"node"`
+		} `json:"nodes"`
+	}
+	if jsonErr := json.Unmarshal([]byte(out), &got); jsonErr != nil {
+		t.Fatalf("unmarshal %q: %v", out, jsonErr)
+	}
+	if got.Plan != "Demo" || got.By != "tester" || len(got.Nodes) != 1 || got.Nodes[0].Node.ID != "candidate" {
+		t.Fatalf("show payload = %+v", got)
+	}
+}
+
+// TestNext_Show_NoClaim_ReportsAndExitsZero: a holder with no claim gets a
+// plain statement, not an error — --show is a read, and "nothing held" is a
+// legitimate answer, not a failure (P-06b).
+func TestNext_Show_NoClaim_ReportsAndExitsZero(t *testing.T) {
+	claimableFixture(t)
+
+	out, err := captureStdout(t, func() error {
+		handled, err := graphNextShow("Plans/Demo", "nobody", true)
+		if !handled {
+			t.Fatal("graphNextShow must handle a plan with a committed graph")
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("show with no claim must exit 0, got: %v\n%s", err, out)
+	}
+	var got struct {
+		Plan  string `json:"plan"`
+		By    string `json:"by"`
+		Nodes []any  `json:"nodes"`
+	}
+	if jsonErr := json.Unmarshal([]byte(out), &got); jsonErr != nil {
+		t.Fatalf("unmarshal %q: %v", out, jsonErr)
+	}
+	if got.Plan != "Demo" || got.By != "nobody" || len(got.Nodes) != 0 {
+		t.Fatalf("show payload = %+v", got)
 	}
 }

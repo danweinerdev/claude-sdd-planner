@@ -18,11 +18,15 @@ package sync
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
@@ -39,6 +43,11 @@ type ReverifyOptions struct {
 	Provider    provider.Provider
 	Now         func() time.Time
 	TTL         time.Duration
+	// All re-attempts nodes whose current observation is already a fresh
+	// pass (GREEN — not STALE, not RED). The default skips them: reverify
+	// exists to fold one run against unverified/stale work, not to append a
+	// redundant pass observation to nodes that already have current proof.
+	All bool
 }
 
 // ReverifyOutcome is one node's result in the batch.
@@ -53,6 +62,13 @@ type ReverifyOutcome struct {
 	// Refused carries sync's per-node refusal when the attempt could not
 	// record honestly (unresolved tests, red-before-green, ...).
 	Refused string `json:"refused,omitempty"`
+	// ExpectedAbsence: the refusal's only reason is that this node's
+	// declared tests never appeared in the report, and the node has no
+	// prior observation — the normal mid-walk state (the run simply had not
+	// reached this node's tests yet). Reported like any other refusal, but
+	// excluded from Refusals: a genuine failure in the report, or a stale
+	// node an observation already exists for, keeps counting.
+	ExpectedAbsence bool `json:"expected_absence,omitempty"`
 }
 
 // ReverifyResult summarizes the batch.
@@ -103,6 +119,22 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 		// error text; the aggregate untracked list is best-effort.
 	}
 
+	// Best-effort derived states, used only to skip nodes whose current
+	// observation is already a fresh pass (DD-1's digest/intent/input axes
+	// wired when the plan's sources resolve; graph-only semantics otherwise
+	// — a caller without a repo checkout still gets seq/digest staleness).
+	var statesByID map[string]states.NodeState
+	if !o.All {
+		in := states.Inputs{Graph: g}
+		if sources, serr := gcompile.NewSources(filepath.Dir(filepath.Dir(o.PlanDir)), o.RepoRoot, filepath.Base(o.PlanDir)); serr == nil {
+			snap := sources.IntentSnapshot()
+			in.ArtifactDigest = digest.New(o.RepoRoot).Artifact
+			in.CurrentIntentHashes = snap.Hashes()
+			in.CurrentInputHashes = sources.InputResolver().GraphHashes(g)
+		}
+		statesByID = states.Derive(in)
+	}
+
 	for _, id := range algorithms.TopoSort(adjacency) {
 		n := byID[id]
 		out := ReverifyOutcome{Node: id}
@@ -111,6 +143,8 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 			out.Skipped = "claimed by " + n.Claim.By + " (the holder owns its observations)"
 		case n.Gate.Type == model.GateReview:
 			out.Skipped = "review gate (its observation is a frozen review artifact; use `sdd graph review`)"
+		case !o.All && statesByID[id].State == states.Green:
+			out.Skipped = "fresh, skipped (already a current pass; pass --all to re-verify anyway)"
 		case n.Gate.Type == model.GateTests && o.ReportBytes == nil:
 			out.Skipped = "tests gate, no --report supplied"
 		case n.Gate.Type == model.GateCommand && o.CommandExit == nil:
@@ -133,6 +167,15 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 				out.Refused = err.Error()
 			case !r.Recorded:
 				out.Refused = r.Refusal
+				// A node with no observations yet, refused ONLY because its
+				// declared tests never appeared in this report, is the
+				// normal mid-walk state (the rest of the graph's tests ran,
+				// this node's have not been reached) — reported, but not a
+				// violation to exit nonzero over. Any ambiguity, or a node
+				// that already carries an observation and still cannot be
+				// re-verified (a stale node this run could not clear), keeps
+				// the refusal counted.
+				out.ExpectedAbsence = n.Verification == nil && len(r.Buckets.Ambiguous) == 0 && len(r.Buckets.Unresolved) > 0
 			default:
 				out.Result = r.Observation.Result
 				out.Seq = r.Observation.Seq
@@ -145,6 +188,8 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 			res.Failures++
 		case out.Skipped != "":
 			res.Skips++
+		case out.ExpectedAbsence:
+			// Reported, not a violation: see ExpectedAbsence's doc comment.
 		default:
 			res.Refusals++
 		}

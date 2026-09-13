@@ -154,6 +154,35 @@ func TestGitProviderWorktreeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestGitProviderReleaseDeletesEmptyBranch: a claim branch that never
+// advanced past the mainline it was allocated from is release's own litter,
+// not evidence of anything — release should delete it, not leave the
+// gc/prune path as the only cleanup.
+func TestGitProviderReleaseDeletesEmptyBranch(t *testing.T) {
+	repoRoot, planDir := gitFixture(t)
+	p := Detect(repoRoot, planDir)
+
+	ws, err := p.Allocate("node-empty")
+	if err != nil {
+		t.Fatalf("allocate: %v", err)
+	}
+	branches := gitOK(t, repoRoot, "branch", "--list", "graph/node-empty-*", "--format=%(refname:short)")
+	if branches == "" {
+		t.Fatal("allocate must create a claim branch")
+	}
+
+	if err := p.Release(ws.Handle); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if _, err := os.Stat(ws.Dir); !os.IsNotExist(err) {
+		t.Fatal("release must remove the worktree")
+	}
+	after := gitOK(t, repoRoot, "branch", "--list", "graph/node-empty-*", "--format=%(refname:short)")
+	if after != "" {
+		t.Fatalf("release must delete a claim branch with no commits beyond its base, found: %q", after)
+	}
+}
+
 func TestGitProviderBacksClaimsEndToEnd(t *testing.T) {
 	repoRoot, planDir := gitFixture(t)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {

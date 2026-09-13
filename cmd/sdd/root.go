@@ -336,8 +336,8 @@ findings; exit 2 means validation could not run.`,
 }
 
 func nextCmd() *cobra.Command {
-	var jsonOut, claim bool
-	var by string
+	var jsonOut, claim, show bool
+	var by, plan string
 	c := &cobra.Command{
 		Use:   "next [plan-path]",
 		Short: "Report current state and the literal next command to run",
@@ -347,22 +347,47 @@ func nextCmd() *cobra.Command {
 			if len(args) == 1 {
 				planPath = args[0]
 			}
-			// Graph-executed plans route to the frontier scheduler; v1
-			// markdown plans keep the report untouched (D-0022's v1 clause).
-			if planPath != "" {
-				if handled, err := graphNext(planPath, claim, by, jsonOut); handled {
+			if plan != "" {
+				if planPath != "" {
+					return fmt.Errorf("next: --plan and a positional plan path are mutually exclusive")
+				}
+				resolved, err := planDirFor(plan, "next")
+				if err != nil {
 					return err
+				}
+				planPath = resolved
+			}
+			if planPath != "" {
+				if _, err := os.Stat(planPath); err != nil {
+					return fmt.Errorf("next: plan path %q not found (try `sdd next --plan <Name>`)", planPath)
+				}
+				if show {
+					if handled, err := graphNextShow(planPath, by, jsonOut); handled {
+						return err
+					}
+				} else {
+					// Graph-executed plans route to the frontier scheduler; v1
+					// markdown plans keep the report untouched (D-0022's v1
+					// clause).
+					if handled, err := graphNext(planPath, claim, by, jsonOut); handled {
+						return err
+					}
 				}
 			}
 			if claim {
 				return fmt.Errorf("next: --claim requires a plan with a committed graph (run `sdd graph init` / `sdd compile` first)")
+			}
+			if show {
+				return fmt.Errorf("next: --show requires a plan with a committed graph (run `sdd graph init` / `sdd compile` first)")
 			}
 			return cmdNext(planPath, jsonOut)
 		},
 	}
 	c.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	c.Flags().BoolVar(&claim, "claim", false, "claim the frontier head under a lease and print its context payload")
-	c.Flags().StringVar(&by, "by", "", "claimant identity for --claim (default: a generated agent id)")
+	c.Flags().BoolVar(&show, "show", false, "reprint the current holder's claim payload(s) without claiming")
+	c.Flags().StringVar(&by, "by", "", "claimant identity for --claim/--show (default: a generated agent id for --claim)")
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/), resolved against the planning root")
 	return c
 }
 

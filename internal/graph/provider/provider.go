@@ -191,8 +191,29 @@ func (g *gitProvider) Release(handle string) error {
 	if handle == "" {
 		return nil
 	}
-	_, err := g.run(g.repoRoot, "git", "worktree", "remove", "--force", g.absDir(handle))
-	return err
+	branch, branchErr := g.run(g.repoRoot, "git", "-C", g.absDir(handle), "rev-parse", "--abbrev-ref", "HEAD")
+	if _, err := g.run(g.repoRoot, "git", "worktree", "remove", "--force", g.absDir(handle)); err != nil {
+		return err
+	}
+	if branchErr != nil {
+		return nil // worktree removed; branch name unavailable is not fatal
+	}
+	name := strings.TrimSpace(string(branch))
+	if name == "" || name == "HEAD" || !strings.HasPrefix(name, "graph/") {
+		return nil
+	}
+	// Delete the claim branch only when it carries no commits beyond the
+	// mainline it was allocated from (`git branch -d` independently refuses
+	// unmerged branches, so this is belt-and-suspenders, not the only
+	// check): a branch with real work is the only reference to it and must
+	// survive release.
+	if _, err := g.run(g.repoRoot, "git", "merge-base", "--is-ancestor", name, "HEAD"); err != nil {
+		return nil // unmerged: keep it
+	}
+	if _, err := g.run(g.repoRoot, "git", "branch", "-d", name); err != nil {
+		return nil // benign: concurrent checkout/delete race, or already gone
+	}
+	return nil
 }
 
 // PruneMergedBranches derives the prune set from git itself — branch list,

@@ -239,6 +239,146 @@ func TestReverifySingleSelfLoopRefuses(t *testing.T) {
 	}
 }
 
+// TestReverifyFreshGreenNodesAreSkippedByDefault: a node whose current
+// observation is already a fresh pass (GREEN — not STALE, not RED) must not
+// have a redundant pass observation appended by an ordinary reverify; it is
+// reported as skipped instead. --all overrides the skip.
+func TestReverifyFreshGreenNodesAreSkippedByDefault(t *testing.T) {
+	fresh := testsNode("fresh", "test_fresh")
+	stale := testsNode("stale", "test_stale")
+	planDir, repoRoot := fixture(t, fresh, stale)
+
+	// Give "fresh" a clean, current pass observation so it derives GREEN;
+	// leave "stale" unobserved so it stays workable.
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.SeqCounter++
+		g.NodeByID("fresh").Verification = &model.Verification{
+			Result: model.ResultPass, Seq: g.SeqCounter, Isolation: model.IsolationClean,
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report := `<testsuite><testcase name="test_fresh"/><testcase name="test_stale"/></testsuite>`
+	res, err := Reverify(ReverifyOptions{
+		PlanDir: planDir, RepoRoot: repoRoot,
+		ReportName: "r.xml", ReportBytes: []byte(report),
+	})
+	if err != nil {
+		t.Fatalf("reverify: %v", err)
+	}
+	byNode := map[string]ReverifyOutcome{}
+	for _, o := range res.Outcomes {
+		byNode[o.Node] = o
+	}
+	if !strings.Contains(byNode["fresh"].Skipped, "fresh, skipped") {
+		t.Fatalf("a fresh GREEN node must be skipped by default: %+v", byNode["fresh"])
+	}
+	if byNode["stale"].Result != model.ResultPass {
+		t.Fatalf("an unobserved node must still record: %+v", byNode["stale"])
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("fresh").Verification.Seq != 1 {
+		t.Fatalf("a skipped fresh node must not gain a new observation: seq=%d", g.NodeByID("fresh").Verification.Seq)
+	}
+
+	// --all re-attempts the fresh node too.
+	res, err = Reverify(ReverifyOptions{
+		PlanDir: planDir, RepoRoot: repoRoot,
+		ReportName: "r.xml", ReportBytes: []byte(report),
+		All: true,
+	})
+	if err != nil {
+		t.Fatalf("reverify --all: %v", err)
+	}
+	byNode = map[string]ReverifyOutcome{}
+	for _, o := range res.Outcomes {
+		byNode[o.Node] = o
+	}
+	if byNode["fresh"].Result != model.ResultPass {
+		t.Fatalf("--all must re-attempt an already-fresh node: %+v", byNode["fresh"])
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	if g.NodeByID("fresh").Verification.Seq == 1 {
+		t.Fatal("--all must append a new observation to the previously-fresh node")
+	}
+}
+
+// TestReverifyDeclaredTestsNeverRanDoesNotCountAsRefusal: a node with no
+// prior observation, refused only because its declared tests never appeared
+// in this report, is the normal mid-walk state — reported, but excluded
+// from the violation count and exit code. A genuine failure elsewhere still
+// counts.
+func TestReverifyDeclaredTestsNeverRanDoesNotCountAsRefusal(t *testing.T) {
+	unreached := testsNode("unreached", "test_unreached")
+	failing := testsNode("failing", "test_failing")
+	planDir, repoRoot := fixture(t, unreached, failing)
+
+	// The report only covers "failing"; "unreached" was never reached by
+	// this run (the normal mid-walk state), and failing genuinely fails.
+	report := `<testsuite><testcase name="test_failing"><failure message="boom"/></testcase></testsuite>`
+	res, err := Reverify(ReverifyOptions{
+		PlanDir: planDir, RepoRoot: repoRoot,
+		ReportName: "r.xml", ReportBytes: []byte(report),
+	})
+	if err != nil {
+		t.Fatalf("reverify: %v", err)
+	}
+	byNode := map[string]ReverifyOutcome{}
+	for _, o := range res.Outcomes {
+		byNode[o.Node] = o
+	}
+	if !byNode["unreached"].ExpectedAbsence {
+		t.Fatalf("declared-tests-never-ran on an unobserved node must be marked expected: %+v", byNode["unreached"])
+	}
+	if byNode["unreached"].Refused == "" {
+		t.Fatal("the refusal must still be reported")
+	}
+	if byNode["failing"].Result != model.ResultFail {
+		t.Fatalf("a genuine failure in the report must still record: %+v", byNode["failing"])
+	}
+	// Only the genuine failure exists; it records rather than refuses, and
+	// the expected-absence case must not inflate the violation count.
+	if res.Refusals != 0 {
+		t.Fatalf("expected-absence must not count as a violation: %+v", res)
+	}
+	if res.Failures != 1 {
+		t.Fatalf("the genuine failure must still be counted: %+v", res)
+	}
+}
+
+// TestReverifyStaleNodeRefusalStillCounts: a node that already carries an
+// observation (so it is not the "never ran" mid-walk case) and still cannot
+// be re-verified from this report keeps counting as a violation.
+func TestReverifyStaleNodeRefusalStillCounts(t *testing.T) {
+	hazard := testsNode("hazard", "test_hazard")
+	hazard.Hazards = model.Hazards{"external-format"}
+	hazard.Gate.Tests[0].Satisfies = []string{"external-format"}
+	planDir, repoRoot := fixture(t, hazard)
+
+	report := `<testsuite><testcase name="test_hazard"/></testsuite>`
+	res, err := Reverify(ReverifyOptions{
+		PlanDir: planDir, RepoRoot: repoRoot,
+		ReportName: "r.xml", ReportBytes: []byte(report),
+	})
+	if err != nil {
+		t.Fatalf("reverify: %v", err)
+	}
+	byNode := map[string]ReverifyOutcome{}
+	for _, o := range res.Outcomes {
+		byNode[o.Node] = o
+	}
+	// The hazard node's pass refuses for red-before-green, not absence —
+	// its tests DID run (and passed); the refusal is a real violation.
+	if byNode["hazard"].ExpectedAbsence {
+		t.Fatalf("a real red-before-green refusal must not be marked expected: %+v", byNode["hazard"])
+	}
+	if res.Refusals != 1 {
+		t.Fatalf("a genuine refusal must still count: %+v", res)
+	}
+}
+
 // TestReverifyRefusalsInSummary: refusals from per-node failures (e.g.
 // hazard red-before-green) must count in ReverifyResult.Refusals for the
 // CLI to map them to exit code 1 via refusedError.

@@ -1093,6 +1093,82 @@ func TestSetArtifactsHolderDisciplineAndValidation(t *testing.T) {
 	}
 }
 
+// TestEditArtifactsAddRemove covers set-artifacts's --add/--remove path: it
+// edits the current declared set under the same holder-only and review-gate
+// fences as a full --file replacement, rather than requiring one.
+func TestEditArtifactsAddRemove(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+		n.Artifacts = []string{"crates/a.rs", "crates/b.rs"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the holder edits a claimed node's artifacts.
+	if err := EditArtifacts(planDir, "big", "impostor", []string{"crates/c.rs"}, nil); err == nil {
+		t.Fatal("only the holder edits a claimed node's artifacts")
+	}
+
+	// Add a collateral path the node did not originally declare.
+	if err := EditArtifacts(planDir, "big", "holder", []string{"crates/c.rs"}, nil); err != nil {
+		t.Fatalf("holder add: %v", err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	want := []string{"crates/a.rs", "crates/b.rs", "crates/c.rs"}
+	if got := g.NodeByID("big").Artifacts; !reflect.DeepEqual(got, want) {
+		t.Fatalf("artifacts after add: %v, want %v", got, want)
+	}
+
+	// Remove one, in the same call as adding another.
+	if err := EditArtifacts(planDir, "big", "holder", []string{"crates/d.rs"}, []string{"crates/a.rs"}); err != nil {
+		t.Fatalf("holder add+remove: %v", err)
+	}
+	g, _ = gstore.Load(gstore.PathFor(planDir))
+	want = []string{"crates/b.rs", "crates/c.rs", "crates/d.rs"}
+	if got := g.NodeByID("big").Artifacts; !reflect.DeepEqual(got, want) {
+		t.Fatalf("artifacts after add+remove: %v, want %v", got, want)
+	}
+
+	// Removing a path not present is a harmless no-op.
+	if err := EditArtifacts(planDir, "big", "holder", nil, []string{"crates/nonexistent.rs"}); err != nil {
+		t.Fatalf("removing an absent path must not refuse: %v", err)
+	}
+
+	// Neither --add nor --remove given refuses.
+	if err := EditArtifacts(planDir, "big", "holder", nil, nil); err == nil {
+		t.Fatal("no --add or --remove refuses")
+	}
+
+	// A blank added path refuses.
+	if err := EditArtifacts(planDir, "big", "holder", []string{"  "}, nil); err == nil {
+		t.Fatal("a blank artifact path refuses")
+	}
+
+	// Adding a path already present refuses (mirrors SetArtifacts's
+	// duplicate check).
+	if err := EditArtifacts(planDir, "big", "holder", []string{"crates/b.rs"}, nil); err == nil {
+		t.Fatal("adding an already-declared path refuses")
+	}
+
+	// Removing every declared artifact anchors nothing and refuses.
+	if err := EditArtifacts(planDir, "big", "holder", nil, []string{"crates/b.rs", "crates/c.rs", "crates/d.rs"}); err == nil {
+		t.Fatal("removing every declared artifact must refuse (a node with no write-set anchors nothing)")
+	}
+
+	// A nonexistent node refuses.
+	if err := EditArtifacts(planDir, "missing", "holder", []string{"x"}, nil); err == nil {
+		t.Fatal("a nonexistent node refuses")
+	}
+
+	// A review gate refuses (its recorded digests are the reviewed diff).
+	if err := EditArtifacts(planDir, "feature-gate", "", []string{"x"}, nil); err == nil {
+		t.Fatal("a review gate's recorded digests are the reviewed diff, not a declared write-set")
+	}
+}
+
 // TestSetArtifactsNarrowingHealsDirectoryOverlapStaleness is the verb's
 // reason to exist end to end: a node whose over-broad directory write-set
 // was re-staled by a descendant's verified merge derives GREEN again once

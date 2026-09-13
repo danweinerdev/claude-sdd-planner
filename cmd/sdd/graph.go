@@ -320,45 +320,69 @@ writing the graph.`,
 // the lock.
 func graphSetArtifactsCmd() *cobra.Command {
 	var plan, node, by, file string
+	var add, remove []string
 	var asJSON bool
 	c := &cobra.Command{
 		Use:   "set-artifacts",
-		Short: "Replace a node's declared artifact write-set (holder-only while claimed)",
+		Short: "Replace, or add/remove paths in, a node's declared artifact write-set (holder-only while claimed)",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			if plan == "" || node == "" || file == "" {
-				return fmt.Errorf("graph set-artifacts: --plan, --node, and --file are all required")
+			if plan == "" || node == "" {
+				return fmt.Errorf("graph set-artifacts: --plan and --node are required")
+			}
+			if file == "" && len(add) == 0 && len(remove) == 0 {
+				return fmt.Errorf("graph set-artifacts: --file, or at least one --add/--remove, is required")
+			}
+			if file != "" && (len(add) > 0 || len(remove) > 0) {
+				return fmt.Errorf("graph set-artifacts: --file replaces the whole set; it cannot combine with --add/--remove")
 			}
 			planDir, err := planDirFor(plan, "set-artifacts")
 			if err != nil {
 				return err
 			}
-			raw, err := os.ReadFile(file)
-			if err != nil {
-				return fmt.Errorf("graph set-artifacts: %w", err)
-			}
-			var artifacts []string
-			if err := json.Unmarshal(raw, &artifacts); err != nil {
-				return fmt.Errorf("graph set-artifacts: %s is not a JSON array of artifact paths: %v", file, err)
-			}
-			if err := ops.SetArtifacts(planDir, node, by, artifacts); err != nil {
-				return err
+			var count int
+			if file != "" {
+				raw, err := os.ReadFile(file)
+				if err != nil {
+					return fmt.Errorf("graph set-artifacts: %w", err)
+				}
+				var artifacts []string
+				if err := json.Unmarshal(raw, &artifacts); err != nil {
+					return fmt.Errorf("graph set-artifacts: %s is not a JSON array of artifact paths: %v", file, err)
+				}
+				if err := ops.SetArtifacts(planDir, node, by, artifacts); err != nil {
+					return err
+				}
+				count = len(artifacts)
+			} else {
+				if err := ops.EditArtifacts(planDir, node, by, add, remove); err != nil {
+					return err
+				}
+				g, err := gstore.Load(gstore.PathFor(planDir))
+				if err != nil {
+					return err
+				}
+				if n := g.NodeByID(node); n != nil {
+					count = len(n.Artifacts)
+				}
 			}
 			if asJSON {
 				return writeJSON(struct {
 					OK        bool   `json:"ok"`
 					Node      string `json:"node"`
 					Artifacts int    `json:"artifacts"`
-				}{true, node, len(artifacts)})
+				}{true, node, count})
 			}
-			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", len(artifacts), node)
+			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", count, node)
 			return nil
 		},
 	}
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().StringVar(&node, "node", "", "node id to edit")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
-	c.Flags().StringVar(&file, "file", "", "JSON array of artifact paths: [\"src/x.rs\", \"fixtures/y/\"]")
+	c.Flags().StringVar(&file, "file", "", "JSON array of artifact paths, replacing the whole set: [\"src/x.rs\", \"fixtures/y/\"]")
+	c.Flags().StringArrayVar(&add, "add", nil, "artifact path to add to the current declared set (repeatable)")
+	c.Flags().StringArrayVar(&remove, "remove", nil, "artifact path to remove from the current declared set (repeatable)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
@@ -465,7 +489,7 @@ func graphGCCmd() *cobra.Command {
 func graphSyncCmd() *cobra.Command {
 	var plan, node, by, report, commandLog string
 	var commandExit int
-	var asJSON bool
+	var asJSON, verbose bool
 	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Record a node's observation from a test report or command result",
@@ -523,7 +547,7 @@ func graphSyncCmd() *cobra.Command {
 			}
 			printBucket("updated", res.Buckets.Updated)
 			printBucket("unresolved", res.Buckets.Unresolved)
-			printBucket("untracked", res.Buckets.Untracked)
+			printUntracked(c.OutOrStdout(), res.Buckets.Untracked, verbose)
 			printBucket("ambiguous", res.Buckets.Ambiguous)
 			if !res.Recorded {
 				return fmt.Errorf("graph sync: %s", res.Refusal)
@@ -549,7 +573,24 @@ func graphSyncCmd() *cobra.Command {
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print every untracked report id instead of a truncated summary")
 	return c
+}
+
+// printUntracked prints the untracked bucket: a whole-package report can
+// carry hundreds of ids no node declares, which buries the line that
+// matters (`recorded ... at seq N`). The full list is always in --json;
+// on the console it truncates to a count plus the first five ids unless
+// verbose is set.
+func printUntracked(w io.Writer, ids []string, verbose bool) {
+	if len(ids) == 0 {
+		return
+	}
+	if verbose || len(ids) <= 5 {
+		fmt.Fprintf(w, "untracked: %s\n", strings.Join(ids, ", "))
+		return
+	}
+	fmt.Fprintf(w, "untracked: %s … (%d more)\n", strings.Join(ids[:5], ", "), len(ids)-5)
 }
 
 // graphRetireCmd tombstones an id that never became a graph node — most
@@ -642,7 +683,7 @@ func graphRetireCmd() *cobra.Command {
 func graphReverifyCmd() *cobra.Command {
 	var plan, report, commandLog string
 	var commandExit int
-	var asJSON bool
+	var asJSON, verbose, all bool
 	c := &cobra.Command{
 		Use:   "reverify",
 		Short: "Fold one real run's results against every foldable node (the converted-plan on-ramp)",
@@ -661,7 +702,7 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 			if err != nil {
 				return fmt.Errorf("graph reverify: %w", err)
 			}
-			opts := gsync.ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot}
+			opts := gsync.ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot, All: all}
 			if report != "" {
 				raw, err := os.ReadFile(report)
 				if err != nil {
@@ -701,15 +742,15 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 						fmt.Fprintf(w, "  %-28s %s at seq %d\n", o.Node, o.Result, o.Seq)
 					case o.Skipped != "":
 						fmt.Fprintf(w, "  %-28s skipped: %s\n", o.Node, o.Skipped)
+					case o.ExpectedAbsence:
+						fmt.Fprintf(w, "  %-28s not yet run: %s\n", o.Node, o.Refused)
 					default:
 						fmt.Fprintf(w, "  %-28s refused: %s\n", o.Node, o.Refused)
 					}
 				}
 				fmt.Fprintf(w, "recorded %d pass(es), %d failure(s); %d skipped, %d refused\n",
 					res.Passes, res.Failures, res.Skips, res.Refusals)
-				if len(res.Untracked) > 0 {
-					fmt.Fprintf(w, "untracked report ids (decomposition warning, aggregated once): %d\n", len(res.Untracked))
-				}
+				printUntracked(w, res.Untracked, verbose)
 			}
 			if res.Refusals > 0 {
 				return &refusedError{n: res.Refusals}
@@ -722,6 +763,8 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "same exit code folded against every foldable command gate")
 	c.Flags().StringVar(&commandLog, "command-log", "", "same captured output folded against every command gate (teed to each node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print every untracked report id instead of a truncated summary")
+	c.Flags().BoolVar(&all, "all", false, "also re-verify nodes whose current observation is already a fresh pass")
 	return c
 }
 

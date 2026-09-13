@@ -343,6 +343,69 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 	if len(artifacts) == 0 {
 		return fmt.Errorf("graph set-artifacts: at least one artifact is required (a node with no write-set anchors nothing)")
 	}
+	if err := validateArtifactSet(artifacts); err != nil {
+		return err
+	}
+	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n, err := artifactsNode(g, nodeID, by)
+		if err != nil {
+			return err
+		}
+		n.Artifacts = artifacts
+		return nil
+	})
+	return err
+}
+
+// EditArtifacts adds and/or removes paths from a node's current declared
+// artifact write-set under the same lock and fences as SetArtifacts — the
+// planner cannot predict every collateral test edit up front, and a full
+// JSON replacement is unnecessary ceremony for a one-line addition.
+func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
+	if len(add) == 0 && len(remove) == 0 {
+		return fmt.Errorf("graph set-artifacts: at least one --add or --remove is required")
+	}
+	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n, err := artifactsNode(g, nodeID, by)
+		if err != nil {
+			return err
+		}
+		current := append([]string(nil), n.Artifacts...)
+		removeSet := map[string]bool{}
+		for _, a := range remove {
+			removeSet[a] = true
+		}
+		next := make([]string, 0, len(current)+len(add))
+		seen := map[string]bool{}
+		for _, a := range current {
+			if removeSet[a] || seen[a] {
+				continue
+			}
+			seen[a] = true
+			next = append(next, a)
+		}
+		for _, a := range add {
+			if strings.TrimSpace(a) == "" {
+				return fmt.Errorf("graph set-artifacts: every artifact needs a nonempty path")
+			}
+			if seen[a] {
+				return fmt.Errorf("graph set-artifacts: artifact %q declared twice", a)
+			}
+			seen[a] = true
+			next = append(next, a)
+		}
+		if len(next) == 0 {
+			return fmt.Errorf("graph set-artifacts: at least one artifact is required (a node with no write-set anchors nothing)")
+		}
+		n.Artifacts = next
+		return nil
+	})
+	return err
+}
+
+// validateArtifactSet enforces the same shape SetArtifacts always has:
+// nonempty, distinct paths.
+func validateArtifactSet(artifacts []string) error {
 	seen := map[string]bool{}
 	for _, a := range artifacts {
 		if strings.TrimSpace(a) == "" {
@@ -353,21 +416,23 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 		}
 		seen[a] = true
 	}
-	_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		n := g.NodeByID(nodeID)
-		if n == nil {
-			return fmt.Errorf("graph set-artifacts: node %q does not exist", nodeID)
-		}
-		if n.Claim != nil && n.Claim.By != by {
-			return fmt.Errorf("graph set-artifacts: %q is claimed by %q; only the holder edits its artifacts", nodeID, n.Claim.By)
-		}
-		if n.Gate.Type == model.GateReview {
-			return fmt.Errorf("graph set-artifacts: %q is a review gate; its recorded digests are the reviewed diff, not a declared write-set", nodeID)
-		}
-		n.Artifacts = artifacts
-		return nil
-	})
-	return err
+	return nil
+}
+
+// artifactsNode resolves the node under the holder-only and review-gate
+// fences shared by SetArtifacts and EditArtifacts.
+func artifactsNode(g *model.Graph, nodeID, by string) (*model.Node, error) {
+	n := g.NodeByID(nodeID)
+	if n == nil {
+		return nil, fmt.Errorf("graph set-artifacts: node %q does not exist", nodeID)
+	}
+	if n.Claim != nil && n.Claim.By != by {
+		return nil, fmt.Errorf("graph set-artifacts: %q is claimed by %q; only the holder edits its artifacts", nodeID, n.Claim.By)
+	}
+	if n.Gate.Type == model.GateReview {
+		return nil, fmt.Errorf("graph set-artifacts: %q is a review gate; its recorded digests are the reviewed diff, not a declared write-set", nodeID)
+	}
+	return n, nil
 }
 
 // Rehash re-embeds a node's cited intent fingerprints from the current

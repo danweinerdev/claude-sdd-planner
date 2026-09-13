@@ -13,6 +13,9 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
@@ -263,4 +266,152 @@ func allPhasesComplete(phases []fmItem) bool {
 		}
 	}
 	return true
+}
+
+// graphNextShow reprints the payload of every node currently claimed by `by`
+// without claiming anything (P-06b): re-running --claim to re-read a payload
+// otherwise claims a second node. Returns handled=false when the plan has no
+// committed graph, so the caller falls through the same way graphNext does.
+func graphNextShow(planPath, by string, jsonOut bool) (bool, error) {
+	readme, err := resolvePlanReadme(planPath)
+	if err != nil {
+		return false, nil // let the caller report the resolution problem
+	}
+	planDir := filepath.Dir(readme)
+	if _, err := os.Stat(gstore.PathFor(planDir)); err != nil {
+		return false, nil
+	}
+	if by == "" {
+		return true, fmt.Errorf("next: --show requires --by <who> to identify the holder")
+	}
+	root, repoRoot, err := resolveRoots(".", "")
+	if err != nil {
+		return true, fmt.Errorf("next: %w", err)
+	}
+	plan := filepath.Base(planDir)
+	sources, err := gcompile.NewSources(root, repoRoot, plan)
+	if err != nil {
+		return true, fmt.Errorf("next: %w", err)
+	}
+	snap := sources.IntentSnapshot()
+	inRes := sources.InputResolver()
+
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		return true, fmt.Errorf("next: %w", err)
+	}
+	var held []*model.Node
+	for i := range g.Nodes {
+		n := &g.Nodes[i]
+		if n.Claim != nil && n.Claim.By == by {
+			held = append(held, n)
+		}
+	}
+	if len(held) == 0 {
+		if jsonOut {
+			return true, writeJSON(struct {
+				OK    bool   `json:"ok"`
+				Plan  string `json:"plan"`
+				By    string `json:"by"`
+				Nodes []any  `json:"nodes"`
+			}{true, plan, by, nil})
+		}
+		fmt.Printf("%s: %s holds no claim\n", plan, by)
+		return true, nil
+	}
+
+	type citedText struct {
+		ID   string `json:"id"`
+		Text string `json:"text,omitempty"`
+	}
+	type inputText struct {
+		Root     string   `json:"root"`
+		Path     string   `json:"path"`
+		Kind     string   `json:"kind"`
+		Digest   string   `json:"digest"`
+		Binary   bool     `json:"binary,omitempty"`
+		Headings []string `json:"headings,omitempty"`
+		Text     string   `json:"text,omitempty"`
+	}
+	type nodePayload struct {
+		Node         model.Node  `json:"node"`
+		Cited        []citedText `json:"cited"`
+		Inputs       []inputText `json:"inputs"`
+		LeaseExpires string      `json:"lease_expires"`
+		By           string      `json:"by"`
+		Workspace    string      `json:"workspace,omitempty"`
+	}
+
+	var payloads []nodePayload
+	for _, node := range held {
+		var cited []citedText
+		for _, id := range node.Justifies {
+			cited = append(cited, citedText{ID: id, Text: snap.Items[id].Normalized})
+		}
+		var inputs []inputText
+		for _, spec := range node.Inputs {
+			it := inputText{Root: spec.Root, Path: spec.Path, Kind: string(inputsKind(spec))}
+			if resolved, err := inRes.Resolve(spec); err == nil {
+				it.Kind = string(resolved.Kind)
+				it.Digest = resolved.Digest
+				it.Binary = resolved.Binary
+				it.Headings = resolved.Headings
+				it.Text = resolved.Text
+			}
+			inputs = append(inputs, it)
+		}
+		workspace := ""
+		leaseExpires := ""
+		if node.Claim != nil {
+			workspace = node.Claim.Workspace
+			leaseExpires = node.Claim.LeaseExpires
+		}
+		payloads = append(payloads, nodePayload{
+			Node: *node, Cited: cited, Inputs: inputs,
+			LeaseExpires: leaseExpires, By: by, Workspace: workspace,
+		})
+	}
+
+	if jsonOut {
+		return true, writeJSON(struct {
+			OK    bool          `json:"ok"`
+			Plan  string        `json:"plan"`
+			By    string        `json:"by"`
+			Nodes []nodePayload `json:"nodes"`
+		}{true, plan, by, payloads})
+	}
+	for _, p := range payloads {
+		fmt.Printf("holds %s (by %s, lease expires %s)\n\n", p.Node.ID, p.By, p.LeaseExpires)
+		fmt.Printf("contract: %s\n", p.Node.Contract)
+		for _, c := range p.Cited {
+			if c.Text != "" {
+				fmt.Printf("justifies %s: %s\n", c.ID, c.Text)
+			} else {
+				fmt.Printf("justifies %s\n", c.ID)
+			}
+		}
+		for _, in := range p.Inputs {
+			label := in.Root + ":" + in.Path
+			if len(in.Headings) > 0 {
+				label += "#" + strings.Join(in.Headings, " / ")
+			}
+			if in.Text != "" {
+				fmt.Printf("input %s (%s):\n%s\n", label, in.Kind, in.Text)
+			} else {
+				fmt.Printf("input %s (%s, digest %s, binary=%t)\n", label, in.Kind, in.Digest, in.Binary)
+			}
+		}
+		fmt.Printf("gate: %s\nhazards: %s\n", describeGateBrief(p.Node.Gate), describeHazardsBrief(p.Node.Hazards))
+		if len(p.Node.Artifacts) > 0 {
+			fmt.Printf("artifacts: %s\n", strings.Join(p.Node.Artifacts, ", "))
+		}
+		if p.Node.History != "" {
+			fmt.Printf("history: %s\n", p.Node.History)
+		}
+		if p.Workspace != "" {
+			fmt.Printf("workspace: %s\n", p.Workspace)
+		}
+		fmt.Println()
+	}
+	return true, nil
 }
