@@ -104,7 +104,10 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	}
 	inRes := NewInputResolver(root, sources.inputRepoRoot)
 
-	findings := semanticFindings(g, p, sources, inRes)
+	findings, err := semanticFindings(g, p, sources, inRes)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(findings) > 0 {
 		return nil, findings, nil
 	}
@@ -443,13 +446,21 @@ func identifierSources(root, repoRoot, plan string) (*sourceSet, error) {
 }
 
 // semanticFindings is the batched pass: every invariant, every violation,
-// one report, deterministic order.
-func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inRes *InputResolver) []Finding {
+// one report, deterministic order. The returned error is non-nil only when
+// a retirement source could not be verified operationally (network,
+// filesystem or process trouble, not a genuine finding) — callers that
+// need to fail closed rather than report an unanswered probe as an
+// ordinary finding must check it before trusting an empty finding list.
+func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inRes *InputResolver) ([]Finding, error) {
 	var out []Finding
 	add := func(where, format string, args ...any) {
 		out = append(out, Finding{Where: where, Msg: fmt.Sprintf(format, args...)})
 	}
-	for _, problem := range rules.RetirementProblems(sources.planDir, g) {
+	problems, err := rules.RetirementProblemsChecked(sources.planDir, g)
+	if err != nil {
+		return nil, err
+	}
+	for _, problem := range problems {
 		add("graph", "%s", problem)
 	}
 
@@ -750,5 +761,5 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 		}
 		return out[i].Msg < out[j].Msg
 	})
-	return out
+	return out, nil
 }

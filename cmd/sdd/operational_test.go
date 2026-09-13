@@ -469,3 +469,221 @@ func TestLifecycleVerbsOperationalExit(t *testing.T) {
 		})
 	}
 }
+
+// installNShotGitShim is internal/rules/operational_test.go's helper of the
+// same name, copied here (the gate builds the real binary as a subprocess,
+// which cannot share test-package internals across packages): a shim git
+// that answers n invocations by delegating to the real binary before
+// removing its own execute bit, so detection succeeds and only the
+// following probe fails to start.
+func installNShotGitShim(t *testing.T, n int) {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	chmod, err := exec.LookPath("chmod")
+	if err != nil {
+		t.Skip("chmod not installed")
+	}
+	// cat must be resolved to an absolute path here (not merely available
+	// as a bare command): the shim's PATH becomes exactly shimDir once
+	// installed, so "cat" alone would not resolve inside the script's own
+	// invocation of itself.
+	cat, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("cat not installed")
+	}
+	counterFile := filepath.Join(t.TempDir(), "count")
+	if err := os.WriteFile(counterFile, []byte("0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shimDir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"n=$(" + cat + " '" + counterFile + "')\n" +
+		"n=$((n + 1))\n" +
+		"echo $n > '" + counterFile + "'\n" +
+		"if [ $n -ge " + fmt.Sprint(n) + " ]; then " + chmod + " -x \"$0\"; fi\n" +
+		"exec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shimDir)
+}
+
+// retireCompileOperationalFixture builds a git-backed planning root whose
+// plan's compiled graph already carries a retirement source pinned to a
+// real historical commit, so VerifyRetirementSource's detection succeeds
+// and only the RevisionExists probe is left for the n-shot git shim to
+// fail operationally. It also stages a trivial valid payload so `compile`
+// reaches semanticFindings (and therefore RetirementProblems) rather than
+// refusing earlier on missing input.
+func retireCompileOperationalFixture(t *testing.T) (root string) {
+	t.Helper()
+	root = t.TempDir()
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"-C", dir, "-c", "user.name=SDD Test", "-c", "user.email=sdd@example.invalid"}, args...)
+		out, err := exec.Command(gitExe, argv...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("planning-config.json", `{"planningRoot":"."}`)
+	write("Plans/Demo/README.md",
+		"---\ntitle: Demo\ntype: plan\nstatus: active\ncreated: 2026-09-12\nupdated: 2026-09-12\n"+
+			"tags: []\nrelated: []\nphases: []\n---\n\n# Demo\n\n## Overview\n\nText.\n")
+	write("old.md", "---\ntasks:\n  - id: \"1.1\"\n---\n")
+
+	git(root, "init", "-q", "-b", "main")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "base")
+	rev := git(root, "rev-parse", "HEAD")
+
+	graph := `{"version":1,"nodes":[],"retired":["old"],"retirement_sources":{"old":{"source":{"vcs":"git","revision":"` + rev + `","path":"old.md","source_id":"1.1"}}}}`
+	write("Plans/Demo/Demo-Graph.json", graph)
+	write("payload.json", `{"version":1,"nodes":[]}`)
+
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "graph and payload")
+	return root
+}
+
+// TestRetireAndCompileOperationalSourceExit (review-execution F-02): `graph
+// retire` and `compile` both consume a retirement source's verification
+// through RetirementProblems inside RetireWithSource's apply and
+// semanticFindings respectively. Both call the lossy RetirementProblems
+// today, which folds an operational VerifyRetirementSource failure into an
+// ordinary problem string — so an unanswered historical-commit probe is
+// reported and refused as though it were a genuine finding (exit 1) rather
+// than surfaced as operational (exit 2), and worse, `compile` may still
+// proceed if RetirementProblems' folded string doesn't trip a refusal path
+// the caller checks for. This test documents the current (wrong) behavior
+// red: once both callers switch to RetirementProblemsChecked and propagate
+// the error, both must exit 2, name the cause, and leave the graph file
+// byte-for-byte unchanged / make no write.
+func TestRetireAndCompileOperationalSourceExit(t *testing.T) {
+	bin := stressBinary(t)
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+
+	base := []string{"SDD_VCS_DISABLE_P4=1", "HOME=" + t.TempDir(),
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull}
+	run := func(dir, path string, args ...string) (int, string) {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		cmd.Env = append(append([]string{}, base...), "PATH="+path)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatalf("running sdd %s: %v", strings.Join(args, " "), err)
+		}
+		return code, string(out)
+	}
+
+	t.Run("graph retire", func(t *testing.T) {
+		root := retireCompileOperationalFixture(t)
+		graphPath := filepath.Join(root, "Plans", "Demo", "Demo-Graph.json")
+		args := []string{"graph", "retire", "--plan", "Demo", "--id", "other",
+			"--source-rev", "2222222222222222222222222222222222222222",
+			"--source-path", "old.md", "--source-id", "1.2", "--dry-run"}
+
+		// Control: git available. The retirement source is bogus (a fake
+		// revision), so the verb may refuse (exit 1), but it must never be
+		// operational (exit 2) — establishing the fixture itself is not the
+		// cause.
+		if code, out := run(root, filepath.Dir(gitExe), args...); code == 2 {
+			t.Fatalf("control with git exited 2 (operational):\n%s", out)
+		}
+
+		before, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		installNShotGitShim(t, 3)
+		shimPath := os.Getenv("PATH")
+		code, out := run(root, shimPath, args...)
+		if code != 2 {
+			t.Fatalf("without a working git: exit %d, want 2 (operational)\n%s", code, out)
+		}
+		low := strings.ToLower(out)
+		if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+			t.Errorf("the operational exit must name the cause; got:\n%s", out)
+		}
+
+		after, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Errorf("an operational retirement-source verification must not let retire write; graph changed:\nbefore:\n%s\nafter:\n%s",
+				before, after)
+		}
+	})
+
+	t.Run("compile", func(t *testing.T) {
+		// Control fixture: its own copy, so compile (which consumes the
+		// staged proposal and appends to the graph on success) never shares
+		// mutable state with the fixture the operational run inspects.
+		controlRoot := retireCompileOperationalFixture(t)
+		if out, errb, err := runSdd(bin, controlRoot, "graph", "propose", "--plan", "Demo", "--file", "payload.json"); err != nil {
+			t.Fatalf("setup control propose: %v\nstdout: %s\nstderr: %s", err, out, errb)
+		}
+		if code, out := run(controlRoot, filepath.Dir(gitExe), "compile", "--plan", "Demo", "--json"); code == 2 {
+			t.Fatalf("control with git exited 2 (operational):\n%s", out)
+		}
+
+		root := retireCompileOperationalFixture(t)
+		graphPath := filepath.Join(root, "Plans", "Demo", "Demo-Graph.json")
+		if out, errb, err := runSdd(bin, root, "graph", "propose", "--plan", "Demo", "--file", "payload.json"); err != nil {
+			t.Fatalf("setup propose: %v\nstdout: %s\nstderr: %s", err, out, errb)
+		}
+
+		before, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		installNShotGitShim(t, 3)
+		shimPath := os.Getenv("PATH")
+		code, out := run(root, shimPath, "compile", "--plan", "Demo", "--json")
+		if code != 2 {
+			t.Fatalf("without a working git: exit %d, want 2 (operational)\n%s", code, out)
+		}
+		low := strings.ToLower(out)
+		if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+			t.Errorf("the operational exit must name the cause; got:\n%s", out)
+		}
+
+		after, err := os.ReadFile(graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Errorf("an operational retirement-source verification must not let compile write; graph changed:\nbefore:\n%s\nafter:\n%s",
+				before, after)
+		}
+	})
+}

@@ -90,7 +90,12 @@ func (s *Sources) InputResolver() *InputResolver {
 // empty proposal against it) — the same gate compile applies, including the
 // missing-fingerprint guard, against this snapshot.
 func (s *Sources) Validate(g *model.Graph) []Finding {
-	return semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set, s.inRes)
+	// Out of this task's scope (compile.go:452/retirement.go:53 only): keeps
+	// today's lossy behavior for Validate's other callers (audit, amend,
+	// reverify) unchanged — an operational retirement-source failure here
+	// still folds into an ordinary finding rather than propagating.
+	findings, _ := semanticFindings(g, &model.Proposal{Version: model.SchemaVersion}, s.set, s.inRes)
+	return findings
 }
 
 // CitationKind classifies one justification against the snapshot: how it

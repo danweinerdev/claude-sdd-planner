@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // RetireWithSource attaches immutable historical evidence, including to an
@@ -17,6 +19,9 @@ func RetireWithSource(root, plan, id string, source model.RetirementSource, repl
 	dir := filepath.Join(root, "Plans", plan)
 	canonical, err := rules.VerifyRetirementSource(dir, source)
 	if err != nil {
+		if errors.Is(err, vcs.ErrOperational) {
+			return model.RetirementRecord{}, err
+		}
 		return model.RetirementRecord{}, &RefusedError{Reasons: []string{err.Error()}}
 	}
 	unique := map[string]bool{}
@@ -50,7 +55,11 @@ func RetireWithSource(root, plan, id string, source model.RetirementSource, repl
 			g.RetirementSources = map[string]model.RetirementRecord{}
 		}
 		g.RetirementSources[id] = record
-		if problems := rules.RetirementProblems(dir, g); len(problems) != 0 {
+		problems, err := rules.RetirementProblemsChecked(dir, g)
+		if err != nil {
+			return err
+		}
+		if len(problems) != 0 {
 			return &RefusedError{Reasons: problems}
 		}
 		return nil
