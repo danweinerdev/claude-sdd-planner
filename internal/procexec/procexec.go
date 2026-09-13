@@ -91,11 +91,23 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		}
 		return fail(CauseAccess, err, nil)
 	}
+	if observeStart != nil {
+		observeStart(cmd.Process.Pid)
+	}
+	// Owned descendants are swept before the leader is reaped: while the
+	// leader is a zombie its pid is still its own, so signalling -pgid cannot
+	// reach a group the kernel handed that pid to after a reap (review F-02).
+	cleaned, swept, containErr := sweepGroupBeforeReap(cmd)
 	waitErr := cmd.Wait()
-	// Whatever the outcome, owned descendants that outlived the command are
-	// cleaned now, within the cleanup allowance; a failure to do so is
-	// reported ahead of the command's own result.
-	cleaned, containErr := cleanupGroup(cmd, p.Cleanup)
+	// After the reap the group is only polled for emptiness, never signalled
+	// again; when the sweep could not run the fallback still probes and kills
+	// here, within the cleanup allowance. A failure to clean up is reported
+	// ahead of the command's own result.
+	postCleaned, postErr := cleanupGroup(cmd, p.Cleanup, swept)
+	if containErr == nil {
+		containErr = postErr
+	}
+	cleaned = cleaned || postCleaned
 	end := time.Now()
 
 	run := end.Sub(start)
@@ -143,6 +155,10 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	res.Stderr, res.StderrTruncated = stderr.excerpt()
 	return res, nil
 }
+
+// observeStart lets a test learn the leader pid the instant the command is
+// started; production never sets it.
+var observeStart func(pid int)
 
 var (
 	errMachineOverflow = errors.New("machine output exceeded the policy limit; result incomplete")

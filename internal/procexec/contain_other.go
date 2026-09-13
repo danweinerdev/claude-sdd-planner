@@ -17,4 +17,8 @@ func configureContainment(cmd *exec.Cmd) error {
 	return fmt.Errorf("containment: no process-containment adapter for %s; refusing to run uncontained", runtime.GOOS)
 }
 
-func cleanupGroup(cmd *exec.Cmd, allowance time.Duration) (bool, error) { return false, nil }
+func sweepGroupBeforeReap(cmd *exec.Cmd) (bool, bool, error) { return false, false, nil }
+
+func cleanupGroup(cmd *exec.Cmd, allowance time.Duration, swept bool) (bool, error) {
+	return false, nil
+}

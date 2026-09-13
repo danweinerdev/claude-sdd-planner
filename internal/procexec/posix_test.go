@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -155,5 +156,98 @@ func TestContainmentFailure(t *testing.T) {
 	}
 	if !strings.Contains(pe.Error(), "containment") {
 		t.Errorf("error text must name containment: %q", pe.Error())
+	}
+}
+
+// leaderState reports the single-character process state of pid from
+// /proc (Linux). 'Z' means exited but not yet reaped. The second result is
+// false when /proc is unavailable or the process is entirely gone.
+func leaderState(pid int) (byte, bool) {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return 0, false
+	}
+	// The comm field is parenthesised and may contain spaces; the state
+	// character is the first field after the closing parenthesis.
+	i := strings.LastIndexByte(string(b), ')')
+	if i < 0 || i+2 >= len(b) {
+		return 0, false
+	}
+	return b[i+2], true
+}
+
+// FR-14 / DD-4 (review F-02): the descendant sweep must signal the process
+// group while the leader is still unreaped, so the leader's pid cannot have
+// been recycled by an unrelated new group leader before the sweep lands.
+// Under the pre-fix code the SIGKILL to -pgid ran after cmd.Wait reaped the
+// leader, so at sweep time the leader had no /proc entry at all and this
+// test fails.
+func TestGroupSweepPrecedesReap(t *testing.T) {
+	if _, ok := leaderState(os.Getpid()); !ok {
+		t.Skip("/proc is unavailable; cannot observe the leader's zombie state")
+	}
+
+	restore := signalGroup
+	type observation struct {
+		state byte
+		ok    bool
+	}
+	var mu sync.Mutex
+	var kills []observation
+	var leaderPID int
+
+	signalGroup = func(pgid int, sig syscall.Signal) error {
+		mu.Lock()
+		if sig == syscall.SIGKILL && pgid == leaderPID && leaderPID != 0 {
+			state, ok := leaderState(pgid)
+			kills = append(kills, observation{state: state, ok: ok})
+		}
+		mu.Unlock()
+		return restore(pgid, sig)
+	}
+	t.Cleanup(func() { signalGroup = restore })
+
+	exe, args, p := helperPolicy(t, "spawn-descendant-exit")
+	p.Cleanup = 2 * time.Second
+
+	// The leader pid is the group id; learn it from the started command by
+	// observing the only new group the runner creates. Run reports the
+	// grandchild, so instead pin the leader via a start hook.
+	startedPID := make(chan int, 1)
+	observeStart = func(pid int) {
+		mu.Lock()
+		leaderPID = pid
+		mu.Unlock()
+		select {
+		case startedPID <- pid:
+		default:
+		}
+	}
+	t.Cleanup(func() { observeStart = nil })
+
+	res, err := Run(context.Background(), exe, args, p)
+	if err != nil {
+		t.Fatalf("normal completion: %v", err)
+	}
+	grandchild := pidFrom(t, res.Stdout)
+	killLater(t, grandchild)
+	if !waitDead(grandchild, 2*time.Second) {
+		t.Errorf("grandchild %d survived the sweep", grandchild)
+	}
+	if !res.DescendantsCleaned {
+		t.Error("result does not report that descendants were cleaned")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(kills) == 0 {
+		t.Fatal("no SIGKILL was sent to the command's process group; the descendant sweep never ran")
+	}
+	first := kills[0]
+	if !first.ok {
+		t.Fatalf("at the first group SIGKILL the leader pid %d had no /proc entry: it was already reaped, so the pid could have been recycled", leaderPID)
+	}
+	if first.state != 'Z' {
+		t.Fatalf("at the first group SIGKILL the leader was in state %q, want %q (exited but unreaped)", string(first.state), "Z")
 	}
 }
