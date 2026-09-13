@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
@@ -123,6 +124,10 @@ func retainedIDsFor(kind, baseline, current string) retainedIDCheck {
 	}
 }
 
+// appendOnlyScans counts history scans so a test can prove one evaluation
+// scans once (FR-08).
+var appendOnlyScans atomic.Int64
+
 // appendOnlyFinding is one diagnostic this family produces, before it is
 // filtered to a single code.
 type appendOnlyFinding struct {
@@ -132,10 +137,26 @@ type appendOnlyFinding struct {
 	Correction string
 }
 
-// appendOnlyHistory ports _append_only_repository_history. It returns every
-// finding across all four codes; each registered rule keeps only its own, so
-// the rules agree on exactly what one scan found.
+// appendOnlyHistory returns the family's findings for this Root, scanning
+// history at most once per Root (FR-08, DD-6). Each registered rule keeps
+// only its own code, so the four rules agree on exactly what one scan found.
+// The result is evaluation-local (DD-7): it lives on the Root, which is
+// immutable once loaded; a caller that needs to observe a HEAD, index or
+// worktree change loads a new Root.
 func appendOnlyHistory(r *Root) []appendOnlyFinding {
+	r.appendMu.Lock()
+	defer r.appendMu.Unlock()
+	if !r.appendDone {
+		r.appendFindings = scanAppendOnlyHistory(r)
+		r.appendDone = true
+	}
+	return append([]appendOnlyFinding(nil), r.appendFindings...)
+}
+
+// scanAppendOnlyHistory ports _append_only_repository_history: one pass over
+// the repository comparing HEAD, the index and the worktree.
+func scanAppendOnlyHistory(r *Root) []appendOnlyFinding {
+	appendOnlyScans.Add(1)
 	var out []appendOnlyFinding
 	repo := r.Repo(r.Dir)
 	if !gitCapable(repo) {

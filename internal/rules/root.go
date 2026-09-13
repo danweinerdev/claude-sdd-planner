@@ -87,6 +87,13 @@ type Root struct {
 	// error cannot turn inability into findings (DD-10).
 	opMu       sync.Mutex
 	opFailures []error
+
+	// appendFindings memoizes the append-only history family's one scan per
+	// Root (FR-08): SDD154/155/156/164 all read it. Evaluation-local by
+	// construction — a new Root scans afresh (DD-7).
+	appendMu       sync.Mutex
+	appendDone     bool
+	appendFindings []appendOnlyFinding
 }
 
 // recordFailure appends an operational failure to the evaluation's collector.
