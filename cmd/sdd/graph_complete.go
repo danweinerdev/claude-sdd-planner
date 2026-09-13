@@ -146,11 +146,11 @@ func graphPlanComplete(path string, o completeOpts) (handled bool, err error) {
 		return true, nil
 	}
 
-	root, _, err := resolveRoots(".", "")
+	root, repoRoot, err := resolveRoots(".", "")
 	if err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}
-	if _, err := gcompile.RenderViews(root, plan, g, st, closed); err != nil {
+	if _, err := gcompile.RenderViews(root, plan, repoRoot, g, st, closed); err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}
 	if err := writeReadmeStatusComplete(readme); err != nil {
@@ -224,11 +224,11 @@ func graphPhaseComplete(path string, o completeOpts) (handled bool, err error) {
 		return true, nil
 	}
 
-	root, _, err := resolveRoots(".", "")
+	root, repoRoot, err := resolveRoots(".", "")
 	if err != nil {
 		return true, fmt.Errorf("phase complete: %w", err)
 	}
-	if _, err := gcompile.RenderViews(root, plan, g, st, closed); err != nil {
+	if _, err := gcompile.RenderViews(root, plan, repoRoot, g, st, closed); err != nil {
 		return true, fmt.Errorf("phase complete: %w", err)
 	}
 	res.Wrote = true

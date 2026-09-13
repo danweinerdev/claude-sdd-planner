@@ -135,7 +135,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	preview.Nodes = append(append([]model.Node(nil), g.Nodes...), p.Nodes...)
 	deriveFor := deriveClosure(repoRoot, sources, inRes)
 	pst, pclosed := deriveFor(&preview)
-	if err := preflightViews(root, plan, &preview, pst, pclosed); err != nil {
+	if err := preflightViews(root, plan, repoRoot, &preview, pst, pclosed); err != nil {
 		return nil, nil, err
 	}
 
@@ -156,7 +156,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	// Views render from the graph as written (DD-2: projections of the
 	// source of truth, never of an in-memory draft).
 	fst, fclosed := deriveFor(final)
-	views, err := renderViews(root, plan, final, fst, fclosed)
+	views, err := renderViews(root, plan, repoRoot, final, fst, fclosed)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compile: graph written but view rendering failed (re-run `sdd compile` after fixing): %w", err)
 	}

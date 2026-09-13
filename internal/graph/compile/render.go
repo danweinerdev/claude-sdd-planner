@@ -206,7 +206,7 @@ func allClosed(nodes []*model.Node, closed map[string]bool) bool {
 // the writer so unchanged content stays byte-identical across days. st and
 // closed carry the derived truth the view projects (DD-2: a projection may
 // show derived state precisely because it is never parsed back).
-func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated string, st map[string]states.NodeState, closed map[string]bool) string {
+func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created, updated, repoRoot string, st map[string]states.NodeState, closed map[string]bool) string {
 	frozen := allClosed(ph.Nodes, closed)
 	var b strings.Builder
 	fmt.Fprintf(&b, "---\ntitle: \"%s\"\ntype: phase\nplan: \"%s\"\nphase: %d\nstatus: %s\n", ph.Title, plan, ph.Ordinal, phaseStatus(ph.Nodes, closed))
@@ -252,7 +252,12 @@ func renderPhaseDoc(plan string, g *model.Graph, ph phaseGroup, created, updated
 		box = "[x]"
 	}
 	fmt.Fprintf(&b, "- %s Every node in this phase is truly closed: a passing observation, and\n      coverage by a passing frozen full review gate (derived from the graph;\n      never checked off by hand).\n\n", box)
-	b.WriteString("## Phase Completion Evidence\n\nPending — not complete.\n")
+	b.WriteString("## Phase Completion Evidence\n\n")
+	if frozen {
+		b.WriteString(renderPhaseEvidence(planDir, plan, ph, repoRoot, "{VERIFIED_DATE}"))
+	} else {
+		b.WriteString("Pending — not complete.\n")
+	}
 	return b.String()
 }
 
@@ -400,9 +405,46 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 		return false, "", nil
 	}
 	if strings.Contains(string(existing), frozenViewMarker) {
-		return false, "", fmt.Errorf("compile: %s is a frozen view — every node in it was closed when it was rendered, and the graph now disagrees with that frozen history; if the phase was legitimately reopened (a review finding demoted a node), delete the frozen view file explicitly and recompile", path)
+		// The frozen-view invariant is about REOPENING, not about byte
+		// drift: refuse only when the projected history itself would
+		// change — the graph's closure regressed (no longer frozen-shaped)
+		// or a node's own projected content (contract, gate, observation,
+		// closure, ...) differs. A renderer upgrade that only ADDS to the
+		// derived `## Phase Completion Evidence` section (e.g. this
+		// completion-evidence rendering itself) changes none of that: the
+		// projection of history is unchanged, only the renderer's ability
+		// to state it is. Comparing both renderings with their evidence
+		// sections stripped isolates exactly that distinction, so compile
+		// stays able to pick up a renderer fix on an already-completed
+		// plan without ever silently rewriting what the projection says
+		// happened.
+		existingCore, existingHasEvidence := stripPhaseEvidenceSection(string(existing))
+		contentCore, contentHasEvidence := stripPhaseEvidenceSection(content)
+		if !contentHasEvidence || !existingHasEvidence ||
+			fillDates(contentCore, created, prevUpdated) != existingCore {
+			return false, "", fmt.Errorf("compile: %s is a frozen view — every node in it was closed when it was rendered, and the graph now disagrees with that frozen history; if the phase was legitimately reopened (a review finding demoted a node), delete the frozen view file explicitly and recompile", path)
+		}
 	}
 	return true, fillDates(content, created, today), nil
+}
+
+// phaseEvidenceHeadingRe locates a phase doc's `## Phase Completion
+// Evidence` section — always the view's last section (renderPhaseDoc emits
+// nothing after it), so everything from the heading to EOF is exactly that
+// section's extent.
+var phaseEvidenceHeadingRe = regexp.MustCompile(`(?m)^## Phase Completion Evidence\s*$`)
+
+// stripPhaseEvidenceSection returns a rendered phase doc with its `## Phase
+// Completion Evidence` section (heading and body) removed, and whether the
+// heading was found. Used only to isolate frozen-view byte comparison from
+// evidence-only content growth (planWrite) — never to change what is
+// written.
+func stripPhaseEvidenceSection(content string) (string, bool) {
+	loc := phaseEvidenceHeadingRe.FindStringIndex(content)
+	if loc == nil {
+		return content, false
+	}
+	return strings.TrimRight(content[:loc[0]], "\n"), true
 }
 
 // writeView writes one rendered view with date stability: an existing
@@ -416,21 +458,31 @@ func writeView(path, content, plan string) (wrote bool, err error) {
 	return true, istore.WriteAtomic(path, filled)
 }
 
-// fillDates substitutes the renderer's date placeholders.
+// fillDates substitutes the renderer's date placeholders: the frontmatter
+// `created:`/`updated:` stamps (count=1 each — exactly one frontmatter
+// line), and every `{VERIFIED_DATE}` body placeholder (count=all) the
+// derived evidence section uses for its `Verified` and `Identity recheck`
+// dates. Reusing the same `updated` value as the evidence date means a
+// byte-identical re-render (nothing else changed) still stamps `updated`
+// exactly once and stays stable — the evidence date does not independently
+// drift across days the way a live time.Now() read at evidence-render time
+// would (which would defeat frozen-view byte-stability: a frozen view could
+// never be re-rendered as a no-op once a day passed).
 func fillDates(content, created, updated string) string {
 	content = strings.Replace(content, "created: {DATE}", "created: "+created, 1)
-	return strings.Replace(content, "updated: {DATE}", "updated: "+updated, 1)
+	content = strings.Replace(content, "updated: {DATE}", "updated: "+updated, 1)
+	return strings.ReplaceAll(content, "{VERIFIED_DATE}", updated)
 }
 
 // preflightViews dry-runs every render target before anything is written:
 // both refusal rules (non-generated file in a target's place, frozen view
 // whose content would change) fire here, BEFORE the graph write, leaving
 // nothing half-done.
-func preflightViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
+func preflightViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) error {
 	planDir := filepath.Join(root, "Plans", plan)
 	for _, ph := range groupPhases(g, plan) {
 		path := filepath.Join(planDir, ph.Doc)
-		content := renderPhaseDoc(plan, g, ph, "{DATE}", "{DATE}", st, closed)
+		content := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, st, closed)
 		if _, _, err := planWrite(path, content, plan); err != nil {
 			return err
 		}
@@ -443,16 +495,18 @@ func preflightViews(root, plan string, g *model.Graph, st map[string]states.Node
 // Exported so callers outside a staged-proposal compile (e.g. `sdd plan
 // complete` / `sdd phase complete` on a graph plan, which have nothing to
 // stage) can refresh the same rendered views `sdd compile` produces,
-// without duplicating the renderer.
-func RenderViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
-	return renderViews(root, plan, g, st, closed)
+// without duplicating the renderer. repoRoot is the resolved target
+// repository, used only to derive the Repository label the plan/phase
+// completion evidence sections carry (SDD072).
+func RenderViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
+	return renderViews(root, plan, repoRoot, g, st, closed)
 }
 
 // renderViews writes the phase views and updates the README projection.
-func renderViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
+func renderViews(root, plan, repoRoot string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
 	planDir := filepath.Join(root, "Plans", plan)
 	groups := groupPhases(g, plan)
-	if err := preflightViews(root, plan, g, st, closed); err != nil {
+	if err := preflightViews(root, plan, repoRoot, g, st, closed); err != nil {
 		return nil, err
 	}
 	// Determine ownership before writing phase files: a just-created marker
@@ -471,7 +525,7 @@ func renderViews(root, plan string, g *model.Graph, st map[string]states.NodeSta
 		path := filepath.Join(planDir, ph.Doc)
 		// Dates stay templated here; writeView fills them with stability
 		// rules (existing created preserved, updated stamped on change).
-		content := renderPhaseDoc(plan, g, ph, "{DATE}", "{DATE}", st, closed)
+		content := renderPhaseDoc(planDir, plan, g, ph, "{DATE}", "{DATE}", repoRoot, st, closed)
 		wrote, err := writeView(path, content, plan)
 		if err != nil {
 			return nil, err
@@ -540,6 +594,11 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 		out += "\n" + section + "\n"
 	}
 
+	out, err = applyPlanEvidence(planDir, plan, out, groups, closed)
+	if err != nil {
+		return "", false, err
+	}
+
 	if out == src {
 		return "", false, nil
 	}
@@ -551,6 +610,38 @@ func planReadmeUpdate(planDir, plan string, groups []phaseGroup, closed map[stri
 	}
 	out = updatedLineRe.ReplaceAllString(out[:end], "updated: "+time.Now().Format("2006-01-02")) + out[end:]
 	return out, true, nil
+}
+
+// nextH2HeadingRe finds the next depth<=2 heading, the extent every
+// evidence writer (this one included) replaces up to (SDD020's duplicate
+// check: exactly one visible `## Plan Completion Evidence` section).
+var nextH2HeadingRe = regexp.MustCompile(`(?m)^ {0,3}#{1,2}\s+`)
+
+// applyPlanEvidence replaces the `## Plan Completion Evidence` section body
+// with the derived evidence once every phase in groups is closed and every
+// completed phase resolves a covering final review (renderPlanEvidence);
+// otherwise the section (typically still `Pending — not complete.`) is left
+// exactly as it is — this function never invents evidence and never
+// regresses a section a human or an earlier render already completed.
+func applyPlanEvidence(planDir, plan, src string, groups []phaseGroup, closed map[string]bool) (string, error) {
+	body, ok := renderPlanEvidence(planDir, plan, time.Now().Format("2006-01-02"), groups, closed)
+	if !ok {
+		return src, nil
+	}
+	loc := planEvidenceHeadingRe.FindStringIndex(src)
+	if loc == nil {
+		return src, nil
+	}
+	bodyStart := loc[1]
+	for bodyStart < len(src) && src[bodyStart] == '\n' {
+		bodyStart++
+	}
+	rest := nextH2HeadingRe.FindStringIndex(src[bodyStart:])
+	bodyEnd := len(src)
+	if rest != nil {
+		bodyEnd = bodyStart + rest[0]
+	}
+	return src[:bodyStart] + body + "\n" + src[bodyEnd:], nil
 }
 
 func readmeFrontmatterEnd(src string) (int, error) {
@@ -679,57 +770,26 @@ func refreshReadmePhaseStatuses(planDir, plan, src string, groups []phaseGroup, 
 			if fields["id"].Value != strconv.Itoa(ph.Ordinal) {
 				return "", fmt.Errorf("compile: generated phase %s has README id %q, expected %d; reconcile the identity instead of silently leaving a stale status", ph.Doc, fields["id"].Value, ph.Ordinal)
 			}
-			status := fields["status"]
-			want := phaseStatus(ph.Nodes, closed)
-			if status != nil && status.Kind == yaml.ScalarNode && status.Tag == "!!str" && status.Value == want {
-				continue
-			}
-			if status == nil || status.Kind != yaml.ScalarNode || status.Tag != "!!str" || status.Anchor != "" || status.Style&(yaml.LiteralStyle|yaml.FoldedStyle|yaml.TaggedStyle) != 0 {
-				return "", fmt.Errorf("compile: generated phase %s requires a plain or quoted scalar status", ph.Doc)
-			}
-			start, err := offset(status)
+			statusEdit, err := scalarFieldEdit(src, end, offset, fields["status"], phaseStatus(ph.Nodes, closed), "status", ph.Doc)
 			if err != nil {
 				return "", err
 			}
-			finish := start
-			replacement := want
-			switch status.Style {
-			case yaml.DoubleQuotedStyle, yaml.SingleQuotedStyle:
-				quote := src[start]
-				if quote != '"' && quote != '\'' {
-					return "", fmt.Errorf("compile: quoted phase status source span does not start at a quote")
-				}
-				finish++
-				for finish < end {
-					if quote == '"' && src[finish] == '\\' {
-						finish += 2
-						continue
-					}
-					if src[finish] == quote {
-						if quote == '\'' && finish+1 < end && src[finish+1] == '\'' {
-							finish += 2
-							continue
-						}
-						finish++
-						break
-					}
-					finish++
-				}
-				if finish > end || src[finish-1] != quote {
-					return "", fmt.Errorf("compile: unterminated phase status")
-				}
-				if quote == '"' {
-					replacement = strconv.Quote(want)
-				} else {
-					replacement = "'" + want + "'"
-				}
-			default:
-				if !strings.HasPrefix(src[start:end], status.Value) || strings.ContainsAny(status.Value, "\r\n") {
-					return "", fmt.Errorf("compile: unsafe phase status source span")
-				}
-				finish = start + len(status.Value)
+			if statusEdit != nil {
+				edits = append(edits, *statusEdit)
 			}
-			edits = append(edits, edit{start, finish, replacement})
+			// SDD152: the README phase entry's title and the phase doc's own
+			// `title` frontmatter must agree exactly. The doc's title is the
+			// human-derived one (phaseTitle); this keeps the README entry in
+			// sync with it the same way status is kept in sync, rather than
+			// leaving a raw phase label the initial README write may have
+			// used.
+			titleEdit, err := scalarFieldEdit(src, end, offset, fields["title"], ph.Title, "title", ph.Doc)
+			if err != nil {
+				return "", err
+			}
+			if titleEdit != nil {
+				edits = append(edits, *titleEdit)
+			}
 		}
 	}
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
@@ -737,6 +797,68 @@ func refreshReadmePhaseStatuses(planDir, plan, src string, groups []phaseGroup, 
 		src = src[:e.start] + e.text + src[e.end:]
 	}
 	return src, nil
+}
+
+// scalarFieldEdit computes the edit (if any) that brings a README phase
+// entry's plain- or quoted-scalar field to the wanted value, matching
+// refreshReadmePhaseStatuses' status-field logic exactly so title and status
+// stay in lockstep. Returns nil, nil when the field already holds want.
+func scalarFieldEdit(src string, end int, offset func(*yaml.Node) (int, error), field *yaml.Node, want, fieldName, doc string) (*struct {
+	start, end int
+	text       string
+}, error) {
+	if field != nil && field.Kind == yaml.ScalarNode && field.Tag == "!!str" && field.Value == want {
+		return nil, nil
+	}
+	if field == nil || field.Kind != yaml.ScalarNode || field.Tag != "!!str" || field.Anchor != "" || field.Style&(yaml.LiteralStyle|yaml.FoldedStyle|yaml.TaggedStyle) != 0 {
+		return nil, fmt.Errorf("compile: generated phase %s requires a plain or quoted scalar %s", doc, fieldName)
+	}
+	start, err := offset(field)
+	if err != nil {
+		return nil, err
+	}
+	finish := start
+	replacement := want
+	switch field.Style {
+	case yaml.DoubleQuotedStyle, yaml.SingleQuotedStyle:
+		quote := src[start]
+		if quote != '"' && quote != '\'' {
+			return nil, fmt.Errorf("compile: quoted phase %s source span does not start at a quote", fieldName)
+		}
+		finish++
+		for finish < end {
+			if quote == '"' && src[finish] == '\\' {
+				finish += 2
+				continue
+			}
+			if src[finish] == quote {
+				if quote == '\'' && finish+1 < end && src[finish+1] == '\'' {
+					finish += 2
+					continue
+				}
+				finish++
+				break
+			}
+			finish++
+		}
+		if finish > end || src[finish-1] != quote {
+			return nil, fmt.Errorf("compile: unterminated phase %s", fieldName)
+		}
+		if quote == '"' {
+			replacement = strconv.Quote(want)
+		} else {
+			replacement = "'" + want + "'"
+		}
+	default:
+		if !strings.HasPrefix(src[start:end], field.Value) || strings.ContainsAny(field.Value, "\r\n") {
+			return nil, fmt.Errorf("compile: unsafe phase %s source span", fieldName)
+		}
+		finish = start + len(field.Value)
+	}
+	return &struct {
+		start, end int
+		text       string
+	}{start, finish, replacement}, nil
 }
 
 func renderGraphViewSection(plan string, groups []phaseGroup) string {

@@ -22,7 +22,7 @@ func rendererStatusFixture(t *testing.T) (string, string, *model.Graph) {
 		t.Fatal(err)
 	}
 	g := &model.Graph{Version: 1, Nodes: []model.Node{{ID: "work", Contract: "works", Phase: "01-core", Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1}}}
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	return root, dir, g
@@ -77,30 +77,30 @@ func TestGraphReadmeStatusesTrackDerivedPhaseState(t *testing.T) {
 	}
 	check("planned")
 	g.Nodes[0].Claim = &model.Claim{By: "worker", LeaseExpires: "2099-01-01T00:00:00Z"}
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	check("in-progress")
 	g.Nodes[0].Claim = nil
 	g.Nodes[0].Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
 	g.SeqCounter = 1
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	check("in-progress") // GREEN is not closed.
-	if _, err := renderViews(root, "P", g, nil, map[string]bool{"work": true}); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, map[string]bool{"work": true}); err != nil {
 		t.Fatal(err)
 	}
 	check("complete")
 	before := rendererRead(t, filepath.Join(dir, "README.md"))
-	if files, err := renderViews(root, "P", g, nil, map[string]bool{"work": true}); err != nil || len(files) != 0 {
+	if files, err := renderViews(root, "P", "", g, nil, map[string]bool{"work": true}); err != nil || len(files) != 0 {
 		t.Fatalf("idempotent complete render: %v %v", files, err)
 	}
 	if rendererRead(t, filepath.Join(dir, "README.md")) != before {
 		t.Fatal("idempotent render changed README")
 	}
 	g.Nodes[0].Contract = "changed after freeze"
-	if _, err := renderViews(root, "P", g, nil, map[string]bool{"work": true}); err == nil {
+	if _, err := renderViews(root, "P", "", g, nil, map[string]bool{"work": true}); err == nil {
 		t.Fatal("frozen view was overwritten")
 	}
 	if rendererRead(t, filepath.Join(dir, "README.md")) != before {
@@ -118,7 +118,7 @@ func TestGraphReadmePreservesMixedPhaseOwnership(t *testing.T) {
 	rendererWrite(t, readme, src)
 	rendererWrite(t, filepath.Join(dir, "07-manual.md"), "hand authored, do not touch\n")
 	g.Nodes[0].Claim = &model.Claim{By: "worker"}
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	a, b := rendererStatuses(t, dir)
@@ -158,7 +158,7 @@ func TestGraphReadmeStatusPreflight(t *testing.T) {
 	rendererWrite(t, readme, src)
 	before := rendererRead(t, phase)
 	g.Nodes[0].Claim = &model.Claim{By: "worker"}
-	if _, err := renderViews(root, "P", g, nil, nil); err == nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err == nil {
 		t.Fatal("unsafe generated status shape was not refused")
 	}
 	if rendererRead(t, readme) != src || rendererRead(t, phase) != before {
@@ -178,7 +178,7 @@ func TestGraphReadmeFlowAndQuotedStatus(t *testing.T) {
 			src = src[:start] + flow + src[end:] + "\n```yaml\nupdated: 1999-01-01\nphases: []\n```\n"
 			rendererWrite(t, readme, src)
 			g.Nodes[0].Claim = &model.Claim{By: "worker"}
-			if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+			if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			a, b := rendererStatuses(t, dir)
@@ -203,14 +203,14 @@ func TestGraphReadmeUnchangedStyleAndIdentityRefusal(t *testing.T) {
 		readme := filepath.Join(dir, "README.md")
 		src := strings.Replace(rendererRead(t, readme), "    status: planned\n", "    status: &state planned\n", 1)
 		rendererWrite(t, readme, src)
-		if files, err := renderViews(root, "P", g, nil, nil); err != nil || len(files) != 0 {
+		if files, err := renderViews(root, "P", "", g, nil, nil); err != nil || len(files) != 0 {
 			t.Fatalf("unchanged styled status: %v %v", files, err)
 		}
 		if rendererRead(t, readme) != src {
 			t.Fatal("unchanged style was rewritten")
 		}
 		g.Nodes[0].Claim = &model.Claim{By: "worker"}
-		if _, err := renderViews(root, "P", g, nil, nil); err == nil {
+		if _, err := renderViews(root, "P", "", g, nil, nil); err == nil {
 			t.Fatal("changed anchored status must refuse unsafe source rewriting")
 		}
 	})
@@ -220,7 +220,7 @@ func TestGraphReadmeUnchangedStyleAndIdentityRefusal(t *testing.T) {
 		src := strings.Replace(rendererRead(t, readme), "  - id: 1\n", "  - id: 01\n", 1)
 		rendererWrite(t, readme, src)
 		g.Nodes[0].Claim = &model.Claim{By: "worker"}
-		if _, err := renderViews(root, "P", g, nil, nil); err == nil {
+		if _, err := renderViews(root, "P", "", g, nil, nil); err == nil {
 			t.Fatal("ambiguous generated identity was silently left stale")
 		}
 		if rendererRead(t, readme) != src {

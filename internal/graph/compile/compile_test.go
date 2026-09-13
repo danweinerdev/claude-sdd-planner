@@ -295,7 +295,7 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 		t.Fatal(err)
 	}
 	st, closed := deriveClosure(root, sources, NewInputResolver(root, root))(g2)
-	again, err := renderViews(root, "SamplePlan", g2, st, closed)
+	again, err := renderViews(root, "SamplePlan", "", g2, st, closed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,7 +769,7 @@ func TestFrozenViewLifecycle(t *testing.T) {
 	}
 	closed := map[string]bool{"a": true, "g1": true}
 
-	written, err := renderViews(root, "P", g, st, closed)
+	written, err := renderViews(root, "P", "", g, st, closed)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -792,7 +792,7 @@ func TestFrozenViewLifecycle(t *testing.T) {
 
 	// Byte-identical re-render: no-op, no refusal — compile stays runnable
 	// on a completed plan.
-	again, err := renderViews(root, "P", g, st, closed)
+	again, err := renderViews(root, "P", "", g, st, closed)
 	if err != nil {
 		t.Fatalf("identical re-render must not refuse: %v", err)
 	}
@@ -803,7 +803,7 @@ func TestFrozenViewLifecycle(t *testing.T) {
 	// The graph moves under the frozen view (a contract edit, a demotion,
 	// anything content-changing): the render is refused, naming the escape.
 	g.Nodes[0].Contract = "works differently now"
-	_, err = renderViews(root, "P", g, st, closed)
+	_, err = renderViews(root, "P", "", g, st, closed)
 	if err == nil || !strings.Contains(err.Error(), "frozen view") {
 		t.Fatalf("a content-changing render of a frozen view must refuse: %v", err)
 	}
@@ -812,7 +812,7 @@ func TestFrozenViewLifecycle(t *testing.T) {
 	if err := os.Remove(filepath.Join(planDir, "01-Ungrouped.md")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderViews(root, "P", g, st, closed); err != nil {
+	if _, err := renderViews(root, "P", "", g, st, closed); err != nil {
 		t.Fatalf("after the explicit delete, the render proceeds: %v", err)
 	}
 }
@@ -941,7 +941,7 @@ func TestGraphViewSectionInsertsBeforeEvidence(t *testing.T) {
 		{ID: "a", Contract: "works", Gate: model.Gate{Type: model.GateTests},
 			Hazards: model.Hazards{}, Estimate: 1},
 	}}
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	out, err := os.ReadFile(filepath.Join(planDir, "README.md"))
@@ -959,7 +959,7 @@ func TestGraphViewSectionInsertsBeforeEvidence(t *testing.T) {
 	}
 	// The upsert path replaces in place: a second render must not duplicate
 	// or relocate the section.
-	if _, err := renderViews(root, "P", g, nil, nil); err != nil {
+	if _, err := renderViews(root, "P", "", g, nil, nil); err != nil {
 		t.Fatalf("re-render: %v", err)
 	}
 	out2, _ := os.ReadFile(filepath.Join(planDir, "README.md"))
