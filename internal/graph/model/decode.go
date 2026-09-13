@@ -67,7 +67,7 @@ var (
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	originKeys       = []string{"review", "finding"}
-	amendmentKeys    = []string{"seq", "review", "artifact", "report_digest", "revised", "extended"}
+	amendmentKeys    = []string{"seq", "review", "artifact", "report_digest", "revised", "extended", "preimage_tests", "preimage_red_seqs"}
 	reviewedKeys     = []string{"contract_rev", "artifact_digests"}
 	gateKeys         = []string{"type", "tests", "command", "lanes"}
 	testKeys         = []string{"id", "file", "satisfies"}
@@ -504,6 +504,37 @@ func (d *decoder) amendment(path string, raw any) AmendmentRecord {
 		a.Seq, _ = d.intVal(path+".seq", v)
 	} else {
 		d.errf(path+".seq", "missing required field")
+	}
+	if v, present := obj["preimage_tests"]; present {
+		pm, ok := v.(map[string]any)
+		if !ok {
+			d.errf(path+".preimage_tests", "must be an object of node id to test list, got %s", typeName(v))
+		} else {
+			a.PreimageTests = map[string][]Test{}
+			for nodeID, raw := range pm {
+				list, ok := raw.([]any)
+				if !ok {
+					d.errf(fmt.Sprintf("%s.preimage_tests.%s", path, nodeID), "must be a list of test objects, got %s", typeName(raw))
+					continue
+				}
+				var tests []Test
+				for i, item := range list {
+					tests = append(tests, d.test(fmt.Sprintf("%s.preimage_tests.%s[%d]", path, nodeID, i), item))
+				}
+				a.PreimageTests[nodeID] = tests
+			}
+		}
+	}
+	if v, present := obj["preimage_red_seqs"]; present {
+		pm, ok := v.(map[string]any)
+		if !ok {
+			d.errf(path+".preimage_red_seqs", "must be an object of node id to red_seqs, got %s", typeName(v))
+		} else {
+			a.PreimageRedSeqs = map[string]map[string]int{}
+			for nodeID, raw := range pm {
+				a.PreimageRedSeqs[nodeID] = d.intMap(fmt.Sprintf("%s.preimage_red_seqs.%s", path, nodeID), raw)
+			}
+		}
 	}
 	return a
 }

@@ -150,6 +150,18 @@ type AmendmentRecord struct {
 	ReportDigest string   `json:"report_digest"` // digest of the artifact applied
 	Revised      []string `json:"revised,omitempty"`
 	Extended     []string `json:"extended,omitempty"`
+	// PreimageTests is tool-owned: for each revised node id, the tests gate
+	// it carried immediately before this amendment (nil for nodes whose
+	// gate was not a tests gate). PreimageRedSeqs is that same node's
+	// red_seqs immediately before the amendment cleared them. Together
+	// they exist solely so `graph repair-red` can recompute which
+	// red_seqs a revise should have carried over (proof compatibility,
+	// ReviewDrivenAmendment DD-9) on a graph amended before the
+	// carry-over fix landed — the seq a test first failed at cannot be
+	// recovered any other way once cleared. Absent on amendments recorded
+	// before this field existed.
+	PreimageTests   map[string][]Test         `json:"preimage_tests,omitempty"`
+	PreimageRedSeqs map[string]map[string]int `json:"preimage_red_seqs,omitempty"`
 }
 
 // Node is one unit of work: a falsifiable contract, its dependencies, the

@@ -91,8 +91,15 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	big := g.NodeByID("big")
-	if big.ContractRev != 2 || big.Contract != "does too much, and excludes archived rows" || big.RedSeqs != nil {
-		t.Fatalf("revise did not advance/reset: rev=%d red=%v contract=%q", big.ContractRev, big.RedSeqs, big.Contract)
+	// The revise only changed the contract, not the gate: every declared
+	// test's (id, file, satisfies) is unchanged, so its recorded red
+	// carries over (proof compatibility, ReviewDrivenAmendment DD-9) even
+	// though the contract revision still advances.
+	if big.ContractRev != 2 || big.Contract != "does too much, and excludes archived rows" {
+		t.Fatalf("revise did not advance: rev=%d contract=%q", big.ContractRev, big.Contract)
+	}
+	if len(big.RedSeqs) != 1 || big.RedSeqs["test_big"] != 1 {
+		t.Fatalf("unchanged test's red must carry over: red=%v", big.RedSeqs)
 	}
 	if big.Verification == nil || big.Verification.Result != model.ResultPass {
 		t.Fatal("history is kept: the old pass stays recorded")
@@ -113,6 +120,85 @@ func TestAmendReviseAdvancesRevisionAndResetsProof(t *testing.T) {
 	// The same artifact cannot amend twice.
 	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: out.NewDigest, ExpectReportDigest: res.Plan.ReportDigest}); err == nil || !strings.Contains(err.Error(), "already applied") {
 		t.Fatalf("second application must refuse: %v", err)
+	}
+}
+
+// TestAmendReviseAddingTestCarriesOverUnchangedHazardRed: a revise that adds
+// a third test to a two-test gate must keep the unchanged hazard-discharging
+// test's recorded red and must not fabricate one for the new test
+// (ReviewDrivenAmendment DD-9's proof compatibility).
+func TestAmendReviseAddingTestCarriesOverUnchangedHazardRed(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		big := g.NodeByID("big")
+		big.Gate.Tests = []model.Test{
+			{ID: "test_big", File: "t.ext", Satisfies: []string{"external-format"}},
+			{ID: "test_plain", File: "t.ext"},
+		}
+		big.RedSeqs = map[string]int{"test_big": 7}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	findings := "  - id: F-01\n    severity: major\n    title: \"needs a third test\"\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      gate:\n        type: tests\n        tests:\n          - id: test_big\n            file: t.ext\n            satisfies: [external-format]\n          - id: test_plain\n            file: t.ext\n          - id: test_new\n            file: t.ext\n"
+	rel := frozenReview(t, root, findings)
+	res, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest, ExpectReportDigest: res.Plan.ReportDigest})
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if !out.Applied {
+		t.Fatal("not applied")
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	big := g.NodeByID("big")
+	if seq, ok := big.RedSeqs["test_big"]; !ok || seq != 7 {
+		t.Fatalf("unchanged hazard test must keep its red: red=%v", big.RedSeqs)
+	}
+	if _, ok := big.RedSeqs["test_new"]; ok {
+		t.Fatalf("new test must not carry a fabricated red: red=%v", big.RedSeqs)
+	}
+	if len(big.RedSeqs) != 1 {
+		t.Fatalf("only the unchanged test's red should survive: red=%v", big.RedSeqs)
+	}
+}
+
+// TestAmendReviseChangingHazardTestClearsItsRed: a revise that changes the
+// hazard test's file (same id) must clear its red — the proof it discharges
+// is no longer the same obligation.
+func TestAmendReviseChangingHazardTestClearsItsRed(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		big := g.NodeByID("big")
+		big.Gate.Tests = []model.Test{
+			{ID: "test_big", File: "t.ext", Satisfies: []string{"external-format"}},
+			{ID: "test_plain", File: "t.ext"},
+		}
+		big.RedSeqs = map[string]int{"test_big": 7}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	findings := "  - id: F-01\n    severity: major\n    title: \"test_big moved files\"\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      gate:\n        type: tests\n        tests:\n          - id: test_big\n            file: other.ext\n            satisfies: [external-format]\n          - id: test_plain\n            file: t.ext\n"
+	rel := frozenReview(t, root, findings)
+	res, err := greview.Record(greview.Options{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: res.ExpectDigest, ExpectReportDigest: res.Plan.ReportDigest})
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if !out.Applied {
+		t.Fatal("not applied")
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	big := g.NodeByID("big")
+	if _, ok := big.RedSeqs["test_big"]; ok {
+		t.Fatalf("changed test's red must clear: red=%v", big.RedSeqs)
 	}
 }
 

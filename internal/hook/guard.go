@@ -142,6 +142,8 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"retire": false,
 	// mutating: backfills missing intent fingerprints
 	"repair-intent": false,
+	// mutating: recomputes red_seqs a pre-fix revise cleared
+	"repair-red": false,
 	// mutating: replaces a node's declared read-only inputs
 	"set-inputs": false,
 	// mutating: replaces a node's declared artifact write-set

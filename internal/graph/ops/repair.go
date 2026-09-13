@@ -199,3 +199,146 @@ func planRepair(g *model.Graph, nodeID string, sources *gcompile.Sources) (*Repa
 	sort.Strings(ids)
 	return &RepairIntentResult{Repaired: ids, Changes: changes}, nil
 }
+
+// RedRepairChange is one recomputed red_seqs entry: the test carried its red
+// forward from seq across a revise that should have preserved it.
+type RedRepairChange struct {
+	Node string `json:"node"`
+	Test string `json:"test"`
+	Seq  int    `json:"seq"`
+}
+
+// RepairRedResult reports a repair-red run.
+type RepairRedResult struct {
+	Repaired []string          `json:"repaired,omitempty"`
+	Changes  []RedRepairChange `json:"changes,omitempty"`
+	DryRun   bool              `json:"dry_run,omitempty"`
+}
+
+// RepairRed recomputes red_seqs entries dropped by amendments applied before
+// the proof-compatibility carry-over fix (ReviewDrivenAmendment DD-9): a
+// revise used to clear every red_seqs entry on gate change, even for a test
+// whose (id, file, satisfies) did not change and so still discharges the
+// same obligation.
+//
+// The repair is conservative by construction, not by inference: it only
+// recomputes a node's red_seqs from that node's amendment history --
+// specifically each revise's recorded PreimageTests (the tests gate the node
+// carried immediately before the revise, written by `graph amend` starting
+// with this fix). There is no other persisted record of which test was ever
+// observed red before a revise cleared the bookkeeping, so a node revised
+// before PreimageTests existed cannot be repaired; RepairRed reports it as
+// unrepairable rather than guessing.
+//
+// With a non-empty nodeID it considers only that node; with an empty nodeID
+// it considers every node with amendment history. dryRun computes and
+// returns the same planned changes without writing the graph.
+func RepairRed(root, repoRoot, plan, nodeID string, dryRun bool) (*RepairRedResult, error) {
+	planDir := filepath.Join(root, "Plans", plan)
+	if dryRun {
+		g, err := gstore.Load(gstore.PathFor(planDir))
+		if err != nil {
+			return nil, err
+		}
+		res, err := planRedRepair(g, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		res.DryRun = true
+		return res, nil
+	}
+	var result *RepairRedResult
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
+		res, err := planRedRepair(fresh, nodeID)
+		if err != nil {
+			return err
+		}
+		for _, ch := range res.Changes {
+			n := fresh.NodeByID(ch.Node)
+			if n.RedSeqs == nil {
+				n.RedSeqs = map[string]int{}
+			}
+			if _, already := n.RedSeqs[ch.Test]; !already {
+				n.RedSeqs[ch.Test] = ch.Seq
+			}
+		}
+		result = res
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// planRedRepair classifies a graph's selected nodes and returns the planned
+// red_seqs backfills. Pure: it never writes. A node is skipped (not
+// refused) when it has no amendment history, no gap, or no PreimageTests to
+// repair from — repair-red never blocks a node that does not need it.
+func planRedRepair(g *model.Graph, nodeID string) (*RepairRedResult, error) {
+	var selected []*model.Node
+	if nodeID != "" {
+		n := g.NodeByID(nodeID)
+		if n == nil {
+			return nil, fmt.Errorf("graph repair-red: node %q does not exist", nodeID)
+		}
+		selected = []*model.Node{n}
+	} else {
+		for i := range g.Nodes {
+			selected = append(selected, &g.Nodes[i])
+		}
+	}
+
+	var changes []RedRepairChange
+	for _, n := range selected {
+		if n.Gate.Type != model.GateTests {
+			continue
+		}
+		// Find this node's most recent revise carrying a recorded preimage:
+		// PreimageTests/PreimageRedSeqs only exist from this fix forward, so
+		// an older revise on a graph never touched by this fix has no
+		// recorded preimage and is left alone -- the seq a test first
+		// failed at cannot be reconstructed once its red_seqs entry was
+		// cleared without a trace.
+		var pre []model.Test
+		var preRed map[string]int
+		found := false
+		for _, a := range g.Amendments {
+			if p, ok := a.PreimageTests[n.ID]; ok {
+				pre = p
+				preRed = a.PreimageRedSeqs[n.ID]
+				found = true
+			}
+		}
+		if !found {
+			continue
+		}
+		// Its red bookkeeping is exactly the carry-over the fixed revise
+		// path would have computed from the recorded preimage, restricted
+		// to entries missing today (repair-red never overwrites an entry
+		// that is already present, whatever its source).
+		carried := carryOverRedSeqs(pre, n.Gate.Tests, preRed)
+		for id, seq := range carried {
+			if _, already := n.RedSeqs[id]; already {
+				continue
+			}
+			changes = append(changes, RedRepairChange{Node: n.ID, Test: id, Seq: seq})
+		}
+	}
+	sort.Slice(changes, func(i, j int) bool {
+		if changes[i].Node != changes[j].Node {
+			return changes[i].Node < changes[j].Node
+		}
+		return changes[i].Test < changes[j].Test
+	})
+
+	repaired := map[string]bool{}
+	for _, ch := range changes {
+		repaired[ch.Node] = true
+	}
+	ids := make([]string, 0, len(repaired))
+	for id := range repaired {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return &RepairRedResult{Repaired: ids, Changes: changes}, nil
+}

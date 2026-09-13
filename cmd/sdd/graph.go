@@ -63,6 +63,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphSetInputsCmd())
 	c.AddCommand(graphRepairIntentCmd())
+	c.AddCommand(graphRepairRedCmd())
 	c.AddCommand(graphSetArtifactsCmd())
 	c.AddCommand(graphRehashCmd())
 	c.AddCommand(graphGCCmd())
@@ -312,6 +313,71 @@ writing the graph.`,
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().StringVar(&node, "node", "", "repair only this node (default: every node)")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned backfills without writing the graph")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	return c
+}
+
+// graphRepairRedCmd recomputes red_seqs entries a revise cleared before the
+// proof-compatibility carry-over fix landed (ReviewDrivenAmendment DD-9): a
+// test whose (id, file, satisfies) survived a revise unchanged should have
+// kept its recorded red. Mutating: guard-covered per D-0014.
+func graphRepairRedCmd() *cobra.Command {
+	var plan, node string
+	var dryRun, asJSON bool
+	c := &cobra.Command{
+		Use:   "repair-red",
+		Short: "Recompute red_seqs a revise cleared for tests whose definition did not change",
+		Long: `Recompute red_seqs entries lost to a revise that predates the proof-
+compatibility carry-over fix: a test whose (id, file, satisfies) is
+unchanged across a revise should have kept its recorded red, but earlier
+revises cleared every entry regardless. This only recovers what a revise
+itself recorded as its own pre-image (PreimageTests / PreimageRedSeqs on the
+amendment record) -- a node revised before that bookkeeping existed cannot
+be repaired and is left alone rather than guessed at. Never overwrites an
+existing red_seqs entry. With no --node it considers every node; --dry-run
+reports the same planned changes without writing the graph.`,
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			if plan == "" {
+				return fmt.Errorf("graph repair-red: --plan is required")
+			}
+			root, repoRoot, err := resolveRoots(".", "")
+			if err != nil {
+				return fmt.Errorf("graph repair-red: %w", err)
+			}
+			res, err := ops.RepairRed(root, repoRoot, plan, node, dryRun)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(struct {
+					OK bool `json:"ok"`
+					*ops.RepairRedResult
+				}{true, res})
+			}
+			w := c.OutOrStdout()
+			if len(res.Changes) == 0 {
+				if dryRun {
+					fmt.Fprintln(w, "nothing to repair")
+				} else {
+					fmt.Fprintln(w, "nothing to repair (no recoverable red_seqs gap)")
+				}
+				return nil
+			}
+			verb := "repaired"
+			if dryRun {
+				verb = "would repair"
+			}
+			for _, ch := range res.Changes {
+				fmt.Fprintf(w, "%s %s: %s -> red at seq %d\n", verb, ch.Node, ch.Test, ch.Seq)
+			}
+			fmt.Fprintf(w, "%s %d red_seqs entr(y/ies) across %d node(s)\n", verb, len(res.Changes), len(res.Repaired))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "repair only this node (default: every node)")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned recomputation without writing the graph")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }

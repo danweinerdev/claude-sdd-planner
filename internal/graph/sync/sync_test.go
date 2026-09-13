@@ -10,6 +10,7 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -302,6 +303,99 @@ func TestRedBeforeGreenGatesHazardTests(t *testing.T) {
 		ReportName: "r.xml", ReportBytes: []byte(passing)})
 	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
 		t.Fatalf("after the recorded red, the pass counts: %+v %v", res, err)
+	}
+}
+
+// TestSyncPassesAfterReviseCarriesOverUnchangedHazardRed proves the
+// carry-over fix end to end: a hazard test observed red, then a gate
+// revise (via ops.SetTests, the same carry-over `graph amend` uses) that
+// adds a new test while leaving the hazard test's (id, file, satisfies)
+// unchanged. The unchanged test's red survives, so a pass syncs without a
+// fresh red-before-green refusal for it — but still owes (and gets) one for
+// the newly added test.
+func TestSyncPassesAfterReviseCarriesOverUnchangedHazardRed(t *testing.T) {
+	n := testsNode("a", "test_h")
+	n.Gate.Tests[0].Satisfies = []string{"external-format"}
+	n.Hazards = model.Hazards{"external-format"}
+	planDir, repoRoot := fixture(t, n)
+
+	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ops.SetTests(planDir, "a", "", []model.Test{
+		{ID: "test_h", File: "t.ext", Satisfies: []string{"external-format"}},
+		{ID: "test_new", File: "t.ext", Satisfies: []string{"external-format"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	a := g.NodeByID("a")
+	if a.ContractRev != 2 {
+		t.Fatalf("gate change must advance contract_rev: %d", a.ContractRev)
+	}
+	if seq, ok := a.RedSeqs["test_h"]; !ok || seq != 1 {
+		t.Fatalf("unchanged hazard test's red must carry over the revise: %+v", a.RedSeqs)
+	}
+	if _, ok := a.RedSeqs["test_new"]; ok {
+		t.Fatal("new test must not carry a fabricated red")
+	}
+
+	// The new test has never been observed failing: a pass covering both
+	// still refuses red-before-green, naming only the new test.
+	bothPassing := `<testsuite><testcase name="test_h"/><testcase name="test_new"/></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green.xml", ReportBytes: []byte(bothPassing)}); err == nil ||
+		!strings.Contains(err.Error(), "red-before-green") || strings.Contains(err.Error(), "test_h") {
+		t.Fatalf("only the new test should still owe a red: %v", err)
+	}
+
+	// Once the new test is also observed red, the pass syncs clean —
+	// test_h's carried-over red is still honored at the new revision.
+	newFails := `<testsuite><testcase name="test_h"/><testcase name="test_new"><failure/></testcase></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "red2.xml", ReportBytes: []byte(newFails)}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green2.xml", ReportBytes: []byte(bothPassing)})
+	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
+		t.Fatalf("pass must sync once every hazard test has a red at the current revision: %+v %v", res, err)
+	}
+}
+
+// TestSyncStillRefusesWhenHazardTestItselfChanged proves the carry-over is
+// scoped to unchanged tests: a revise that changes the hazard test's file
+// clears its red, so a pass covering it still refuses red-before-green.
+func TestSyncStillRefusesWhenHazardTestItselfChanged(t *testing.T) {
+	n := testsNode("a", "test_h")
+	n.Gate.Tests[0].Satisfies = []string{"external-format"}
+	n.Hazards = model.Hazards{"external-format"}
+	planDir, repoRoot := fixture(t, n)
+
+	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ops.SetTests(planDir, "a", "", []model.Test{
+		{ID: "test_h", File: "other.ext", Satisfies: []string{"external-format"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	if _, ok := g.NodeByID("a").RedSeqs["test_h"]; ok {
+		t.Fatal("a test whose definition changed must not carry over its red")
+	}
+
+	passing := `<testsuite><testcase name="test_h"/></testsuite>`
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+		ReportName: "green.xml", ReportBytes: []byte(passing)}); err == nil ||
+		!strings.Contains(err.Error(), "red-before-green") {
+		t.Fatalf("the changed hazard test still owes a fresh red: %v", err)
 	}
 }
 

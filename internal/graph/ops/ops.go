@@ -248,6 +248,46 @@ func sameTests(a, b []model.Test) bool {
 	return string(ra) == string(rb)
 }
 
+// testProofKey renders the part of a test's definition that proof
+// compatibility depends on: id, file, and satisfies (order-independent).
+// Two tests with the same key discharge the same obligation, so a red
+// observed against one is still valid proof against the other.
+func testProofKey(t model.Test) string {
+	sat := append([]string(nil), t.Satisfies...)
+	sort.Strings(sat)
+	return t.ID + "\x00" + t.File + "\x00" + strings.Join(sat, "\x00")
+}
+
+// carryOverRedSeqs computes the surviving red_seq bookkeeping across a gate
+// change: a test whose (id, file, satisfies) is unchanged between oldTests
+// and newTests keeps its recorded red — the proof is unchanged, so the
+// obligation it discharges is unchanged (ReviewDrivenAmendment DD-9's
+// "compatible proof definitions"). A changed, removed, or new test starts
+// (or stays) without a red; it owes a fresh one.
+func carryOverRedSeqs(oldTests, newTests []model.Test, oldRed map[string]int) map[string]int {
+	if len(oldRed) == 0 {
+		return nil
+	}
+	oldByKey := map[string]string{} // proof key -> old test id
+	for _, t := range oldTests {
+		oldByKey[testProofKey(t)] = t.ID
+	}
+	out := map[string]int{}
+	for _, t := range newTests {
+		oldID, ok := oldByKey[testProofKey(t)]
+		if !ok {
+			continue
+		}
+		if seq, ok := oldRed[oldID]; ok {
+			out[t.ID] = seq
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // introducedFindings diffs two finding sets by rendered text.
 func introducedFindings(before, after []gcompile.Finding) []gcompile.Finding {
 	prior := map[string]bool{}
@@ -264,8 +304,10 @@ func introducedFindings(before, after []gcompile.Finding) []gcompile.Finding {
 }
 
 // SetTests replaces a node's declared test list under the lock. Holder-only
-// when the node is claimed. red_seq entries for tests no longer declared are
-// pruned: a renamed or replaced test owes a fresh red proof.
+// when the node is claimed. red_seq entries for tests no longer declared, or
+// whose file or satisfies changed, are pruned: a renamed or replaced test
+// owes a fresh red proof. A test whose (id, file, satisfies) is unchanged
+// keeps its recorded red.
 func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 	if len(tests) == 0 {
 		return fmt.Errorf("graph set-tests: at least one test is required (an empty tests gate verifies nothing)")
@@ -308,16 +350,17 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 		if sameTests(n.Gate.Tests, tests) {
 			return nil
 		}
+		oldTests := n.Gate.Tests
 		n.Gate.Tests = tests
 		if n.Verification != nil {
 			// The gate is owned normative content (ReviewDrivenAmendment
 			// DD-4): changing it under an observation advances the contract
-			// revision, so the old proof is history and RED is owed again for
-			// every hazard-discharging test at the new revision. A never-
-			// observed node only prunes bookkeeping for tests it no longer
-			// declares.
+			// revision. A test whose (id, file, satisfies) is unchanged
+			// keeps its recorded red — the proof it discharges is unchanged
+			// (DD-9's "compatible proof definitions"); a changed, removed,
+			// or new test owes a fresh red at the new revision.
 			n.ContractRev = n.EffectiveContractRev() + 1
-			n.RedSeqs = nil
+			n.RedSeqs = carryOverRedSeqs(oldTests, tests, n.RedSeqs)
 			return nil
 		}
 		for id := range n.RedSeqs {

@@ -169,6 +169,8 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 		return nil, 0, fmt.Errorf("graph amend: review node %q does not exist", plan.Review)
 	}
 	record := model.AmendmentRecord{Review: plan.Review, Artifact: plan.Artifact, ReportDigest: plan.ReportDigest}
+	preimageTests := map[string][]model.Test{}
+	preimageRedSeqs := map[string]map[string]int{}
 	for _, a := range plan.Amendments {
 		switch a.Action {
 		case review.ActionRevise:
@@ -180,14 +182,24 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			if n.Claim != nil && n.Claim.By != by {
 				return nil, 0, fmt.Errorf("graph amend: %q is claimed by %q; the holder applies the revise, or releases the claim first", n.ID, n.Claim.By)
 			}
+			oldTests := n.Gate.Tests
+			oldRed := n.RedSeqs
 			n.Contract = a.After.Contract
 			n.Gate = a.After.Gate
 			n.Justifies = a.After.Justifies
 			n.Inputs = a.After.Inputs
 			n.ContractRev = n.EffectiveContractRev() + 1
-			// Proof compatibility boundary (DD-9): the obligation changed,
-			// so RED is owed again for every test regardless of name.
-			n.RedSeqs = nil
+			// Proof compatibility boundary (DD-9): a test whose (id, file,
+			// satisfies) is unchanged across the revise keeps its recorded
+			// red — the proof it discharges is unchanged. A changed,
+			// removed, or new test owes a fresh red at the new revision.
+			n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
+			if len(oldTests) > 0 {
+				preimageTests[n.ID] = oldTests
+			}
+			if len(oldRed) > 0 {
+				preimageRedSeqs[n.ID] = oldRed
+			}
 			// Re-anchor against the snapshot: hashes belong to the new
 			// citation and input sets, never carried over.
 			n.IntentHashes = nil
@@ -231,6 +243,12 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 	}
 	sort.Strings(record.Revised)
 	sort.Strings(record.Extended)
+	if len(preimageTests) > 0 {
+		record.PreimageTests = preimageTests
+	}
+	if len(preimageRedSeqs) > 0 {
+		record.PreimageRedSeqs = preimageRedSeqs
+	}
 	out.SeqCounter++
 	record.Seq = out.SeqCounter
 	out.Amendments = append(out.Amendments, record)
