@@ -66,3 +66,6 @@ bin/
 # Shipping one would name an interpreter that does not exist on some
 # platforms, and every listed hook command runs on every platform.
 hooks/hooks.json
+
+# `go test -c` compiled test binaries.
+*.test

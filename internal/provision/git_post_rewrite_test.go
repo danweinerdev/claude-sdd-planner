@@ -57,6 +57,13 @@ func TestPostRewriteResumesInterruptedUserHookBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// CheckPostRewrite is read-only and never creates the hooks directory;
+	// under the hermetic policy's empty GIT_TEMPLATE_DIR, git init doesn't
+	// seed it either, so the fixture must create it before writing directly
+	// into it (InstallPostRewrite does the same MkdirAll in production).
+	if err := os.MkdirAll(filepath.Dir(report.HookPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	user := []byte("#!/bin/sh\nexit 7\n")
 	if err := os.WriteFile(report.HookPath, user, 0o755); err != nil {
 		t.Fatal(err)
