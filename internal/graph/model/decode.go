@@ -63,7 +63,7 @@ var toolOwnedNodeKeys = map[string]string{
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements"}
+	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements", "completed_at"}
 	proposalKeys     = []string{"version", "nodes"}
 	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
 	originKeys       = []string{"review", "finding"}
@@ -234,6 +234,9 @@ func (d *decoder) graph(raw any) *Graph {
 			}
 		}
 	}
+	if v, present := obj["completed_at"]; present && !d.proposal {
+		g.CompletedAt = d.completedAt("completed_at", v)
+	}
 	nodesRaw, present := obj["nodes"]
 	if !present {
 		d.errf("nodes", "missing required field")
@@ -370,6 +373,28 @@ func (d *decoder) retirementSources(raw any) map[string]RetirementRecord {
 		out[id] = RetirementRecord{Source: s, ReplacedBy: d.stringList(path+".replaced_by", record["replaced_by"])}
 	}
 	return out
+}
+
+func (d *decoder) completedAt(path string, raw any) *CompletedAt {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return nil
+	}
+	d.unknownKeys(path, obj, []string{"revision", "seq"})
+	c := &CompletedAt{Revision: d.requiredString(path, obj, "revision")}
+	switch v, present := obj["seq"]; {
+	case !present:
+		d.errf(path+".seq", "missing required field")
+	default:
+		if n, ok := d.intVal(path+".seq", v); ok {
+			if n < 0 {
+				d.errf(path+".seq", "must be >= 0, got %d", n)
+			}
+			c.Seq = n
+		}
+	}
+	return c
 }
 
 func (d *decoder) node(path string, raw any) Node {

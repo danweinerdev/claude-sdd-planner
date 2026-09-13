@@ -390,13 +390,32 @@ func selectInScope(diags []rules.Diagnostic, scope string, inScope []string) []r
 	return out
 }
 
-// graphCompleteButUnclosedDiagnostics is SDD199: a graph plan's README can
-// say `status: complete` while its committed graph is not actually closed —
+// graphCompleteButUnclosedDiagnostics is SDD199/SDD200: a graph plan's
+// README can say `status: complete` while its committed graph disagrees —
 // CLAUDE.md's graph-plan discipline that "closure is a derived predicate",
-// never an assertion. It derives closure the same way `sdd plan complete`
-// does (states.Derive + review.Closed, see cmd/sdd/graph_complete.go's
-// graphDerive) and reports one diagnostic per disagreeing plan, naming the
-// nodes that are not closed.
+// never an assertion. Judged the LIVE tree, that disagreement is unusable in
+// CI: the moment any later commit touches a file a closed node owns, or any
+// later edit changes a cited requirement's text, a legitimately completed
+// plan goes red forever (P-23). For an already-complete plan every kind of
+// later drift is post-completion drift, not a reopening — so closure here is
+// judged twice:
+//
+//   - Observation-only (SDD199, Error): the same states.Derive + review.Closed
+//     `sdd plan complete` used, but with every staleness axis that compares
+//     current content against recorded content disabled (artifact digests,
+//     dependency digests, intent hashes, input hashes all nil/unset) so
+//     every byte and every cited requirement reads as unchanged — "was the
+//     graph closed by its recorded observations?", stable across later
+//     commits and later requirement edits alike. A node never verified, a
+//     review gate never passed, or a node RED at its latest observation
+//     still fails this and blocks.
+//   - Live (SDD200, Warning/informational): the ordinary current-tree
+//     derive `sdd graph status` uses (all four axes active). When
+//     observation-only closure holds but live closure does not, that is
+//     post-completion drift — later maintenance touched a closed node's
+//     artifact, a dependency's artifact, a cited requirement, or a declared
+//     input — reported as information, never as reopening the plan, naming
+//     up to five nodes per drift kind.
 //
 // This lives here rather than in internal/rules because internal/rules
 // cannot import internal/graph/{states,review} without an import cycle
@@ -427,24 +446,79 @@ func graphCompleteButUnclosedDiagnostics(r *rules.Root, resolved, repoRoot strin
 		}
 		snap := sources.IntentSnapshot()
 		digester := digest.New(repoRoot)
-		st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-			CurrentIntentHashes: snap.Hashes(),
-			CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
-		closed := greview.Closed(g, st)
+		inputHashes := sources.InputResolver().GraphHashes(g)
+
+		// Observation-only: every current-vs-recorded comparison axis is
+		// disabled, so only the recorded observations themselves (pass/fail,
+		// review scope, seq ordering) can withhold closure.
+		stObs := states.Derive(states.Inputs{Graph: g})
+		closedObs := greview.Closed(g, stObs)
 		var open []string
 		for _, n := range g.Nodes {
-			if !closed[n.ID] {
+			if !closedObs[n.ID] {
 				open = append(open, n.ID)
 			}
 		}
-		if len(open) == 0 {
+		if len(open) > 0 {
+			sort.Strings(open)
+			out = append(out, rules.Diagnostic{
+				Code: "SDD199", Severity: rules.Error, Path: a.Rel, Line: 1,
+				Message:    "Plan status is `complete` but its graph was never closed by its own recorded observations: " + strings.Join(open, ", ") + ".",
+				Correction: "Close every node (sdd graph status) or move status off complete until the graph agrees.",
+			})
 			continue
 		}
-		sort.Strings(open)
+
+		st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
+			CurrentIntentHashes: snap.Hashes(), CurrentInputHashes: inputHashes})
+		closed := greview.Closed(g, st)
+
+		drift := map[string][]string{"artifact": nil, "dependency": nil, "intent": nil, "input": nil}
+		for _, n := range g.Nodes {
+			if closed[n.ID] {
+				continue
+			}
+			ns := st[n.ID]
+			if len(ns.DigestStale) > 0 {
+				drift["artifact"] = append(drift["artifact"], n.ID)
+			}
+			if len(ns.DependencyStale) > 0 {
+				drift["dependency"] = append(drift["dependency"], n.ID)
+			}
+			if len(ns.IntentStale) > 0 {
+				drift["intent"] = append(drift["intent"], n.ID)
+			}
+			if len(ns.InputStale) > 0 {
+				drift["input"] = append(drift["input"], n.ID)
+			}
+		}
+		total := 0
+		var parts []string
+		for _, kind := range []string{"artifact", "dependency", "intent", "input"} {
+			nodes := drift[kind]
+			if len(nodes) == 0 {
+				continue
+			}
+			sort.Strings(nodes)
+			total += len(nodes)
+			named := nodes
+			if len(named) > 5 {
+				named = named[:5]
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s", kind, strings.Join(named, ", ")))
+		}
+		if total == 0 {
+			continue // closure disagrees for a reason none of the four axes explain (e.g. a claim); not this diagnostic's shape.
+		}
+		when := "an unrecorded revision (this plan completed before completed_at was tracked)"
+		if g.CompletedAt != nil {
+			when = g.CompletedAt.Revision
+		}
 		out = append(out, rules.Diagnostic{
-			Code: "SDD199", Severity: rules.Error, Path: a.Rel, Line: 1,
-			Message:    "Plan status is `complete` but its graph is not closed: " + strings.Join(open, ", ") + ".",
-			Correction: "Close every node (sdd graph status) or move status off complete until the graph agrees.",
+			Code: "SDD200", Severity: rules.Warning, Path: a.Rel, Line: 1,
+			Message: fmt.Sprintf("Post-completion drift: %d node(s) changed since the plan closed at %s (%s).",
+				total, when, strings.Join(parts, "; ")),
+			Correction: "Informational only — the plan closed by its recorded observations; no action required unless the drift is unexpected.",
 		})
 	}
 	return out, nil

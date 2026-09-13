@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -417,5 +418,75 @@ phases: []
 	wrapped := fmt.Errorf("plan complete: %w", err)
 	if code := exitCode(wrapped); code != 2 {
 		t.Fatalf("exitCode = %d, want 2 (operational, not a refused mutation): %v", code, wrapped)
+	}
+}
+
+// initGitRepo turns dir into a minimal git repo with one commit, so
+// vcs.DetectChecked resolves a real HEAD for the completed_at capture.
+func initGitRepo(t *testing.T, dir string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	run("add", "-A")
+	run("commit", "-q", "-m", "initial", "--allow-empty")
+}
+
+// TestGraphPlanCompleteRecordsCompletedAt: `sdd plan complete` on a closed
+// graph in a real git repo records CompletedAt (HEAD revision + seq) in the
+// committed graph, and `sdd graph status` surfaces it.
+func TestGraphPlanCompleteRecordsCompletedAt(t *testing.T) {
+	root, planDir := completeFixture(t, false)
+	initGitRepo(t, root)
+	readme := filepath.Join(planDir, "README.md")
+
+	head, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRev := strings.TrimSpace(string(head))
+
+	if out, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"plan", "complete", readme})
+		return root.Execute()
+	}); err != nil {
+		t.Fatalf("plan complete: %v\n%s", err, out)
+	}
+
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.CompletedAt == nil {
+		t.Fatalf("expected CompletedAt to be recorded")
+	}
+	if g.CompletedAt.Revision != wantRev {
+		t.Fatalf("CompletedAt.Revision = %q, want %q", g.CompletedAt.Revision, wantRev)
+	}
+	if g.CompletedAt.Seq != g.SeqCounter {
+		t.Fatalf("CompletedAt.Seq = %d, want SeqCounter %d", g.CompletedAt.Seq, g.SeqCounter)
+	}
+
+	out, err := captureStdout(t, func() error {
+		root := newRootCmd()
+		root.SetArgs([]string{"graph", "status", "--plan", "Demo"})
+		return root.Execute()
+	})
+	if err != nil {
+		t.Fatalf("graph status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "completed_at: revision="+wantRev) {
+		t.Fatalf("expected completed_at line in graph status output:\n%s", out)
 	}
 }

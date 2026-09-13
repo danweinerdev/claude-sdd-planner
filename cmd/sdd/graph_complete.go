@@ -28,6 +28,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
 // beforeStatusFlip is a test seam invoked in graphPlanComplete right after
@@ -175,6 +176,26 @@ func graphPlanComplete(path string, o completeOpts) (handled bool, err error) {
 	if err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}
+
+	// Record the closing identity (P-23): completion is judged at the
+	// revision the plan closed at, not the live tree, so validate's SDD199
+	// does not reopen a completed plan the moment later maintenance touches
+	// a closed node's artifact. Best-effort: a plain tree or an operational
+	// VCS failure leaves CompletedAt unset rather than blocking completion —
+	// the same posture RenderViews' own evidence-repo resolution takes.
+	if repo, herr := vcs.DetectChecked(repoRoot); herr == nil {
+		if head, herr := repo.Head(); herr == nil && head != "" {
+			completedAt := &model.CompletedAt{Revision: head, Seq: g.SeqCounter}
+			g, err = gstore.Update(gstore.PathFor(planDir), func(u *model.Graph) error {
+				u.CompletedAt = completedAt
+				return nil
+			})
+			if err != nil {
+				return true, fmt.Errorf("plan complete: recording completed_at: %w", err)
+			}
+		}
+	}
+
 	if _, err := gcompile.RenderViews(root, plan, repoRoot, g, st, closed); err != nil {
 		return true, fmt.Errorf("plan complete: %w", err)
 	}

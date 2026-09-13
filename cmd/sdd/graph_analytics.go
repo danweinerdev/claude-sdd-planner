@@ -292,6 +292,9 @@ func graphStatusCmd() *cobra.Command {
 				fmt.Fprintf(c.OutOrStdout(), "%s=%d ", k, counts[k])
 			}
 			fmt.Fprintf(c.OutOrStdout(), "closed=%d/%d\n", closedCount, len(lines))
+			if ctx.g.CompletedAt != nil {
+				fmt.Fprintf(c.OutOrStdout(), "completed_at: revision=%s seq=%d\n", ctx.g.CompletedAt.Revision, ctx.g.CompletedAt.Seq)
+			}
 			for _, l := range lines {
 				mark := ""
 				if l.Closed {

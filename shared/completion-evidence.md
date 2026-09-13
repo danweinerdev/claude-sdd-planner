@@ -145,6 +145,15 @@ For Git/git-worktree evidence, each completed phase checkpoint and the plan
 checkpoint must exist in the same target repository, and each phase checkpoint
 must be an ancestor of (or equal to) the plan checkpoint.
 
+Graph plans record their own closing identity: `sdd plan complete` writes
+`completed_at` (the target repository's HEAD revision and the graph's
+`seq_counter`) into the committed graph when it closes. `sdd validate`
+judges a `complete` graph plan's closure by its recorded observations, not
+the live tree, so later maintenance touching a closed node's artifact is
+reported as informational post-completion drift (`SDD200`), never as
+reopening the plan; only a graph that was never actually closed by its own
+observations is an error (`SDD199`).
+
 ## Legacy completed artifacts
 
 Artifacts already marked `complete` without conforming evidence are legacy gaps.

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -383,7 +385,7 @@ func TestValidate_GraphCompleteButUnclosed(t *testing.T) {
 		if !strings.Contains(out, `"SDD199"`) {
 			t.Fatalf("expected SDD199 in output:\n%s", out)
 		}
-		if !strings.Contains(out, "not closed: a, review-a") {
+		if !strings.Contains(out, "never closed by its own recorded observations: a, review-a") {
 			t.Fatalf("expected the open node named in the diagnostic:\n%s", out)
 		}
 	})
@@ -402,4 +404,152 @@ func TestValidate_GraphCompleteButUnclosed(t *testing.T) {
 			t.Fatalf("a closed graph must not report SDD199:\n%s", out)
 		}
 	})
+}
+
+// TestValidate_GraphCompleteObservationClosedButLiveDrifted is SDD200: a
+// complete graph plan whose graph was closed by its own recorded
+// observations, but whose declared artifact has since changed on disk (an
+// unrelated later commit touching a closed node's file), must not report
+// SDD199 — observation-only closure still holds — and must report a single
+// SDD200 informational diagnostic naming the drifted node.
+func TestValidate_GraphCompleteObservationClosedButLiveDrifted(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root)
+	writeArtifact(t, root, "Plans/Demo", "README.md", strings.Replace(nextPlanReadme("complete", ""), "phases:\n\n", "phases: []\n", 1))
+	artifactPath := filepath.Join(root, "impl.txt")
+	if err := os.WriteFile(artifactPath, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core",
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1, Artifacts: []string{"impl.txt"},
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			ArtifactDigests: map[string]string{"impl.txt": mustDigest(t, "original")}}}
+	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
+		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean,
+			ArtifactDigests: map[string]string{"impl.txt": mustDigest(t, "original")}}}
+	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA},
+		CompletedAt: &model.CompletedAt{Revision: "deadbeef", Seq: 2}}
+	planDir := filepath.Join(root, "Plans", "Demo")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
+		t.Fatal(err)
+	}
+
+	// Post-completion maintenance touches the closed node's artifact.
+	if err := os.WriteFile(artifactPath, []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
+	})
+	if err != nil {
+		t.Fatalf("post-completion drift must not fail validate: %v\n%s", err, out)
+	}
+	if strings.Contains(out, `"SDD199"`) {
+		t.Fatalf("observation-only closure holds; SDD199 must not fire:\n%s", out)
+	}
+	if !strings.Contains(out, `"SDD200"`) {
+		t.Fatalf("expected SDD200 in output:\n%s", out)
+	}
+	if !strings.Contains(out, "deadbeef") {
+		t.Fatalf("expected completed_at revision named in the diagnostic:\n%s", out)
+	}
+	if !jsonHasDiag(t, out, "SDD200", "warning") {
+		t.Fatalf("expected SDD200/warning, got: %s", out)
+	}
+}
+
+// TestValidate_GraphCompleteIntentDriftIsAlsoPostCompletion is SDD200: for
+// an already-complete plan, a cited requirement's text changing since
+// closure is post-completion drift too, not a reopening — observation-only
+// closure must disable the intent axis exactly as it disables digests, so
+// this reports SDD200 naming the intent kind, never SDD199.
+func TestValidate_GraphCompleteIntentDriftIsAlsoPostCompletion(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root)
+	writeArtifact(t, root, "Plans/Demo", "README.md", strings.Replace(nextPlanReadme("complete", ""), "phases:\n\n", "phases: []\n", 1))
+	writeArtifact(t, root, "Specs/Demo", "README.md", strings.Replace(validSpec, "Does a thing.", "Does a thing, revised.", 1))
+
+	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core", Justifies: []string{"FR-01"},
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1,
+		IntentHashes: map[string]string{"FR-01": mustDigest(t, "stale-anchor")},
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			IntentHashes: map[string]string{"FR-01": mustDigest(t, "stale-anchor")}}}
+	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
+		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}}
+	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA}}
+	planDir := filepath.Join(root, "Plans", "Demo")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
+	})
+	if err != nil {
+		t.Fatalf("post-completion intent drift must not fail validate: %v\n%s", err, out)
+	}
+	if strings.Contains(out, `"SDD199"`) {
+		t.Fatalf("observation-only closure must disable the intent axis too; SDD199 must not fire:\n%s", out)
+	}
+	if !jsonHasDiag(t, out, "SDD200", "warning") {
+		t.Fatalf("expected SDD200/warning naming the intent drift, got: %s", out)
+	}
+	if !strings.Contains(out, "intent: a") {
+		t.Fatalf("expected the intent-drift kind and node named:\n%s", out)
+	}
+}
+
+// TestValidate_GraphCompleteReviewNeverPassed is SDD199: a graph plan whose
+// implementation node is GREEN but whose review gate was never observed
+// (or observed non-passing) fails observation-only closure regardless of
+// live-digest agreement, and must still report SDD199 Error.
+func TestValidate_GraphCompleteReviewNeverPassed(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root)
+	writeArtifact(t, root, "Plans/Demo", "README.md", strings.Replace(nextPlanReadme("complete", ""), "phases:\n\n", "phases: []\n", 1))
+	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core",
+		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
+		Hazards: model.Hazards{}, Estimate: 1,
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}}
+	// review-a's gate was never observed: no Verification at all.
+	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
+		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}
+	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA}}
+	planDir := filepath.Join(root, "Plans", "Demo")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := captureStdout(t, func() error {
+		return cmdValidate(validateOpts{Root: root, Format: "json"})
+	})
+	if _, ok := err.(*refusedError); !ok {
+		t.Fatalf("expected *refusedError, got %v (%T)", err, err)
+	}
+	if !strings.Contains(out, `"SDD199"`) {
+		t.Fatalf("expected SDD199 for a never-passed review gate:\n%s", out)
+	}
+	if strings.Contains(out, `"SDD200"`) {
+		t.Fatalf("SDD199 and SDD200 are mutually exclusive per plan:\n%s", out)
+	}
+}
+
+func mustDigest(t *testing.T, content string) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(content))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }

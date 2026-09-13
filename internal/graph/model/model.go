@@ -140,6 +140,28 @@ type Graph struct {
 	// Acknowledgements is the append-only register of anchor rebinding
 	// judgments (VerificationFreshness DD-3).
 	Acknowledgements []AcknowledgementRecord `json:"acknowledgements,omitempty"`
+	// CompletedAt is tool-owned: the closing identity `sdd plan complete`
+	// recorded when the graph closed — the target repository's HEAD
+	// revision plus the graph's seq_counter at that moment. It exists so
+	// completion can be judged at the revision the plan actually closed at
+	// rather than the live tree, which would otherwise reopen a completed
+	// plan the moment any later commit touches a closed node's artifact
+	// (SDD199/SDD200). Absent on plans completed before this field existed,
+	// and absent when the target repository's revision could not be read at
+	// completion time (a plain tree, or an operational VCS failure) — a
+	// best-effort record, never a blocking requirement. `phase complete`
+	// does not write it.
+	CompletedAt *CompletedAt `json:"completed_at,omitempty"`
+}
+
+// CompletedAt is the closing identity `sdd plan complete` records.
+type CompletedAt struct {
+	// Revision is the target repository's HEAD full revision identity at
+	// the moment the plan closed (a full Git commit ID, or the VCS's native
+	// equivalent).
+	Revision string `json:"revision"`
+	// Seq is the graph's seq_counter at closure.
+	Seq int `json:"seq"`
 }
 
 // AmendmentRecord is one applied review amendment.
