@@ -33,8 +33,11 @@ const (
 	// CauseDrain: the command exited but its pipes could not be drained within
 	// the cleanup allowance (a descendant kept them open).
 	CauseDrain
-	// CauseContainment: the platform containment adapter failed to establish
-	// or clean up ownership of the process tree.
+	// CauseContainment: either this build has no containment adapter for the
+	// platform, so Run refused before launch, or the adapter failed to
+	// establish or clean up ownership of the process tree. Callers that must
+	// tell the two apart use errors.Is(err, ErrNoContainmentAdapter), which
+	// matches only the pre-flight refusal.
 	CauseContainment
 )
 

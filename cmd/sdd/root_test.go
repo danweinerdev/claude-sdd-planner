@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/hook"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -336,4 +339,39 @@ func findByPath(root *cobra.Command, path string) *cobra.Command {
 		}
 	})
 	return found
+}
+
+// TestDiagnoseRendersPlatformOnce pins the shape of the top-level refusal a
+// Windows user reads. procexec's error is already self-describing — it names
+// the platform, the missing adapter and the follow-on plan — so diagnose may
+// only prefix the label. Re-stating the reason made the stderr line say
+// "windows" and "no process-containment adapter" twice each, which reads as a
+// tool malfunction rather than an unsupported platform (review F-02).
+func TestDiagnoseRendersPlatformOnce(t *testing.T) {
+	restore := procexec.ContainmentProbe
+	t.Cleanup(func() { procexec.ContainmentProbe = restore })
+	procexec.ContainmentProbe = func() (bool, string) {
+		return false, "windows: no process-containment adapter (the Windows Job Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan)"
+	}
+
+	_, err := procexec.Run(context.Background(), "git", []string{"rev-parse", "HEAD"}, procexec.Policy{})
+	if err == nil {
+		t.Fatal("procexec.Run on an uncontainable platform returned no error")
+	}
+	if !errors.Is(err, procexec.ErrNoContainmentAdapter) {
+		t.Fatalf("refusal %v does not wrap ErrNoContainmentAdapter", err)
+	}
+
+	msg := diagnose(err)
+	if !strings.HasPrefix(msg, "unsupported platform: ") {
+		t.Errorf("diagnosis %q does not start with the unsupported-platform label", msg)
+	}
+	for _, want := range []string{"windows", "no process-containment adapter"} {
+		if n := strings.Count(msg, want); n != 1 {
+			t.Errorf("diagnosis names %q %d times, want exactly 1:\n%s", want, n, msg)
+		}
+	}
+	if !strings.Contains(msg, "Job Object") {
+		t.Errorf("diagnosis %q does not name the follow-on adapter", msg)
+	}
 }

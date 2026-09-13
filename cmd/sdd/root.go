@@ -706,11 +706,10 @@ func exitCode(err error) int {
 // Windows user hunting for a Git installation they already have (review F-01).
 func diagnose(err error) string {
 	if errors.Is(err, procexec.ErrNoContainmentAdapter) {
-		_, reason := procexec.ContainmentSupported()
-		if reason == "" {
-			reason = "this platform has no process-containment adapter"
-		}
-		return "unsupported platform: " + reason + ": " + err.Error()
+		// The procexec refusal already names the platform, the missing adapter
+		// and the follow-on plan; restating the reason here printed each of
+		// them twice in one stderr line (review F-02).
+		return "unsupported platform: " + err.Error()
 	}
 	return err.Error()
 }

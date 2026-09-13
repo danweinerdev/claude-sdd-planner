@@ -1,9 +1,6 @@
 package procexec
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 // ErrNoContainmentAdapter is the sentinel every refusal on an uncontainable
 // platform wraps. Callers match it with errors.Is to tell "this platform has
@@ -21,14 +18,27 @@ var ContainmentProbe = platformContainmentSupported
 // missing adapter, and the follow-on plan that would supply it.
 func ContainmentSupported() (bool, string) { return ContainmentProbe() }
 
+// noAdapterError is the refusal Run returns when this build has no containment
+// adapter. It unwraps to ErrNoContainmentAdapter so callers can match the case
+// with errors.Is, but renders only the platform reason: the reason already
+// opens with the sentinel's own wording, so wrapping it with %w printed "no
+// process-containment adapter" twice in the line a user reads (review F-02).
+type noAdapterError struct{ reason string }
+
+func (e *noAdapterError) Error() string {
+	return e.reason + "; refusing to run uncontained"
+}
+
+func (e *noAdapterError) Unwrap() error { return ErrNoContainmentAdapter }
+
 // errNoAdapter renders the refusal Run returns when this build has no
-// containment adapter. It wraps ErrNoContainmentAdapter so a CLI can tell the
-// case apart from a missing executable, and carries the platform and the
-// follow-on plan in the message a user actually reads.
+// containment adapter. It carries the platform and the follow-on plan in the
+// message a user actually reads, so a CLI can prefix a label without having to
+// restate the reason itself.
 func errNoAdapter() error {
 	_, reason := ContainmentSupported()
 	if reason == "" {
 		reason = "this platform has no process-containment adapter"
 	}
-	return fmt.Errorf("%w: %s; refusing to run uncontained", ErrNoContainmentAdapter, reason)
+	return &noAdapterError{reason: reason}
 }
