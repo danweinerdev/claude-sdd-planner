@@ -158,7 +158,7 @@ When a v1 plan keeps generating drift the evidence rules exist to catch, offer c
 
 Ask the user before destructive or production-impacting operations, when requirements are ambiguous, when implementation reveals unplanned scope (for graph plans the remedy is a new proposal payload, never silent extra work inside a claim), when a graph node hits its third consecutive failure, or after two failed attempts to resolve a blocking verification failure.
 
-**Close the walk.** When every node is GREEN and acceptance is closed, run `sdd decide render --plan <Name>` so the plan folder carries its generated `Design.md` before the closing commit.
+**Close the walk.** When every node is GREEN and acceptance is closed, run `sdd decide render --plan <Name>` so the plan folder carries its generated `Design.md` before the closing commit, then run `sdd plan complete Plans/<Name>/README.md` as the closing transition — graph closure is the gate, and the renderer it reuses marks the phases complete.
 
 **Record escalation resolutions.** When the user answers an escalation with a choice that constrains future work, follow `shared/decision-log.md`: write the statement, show it verbatim, and once approved run `sdd decide add --plan <Name> --statement "..."` exactly once. Pure one-off dispositions ("retry it", "skip for now") are events, not decisions—don't log them.
 

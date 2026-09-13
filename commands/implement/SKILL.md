@@ -133,7 +133,7 @@ Stop and ask the user when:
 4. **Destructive action** — anything deleting data, touching production config, or affecting shared systems.
 5. **Plan-vs-reality mismatch** — the plan names files, APIs, or prerequisites the codebase contradicts. Planning bug; don't patch around it in dispatch.
 
-When the walk finishes (every node GREEN, acceptance closed), run `sdd decide render --plan <Name>` so the plan folder carries its generated `Design.md` before the closing commit.
+When the walk finishes (every node GREEN, acceptance closed), run `sdd decide render --plan <Name>` so the plan folder carries its generated `Design.md` before the closing commit, then run `sdd plan complete Plans/<Name>/README.md` as the closing transition — graph closure is the gate, and the renderer it reuses marks the phases complete.
 
 Everything else is autonomous. When an escalation resolution binds work beyond the task at hand, capture it per `shared/decision-log.md`: write the statement, show it to the user verbatim, and once approved run `sdd decide add --plan <Name> --statement "..."` exactly once. A pure one-off disposition ("retry it", "skip that for now") is not a decision and stays undocumented outside the task notes.
 

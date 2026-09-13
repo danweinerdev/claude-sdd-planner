@@ -76,6 +76,26 @@ type phaseGroup struct {
 	Nodes   []*model.Node
 }
 
+// PhaseGroup is the exported projection of phaseGroup a caller needs to
+// locate a rendered phase doc's owning nodes (`sdd phase complete` on a
+// graph plan) without duplicating the grouping the renderer already does.
+type PhaseGroup struct {
+	Ordinal int
+	Title   string
+	Doc     string
+	Nodes   []*model.Node
+}
+
+// GroupPhases is the exported form of groupPhases.
+func GroupPhases(g *model.Graph, plan string) []PhaseGroup {
+	groups := groupPhases(g, plan)
+	out := make([]PhaseGroup, len(groups))
+	for i, ph := range groups {
+		out[i] = PhaseGroup{Ordinal: ph.Ordinal, Title: ph.Title, Doc: ph.Doc, Nodes: ph.Nodes}
+	}
+	return out
+}
+
 // groupPhases buckets nodes by their presentation label (DD-9: `phase` is a
 // grouping consumed only by views), ordered by label with unlabeled nodes
 // last as "Ungrouped".
@@ -417,6 +437,15 @@ func preflightViews(root, plan string, g *model.Graph, st map[string]states.Node
 	}
 	_, _, err := planReadmeUpdate(planDir, plan, groupPhases(g, plan), closed)
 	return err
+}
+
+// RenderViews writes the phase views and updates the README projection.
+// Exported so callers outside a staged-proposal compile (e.g. `sdd plan
+// complete` / `sdd phase complete` on a graph plan, which have nothing to
+// stage) can refresh the same rendered views `sdd compile` produces,
+// without duplicating the renderer.
+func RenderViews(root, plan string, g *model.Graph, st map[string]states.NodeState, closed map[string]bool) ([]string, error) {
+	return renderViews(root, plan, g, st, closed)
 }
 
 // renderViews writes the phase views and updates the README projection.

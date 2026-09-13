@@ -43,6 +43,21 @@ func cmdComplete(kind, path string, o completeOpts) error {
 		return fmt.Errorf("task complete: --id is required")
 	}
 
+	// Graph plans derive closure from the graph, not v1 markdown evidence
+	// (CLAUDE.md "Completion Evidence": closure is a derived predicate for
+	// a graph plan). Both branches report handled=false — and this falls
+	// through to the v1 path below — when path is not a graph plan/phase.
+	switch kind {
+	case "plan":
+		if handled, err := graphPlanComplete(path, o); handled {
+			return err
+		}
+	case "phase":
+		if handled, err := graphPhaseComplete(path, o); handled {
+			return err
+		}
+	}
+
 	art, err := store.Read(path)
 	if err != nil {
 		return fmt.Errorf("%s complete: %w", kind, err)
