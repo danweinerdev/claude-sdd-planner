@@ -417,8 +417,20 @@ func isFrozenSource(source string) bool {
 type reviewEvidenceOpts struct {
 	Lane     string
 	Evidence string
+	Result   string
 	DryRun   bool
 	JSON     bool
+}
+
+// reviewResultTokens maps `--result` values to the frontmatter token written
+// into the lane's `result:` field. `pass` is the existing PASS/Aligned; the
+// distinct `CHANGES/Amend` token (style-matched to PASS/Aligned) is the
+// truthful non-passing result SDD166/167/168 accept only under `verdict:
+// Amend` — the fix for the class of bug where a scaffolded review could only
+// ever be resolved with every lane falsely claiming a pass.
+var reviewResultTokens = map[string]string{
+	"pass":             "PASS/Aligned",
+	"changes-required": rules.NonPassingLaneResult,
 }
 
 // reviewEvidenceResult is the machine-readable outcome of `review evidence
@@ -440,6 +452,19 @@ func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
 	if !isStableLane(o.Lane) {
 		return fmt.Errorf("review evidence set: --lane must be one of %s",
 			strings.Join(reviewLaneIDs(), ", "))
+	}
+	// Empty --result keeps the lane's current result token untouched — most
+	// calls only update evidence. When given, it must be one of the two
+	// tokens the validator recognizes (rules.NonPassingLaneResult is valid
+	// only under verdict: Amend; SDD167 enforces that at resolve/validate
+	// time, not here, since evidence set runs before verdict is decided).
+	resultToken := ""
+	if o.Result != "" {
+		tok, ok := reviewResultTokens[o.Result]
+		if !ok {
+			return fmt.Errorf("review evidence set: --result must be one of pass, changes-required")
+		}
+		resultToken = tok
 	}
 
 	art, err := store.Read(path)
@@ -485,6 +510,9 @@ func cmdReviewEvidenceSet(path string, o reviewEvidenceOpts) error {
 
 	lines := strings.Split(art.Source, "\n")
 	if !setLaneEvidence(lines, o.Lane, evidence) {
+		return fmt.Errorf("review evidence set: no lane_results entry for lane %q in %s", o.Lane, path)
+	}
+	if resultToken != "" && !setLaneResult(lines, o.Lane, resultToken) {
 		return fmt.Errorf("review evidence set: no lane_results entry for lane %q in %s", o.Lane, path)
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
@@ -539,6 +567,34 @@ func setLaneEvidence(lines []string, lane, evidence string) bool {
 		if inLane && strings.HasPrefix(trimmed, "evidence:") {
 			indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
 			lines[i] = indent + `evidence: "` + yamlEscape(evidence) + `"`
+			return true
+		}
+	}
+	return false
+}
+
+// setLaneResult rewrites the named lane's `result:` line inside the
+// frontmatter's lane_results block, same discipline as setLaneEvidence: text
+// surgery on one line, every other byte untouched.
+func setLaneResult(lines []string, lane, result string) bool {
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return false
+	}
+	inLane := false
+	for i := 1; i < len(lines); i++ {
+		l := lines[i]
+		if strings.TrimSpace(l) == "---" {
+			return false
+		}
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "- lane:") {
+			v := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "- lane:")), `"'`)
+			inLane = v == lane
+			continue
+		}
+		if inLane && strings.HasPrefix(trimmed, "result:") {
+			indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+			lines[i] = indent + "result: " + result
 			return true
 		}
 	}
@@ -621,16 +677,27 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	}
 	scope, _ := doc.FM("review_scope")
 	isPhaseGate := strings.Trim(scope, `"'`) == "phase"
+	// A review that carries a top-level `frozen:` field at all — whether or
+	// not it is `review_scope: phase` — was scaffolded (or hand-authored)
+	// against a reviewed range and is meant to gate something (a phase
+	// completion or a graph review node). Resolving it unfrozen is the dead
+	// end the bug report names: `graph amend`/`graph review` require
+	// `frozen: true` (AdmitArtifact), so an unfrozen "resolved" review can
+	// never be consumed. A review with no `frozen:` field at all was never
+	// meant to gate anything (an ordinary advisory review) and keeps its
+	// reduced, unfrozen resolution.
+	_, hasFrozenField := doc.FM("frozen")
+	freezes := isPhaseGate || hasFrozenField
 
 	status, _ := doc.FM("status")
 	status = strings.Trim(status, `"'`)
 	res := reviewResolveResult{Path: relPath(path), From: status, To: "resolved", DryRun: o.DryRun}
-	if status == "resolved" && (!isPhaseGate || isFrozenSource(art.Source)) {
+	if status == "resolved" && (!freezes || isFrozenSource(art.Source)) {
 		res.OK, res.Already = true, true
 		if o.JSON {
 			return writeJSON(res)
 		}
-		if isPhaseGate {
+		if freezes {
 			fmt.Printf("review resolve: already resolved and frozen\n")
 		} else {
 			fmt.Printf("review resolve: already resolved\n")
@@ -664,6 +731,15 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 			blocking = append(blocking, "rev must carry the frozen reviewed identity")
 		}
 		blocking = append(blocking, rules.PhaseReviewSchemaErrors(fmMeta(doc.FrontmatterRaw))...)
+	} else if freezes {
+		// A non-phase-gate review that still carries a `frozen:` field is
+		// meant to gate a graph node (AdmitArtifact requires frozen: true
+		// and a review_of binding). Resolving it with no reviewed range
+		// would freeze it into evidence nothing reviewed — refuse by name
+		// instead of silently accepting an unfrozen upper bound.
+		if rev, _ := doc.FM("rev"); strings.Trim(rev, `"'`) == "" {
+			blocking = append(blocking, "rev must carry the frozen reviewed range; this review has a `frozen:` field but no reviewed identity to freeze it against")
+		}
 	}
 	openActioned := 0
 	for _, f := range fmSequence(doc.FrontmatterRaw, "findings") {
@@ -717,9 +793,9 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	if !setTopLevelStatus(lines, "resolved") {
 		return fmt.Errorf("review resolve: no top-level `status:` field to advance")
 	}
-	// Only phase-gate reviews freeze at resolution; an ordinary review stays
-	// an editable record (and is scaffolded without a `frozen:` field).
-	if isPhaseGate && !setTopLevelScalar(lines, "frozen", "true") {
+	// Only a review meant to gate something freezes at resolution; an
+	// ordinary review with no `frozen:` field stays an editable record.
+	if freezes && !setTopLevelScalar(lines, "frozen", "true") {
 		return fmt.Errorf("review resolve: no top-level `frozen:` field to advance — was this review scaffolded by `sdd review scaffold`?")
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
@@ -760,7 +836,7 @@ func cmdReviewResolve(path string, o reviewResolveOpts) error {
 	}
 
 	outcome := "resolved"
-	if isPhaseGate {
+	if freezes {
 		outcome = "resolved and frozen"
 	}
 	res.OK = true

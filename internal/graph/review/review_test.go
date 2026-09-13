@@ -255,6 +255,108 @@ func TestRecordLaneConformance(t *testing.T) {
 	}
 }
 
+// TestLaneResultAdmissionByVerdict covers the three cases the shared
+// laneResultProblems admission rule must get right, exercised through both
+// callers: Record (via AdmitArtifact) and Check. An Aligned verdict keeps
+// the strict all-pass requirement; an Amend verdict additionally admits the
+// truthful non-passing token rules.NonPassingLaneResult (CHANGES/Amend); an
+// unrecognized or placeholder-shaped token stays refused under either
+// verdict.
+func TestLaneResultAdmissionByVerdict(t *testing.T) {
+	newFixture := func(t *testing.T) (root string) {
+		t.Helper()
+		a := work("a", nil)
+		gate := fullGate("g1", []string{"a"})
+		root, _ = fixture(t, 0, a, gate)
+		return root
+	}
+	revise := "  - id: F-01\n    severity: major\n    title: \"needs a fix\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"changed\"\n"
+
+	t.Run("Aligned refuses a non-passing lane", func(t *testing.T) {
+		root := newFixture(t)
+		lanes := allPass()
+		lanes["review_quality"] = "CHANGES/Amend"
+		writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Aligned", lanes, ""))
+		artPath := filepath.Join(root, "reviews", "r.md")
+
+		if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath}); err == nil ||
+			!strings.Contains(err.Error(), "review_quality reports") {
+			t.Fatalf("Aligned with a CHANGES/Amend lane must refuse: %v", err)
+		}
+		res, err := Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath})
+		if err != nil {
+			t.Fatalf("check must accept a draft artifact regardless of lane results: %v", err)
+		}
+		found := false
+		for _, p := range res.Problems {
+			if strings.Contains(p, "review_quality reports") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("check must report the same non-passing-lane problem under Aligned: %+v", res.Problems)
+		}
+	})
+
+	t.Run("Amend admits CHANGES/Amend", func(t *testing.T) {
+		root := newFixture(t)
+		lanes := allPass()
+		lanes["review_quality"] = "CHANGES/Amend"
+		writeFile(t, root, "reviews/r.md", artifactText("resolved", true, "Amend", lanes, revise))
+		artPath := filepath.Join(root, "reviews", "r.md")
+
+		res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath})
+		if err != nil {
+			t.Fatalf("Amend with a truthful CHANGES/Amend lane must be admitted: %v", err)
+		}
+		if res.Plan == nil || len(res.Plan.Amendments) != 1 {
+			t.Fatalf("expected one previewed amendment: %+v", res)
+		}
+		checkRes, err := Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath})
+		if err != nil {
+			t.Fatalf("check: %v", err)
+		}
+		if len(checkRes.Problems) != 0 {
+			t.Fatalf("check must report no lane problems for an admissible Amend artifact: %+v", checkRes.Problems)
+		}
+	})
+
+	t.Run("unrecognized token stays refused under either verdict", func(t *testing.T) {
+		for _, verdict := range []string{"Aligned", "Amend"} {
+			verdict := verdict
+			t.Run(verdict, func(t *testing.T) {
+				root := newFixture(t)
+				lanes := allPass()
+				lanes["review_quality"] = "TODO/Unfilled"
+				findings := ""
+				if verdict == "Amend" {
+					findings = revise
+				}
+				writeFile(t, root, "reviews/r.md", artifactText("resolved", true, verdict, lanes, findings))
+				artPath := filepath.Join(root, "reviews", "r.md")
+
+				if _, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath}); err == nil ||
+					!strings.Contains(err.Error(), "review_quality reports") {
+					t.Fatalf("a placeholder-shaped token must stay refused under %s: %v", verdict, err)
+				}
+				res, err := Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1", Artifact: artPath})
+				if err != nil {
+					t.Fatalf("check: %v", err)
+				}
+				found := false
+				for _, p := range res.Problems {
+					if strings.Contains(p, "review_quality reports") {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("check must report the same refusal under %s: %+v", verdict, res.Problems)
+				}
+			})
+		}
+	})
+}
+
 func TestRecordGreensGateAndStalesOnDrift(t *testing.T) {
 	a := work("a", nil, "src/a.ext")
 	a.Verification = pass(1)
@@ -426,8 +528,11 @@ func TestCheckReportsOutOfClosureTargetWithoutRecording(t *testing.T) {
 	gate := fullGate("g1", []string{"a"})
 	unrelated := work("z", nil)
 	root, _ := fixture(t, 0, a, gate, unrelated)
-	writeFile(t, root, "reviews/r.md", artifactText("draft", false, "",
-		nil, "  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: open\n    action: revise\n    nodes: [z]\n    revise:\n      contract: \"changed\"\n"))
+	// A draft carries a full, valid (Amend) lane set here so this test
+	// isolates the out-of-closure target problem from the lane-admission
+	// problems TestLaneResultAdmissionByVerdict covers separately.
+	writeFile(t, root, "reviews/r.md", artifactText("draft", false, "Amend",
+		allPass(), "  - id: F-01\n    severity: major\n    title: \"names outsider\"\n    status: open\n    action: revise\n    nodes: [z]\n    revise:\n      contract: \"changed\"\n"))
 
 	res, err := Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
 		Artifact: filepath.Join(root, "reviews", "r.md")})
@@ -447,9 +552,9 @@ func TestCheckReportsOutOfClosureTargetWithoutRecording(t *testing.T) {
 		t.Fatalf("check must never record: %+v", g.NodeByID("g1").Verification)
 	}
 
-	// A clean artifact (in-closure target) reports no problems.
-	writeFile(t, root, "reviews/ok.md", artifactText("draft", false, "",
-		nil, "  - id: F-02\n    severity: major\n    title: \"names in-closure\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"changed\"\n"))
+	// A clean artifact (in-closure target, valid lanes) reports no problems.
+	writeFile(t, root, "reviews/ok.md", artifactText("draft", false, "Amend",
+		allPass(), "  - id: F-02\n    severity: major\n    title: \"names in-closure\"\n    status: open\n    action: revise\n    nodes: [a]\n    revise:\n      contract: \"changed\"\n"))
 	res, err = Check(Options{Root: root, RepoRoot: root, Plan: "P", Node: "g1",
 		Artifact: filepath.Join(root, "reviews", "ok.md")})
 	if err != nil {

@@ -125,12 +125,24 @@ validator checks. They map to the plugin's agents: `review_plan_drift` →
 always uses the stable identifiers, whatever agent ran the lane.
 
 `lane_results` is the auditable four-lane record: it contains exactly these four
-lanes once, every result is `PASS/Aligned`, every `reviewed_identity` exactly
-equals `rev`, and every evidence value is a specific concrete observation (not
-blank or a generic conclusion such as `passed`, `ok`, `aligned`, `success`, `No
-findings`, or `No blocking findings`). Record inspected paths, behaviors, or
-observations even when a lane is clean. `review_mode` records how the lanes ran:
-`independent` (fresh-context agents), `mixed`, or `single-agent`.
+lanes once, every `reviewed_identity` exactly equals `rev`, and every evidence
+value is a specific concrete observation (not blank or a generic conclusion
+such as `passed`, `ok`, `aligned`, `success`, `No findings`, or `No blocking
+findings`). Record inspected paths, behaviors, or observations even when a
+lane is clean. `review_mode` records how the lanes ran: `independent`
+(fresh-context agents), `mixed`, or `single-agent`.
+
+Each lane's `result` is one of two truthful tokens, chosen by what that lane
+actually found: `PASS/Aligned` when it found nothing that needs a change, or
+`CHANGES/Amend` when it flagged material the review is reporting. Under
+`verdict: Aligned` every lane must be `PASS/Aligned` — the phase-completion
+gate's strict all-pass requirement never relaxes. Under `verdict: Amend` a
+lane may report either token, but at least one lane's `CHANGES/Amend` (with
+an open, actioned finding backing it) is what makes the report an Amend
+rather than a no-op; all-pass lanes with every finding already closed is
+refused as an Aligned review misfiled under the wrong verdict. `sdd review
+evidence set --result pass|changes-required` writes the corresponding token
+alongside the lane's evidence — see the lifecycle below.
 
 **Review lifecycle — freeze at resolution, never at birth.** The review is a
 transition chain driven by the binary, mirroring `task|phase|plan complete`:
@@ -140,19 +152,39 @@ transition chain driven by the binary, mirroring `task|phase|plan complete`:
    placeholder the validator refuses. Open means writable: lane evidence goes
    in via `sdd review evidence set`, findings and Resolution Log entries via
    the normal write path (`apply` / `section set`).
-2. `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]`
-   records what one lane actually observed. It enforces the same
+2. `sdd review evidence set <review-path> --lane <id> [--evidence TEXT]
+   [--result pass|changes-required]` records what one lane actually observed
+   and, optionally, whether it passed or flagged material (default: leaves
+   the lane's current result token untouched). It enforces the same
    evidence-quality bar as the validator: a placeholder, a blank, or a
    conclusory "no findings" is refused at write time.
 3. `sdd review resolve <review-path>` is the closing transition. It refuses
-   unless every lane carries real evidence, the schema is valid, no follow-up
-   floats untracked (`--accept-followups` only after the user explicitly
-   accepts one), and the findings match the verdict: `Aligned` needs every
-   finding terminal; `Amend` needs every open finding classified `revise` or
-   `extend` with its `nodes`/`revise` or `node` block, and at least one open.
-   When the gate is met it sets `frozen: true` and `status: resolved` in one
-   write. A phase completes only on an `Aligned` review; an `Amend` review
-   feeds `sdd graph amend` and the re-review that follows is a fresh artifact.
+   unless every lane carries real evidence and a result token valid for the
+   declared verdict, the schema is valid, no follow-up floats untracked
+   (`--accept-followups` only after the user explicitly accepts one), and the
+   findings match the verdict: `Aligned` needs every finding terminal;
+   `Amend` needs every open finding classified `revise` or `extend` with its
+   `nodes`/`revise` or `node` block, and at least one open. It also refuses a
+   review that carries a `frozen:` field (meant to gate a phase or a graph
+   review node) but no reviewed range in `rev` — resolving it unfrozen would
+   silently strand it, since `sdd graph amend`/`sdd graph review` require
+   `frozen: true` to consume it. When the gate is met it sets `frozen: true`
+   and `status: resolved` in one write. A phase completes only on an
+   `Aligned` review; an `Amend` review feeds `sdd graph amend` and the
+   re-review that follows is a fresh artifact.
+
+**Review complete versus implementation accepted.** These are different
+claims, and a frozen review only ever makes one of them:
+
+- **Review complete** (frozen `Amend`): the findings are finalized — every
+  open finding is classified `revise`/`extend` with its graph consequence —
+  but one or more lanes may report `CHANGES/Amend`, and nothing about the
+  reviewed work is accepted. The review exists to drive `sdd graph amend`,
+  not to close anything.
+- **Implementation accepted** (frozen `Aligned`): every lane reports
+  `PASS/Aligned` and every finding has a terminal disposition. This is the
+  only verdict that completes a phase (the strict all-pass phase-completion
+  gate above) or greens a graph review node.
 
 `frozen: true` therefore marks a *finished* review: from that moment the
 artifact is immutable through every supported command (SPK050 refuses

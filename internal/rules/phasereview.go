@@ -109,10 +109,25 @@ func usefulLaneEvidence(v any) bool {
 	return false
 }
 
+// NonPassingLaneResult is the truthful token a lane_results entry carries
+// when that lane found material it flagged rather than passed — the token
+// `sdd review evidence set --result changes-required` writes. It is only
+// valid under `verdict: Amend` (a lane cannot flag material and the review
+// still claim Aligned), matching `PASS/Aligned`'s style so both are
+// recognizable at a glance in frontmatter.
+const NonPassingLaneResult = "CHANGES/Amend"
+
 // phaseReviewSchemaErrors ports phase_review_schema_errors(). It returns the
 // reasons a review's frontmatter fails the phase-gate schema; the caller only
 // needs to know whether the list is empty, but building it in full keeps the
 // port faithful and makes the reason available if it is ever surfaced.
+//
+// Lane result validity depends on the review's verdict: under `Aligned`
+// every lane must be `PASS/Aligned` (the phase-completion gate's strict
+// all-pass requirement, D-0020); under `Amend` a lane may additionally
+// report `CHANGES/Amend` — the truthful non-passing result a review with
+// open, actioned findings is allowed to carry. Any other verdict rejects
+// every lane result, same as before.
 func phaseReviewSchemaErrors(meta map[string]any) []string {
 	var errs []string
 
@@ -137,6 +152,8 @@ func phaseReviewSchemaErrors(meta map[string]any) []string {
 	}
 
 	rev := metaStr(meta, "rev")
+	verdict := metaStr(meta, "verdict")
+	amend := verdict == "Amend"
 	var lanes []string
 	for _, row := range rows {
 		m := planEntry(row)
@@ -146,8 +163,16 @@ func phaseReviewSchemaErrors(meta map[string]any) []string {
 		}
 		lane := metaStr(m, "lane")
 		lanes = append(lanes, lane)
-		if metaStr(m, "result") != "PASS/Aligned" {
-			errs = append(errs, "lane `"+lane+"` result must be PASS/Aligned")
+		result := metaStr(m, "result")
+		valid := result == "PASS/Aligned" || (amend && result == NonPassingLaneResult)
+		if !valid {
+			errs = append(errs, "lane `"+lane+"` result must be PASS/Aligned"+
+				func() string {
+					if amend {
+						return " or " + NonPassingLaneResult
+					}
+					return ""
+				}())
 		}
 		if metaStr(m, "reviewed_identity") != rev {
 			errs = append(errs, "lane `"+lane+"` reviewed_identity must exactly equal rev")
@@ -167,6 +192,34 @@ func phaseReviewSchemaErrors(meta map[string]any) []string {
 	for l := range phaseReviewLanes {
 		if !seen[l] {
 			return append(errs, "lane_results must name each stable lane exactly once")
+		}
+	}
+
+	// An Amend review is the frozen findings report `sdd graph amend`
+	// consumes: it exists to carry at least one open, actionable finding.
+	// All-pass lanes with every finding already closed is not a report that
+	// demands change — it is an Aligned review misfiled under the wrong
+	// verdict, so it is refused as inconsistent rather than silently
+	// accepted as a no-op Amend. Same rule and message substring as
+	// `sdd review resolve`'s own "no open, actioned finding" refusal
+	// (cmd/sdd/review.go) and AdmitArtifact's graph-consumption check
+	// (internal/graph/review/review.go) — three independent enforcement
+	// points agreeing rather than drifting.
+	if amend {
+		openActioned := false
+		for _, f := range asAnyList(meta["findings"]) {
+			m := planEntry(f)
+			if m == nil || metaStr(m, "status") != "open" {
+				continue
+			}
+			action := metaStr(m, "action")
+			if action == "revise" || action == "extend" {
+				openActioned = true
+				break
+			}
+		}
+		if !openActioned {
+			errs = append(errs, "verdict Amend with no open, actioned finding; use verdict Aligned")
 		}
 	}
 	return errs

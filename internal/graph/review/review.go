@@ -28,6 +28,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
 
 // Scope derives what a review gate reviews: the gate's dependency closure
@@ -215,6 +216,25 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 		}
 	}
 
+	required := node.Gate.Lanes
+	if required == nil {
+		required = model.ReviewLanes
+	}
+	if laneProblems := laneResultProblems(f, required); len(laneProblems) > 0 {
+		return fmt.Errorf("%s does not satisfy %q's lane set — %s", art.Rel, nodeID, strings.Join(laneProblems, "; "))
+	}
+	return nil
+}
+
+// laneResultProblems is the admission rule for lane results, shared by
+// AdmitArtifact and Check: under `verdict: Aligned` every required lane must
+// report a PASS-prefixed result (the strict all-pass phase-completion
+// posture); under `verdict: Amend` a lane may additionally report the
+// truthful non-passing token `rules.NonPassingLaneResult` (`CHANGES/Amend`).
+// Any other verdict, a duplicate lane, a missing lane, or an unrecognized
+// token stays refused regardless of verdict — a placeholder or malformed
+// result is never admissible evidence.
+func laneResultProblems(f *facts, required []string) []string {
 	laneResults := map[string]string{}
 	duplicates := map[string]bool{}
 	for _, lr := range f.LaneResults {
@@ -223,26 +243,24 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 		}
 		laneResults[lr.Lane] = lr.Result
 	}
-	required := node.Gate.Lanes
-	if required == nil {
-		required = model.ReviewLanes
-	}
-	var laneProblems []string
+	amend := f.Verdict == "Amend"
+	var problems []string
 	for _, lane := range required {
 		res, ok := laneResults[lane]
 		switch {
 		case duplicates[lane]:
-			laneProblems = append(laneProblems, fmt.Sprintf("lane %s appears more than once", lane))
+			problems = append(problems, fmt.Sprintf("lane %s appears more than once", lane))
 		case !ok:
-			laneProblems = append(laneProblems, fmt.Sprintf("lane %s is absent from the artifact", lane))
-		case !strings.HasPrefix(res, "PASS"):
-			laneProblems = append(laneProblems, fmt.Sprintf("lane %s reports %q, not a pass", lane, res))
+			problems = append(problems, fmt.Sprintf("lane %s is absent from the artifact", lane))
+		case strings.HasPrefix(res, "PASS"):
+			// Always admissible.
+		case amend && res == rules.NonPassingLaneResult:
+			// Truthful non-passing result, admissible only under Amend.
+		default:
+			problems = append(problems, fmt.Sprintf("lane %s reports %q, not a pass", lane, res))
 		}
 	}
-	if len(laneProblems) > 0 {
-		return fmt.Errorf("%s does not satisfy %q's lane set — %s", art.Rel, nodeID, strings.Join(laneProblems, "; "))
-	}
-	return nil
+	return problems
 }
 
 // CheckResult is the outcome of a dry-run validation: Problems is empty and
@@ -295,8 +313,16 @@ func Check(o Options) (*CheckResult, error) {
 	}
 
 	res := &CheckResult{Node: o.Node, Artifact: o.Artifact, Scope: scope}
+	required := node.Gate.Lanes
+	if required == nil {
+		required = model.ReviewLanes
+	}
+	// Same admission rule AdmitArtifact applies at record time (lane results
+	// valid for the declared verdict), so a truthful Amend artifact can be
+	// checked — and a malformed one caught — before it is ever frozen.
+	res.Problems = append(res.Problems, laneResultProblems(art.Facts, required)...)
 	if _, err := PlanAmendmentsInScope(g, o.Node, art, scope); err != nil {
-		res.Problems = splitAmendProblems(err.Error())
+		res.Problems = append(res.Problems, splitAmendProblems(err.Error())...)
 	}
 	return res, nil
 }

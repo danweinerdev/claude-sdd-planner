@@ -462,6 +462,7 @@ func reviewCmd() *cobra.Command {
 	ef := evidenceSet.Flags()
 	ef.StringVar(&eo.Lane, "lane", "", "stable lane identifier (review_plan_drift | review_quality | review_spec_compliance | review_blind_spots)")
 	ef.StringVar(&eo.Evidence, "evidence", "", "the lane's observation (default: read from stdin)")
+	ef.StringVar(&eo.Result, "result", "", "pass | changes-required (default: keep the lane's current result)")
 	ef.BoolVar(&eo.DryRun, "dry-run", false, "check without writing")
 	ef.BoolVar(&eo.JSON, "json", false, "emit the result as JSON")
 	_ = evidenceSet.MarkFlagRequired("lane")
