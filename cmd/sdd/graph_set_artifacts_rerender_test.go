@@ -95,6 +95,48 @@ func TestGraphSetArtifacts_RerendersViews(t *testing.T) {
 	}
 }
 
+// TestGraphSetArtifacts_NoRenderLeavesViews: --no-render applies the graph
+// edit and leaves every rendered view byte-identical, so a caller holding a
+// graph-only mutation boundary can edit the write-set without the command
+// writing outside the graph.
+func TestGraphSetArtifacts_NoRenderLeavesViews(t *testing.T) {
+	root, planDir := setArtifactsFixture(t)
+	phasePath := filepath.Join(planDir, "01-core.md")
+	before, err := os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatalf("phase view must exist after the initial render: %v", err)
+	}
+
+	c := graphSetArtifactsCmd()
+	c.SetArgs([]string{"--plan", "Demo", "--node", "work", "--no-render",
+		"--file", writeJSONFile(t, root, []string{"src/new.ext"})})
+	out, err := captureStdout(t, func() error { return c.Execute() })
+	if err != nil {
+		t.Fatalf("set-artifacts --no-render: %v\n%s", err, out)
+	}
+
+	after, err := os.ReadFile(phasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("--no-render must leave the view byte-identical, got:\n%s", after)
+	}
+	if !strings.Contains(out, "rendered views not refreshed") {
+		t.Fatalf("--no-render must report the views are stale, got: %q", out)
+	}
+
+	// The graph edit itself still applied.
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := g.NodeByID("work")
+	if n == nil || len(n.Artifacts) != 1 || n.Artifacts[0] != "src/new.ext" {
+		t.Fatalf("the graph edit must still apply under --no-render: %+v", n)
+	}
+}
+
 func writeJSONFile(t *testing.T, root string, artifacts []string) string {
 	t.Helper()
 	path := filepath.Join(root, "artifacts.json")

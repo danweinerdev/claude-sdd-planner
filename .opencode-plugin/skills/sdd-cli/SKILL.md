@@ -87,7 +87,7 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
 | Copy related designs' DD bullets into the plan's decisions file without compiling a proposal | `sdd decide sync --plan P [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
-| Edit a node's declared artifact write set (holder-only) | `sdd graph set-artifacts --plan P --node N --by WHO [--add PATH]... [--remove PATH]... [--json]` |
+| Edit a node's declared artifact write set (holder-only) | `sdd graph set-artifacts --plan P --node N --by WHO [--add PATH]... [--remove PATH]... [--no-render] [--json]` — also re-renders the plan's generated views unless `--no-render` |
 | Record an observation from a test report or command result | `sdd graph sync --plan P --node N --by WHO --report FILE \| --command-exit N --command-log FILE [--verbose] [--json]` |
 | Fold one report against every unclaimed, non-review node | `sdd graph reverify --plan P --report FILE \| --command-exit N --command-log FILE [--all] [--verbose] [--json]` |
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |

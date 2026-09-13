@@ -387,7 +387,7 @@ reports the same planned changes without writing the graph.`,
 func graphSetArtifactsCmd() *cobra.Command {
 	var plan, node, by, file string
 	var add, remove []string
-	var asJSON bool
+	var asJSON, noRender bool
 	c := &cobra.Command{
 		Use:   "set-artifacts",
 		Short: "Replace, or add/remove paths in, a node's declared artifact write-set (holder-only while claimed)",
@@ -432,7 +432,17 @@ func graphSetArtifactsCmd() *cobra.Command {
 					count = len(n.Artifacts)
 				}
 			}
-			written, refused, rerenderErr := rerenderViewsAfterEdit(planDir, plan)
+			// The graph edit is complete at this point. Re-rendering keeps
+			// the generated views in step with the new write-set, but it
+			// writes files outside the graph — a caller holding a
+			// graph-only mutation boundary opts out and picks the refresh
+			// up at the next compile or closing render.
+			var written []string
+			var refused bool
+			var rerenderErr error
+			if !noRender {
+				written, refused, rerenderErr = rerenderViewsAfterEdit(planDir, plan)
+			}
 			if asJSON {
 				return writeJSON(struct {
 					OK            bool     `json:"ok"`
@@ -440,11 +450,14 @@ func graphSetArtifactsCmd() *cobra.Command {
 					Artifacts     int      `json:"artifacts"`
 					ViewsRendered []string `json:"views_rendered,omitempty"`
 					ViewsRefused  bool     `json:"views_refused,omitempty"`
+					ViewsSkipped  bool     `json:"views_skipped,omitempty"`
 					RerenderError string   `json:"rerender_error,omitempty"`
-				}{true, node, count, written, refused, errString(rerenderErr)})
+				}{true, node, count, written, refused, noRender, errString(rerenderErr)})
 			}
 			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", count, node)
 			switch {
+			case noRender:
+				fmt.Fprintln(c.OutOrStdout(), "rendered views not refreshed (--no-render): they are stale against the graph until the next compile")
 			case refused:
 				fmt.Fprintln(c.OutOrStdout(), "the rendered views could not be refreshed now (a phase view is frozen); it will refresh at the next closing render")
 			case rerenderErr != nil:
@@ -462,6 +475,7 @@ func graphSetArtifactsCmd() *cobra.Command {
 	c.Flags().StringArrayVar(&add, "add", nil, "artifact path to add to the current declared set (repeatable)")
 	c.Flags().StringArrayVar(&remove, "remove", nil, "artifact path to remove from the current declared set (repeatable)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
+	c.Flags().BoolVar(&noRender, "no-render", false, "edit the graph only: skip the rendered-view refresh, leaving the views stale until the next compile")
 	return c
 }
 
