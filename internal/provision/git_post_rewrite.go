@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
@@ -193,7 +193,7 @@ func InstallPostRewrite(cwd string) (PostRewriteReport, error) {
 }
 
 func resolvePostRewrite(cwd string) (postRewriteLocation, error) {
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := procexec.LookPath("git", nil); err != nil {
 		return postRewriteLocation{}, fmt.Errorf("post-rewrite hook: git is not installed or not on PATH: %w", err)
 	}
 	absCWD, err := filepath.Abs(cwd)
@@ -257,7 +257,7 @@ func inspectPostRewrite(loc postRewriteLocation) (PostRewriteReport, error) {
 	if loc.state == PostRewriteNoGit || loc.state == PostRewriteBare {
 		return report, nil
 	}
-	if sdd, err := exec.LookPath("sdd"); err == nil {
+	if sdd, err := procexec.LookPath("sdd", nil); err == nil {
 		report.SDDPath = sdd
 		report.Warning = postRewriteBinaryWarning(sdd)
 	} else {
@@ -330,13 +330,13 @@ func postRewriteBinaryWarning(binary string) string {
 	// Presence (or the same version label on an unreleased build) does not
 	// establish command support. Probe the non-mutating command catalog so an
 	// older PATH binary cannot silently make a current dispatcher ineffective.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, binary, "hook", "--help").Output()
+	policy := binaryPolicy
+	policy.Timeout = 2 * time.Second
+	res, err := procexec.Run(context.Background(), binary, []string{"hook", "--help"}, policy)
 	if err != nil {
 		return "could not verify post-rewrite support in sdd on PATH; ensure a compatible user-installed binary is available"
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(string(res.Stdout), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) > 0 && fields[0] == "post-rewrite" {
 			return ""
@@ -345,29 +345,43 @@ func postRewriteBinaryWarning(binary string) string {
 	return "sdd on PATH does not expose hook post-rewrite; update the user-installed binary before relying on capture"
 }
 
+// gitPolicy bounds every git child this package starts. `sdd doctor` reaches
+// these helpers on every run, so an unbounded or uncontained git here would
+// hang or leak on a user-facing path; the defaults are procexec's (review
+// 06-review-fixtures-facd924-b F-01). A test narrows it to prove the bound.
+var gitPolicy = procexec.Policy{}
+
 func gitOutput(cwd string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", cwd}, args...)...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	res, err := procexec.Run(context.Background(), "git", append([]string{"-C", cwd}, args...), gitPolicy)
+	if err != nil {
+		// The stderr text stays in the message: callers classify a git
+		// refusal by reading it (resolvePostRewrite matches "not a git
+		// repository"), and %w keeps procexec's typed cause reachable.
+		var pe *procexec.Error
+		if errors.As(err, &pe) {
+			return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(pe.Stderr))
+		}
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return strings.TrimSpace(string(res.Stdout)), nil
 }
 
 func gitConfigPath(cwd, key string) (value string, found bool, err error) {
-	cmd := exec.Command("git", "-C", cwd, "config", "--path", "--get", key)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err = cmd.Run()
+	res, err := procexec.Run(context.Background(), "git",
+		[]string{"-C", cwd, "config", "--path", "--get", key}, gitPolicy)
 	if err == nil {
-		return strings.TrimSpace(stdout.String()), true, nil
+		return strings.TrimSpace(string(res.Stdout)), true, nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-		return "", false, nil
+	var pe *procexec.Error
+	if errors.As(err, &pe) && pe.Cause == procexec.CauseExit {
+		// git config exits 1 for "the key is not set" — an answer, not a
+		// failure. Every other exit code is a real error.
+		if pe.ExitCode == 1 {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("%w: %s", err, strings.TrimSpace(pe.Stderr))
 	}
-	return "", false, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	return "", false, err
 }
 
 func acquirePostRewriteLock(path string) (func(), error) {

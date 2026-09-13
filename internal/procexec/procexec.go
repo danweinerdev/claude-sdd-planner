@@ -171,6 +171,11 @@ var (
 	errNotExecutable   = errors.New("file is not executable")
 )
 
+// LookPath resolves an executable name exactly as Run would, so a caller that
+// needs the resolved path (to report which binary it will run) gets the same
+// answer the runner will use, without reaching for os/exec itself.
+func LookPath(name string, env []string) (string, error) { return lookPath(name, env) }
+
 // lookPath resolves name the way the child would see it. A name containing a
 // path separator is checked directly; a bare name is searched on the child's
 // PATH. Go's own LookPath is used when the child inherits the environment so

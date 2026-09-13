@@ -92,9 +92,17 @@ func cmdDoctor(o doctorOpts) error {
 	}
 	var gitHookErr error
 	var gitHook provision.PostRewriteReport
-	if o.Check {
+	switch {
+	case !containmentOK:
+		// The hook probe runs git through the bounded runner, which refuses
+		// to launch anything on a platform with no containment adapter. The
+		// probe therefore cannot answer here, and attempting it would bury
+		// the real blocker under a derived "git could not run". The blocker
+		// is already reported above; --check still fails on it.
+		gitHook.Detail = "not probed: " + containmentReason
+	case o.Check:
 		gitHook, gitHookErr = provision.CheckPostRewrite(wd)
-	} else {
+	default:
 		gitHook, gitHookErr = provision.InstallPostRewrite(wd)
 	}
 	rep.GitPostRewriteHook = gitHook.HookPath

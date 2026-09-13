@@ -9,16 +9,18 @@
 package provision
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"golang.org/x/mod/semver"
+
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/procexec"
 )
 
 // Candidate is one resolved binary and why it was or was not admitted.
@@ -67,7 +69,7 @@ func Resolve(pluginRoot, floor string) (Result, error) {
 	if pluginRoot != "" {
 		paths = append(paths, filepath.Join(pluginRoot, "bin", name))
 	}
-	if onPath, err := exec.LookPath("sdd"); err == nil {
+	if onPath, err := procexec.LookPath("sdd", nil); err == nil {
 		paths = append(paths, onPath)
 	}
 
@@ -97,15 +99,21 @@ func Resolve(pluginRoot, floor string) (Result, error) {
 	return res, errNoCandidate
 }
 
+// binaryPolicy bounds the probes of a candidate `sdd` binary. The binary is
+// user-installed and arbitrary until it has answered, so it is run under the
+// same containment as any other child rather than trusted to exit.
+var binaryPolicy = procexec.Policy{}
+
 // probeVersion runs `sdd version` and returns the reported version.
 func probeVersion(path string) (string, error) {
-	out, err := exec.Command(path, "version").Output()
+	res, err := procexec.Run(context.Background(), path, []string{"version"}, binaryPolicy)
 	if err != nil {
 		return "", err
 	}
-	fields := strings.Fields(strings.TrimSpace(string(out)))
+	out := strings.TrimSpace(string(res.Stdout))
+	fields := strings.Fields(out)
 	if len(fields) < 2 || fields[0] != "sdd" {
-		return "", fmt.Errorf("unexpected `version` output %q", strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("unexpected `version` output %q", out)
 	}
 	return fields[1], nil
 }
