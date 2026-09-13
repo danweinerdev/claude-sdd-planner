@@ -137,3 +137,39 @@ func TestMakeTestRunsRaceDetector(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeTestRunsVet(t *testing.T) {
+	rules := parseMakeRules(makefile(t))
+
+	test := rules["test"]
+	if test == nil {
+		t.Fatal("Makefile declares no test: rule")
+	}
+
+	invokesVet := false
+	for _, name := range test.prereqs {
+		if name == "vet" {
+			invokesVet = true
+		}
+	}
+	for _, line := range test.recipe {
+		if strings.Contains(line, "vet") {
+			invokesVet = true
+		}
+	}
+	if !invokesVet {
+		t.Fatalf("the authoritative gate must depend on or invoke vet, so a go vet finding fails `make test`; prerequisites=%v recipe=%v", test.prereqs, test.recipe)
+	}
+
+	vet := rules["vet"]
+	if vet == nil {
+		t.Fatal("Makefile declares no vet: rule")
+	}
+	recipe := strings.Join(vet.recipe, "\n")
+	if !coversPackage(recipe, "./...") {
+		t.Fatalf("vet must run go vet ./...; recipe:\n%s", recipe)
+	}
+	if !strings.Contains(recipe, "go vet") {
+		t.Fatalf("vet must run go vet; recipe:\n%s", recipe)
+	}
+}

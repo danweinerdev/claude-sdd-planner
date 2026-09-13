@@ -1,4 +1,4 @@
-.PHONY: bump-patch bump-minor bump-major test test-race test-pure \
+.PHONY: bump-patch bump-minor bump-major test vet test-race test-pure \
         build build-release build-all gen-fixtures check-fixtures check-templates clean-build \
         plugins plugins-check
 
@@ -145,6 +145,16 @@ clean-build:
 # full coverage and does not claim that the upstream behavior has been fixed.
 test: check-templates
 	@go test -count=1 ./...
+
+# The vet half of the authoritative gate. Declared as a separate prerequisite
+# rule so the recipe above stays a single literal line the testgate assertions
+# can match; make runs both prerequisites before `test`'s own recipe.
+test: vet
+
+# vet runs go's static checker over the whole module, so a vet finding fails
+# `make test` rather than surfacing only in CI or an editor.
+vet:
+	@go vet ./...
 
 # The race half of the authoritative gate. Declared as a separate prerequisite
 # rule so the recipe above stays a single literal line the testgate assertions
