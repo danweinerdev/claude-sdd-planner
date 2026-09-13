@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,7 +109,7 @@ func Run(o Options) (*Result, error) {
 			return nil, fmt.Errorf("graph sync: %q is claimed by %q, not %q; a stale claim cannot sync (its lease was taken over)", o.Node, node.Claim.By, o.By)
 		}
 	}
-	evaluatedSnapshot := proofSnapshot(node)
+	evaluatedSnapshot := node.ProofSnapshot()
 	evaluatedWorkspace := ""
 	if node.Claim != nil {
 		evaluatedWorkspace = node.Claim.Workspace
@@ -314,7 +313,7 @@ func Run(o Options) (*Result, error) {
 		if n.Claim != nil {
 			workspace = n.Claim.Workspace
 		}
-		if proofSnapshot(n) != evaluatedSnapshot || workspace != evaluatedWorkspace {
+		if n.ProofSnapshot() != evaluatedSnapshot || workspace != evaluatedWorkspace {
 			return fmt.Errorf("graph sync: %q's contract changed while its report was evaluated; re-run the current gate and sync that report", o.Node)
 		}
 		if !hookRan && o.beforePublish != nil {
@@ -383,30 +382,6 @@ func Run(o Options) (*Result, error) {
 		res.WorkspaceReleased = handle
 	}
 	return res, nil
-}
-
-// proofSnapshot fingerprints every graph-owned field that determines what a
-// sync report means. Observation/claim bookkeeping and presentation metadata
-// are excluded so the CAS retry may preserve unrelated concurrent writes.
-func proofSnapshot(n *model.Node) string {
-	if n == nil {
-		return ""
-	}
-	raw, _ := json.Marshal(struct {
-		Role         string
-		Contract     string
-		ContractRev  int
-		Justifies    []string
-		Deps         []string
-		Gate         model.Gate
-		Hazards      model.Hazards
-		Artifacts    []string
-		Inputs       []model.Input
-		IntentHashes map[string]string
-		InputHashes  map[string]string
-	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
-		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
-	return digest.Bytes(raw)
 }
 
 // untracked lists report ids no node in the graph declares, directly or as

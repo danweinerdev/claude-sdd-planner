@@ -103,14 +103,14 @@ func remapRevisionsWithWrite(o RemapOptions, write graphWrite) (*RemapResult, er
 	if repo == nil || (repo.Kind() != vcs.Git && repo.Kind() != vcs.GitWorktree && repo.Kind() != vcs.GitBare) {
 		return nil, fmt.Errorf("graph remap-revisions: plan %s targets %s, which is not a Git repository", o.Plan, target)
 	}
+	// Syntax is checked for every row (a regex); existence is probed only
+	// for revisions the graph can reference — a large rebase capture is
+	// mostly rows about commits no observation names, and each probe is a
+	// git subprocess.
 	for _, pair := range pairs {
 		for _, rev := range []string{pair.old, pair.new} {
 			if !repo.RevisionSyntaxValid(rev) {
 				return nil, fmt.Errorf("graph remap-revisions: %q is not a full 40-character Git commit ID", rev)
-			}
-			exists, checkErr := repo.RevisionExists(rev)
-			if checkErr != nil || !exists {
-				return nil, fmt.Errorf("graph remap-revisions: %s is not an available commit in plan target %s", rev, target)
 			}
 		}
 	}
@@ -154,6 +154,22 @@ func remapRevisionsWithWrite(o RemapOptions, write graphWrite) (*RemapResult, er
 			if pair.old != pair.new && reachable[pair.old] && !reachable[pair.new] {
 				reachable[pair.new] = true
 				changed = true
+			}
+		}
+	}
+	probed := map[string]bool{}
+	for _, pair := range pairs {
+		if pair.old == pair.new || !reachable[pair.old] {
+			continue
+		}
+		for _, rev := range []string{pair.old, pair.new} {
+			if probed[rev] {
+				continue
+			}
+			probed[rev] = true
+			exists, checkErr := repo.RevisionExists(rev)
+			if checkErr != nil || !exists {
+				return nil, fmt.Errorf("graph remap-revisions: %s is not an available commit in plan target %s", rev, target)
 			}
 		}
 	}

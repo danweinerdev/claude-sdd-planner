@@ -164,7 +164,7 @@ func TestSplitPreservesAmendmentsAndInvalidatesLegacyReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := applySplit(g, "big", p)
+	out, _, err := applySplit(g, "big", p, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1339,5 +1339,41 @@ func TestSetTestsUnderObservationAdvancesRevision(t *testing.T) {
 	}
 	if st := states.Derive(states.Inputs{Graph: g}); st["helper"].State == states.Green {
 		t.Fatalf("old proof must not survive a gate change: %+v", st["helper"])
+	}
+}
+
+// A gate change via set-tests keeps the node's citation and input anchors:
+// they describe text that did not change, so no advisory is owed after the
+// re-verify. (Reviewer finding 3, refuted by construction.)
+func TestSetTestsKeepsAnchorsSoReverifyRaisesNoAdvisory(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	snap, err := gcompile.LoadIntentSnapshot(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := snap.Hashes()["AC-01"]
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("helper")
+		n.IntentHashes = map[string]string{"AC-01": current}
+		n.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean, ContractRev: 1,
+			DependencyDigests: map[string]map[string]string{}, IntentHashes: map[string]string{"AC-01": current}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetTests(planDir, "helper", "", []model.Test{{ID: "test_helper_v2", File: "t.ext"}}); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	n := g.NodeByID("helper")
+	if n.IntentHashes["AC-01"] != current {
+		t.Fatal("set-tests must not touch citation anchors")
+	}
+	// Simulate the re-verify at the new revision: the run sees the same text.
+	n.Verification = &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean, ContractRev: 2,
+		DependencyDigests: map[string]map[string]string{}, IntentHashes: map[string]string{"AC-01": current}}
+	st := states.Derive(states.Inputs{Graph: g, CurrentIntentHashes: snap.Hashes()})
+	if st["helper"].State != states.Green || len(st["helper"].AnchorAdvisory) != 0 {
+		t.Fatalf("no spurious advisory after a gate-only change: %+v", st["helper"])
 	}
 }

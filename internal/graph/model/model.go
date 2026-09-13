@@ -25,6 +25,8 @@ package model
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -424,6 +426,33 @@ type AcknowledgementRecord struct {
 	Old  string `json:"old,omitempty"`
 	New  string `json:"new"`
 	By   string `json:"by,omitempty"`
+}
+
+// ProofSnapshot fingerprints every graph-owned field that determines what
+// an observation against this node means: the obligation. sync and review
+// both fence publication on it (ReviewDrivenAmendment DD-11), so it lives
+// here, once. Observation and claim bookkeeping and presentation metadata
+// are excluded so a CAS retry may preserve unrelated concurrent writes.
+func (n *Node) ProofSnapshot() string {
+	if n == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(struct {
+		Role         string
+		Contract     string
+		ContractRev  int
+		Justifies    []string
+		Deps         []string
+		Gate         Gate
+		Hazards      Hazards
+		Artifacts    []string
+		Inputs       []Input
+		IntentHashes map[string]string
+		InputHashes  map[string]string
+	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
+		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // ReviewedRef is one node's identity as a review observed it.

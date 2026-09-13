@@ -330,7 +330,7 @@ func TestAmendMaterializesEmptyLegacyScopeAcrossEncoding(t *testing.T) {
 			},
 		}},
 	}
-	rebuilt, _, err := applyAmendments(g, plan, "", sources)
+	rebuilt, _, err := applyAmendments(g, plan, "", sources, root)
 	if err != nil {
 		t.Fatal(err)
 	}

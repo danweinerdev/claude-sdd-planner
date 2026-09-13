@@ -247,25 +247,15 @@ func graphStatusCmd() *cobra.Command {
 			}
 			counts := map[string]int{}
 			closedCount := 0
-			type reasons struct {
-				Dependency []string `json:"dependency,omitempty"`
-				Digest     []string `json:"digest,omitempty"`
-				Intent     []string `json:"intent,omitempty"`
-				Input      []string `json:"input,omitempty"`
-				Review     []string `json:"review,omitempty"`
-				Seq        bool     `json:"seq,omitempty"`
-				Revision   bool     `json:"revision,omitempty"`
-				Isolation  bool     `json:"isolation,omitempty"`
-			}
 			type line struct {
-				ID          string   `json:"id"`
-				State       string   `json:"state"`
-				Closed      bool     `json:"closed"`
-				Role        string   `json:"role"`
-				ContractRev int      `json:"contract_rev"`
-				Claimed     string   `json:"claimed_by,omitempty"`
-				Reasons     *reasons `json:"reasons,omitempty"`
-				Advisories  []string `json:"advisories,omitempty"`
+				ID          string        `json:"id"`
+				State       string        `json:"state"`
+				Closed      bool          `json:"closed"`
+				Role        string        `json:"role"`
+				ContractRev int           `json:"contract_rev"`
+				Claimed     string        `json:"claimed_by,omitempty"`
+				Reasons     *staleReasons `json:"reasons,omitempty"`
+				Advisories  []string      `json:"advisories,omitempty"`
 			}
 			lines := make([]line, 0, len(ctx.g.Nodes))
 			for i := range ctx.g.Nodes {
@@ -280,13 +270,7 @@ func graphStatusCmd() *cobra.Command {
 				if n.Claim != nil {
 					l.Claimed = n.Claim.By
 				}
-				if ns.State == states.Stale {
-					l.Reasons = &reasons{
-						Dependency: ns.DependencyStale, Digest: ns.DigestStale, Intent: ns.IntentStale,
-						Input: ns.InputStale, Review: ns.ReviewStale, Seq: ns.SeqStale,
-						Revision: ns.RevIncompatible, Isolation: ns.IsolationStale,
-					}
-				}
+				l.Reasons = staleReasonsFor(ns)
 				l.Advisories = ns.AnchorAdvisory
 				lines = append(lines, l)
 			}
@@ -355,8 +339,10 @@ func graphShowCmd() *cobra.Command {
 					Stale       []string             `json:"stale_artifacts,omitempty"`
 					Intent      []string             `json:"stale_intent,omitempty"`
 					Inputs      []string             `json:"stale_inputs,omitempty"`
+					Reasons     *staleReasons        `json:"reasons,omitempty"`
+					Advisories  []string             `json:"advisories,omitempty"`
 					Lineage     *revisionLineageView `json:"revision_lineage,omitempty"`
-				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, nodeRevisionLineage(ctx.g, n)})
+				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, staleReasonsFor(ns), ns.AnchorAdvisory, nodeRevisionLineage(ctx.g, n)})
 			}
 			w := c.OutOrStdout()
 			if brief {
@@ -575,5 +561,31 @@ func printBrief(w io.Writer, g *model.Graph, n *model.Node, st map[string]states
 	}
 	if len(st[n.ID].ReviewStale) > 0 {
 		fmt.Fprintf(w, "REVIEW-STALE: %s\n", strings.Join(st[n.ID].ReviewStale, ", "))
+	}
+}
+
+// staleReasons is the per-axis cause list `status --json` and `show --json`
+// share (VerificationFreshness DD-5): every axis that can hold a node at
+// STALE, with its items, so a driver routes on the cause.
+type staleReasons struct {
+	Dependency []string `json:"dependency,omitempty"`
+	Digest     []string `json:"digest,omitempty"`
+	Intent     []string `json:"intent,omitempty"`
+	Input      []string `json:"input,omitempty"`
+	Review     []string `json:"review,omitempty"`
+	Seq        bool     `json:"seq,omitempty"`
+	Revision   bool     `json:"revision,omitempty"`
+	Isolation  bool     `json:"isolation,omitempty"`
+}
+
+// staleReasonsFor returns nil for a node that is not STALE or REV-INCOMPATIBLE.
+func staleReasonsFor(ns states.NodeState) *staleReasons {
+	if ns.State != states.Stale && !ns.RevIncompatible {
+		return nil
+	}
+	return &staleReasons{
+		Dependency: ns.DependencyStale, Digest: ns.DigestStale, Intent: ns.IntentStale,
+		Input: ns.InputStale, Review: ns.ReviewStale, Seq: ns.SeqStale,
+		Revision: ns.RevIncompatible, Isolation: ns.IsolationStale,
 	}
 }

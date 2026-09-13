@@ -155,9 +155,18 @@ func init() {
 				}
 				sort.Strings(names)
 				first := c.Successors[0]
+				var implicated []string
+				for _, s := range c.Successors {
+					implicated = append(implicated, "Plans/"+s.Plan+"/"+s.Plan+"-Decisions.json", "Plans/"+s.Plan+"/README.md")
+				}
+				for _, l := range r.DecisionIndex.EntriesWithID(c.ID) {
+					implicated = append(implicated, "Plans/"+l.Plan+"/"+l.Plan+"-Decisions.json", "Plans/"+l.Plan+"/README.md")
+				}
+				sort.Strings(implicated)
 				emit(Diagnostic{
 					Code: "SDD192", Severity: Error,
 					Path: "Plans/" + first.Plan + "/" + first.Plan + "-Decisions.json", Line: 1,
+					Implicated: implicated,
 					Message:    "Decision `" + c.ID + "` has competing successors: " + strings.Join(names, ", ") + ".",
 					Correction: "Record one reconciling decision whose --supersedes lists every competing successor.",
 				})

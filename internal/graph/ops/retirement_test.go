@@ -86,7 +86,7 @@ func TestRetirementPinsHistoricalIDAfterFileDeletion(t *testing.T) {
 	if string(stable) != string(again) {
 		t.Fatal("idempotent retirement changed bytes")
 	}
-	split, _, err := applySplit(g, "replacement", &model.Proposal{Version: 1, Nodes: []model.Node{{ID: "child-a"}, {ID: "child-b"}}})
+	split, _, err := applySplit(g, "replacement", &model.Proposal{Version: 1, Nodes: []model.Node{{ID: "child-a"}, {ID: "child-b"}}}, nil)
 	if err != nil || !reflect.DeepEqual(split.RetirementSources, g.RetirementSources) {
 		t.Fatalf("split lost historical provenance: %v", err)
 	}

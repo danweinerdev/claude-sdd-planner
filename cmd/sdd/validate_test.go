@@ -316,3 +316,21 @@ func indexOfStr(s, sub string) int {
 func contains(s, sub string) bool {
 	return indexOfStr(s, sub) >= 0
 }
+
+// SDD192 implicates every plan party to a cross-plan supersession conflict,
+// so a plan-scoped validate on any of them reports it (reviewer finding 2).
+func TestScopedSelectionKeepsImplicatedCrossPlanConflict(t *testing.T) {
+	d := rules.Diagnostic{
+		Code: "SDD192", Severity: rules.Error, Path: "Plans/P/P-Decisions.json", Line: 1,
+		Implicated: []string{"Plans/P/P-Decisions.json", "Plans/P/README.md", "Plans/Q/Q-Decisions.json", "Plans/Q/README.md", "Plans/R/R-Decisions.json", "Plans/R/README.md"},
+	}
+	for _, plan := range []string{"P", "Q", "R"} {
+		got := selectInScope([]rules.Diagnostic{d}, "Plans/"+plan, []string{"Plans/" + plan + "/README.md", "Plans/" + plan + "/" + plan + "-Decisions.json"})
+		if len(got) != 1 {
+			t.Fatalf("scope Plans/%s must keep the conflict: got %d", plan, len(got))
+		}
+	}
+	if got := selectInScope([]rules.Diagnostic{d}, "Plans/Z", []string{"Plans/Z/README.md"}); len(got) != 0 {
+		t.Fatal("an uninvolved plan must not see it")
+	}
+}

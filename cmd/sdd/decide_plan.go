@@ -139,7 +139,10 @@ func decidePlanDir(root, plan, verb string) (string, error) {
 	if linkInfo, err := os.Lstat(planDir); err != nil || linkInfo.Mode()&os.ModeSymlink != 0 {
 		return "", fmt.Errorf("decide %s: plan %q must be a real directory, not a symlink under Plans/", verb, plan)
 	}
-	return planDir, nil
+	// Write through the resolved path, not the lexical one: the containment
+	// check above holds for realPlan, and a symlink swapped in between the
+	// check and the write would otherwise be followed.
+	return realPlan, nil
 }
 
 func cmdDecideAdd(c *cobra.Command, plan, statement, supersedes, source string, asJSON bool) error {

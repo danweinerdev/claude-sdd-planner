@@ -14,7 +14,6 @@
 package review
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -246,30 +245,6 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 	return nil
 }
 
-// proofSnapshot fingerprints the graph-owned obligation fields evaluated by a
-// review. Observations, claims, estimates, phases, and history are not
-// part of the promise and therefore do not cause false contention failures.
-func proofSnapshot(n *model.Node) string {
-	if n == nil {
-		return ""
-	}
-	raw, _ := json.Marshal(struct {
-		Role         string
-		Contract     string
-		ContractRev  int
-		Justifies    []string
-		Deps         []string
-		Gate         model.Gate
-		Hazards      model.Hazards
-		Artifacts    []string
-		Inputs       []model.Input
-		IntentHashes map[string]string
-		InputHashes  map[string]string
-	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
-		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
-	return digest.Bytes(raw)
-}
-
 // Record wires a frozen review artifact into a review node's observation.
 // The node greens ONLY from an artifact that is resolved AND frozen: true
 // AND verdict Aligned — three signals read together, because resolve sets
@@ -376,10 +351,10 @@ func Record(o Options) (*Result, error) {
 		}
 		reviewed[id] = ref
 	}
-	evaluatedGate := proofSnapshot(node)
+	evaluatedGate := node.ProofSnapshot()
 	evaluatedScope := make(map[string]string, len(scope))
 	for _, id := range scope {
-		evaluatedScope[id] = proofSnapshot(g.NodeByID(id))
+		evaluatedScope[id] = g.NodeByID(id).ProofSnapshot()
 	}
 
 	prov := o.Provider
@@ -408,11 +383,11 @@ func Record(o Options) (*Result, error) {
 		if err != nil {
 			return err
 		}
-		if proofSnapshot(n) != evaluatedGate || !slices.Equal(currentScope, scope) {
+		if n.ProofSnapshot() != evaluatedGate || !slices.Equal(currentScope, scope) {
 			return fmt.Errorf("graph review: %q's gate or scope changed while the artifact was evaluated; re-review the current graph", o.Node)
 		}
 		for _, id := range scope {
-			if proofSnapshot(fresh.NodeByID(id)) != evaluatedScope[id] {
+			if fresh.NodeByID(id).ProofSnapshot() != evaluatedScope[id] {
 				return fmt.Errorf("graph review: scope changed while the artifact was evaluated: %q has a different contract snapshot; re-review the current graph", id)
 			}
 		}

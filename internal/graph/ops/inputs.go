@@ -148,6 +148,25 @@ func narrowingRefusal(n *model.Node, decl []model.Input) string {
 	for _, in := range n.Inputs {
 		declared[model.InputKey(in)] = in
 	}
+	// Every currently declared input must survive: unchanged, or replaced
+	// by at least one narrowing of the same file. Dropping an input from a
+	// verified node would leave its bytes free to change unobserved.
+	survives := map[string]bool{}
+	for _, next := range decl {
+		key := model.InputKey(next)
+		if _, same := declared[key]; same {
+			survives[key] = true
+			continue
+		}
+		if next.Section != nil {
+			survives[model.InputKey(model.Input{Root: next.Root, Path: next.Path})] = true
+		}
+	}
+	for key, in := range declared {
+		if !survives[key] {
+			return fmt.Sprintf("input %s would be dropped; a verified node's inputs may be narrowed, never removed", inputLabel(in))
+		}
+	}
 	for _, next := range decl {
 		key := model.InputKey(next)
 		if _, same := declared[key]; same {

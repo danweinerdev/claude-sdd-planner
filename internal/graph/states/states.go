@@ -138,7 +138,7 @@ func ReviewScope(g *model.Graph, gateID string) ([]string, error) {
 // single dep, which would misstate what was reviewed. Callers pin it onto
 // the observation before an amendment or split touches the scope, so the
 // old proof becomes REVIEW-STALE by exact comparison afterward.
-func LegacyReviewedSet(g *model.Graph, reviewID string, scope []string) map[string]model.ReviewedRef {
+func LegacyReviewedSet(g *model.Graph, reviewID string, scope []string, artifactDigest func(string) string) map[string]model.ReviewedRef {
 	if len(scope) == 0 {
 		if r := g.NodeByID(reviewID); r != nil {
 			scope = append([]string(nil), r.Deps...)
@@ -146,9 +146,26 @@ func LegacyReviewedSet(g *model.Graph, reviewID string, scope []string) map[stri
 	}
 	out := make(map[string]model.ReviewedRef, len(scope))
 	for _, id := range scope {
-		if prior := g.NodeByID(id); prior != nil {
-			out[id] = model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
+		prior := g.NodeByID(id)
+		if prior == nil {
+			continue
 		}
+		ref := model.ReviewedRef{ContractRev: prior.EffectiveContractRev()}
+		// Members' bytes as they stand now: the legacy pass reviewed the
+		// tree at the time, and nothing has been amended yet at this point,
+		// so the current digests are the best available statement of what
+		// it covered — and they give per-member attribution afterward.
+		if artifactDigest != nil {
+			for _, a := range prior.Artifacts {
+				if d := artifactDigest(a); d != "" {
+					if ref.ArtifactDigests == nil {
+						ref.ArtifactDigests = map[string]string{}
+					}
+					ref.ArtifactDigests[a] = d
+				}
+			}
+		}
+		out[id] = ref
 	}
 	return out
 }

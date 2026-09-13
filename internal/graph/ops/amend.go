@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -98,7 +99,7 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 		return nil, err
 	}
 	before := sources.Validate(g)
-	rebuilt, seq, err := applyAmendments(g, plan, o.By, sources)
+	rebuilt, seq, err := applyAmendments(g, plan, o.By, sources, o.RepoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 }
 
 // applyAmendments computes the post-amendment graph without touching disk.
-func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcompile.Sources) (*model.Graph, int, error) {
+func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcompile.Sources, repoRoot string) (*model.Graph, int, error) {
 	out := *g
 	out.Nodes = append([]model.Node(nil), g.Nodes...)
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
@@ -224,7 +225,7 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			v := *r.Verification
 			// Pinned from the pre-amend graph `g`, so revised members keep
 			// their old revision in the set and mismatch afterward.
-			v.Reviewed = states.LegacyReviewedSet(g, plan.Review, plan.Scope)
+			v.Reviewed = states.LegacyReviewedSet(g, plan.Review, plan.Scope, digest.New(repoRoot).Artifact)
 			r.Verification = &v
 		}
 	}

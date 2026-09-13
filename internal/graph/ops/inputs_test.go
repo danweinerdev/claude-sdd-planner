@@ -289,3 +289,38 @@ func TestSetInputsNarrowingIsProvableOnVerifiedNode(t *testing.T) {
 		t.Fatal("narrowing without a run snapshot must refuse")
 	}
 }
+
+// A verified node's declared input may be narrowed but never dropped: the
+// dropped file's bytes would otherwise change unobserved.
+func TestSetInputsRefusesDroppingAnInputOnVerifiedNode(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	writeInputDoc(t, root, "docs/a.md", "# A\n\n## Alpha\n\nbody\n")
+	writeInputDoc(t, root, "docs/b.md", "# B\n\nbody\n")
+	both, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/a.md"}, {"root": "repository", "path": "docs/b.md"}]`))
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", both, false); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
+	ran := map[string]string{}
+	for k, v := range g.NodeByID("helper").InputHashes {
+		ran[k] = v
+	}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.NodeByID("helper").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
+			DependencyDigests: map[string]map[string]string{}, InputHashes: ran}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	onlyA, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/a.md"}]`))
+	_, err := SetInputs(root, root, "SamplePlan", "helper", onlyA, false)
+	var refusal *RefusedError
+	if err == nil || !errorAs(err, &refusal) || !strings.Contains(strings.Join(refusal.Reasons, "\n"), "would be dropped") {
+		t.Fatalf("dropping b.md from a verified node must refuse: %v", err)
+	}
+	// Narrowing a while keeping b whole is fine.
+	narrowed, _ := model.DecodeInputs([]byte(`[{"root": "repository", "path": "docs/a.md", "section": {"heading_path": ["Alpha"]}}, {"root": "repository", "path": "docs/b.md"}]`))
+	if _, err := SetInputs(root, root, "SamplePlan", "helper", narrowed, false); err != nil {
+		t.Fatalf("narrowing while preserving the rest must succeed: %v", err)
+	}
+}

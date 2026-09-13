@@ -17,6 +17,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
@@ -90,7 +91,7 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 	var res *SplitResult
 	if _, err := update(gstore.PathFor(planDir), func(fresh *model.Graph) error {
 		before := sources.Validate(fresh)
-		rebuilt, splitRes, err := applySplit(fresh, nodeID, p)
+		rebuilt, splitRes, err := applySplit(fresh, nodeID, p, digest.New(repoRoot).Artifact)
 		if err != nil {
 			return err
 		}
@@ -114,7 +115,7 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 
 // applySplit computes the post-split graph without touching disk. Pure so
 // the gate can inspect the candidate and the CAS cycle can re-derive it.
-func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph, *SplitResult, error) {
+func applySplit(g *model.Graph, nodeID string, p *model.Proposal, artifactDigest func(string) string) (*model.Graph, *SplitResult, error) {
 	original := g.NodeByID(nodeID)
 	if original == nil {
 		return nil, nil, fmt.Errorf("graph split: node %q does not exist", nodeID)
@@ -195,7 +196,7 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph,
 				return nil, nil, err
 			}
 			v := *n.Verification
-			v.Reviewed = states.LegacyReviewedSet(g, n.ID, priorScope)
+			v.Reviewed = states.LegacyReviewedSet(g, n.ID, priorScope, artifactDigest)
 			n.Verification = &v
 		}
 		var deps []string
