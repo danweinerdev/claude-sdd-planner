@@ -83,6 +83,7 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Standing decisions across plans | `sdd decide current [--plan P] [--json]` |
 | Look up one decision and its supersession chain | `sdd decide lookup ID [--plan P] [--json]` |
 | Render the plan's generated Design.md at plan close | `sdd decide render --plan P [--json]` |
+| Copy related designs' DD bullets into the plan's decisions file without compiling a proposal | `sdd decide sync --plan P [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |
 | Record Git old→new revision lineage without changing proof | `sdd graph remap-revisions --plan P --map FILE --expect-digest D [--dry-run] [--json]` (omit the digest for preview) |

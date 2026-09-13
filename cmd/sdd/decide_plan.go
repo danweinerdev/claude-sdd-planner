@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
+	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -85,7 +86,17 @@ user the exact statement, get approval, run 'add' once.`,
 	render.Flags().BoolVar(&renderJSON, "json", false, "emit JSON")
 	_ = render.MarkFlagRequired("plan")
 
-	c.AddCommand(add, list, current, lookup, render)
+	var syncPlan string
+	var syncJSON bool
+	sync := &cobra.Command{
+		Use: "sync", Short: "Copy the related designs' DD bullets into the plan's decisions file (what compile does first)", Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error { return cmdDecideSync(c, syncPlan, syncJSON) },
+	}
+	sync.Flags().StringVar(&syncPlan, "plan", "", "plan name (directory under Plans/)")
+	sync.Flags().BoolVar(&syncJSON, "json", false, "emit JSON")
+	_ = sync.MarkFlagRequired("plan")
+
+	c.AddCommand(add, list, current, lookup, render, sync)
 	return c
 }
 
@@ -373,6 +384,37 @@ func cmdDecideRender(c *cobra.Command, plan string, asJSON bool) error {
 		}{true, relPath(out), len(current), len(superseded)})
 	}
 	fmt.Fprintf(c.OutOrStdout(), "rendered %s (%d current, %d superseded)\n", relPath(out), len(current), len(superseded))
+	return nil
+}
+
+// cmdDecideSync is the decisions half of `sdd compile` on its own: for a
+// plan with no proposal to compile (a record-only plan, or a design that
+// gained DDs after its plan was built), copy every related design's DD
+// bullets into the plan's decisions file, verbatim, with declared
+// supersession edges (PlanDecisions DD-4). Idempotent.
+func cmdDecideSync(c *cobra.Command, plan string, asJSON bool) error {
+	root, err := decisionsRoot()
+	if err != nil {
+		return err
+	}
+	if _, err := decidePlanDir(root, plan, "sync"); err != nil {
+		return err
+	}
+	_, repoRoot, err := resolveRoots(".", "")
+	if err != nil {
+		return fmt.Errorf("decide sync: %w", err)
+	}
+	res, err := gcompile.SyncDesignDecisions(root, repoRoot, plan, time.Now().UTC().Format("2006-01-02"))
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		return writeJSON(res)
+	}
+	fmt.Fprintf(c.OutOrStdout(), "recorded %d design decision(s) in %s (%d already present)\n", len(res.Added), relPath(res.Path), len(res.Skipped))
+	for _, e := range res.Added {
+		fmt.Fprintf(c.OutOrStdout(), "  %s  %s\n", e.ID, e.Source)
+	}
 	return nil
 }
 

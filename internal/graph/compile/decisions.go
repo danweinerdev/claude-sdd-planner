@@ -59,6 +59,13 @@ func SyncDesignDecisions(root, repoRoot, plan, today string) (*DecisionSync, err
 					target = qualifier + ":" + target
 				}
 				hits := loaded.DecisionIndex.BySource(target, plan)
+				if len(hits) == 0 && !strings.HasPrefix(target, "Designs/") {
+					// `Supersedes SddGraph:DD-9` names the design by its
+					// short qualifier; compiled sources carry the full
+					// `Designs/<X>:DD-N` form.
+					target = "Designs/" + target
+					hits = loaded.DecisionIndex.BySource(target, plan)
+				}
 				if len(hits) == 0 {
 					return out, fmt.Errorf("compile: %s supersedes %s, which is not recorded in any plan's decisions file; compile the design that defines it first", source, target)
 				}

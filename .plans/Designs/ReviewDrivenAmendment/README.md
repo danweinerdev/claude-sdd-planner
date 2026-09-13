@@ -320,8 +320,8 @@ ignores them as proof (`SddGraph:DD-5`).
   Decision: (b). Rationale: a demoted node whose gate still passes cannot
   produce a new RED, so every real demotion already required a gate edit; making
   that edit the amendment removes the contradictory state and records the
-  reason. Option (c) reintroduces narrated status. This decision supersedes
-  `SddGraph:DD-9`'s demotion clause.
+  reason. Option (c) reintroduces narrated status. Supersedes SddGraph:DD-9
+  (its demotion clause).
 
 - **DD-3**: A per-node `contract_rev` is the compatibility key for observations;
   the whole-file digest stays the only write fence.
