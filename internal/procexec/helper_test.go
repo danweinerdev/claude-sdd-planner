@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"testing"
 	"time"
@@ -49,6 +50,29 @@ func runHelper(mode string) int {
 			w.WriteByte(byte('a' + i%26))
 		}
 		w.Flush()
+		return 0
+	case "spawn-descendant", "spawn-descendant-exit", "spawn-inherit-exit":
+		// Start a grandchild (this binary in sleep mode) that stays in the
+		// group. "inherit" keeps our stdout/stderr open in the grandchild;
+		// the others detach it from our pipes. Print its pid, then either
+		// hang (deadline path) or exit 0 (normal-completion path).
+		exe, err := os.Executable()
+		if err != nil {
+			return 98
+		}
+		child := exec.Command(exe)
+		child.Env = []string{helperEnv + "=sleep"}
+		if mode == "spawn-inherit-exit" {
+			child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		}
+		if err := child.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, "spawn:", err)
+			return 97
+		}
+		fmt.Println(child.Process.Pid)
+		if mode == "spawn-descendant" {
+			time.Sleep(time.Hour)
+		}
 		return 0
 	case "stderr-bytes":
 		n, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_N"))

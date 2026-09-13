@@ -66,6 +66,7 @@ type Error struct {
 	Argv      []string
 	ExitCode  int    // valid when Cause == CauseExit
 	Stderr    string // bounded diagnostic excerpt
+	Stdout    string // machine output collected before the failure (bounded excerpt)
 	Truncated bool   // Stderr was cut at the diagnostic limit
 	Err       error  // underlying cause, if any
 }

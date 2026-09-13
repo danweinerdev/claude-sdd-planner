@@ -22,6 +22,9 @@ type Result struct {
 	ExitCode        int
 	Run             time.Duration // start to exit
 	Cleanup         time.Duration // cancel/exit to drained and reaped (0 when nothing was pending)
+	// DescendantsCleaned reports that owned descendants outlived the command
+	// and were cleaned by the containment adapter.
+	DescendantsCleaned bool
 }
 
 // Run executes name with args (never through a shell) under the policy and
@@ -32,10 +35,19 @@ type Result struct {
 func Run(ctx context.Context, name string, args []string, p Policy) (Result, error) {
 	p = p.withDefaults()
 	argv := append([]string{name}, args...)
+	var stdout *machineWriter
 	fail := func(c Cause, err error, stderr *excerptWriter) (Result, error) {
 		e := &Error{Cause: c, Argv: argv, Err: err}
 		if stderr != nil {
 			e.Stderr, e.Truncated = stderr.excerpt()
+		}
+		if stdout != nil {
+			if b := stdout.bytes(); len(b) > 0 {
+				if len(b) > p.DiagnosticLimit {
+					b = b[:p.DiagnosticLimit]
+				}
+				e.Stdout = string(b)
+			}
 		}
 		return Result{}, e
 	}
@@ -53,7 +65,7 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 
 	var cancelledAt atomicTime
 	stderr := &excerptWriter{limit: p.DiagnosticLimit}
-	stdout := &machineWriter{limit: p.MachineLimit, onOverflow: func() {
+	stdout = &machineWriter{limit: p.MachineLimit, onOverflow: func() {
 		cancelledAt.mark(time.Now())
 		cancel()
 	}}
@@ -64,10 +76,13 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	cmd.Env = p.Env
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	// Cancel kills only the direct child; descendant ownership is the
-	// containment adapter's job (DD-4). WaitDelay bounds the drain of pipes
-	// a descendant may still hold, so Wait can never block forever.
+	// WaitDelay bounds the drain of pipes a descendant may still hold, so
+	// Wait can never block forever; the containment adapter owns the
+	// descendants themselves (DD-4) and makes cancellation kill the group.
 	cmd.WaitDelay = p.Cleanup
+	if err := configureContainment(cmd); err != nil {
+		return fail(CauseContainment, err, nil)
+	}
 
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
@@ -77,6 +92,10 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		return fail(CauseAccess, err, nil)
 	}
 	waitErr := cmd.Wait()
+	// Whatever the outcome, owned descendants that outlived the command are
+	// cleaned now, within the cleanup allowance; a failure to do so is
+	// reported ahead of the command's own result.
+	cleaned, containErr := cleanupGroup(cmd, p.Cleanup)
 	end := time.Now()
 
 	run := end.Sub(start)
@@ -93,6 +112,8 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	}
 
 	switch {
+	case containErr != nil:
+		return fail(CauseContainment, containErr, stderr)
 	case stdout.overflowed():
 		return fail(CauseOverflow, errMachineOverflow, stderr)
 	case ctx.Err() != nil:
@@ -101,7 +122,13 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		return fail(CauseDeadline, runCtx.Err(), stderr)
 	case waitErr == nil:
 	case errors.Is(waitErr, exec.ErrWaitDelay):
-		return fail(CauseDrain, waitErr, stderr)
+		// The command itself exited successfully; only inherited pipes were
+		// still open. They belonged to descendants the adapter has now
+		// cleaned (cleaned == true) — a success with the cleanup recorded.
+		// If nothing was left to clean, the pipe holder escaped ownership.
+		if !cleaned {
+			return fail(CauseDrain, waitErr, stderr)
+		}
 	default:
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
@@ -112,7 +139,7 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		return fail(CauseAccess, waitErr, stderr)
 	}
 
-	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup}
+	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup, DescendantsCleaned: cleaned}
 	res.Stderr, res.StderrTruncated = stderr.excerpt()
 	return res, nil
 }
