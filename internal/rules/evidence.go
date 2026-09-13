@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -595,7 +596,13 @@ func verifyCleanP4Identity(r *Root, a *Artifact, revision, name string, line int
 			Message: "`" + name + "` records Perforce but `" + repository + "` is not a Perforce client workspace.", Correction: "Correct the repository/VCS evidence."})
 		return
 	}
-	if ok, _ := repo.RevisionExists(revision); !ok {
+	ok, err := repo.RevisionExists(revision)
+	if err != nil && !errors.Is(err, vcs.ErrNotFound) {
+		// The collector already recorded the operational failure (recordingRepo);
+		// don't misreport an unanswered query as "not a submitted changelist".
+		return
+	}
+	if !ok {
 		emit(Diagnostic{Code: "SDD072", Severity: Error, Path: a.Rel, Line: line,
 			Message: "`" + name + "` Perforce revision/checkpoint `" + revision + "` is not a submitted changelist known to `" + repository + "`.", Correction: "Record the exact submitted changelist number; submit the pending or shelved work first."})
 	}

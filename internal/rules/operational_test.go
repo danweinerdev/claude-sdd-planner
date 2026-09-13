@@ -2,6 +2,7 @@ package rules
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,4 +124,73 @@ func TestRetirementDetectionFailureIsOperational(t *testing.T) {
 	if !errors.Is(err, vcs.ErrOperational) {
 		t.Fatalf("VerifyRetirementSource without git = %v, want vcs.ErrOperational", err)
 	}
+}
+
+// fakeP4Repo is a Perforce-kind adapter whose RevisionExists answer is
+// scripted, so verifyCleanP4Identity can be exercised without a live p4
+// server. Every other operation reports ErrUnsupported via the embedded
+// Unavailable, which this rule never calls.
+type fakeP4Repo struct {
+	vcs.Unavailable
+	existsErr error
+}
+
+func (f fakeP4Repo) Kind() vcs.Kind { return vcs.Perforce }
+
+func (f fakeP4Repo) RevisionExists(string) (bool, error) {
+	if f.existsErr != nil {
+		return false, f.existsErr
+	}
+	return true, nil
+}
+
+// TestP4IdentityQueryFailureIsOperational: a p4 identity query that fails
+// operationally (the server or client could not be consulted) must be
+// recorded on the evaluation's collector, not reported as "not a submitted
+// changelist" — that diagnostic is reserved for a query that actually ran
+// and came back with ErrNotFound.
+func TestP4IdentityQueryFailureIsOperational(t *testing.T) {
+	rel := "Plans/P/README.md"
+
+	t.Run("operational failure is recorded, not reported as absence", func(t *testing.T) {
+		_, root := materializeRoot(t, map[string]string{rel: researchClean})
+		fake := fakeP4Repo{existsErr: fmt.Errorf("%w: p4 describe: deadline exceeded", vcs.ErrOperational)}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		a := root.ByPath[rel]
+		var diags []Diagnostic
+		verifyCleanP4Identity(root, a, "123", "Revision / checkpoint", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); !errors.Is(err, vcs.ErrOperational) {
+			t.Fatalf("OperationalFailure() = %v, want vcs.ErrOperational", err)
+		}
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				t.Errorf("operational failure surfaced as SDD072: %+v", d)
+			}
+		}
+	})
+
+	t.Run("ErrNotFound still produces the diagnostic", func(t *testing.T) {
+		_, root := materializeRoot(t, map[string]string{rel: researchClean})
+		fake := fakeP4Repo{existsErr: fmt.Errorf("%w: 123", vcs.ErrNotFound)}
+		root.repoCache = map[string]vcs.Repo{root.RepoRoot: recordingRepo{Repo: fake, root: root}}
+
+		a := root.ByPath[rel]
+		var diags []Diagnostic
+		verifyCleanP4Identity(root, a, "123", "Revision / checkpoint", 1, func(d Diagnostic) { diags = append(diags, d) })
+
+		if err := root.OperationalFailure(); err != nil {
+			t.Fatalf("OperationalFailure() = %v, want nil", err)
+		}
+		found := false
+		for _, d := range diags {
+			if d.Code == "SDD072" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("ErrNotFound diags = %v, want an SDD072", codesOf(diags))
+		}
+	})
 }
