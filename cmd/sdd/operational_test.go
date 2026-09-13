@@ -136,6 +136,109 @@ func lifecycleOperationalFixture(t *testing.T) (root, planningRev, mapPath strin
 	return root, planningRev, mapPath
 }
 
+// TestTransitionGateOperationalSweepExits (review-execution F-02): the
+// lifecycle transition gate (gateDiagnostics) runs its before and after
+// sweeps through the checked evaluation entry points and exits 2 with the
+// cause when either sweep is operational. Today gateDiagnostics calls
+// rules.RunWithWaivers (the unchecked form) for both sweeps and never
+// inspects the operational outcome, so the same SDD198 finding in both
+// sweeps dedups to an empty introduced set and `plan approve` proceeds —
+// this test documents that defect red and must start failing once
+// gateDiagnostics switches to the checked entry point.
+//
+// `plan approve` is the cheapest verb that reaches gateDiagnostics: it needs
+// only a plan at status `draft` with no other blocking findings, no task
+// IDs, and no candidate-artifact freezing pass.
+func TestTransitionGateOperationalSweepExits(t *testing.T) {
+	bin := stressBinary(t)
+	gitExe, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+
+	root := t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"-C", dir, "-c", "user.name=SDD Test", "-c", "user.email=sdd@example.invalid"}, args...)
+		out, err := exec.Command(gitExe, argv...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("planning-config.json", `{"planningRoot":"."}`)
+	write("Plans/Demo/README.md",
+		"---\ntitle: Demo\ntype: plan\nstatus: draft\ncreated: 2026-09-12\nupdated: 2026-09-12\n"+
+			"tags: []\nrelated: []\nphases: []\n---\n\n# Demo\n\n## Overview\n\nText.\n")
+
+	// The planning root itself must be a committed repository: gateDiagnostics
+	// scopes its rule sweeps against the repository the artifact lives in, and
+	// several rules (e.g. the clean-worktree check) query it directly.
+	git(root, "init", "-q", "-b", "main")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "planning root")
+
+	base := []string{"SDD_VCS_DISABLE_P4=1", "HOME=" + t.TempDir(),
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull}
+	run := func(path string, extraArgs ...string) (int, string) {
+		t.Helper()
+		args := append([]string{"plan", "approve", "Plans/Demo/README.md"}, extraArgs...)
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = root
+		cmd.Env = append(append([]string{}, base...), "PATH="+path)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatalf("running sdd plan approve: %v", err)
+		}
+		return code, string(out)
+	}
+
+	// Control: git available, --dry-run so it never mutates the fixture. The
+	// transition may refuse (exit 1) or succeed (exit 0) depending on
+	// findings, but it must never be an operational exit — establishing that
+	// the fixture itself is not the cause of an operational failure.
+	if code, out := run(filepath.Dir(gitExe), "--dry-run"); code == 2 {
+		t.Fatalf("control with git exited 2 (operational):\n%s", out)
+	}
+
+	statusBefore, err := os.ReadFile(filepath.Join(root, "Plans", "Demo", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := run(t.TempDir())
+	if code != 2 {
+		t.Fatalf("without git: exit %d, want 2 (operational)\n%s", code, out)
+	}
+	low := strings.ToLower(out)
+	if !strings.Contains(low, "git") || !strings.Contains(low, "could not") {
+		t.Errorf("the operational exit must name the cause; got:\n%s", out)
+	}
+
+	statusAfter, err := os.ReadFile(filepath.Join(root, "Plans", "Demo", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(statusAfter) != string(statusBefore) {
+		t.Errorf("an operational sweep must not let the transition proceed; artifact changed:\nbefore:\n%s\nafter:\n%s",
+			statusBefore, statusAfter)
+	}
+}
+
 // TestLifecycleVerbsOperationalExit (FR-16, AC-08, DD-10): the lifecycle
 // verbs that consult the VCS — `evidence add` and `graph remap-revisions` —
 // exit 2 with the cause named when git cannot run, never 1 (an authoritative

@@ -243,12 +243,18 @@ func gateDiagnostics(path, candidate string) ([]rules.Diagnostic, error) {
 		case docRel != "":
 			loaded = rules.ScopeToDoc(loaded, docRel)
 		}
-		// RunWithWaivers, not Run: the gate's criterion must be the same one
-		// `sdd validate` applies by default, where an accepted exception
-		// re-tags its finding Waived (reported, not invalidating). Plain Run
-		// leaves matched errors at Error severity, which would make the gate
-		// refuse transitions on findings the validator itself excuses.
-		return rules.RunWithWaivers(loaded), nil
+		// RunWithWaiversChecked, not RunWithWaivers: the gate's criterion must
+		// be the same one `sdd validate` applies by default, where an accepted
+		// exception re-tags its finding Waived (reported, not invalidating).
+		// Plain Run leaves matched errors at Error severity, which would make
+		// the gate refuse transitions on findings the validator itself
+		// excuses. The Checked form additionally surfaces an operational
+		// failure (e.g. git could not run) as an error instead of silently
+		// returning whatever partial diagnostics it collected — undetected,
+		// the same operational diagnostic in both the before and after sweep
+		// dedups to an empty introduced set and the transition proceeds on a
+		// root nothing actually validated.
+		return rules.RunWithWaiversChecked(loaded)
 	}
 
 	beforeDiags, err := run()
