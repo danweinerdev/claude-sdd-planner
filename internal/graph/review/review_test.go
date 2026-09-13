@@ -480,6 +480,28 @@ func TestPlanAmendmentsScopeVsReach(t *testing.T) {
 	if len(plan2.Amendments) != 1 || plan2.Amendments[0].Node != "impl-followup" {
 		t.Fatalf("plan2 = %+v", plan2.Amendments)
 	}
+
+	// A revise naming a review-gate node in the closure is refused: revise/extend
+	// act on implementation nodes, not review or command nodes.
+	artReviewGate := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-04", Status: "open", Action: ActionRevise, Nodes: []string{"inner-review"},
+			Revise: map[string]any{"contract": "changed"}}},
+	}}
+	_, err = PlanAmendmentsInScope(g, "review-final", artReviewGate, scope)
+	if err == nil || !strings.Contains(err.Error(), "revise/extend act on implementation nodes") {
+		t.Fatalf("a revise naming a review-gate node must be refused: %v", err)
+	}
+
+	// A revise naming a command-gate node in the closure is refused for the
+	// same reason.
+	artCommandGate := &Artifact{Rel: "reviews/r.md", Qualifier: "reviews/r", Facts: &facts{
+		Findings: []finding{{ID: "F-05", Status: "open", Action: ActionRevise, Nodes: []string{"full-gate"},
+			Revise: map[string]any{"contract": "changed"}}},
+	}}
+	_, err = PlanAmendmentsInScope(g, "review-final", artCommandGate, scope)
+	if err == nil || !strings.Contains(err.Error(), "revise/extend act on implementation nodes") {
+		t.Fatalf("a revise naming a command-gate node must be refused: %v", err)
+	}
 }
 
 func TestRecordClaimDiscipline(t *testing.T) {
