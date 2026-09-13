@@ -74,6 +74,27 @@ func runHelper(mode string) int {
 			time.Sleep(time.Hour)
 		}
 		return 0
+	case "mutate-then-fail":
+		// Append one line to the counter file named by the env var, then exit
+		// with the ambiguous nonzero code — the shape of a mutating command
+		// whose write landed but whose own exit status is a failure.
+		path := os.Getenv("PROCEXEC_HELPER_COUNTER")
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "open counter:", err)
+			return 96
+		}
+		if _, err := f.WriteString("mutated\n"); err != nil {
+			fmt.Fprintln(os.Stderr, "write counter:", err)
+			return 96
+		}
+		if err := f.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "close counter:", err)
+			return 96
+		}
+		code, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_CODE"))
+		fmt.Fprintln(os.Stderr, "helper exiting with", code)
+		return code
 	case "stderr-bytes":
 		n, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_N"))
 		w := bufio.NewWriterSize(os.Stderr, 1<<16)

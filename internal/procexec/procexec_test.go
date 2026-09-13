@@ -155,6 +155,31 @@ func TestTypedCauses(t *testing.T) {
 	}
 }
 
+// Contract clause added on node revision: Run never re-executes a command on
+// its own. A mutating command that fails ambiguously (its write landed, but
+// its own exit status is a failure) must be observed to have run exactly
+// once — the counter file it appended to carries exactly one line.
+func TestMutationNotRetried(t *testing.T) {
+	counter := filepath.Join(t.TempDir(), "counter")
+	exe, args, p := helperPolicy(t, "mutate-then-fail",
+		"PROCEXEC_HELPER_CODE=3", "PROCEXEC_HELPER_COUNTER="+counter)
+	_, err := Run(context.Background(), exe, args, p)
+
+	var pe *Error
+	if !errors.As(err, &pe) || pe.Cause != CauseExit || pe.ExitCode != 3 {
+		t.Fatalf("want CauseExit/3, got %v", err)
+	}
+
+	b, readErr := os.ReadFile(counter)
+	if readErr != nil {
+		t.Fatalf("counter file: %v", readErr)
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if len(lines) != 1 || lines[0] != "mutated" {
+		t.Fatalf("counter file has %d line(s) (%q); want exactly 1 — the command must run exactly once", len(lines), b)
+	}
+}
+
 // Review F-01: on a platform with no containment adapter the refusal must be
 // legible as exactly that. The seam is the only way to reach the path from a
 // supported build — GOOS cannot be flipped at runtime — but the assertion is

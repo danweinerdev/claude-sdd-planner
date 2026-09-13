@@ -160,6 +160,8 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	default:
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
+			// The runner never re-executes a command on its own: a failure here
+			// is reported once, exactly as observed.
 			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: exitErr.ExitCode(), Err: waitErr}
 			e.Stderr, e.Truncated = stderr.excerpt()
 			return Result{}, e
