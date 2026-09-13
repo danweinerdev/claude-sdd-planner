@@ -174,8 +174,15 @@ func remapRevisionsWithWrite(o RemapOptions, write graphWrite) (*RemapResult, er
 				continue
 			}
 			probed[rev] = true
+			// Absence is claimed only after a successful query: a probe
+			// that could not run says nothing about whether the revision
+			// is there, and calling it missing would send the operator
+			// hunting a commit that exists (FR-16, DD-10).
 			exists, checkErr := repo.RevisionExists(rev)
-			if checkErr != nil || !exists {
+			if checkErr != nil && !errors.Is(checkErr, vcs.ErrNotFound) {
+				return nil, fmt.Errorf("graph remap-revisions: revision %s could not be checked in %s: %w", rev, target, checkErr)
+			}
+			if !exists {
 				return nil, fmt.Errorf("graph remap-revisions: %s is not an available commit in plan target %s", rev, target)
 			}
 		}
