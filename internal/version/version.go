@@ -7,4 +7,4 @@
 package version
 
 // Version is the plugin version this binary was built at.
-const Version = "2.10.0-sdd-redesign-3"
+const Version = "2.10.0-sdd-redesign-4"
