@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package procexec
 
@@ -9,12 +9,11 @@ import (
 	"time"
 )
 
-// No containment adapter exists for this platform yet (the Windows Job
-// Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan).
-// Per the plan's decision pd-52a6f11c the runner refuses to run uncontained
-// rather than silently weakening the guarantee.
+// No containment adapter exists for this platform. Per decision pd-52a6f11c
+// the runner refuses to run uncontained rather than silently weakening the
+// guarantee. Windows has its own Job Object adapter in contain_windows.go.
 func platformContainmentSupported() (bool, string) {
-	return false, fmt.Sprintf("%s: no process-containment adapter (the Windows Job Object adapter, Designs/TestSuiteReliability DD-3, is a follow-on plan)", runtime.GOOS)
+	return false, fmt.Sprintf("%s: no process-containment adapter", runtime.GOOS)
 }
 
 // configureContainment is unreachable on this platform: Run refuses before

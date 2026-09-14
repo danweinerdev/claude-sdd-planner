@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,23 @@ func TestMain(m *testing.M) {
 // only helper arguments.
 func runHelper(mode string) int {
 	switch mode {
+	case "echo-args":
+		fmt.Fprint(os.Stdout, strings.Join(os.Args[1:], "\x00"))
+		return 0
+	case "env-dir":
+		dir, err := os.Getwd()
+		if err != nil {
+			return 95
+		}
+		fmt.Fprintf(os.Stdout, "%s\x00%s", dir, os.Getenv("PROCEXEC_FIDELITY"))
+		return 0
+	case "env-value":
+		fmt.Fprint(os.Stdout, os.Getenv("PROCEXEC_ENV_VALUE"))
+		return 0
+	case "handle-probe":
+		return runHandleProbe()
+	case "nested-run":
+		return runNestedProbe()
 	case "sleep":
 		time.Sleep(time.Hour)
 		return 0
@@ -115,6 +133,15 @@ func runHelper(mode string) int {
 		}
 		w.Flush()
 		fmt.Fprintln(os.Stdout, "done")
+		return 0
+	case "stdout-stderr":
+		n, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_N"))
+		w := bufio.NewWriterSize(os.Stdout, 1<<16)
+		for i := 0; i < n; i++ {
+			w.WriteByte(byte('a' + i%26))
+		}
+		w.Flush()
+		fmt.Fprint(os.Stderr, "stderr-sentinel")
 		return 0
 	}
 	fmt.Fprintln(os.Stderr, "unknown helper mode", mode)

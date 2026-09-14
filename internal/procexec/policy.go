@@ -29,7 +29,8 @@ type Policy struct {
 	// Dir is the working directory ("" = inherit).
 	Dir string
 	// Env is the explicit child environment. nil inherits the process
-	// environment (production default); an empty non-nil slice is empty.
+	// environment (production default). As with os/exec, an empty non-nil
+	// slice is empty except that Windows adds SYSTEMROOT when not supplied.
 	Env []string
 }
 

@@ -163,7 +163,10 @@ func TestRemapRevisionsRealRebaseDryRunApplyAndIdempotence(t *testing.T) {
 
 func TestRemapRevisionsMultiStepChainAndNoOpRows(t *testing.T) {
 	f := newRemapFixture(t)
-	first, _ := RemapRevisions(RemapOptions{Root: f.root, RepoRoot: f.root, Plan: "Demo", Mapping: []byte(f.old + " " + f.rewritten), DryRun: true})
+	first, err := RemapRevisions(RemapOptions{Root: f.root, RepoRoot: f.root, Plan: "Demo", Mapping: []byte(f.old + " " + f.rewritten), DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := RemapRevisions(RemapOptions{Root: f.root, RepoRoot: f.root, Plan: "Demo", Mapping: []byte(f.old + " " + f.rewritten), ExpectDigest: first.ExpectDigest}); err != nil {
 		t.Fatal(err)
 	}

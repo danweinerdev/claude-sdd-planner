@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -121,6 +122,9 @@ func TestTypedCauses(t *testing.T) {
 	}
 
 	notExec := filepath.Join(dir, "not-executable")
+	if runtime.GOOS == "windows" {
+		notExec += ".exe"
+	}
 	if err := os.WriteFile(notExec, []byte("#!/bin/sh\necho hi\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -219,10 +220,12 @@ func TestGraphCompleteReadFailuresAreOperational(t *testing.T) {
 		if err := os.MkdirAll(reviews, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(reviews, 0o000); err != nil {
-			t.Fatal(err)
+		obstructReviewsRead(t, reviews)
+		if _, readErr := os.ReadDir(reviews); readErr == nil {
+			t.Fatal("reviews-directory obstruction did not make os.ReadDir fail")
+		} else if os.IsNotExist(readErr) {
+			t.Fatalf("injected reviews read error must not be IsNotExist: %v", readErr)
 		}
-		defer os.Chmod(reviews, 0o755)
 
 		out, err := captureStdout(t, func() error {
 			root := newRootCmd()
@@ -368,14 +371,13 @@ func TestGraphCompleteStatusFlipIsCompareAndSwap(t *testing.T) {
 
 // TestWriteReadmeStatusCompleteNonConflictErrorExitsTwo isolates
 // writeReadmeStatusComplete's OTHER error branch directly: an operational
-// failure that is NOT a *store.ErrConcurrentWrite (here,
-// WriteAtomicExpecting's temp-file create failing because the plan
-// directory is unwritable) must surface as a plain error — never wrapped in
+// failure that is NOT a *store.ErrConcurrentWrite (here, a deterministic
+// injected temp-file create failure from WriteAtomicExpecting) must surface
+// as a plain error — never wrapped in
 // *refusedError — so it exits 2 (an inability to run the operation), not 1
 // (a refused mutation). The expectDigest passed matches the file's current
-// digest exactly, so store.WriteAtomicExpecting's own digest re-check
-// cannot itself produce the conflict this test must NOT exercise; the exit-1
-// conflict case is TestGraphCompleteStatusFlipIsCompareAndSwap.
+// digest exactly; the exit-1 conflict case is
+// TestGraphCompleteStatusFlipIsCompareAndSwap.
 func TestWriteReadmeStatusCompleteNonConflictErrorExitsTwo(t *testing.T) {
 	root := chdirTemp(t)
 	src := `---
@@ -398,19 +400,39 @@ phases: []
 	}
 	expectDigest := store.Digest(string(current))
 
-	planDir := filepath.Dir(readme)
-	if err := os.Chmod(planDir, 0o555); err != nil {
-		t.Fatal(err)
+	lines := strings.Split(src, "\n")
+	if !setTopLevelStatus(lines, "complete") {
+		t.Fatal("fixture has no top-level status")
 	}
-	defer os.Chmod(planDir, 0o755)
+	wantUpdated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
+
+	called := false
+	old := writeGraphReadmeExpecting
+	writeGraphReadmeExpecting = func(path, content, digest string) error {
+		called = true
+		if path != readme {
+			t.Errorf("write path = %q, want %q", path, readme)
+		}
+		if content != wantUpdated {
+			t.Errorf("write candidate mismatch:\nwant:\n%s\ngot:\n%s", wantUpdated, content)
+		}
+		if digest != expectDigest {
+			t.Errorf("write digest = %q, want %q", digest, expectDigest)
+		}
+		return &os.PathError{Op: "create", Path: path, Err: os.ErrPermission}
+	}
+	defer func() { writeGraphReadmeExpecting = old }()
 
 	err = writeReadmeStatusComplete(readme, expectDigest)
 	if err == nil {
-		t.Fatal("expected an operational error from the unwritable plan directory")
+		t.Fatal("expected an injected operational write error")
+	}
+	if !called {
+		t.Fatal("writeReadmeStatusComplete did not reach WriteAtomicExpecting")
 	}
 	var conflict *store.ErrConcurrentWrite
 	if errors.As(err, &conflict) {
-		t.Fatalf("an unwritable-directory failure must not be reported as a concurrent-write conflict: %v", err)
+		t.Fatalf("an injected create failure must not be reported as a concurrent-write conflict: %v", err)
 	}
 	if _, ok := err.(*refusedError); ok {
 		t.Fatalf("a non-conflict write failure must not be wrapped in *refusedError: %v", err)
@@ -418,6 +440,13 @@ phases: []
 	wrapped := fmt.Errorf("plan complete: %w", err)
 	if code := exitCode(wrapped); code != 2 {
 		t.Fatalf("exitCode = %d, want 2 (operational, not a refused mutation): %v", code, wrapped)
+	}
+	after, readErr := os.ReadFile(readme)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != string(current) {
+		t.Fatalf("failed write must leave README unchanged:\nbefore:\n%s\nafter:\n%s", current, after)
 	}
 }
 

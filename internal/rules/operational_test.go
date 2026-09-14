@@ -1122,8 +1122,12 @@ func TestRepoQueryFailuresAreOperational(t *testing.T) {
 		if phase == nil {
 			t.Fatal("fixture phase not found")
 		}
-		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1148,8 +1152,12 @@ func TestRepoQueryFailuresAreOperational(t *testing.T) {
 		if phase == nil {
 			t.Fatal("fixture phase not found")
 		}
-		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1184,10 +1192,14 @@ func TestRepoQueryFailuresAreOperational(t *testing.T) {
 			// The plan's own FileAt (planCommitted) is scripted to fail
 			// operationally by returning a distinct error only for that key
 			// via a wrapping repo below.
-			Unavailable: vcs.Unavailable{Dir: dir},
+			Unavailable: vcs.Unavailable{Dir: root.Dir},
 		}
 		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+		cached := &recordingRepo{Repo: wrapped, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1215,10 +1227,14 @@ func TestRepoQueryFailuresAreOperational(t *testing.T) {
 		committedPhase := []byte(files["Plans/Sample/01-One.md"])
 		fake := fakeGitRepo{
 			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
-			Unavailable: vcs.Unavailable{Dir: dir},
+			Unavailable: vcs.Unavailable{Dir: root.Dir},
 		}
 		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrNotFound)}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+		cached := &recordingRepo{Repo: wrapped, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1442,8 +1458,12 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		if phase == nil || review == nil {
 			t.Fatal("fixture phase or review not found")
 		}
-		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		ctx := phaseGateContext{Phase: phase, Line: 1}
 		var diags []Diagnostic
@@ -1470,8 +1490,12 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		if phase == nil || review == nil {
 			t.Fatal("fixture phase or review not found")
 		}
-		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{fileAtErr: fmt.Errorf("%w: HEAD:x", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		ctx := phaseGateContext{Phase: phase, Line: 1}
 		var diags []Diagnostic
@@ -1523,9 +1547,13 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 			revisionsAfterVal: []string{"commit-1"},
 			changedPathsVal:   map[string][]string{"commit-1": nil},
 			fileAtErr:         opErr,
-			Unavailable:       vcs.Unavailable{Dir: dir},
+			Unavailable:       vcs.Unavailable{Dir: root.Dir},
 		}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
@@ -1552,9 +1580,13 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 			revisionsAfterVal: []string{"commit-1"},
 			changedPathsVal:   map[string][]string{"commit-1": nil},
 			fileAtErr:         fmt.Errorf("%w: path absent at revision", vcs.ErrNotFound),
-			Unavailable:       vcs.Unavailable{Dir: dir},
+			Unavailable:       vcs.Unavailable{Dir: root.Dir},
 		}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitPhasePostReviewState(root, ctx, review, endpoint, func(d Diagnostic) { diags = append(diags, d) })
@@ -1590,8 +1622,12 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 			t.Fatal("fixture review not found at Retro/phase-review.md")
 		}
 		rev := "1111111111111111111111111111111111111111"
-		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: opErr, Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyPhaseReviewPlanningRevision(root, ctxs[0], review, func(d Diagnostic) { diags = append(diags, d) })
@@ -1620,8 +1656,12 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		if review == nil {
 			t.Fatal("fixture review not found at Retro/phase-review.md")
 		}
-		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: fmt.Errorf("%w: path absent at revision", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: dir}}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: fake, root: root}}
+		fake := fakeGitRepo{existsOK: true, ancestrOK: true, fileAtErr: fmt.Errorf("%w: path absent at revision", vcs.ErrNotFound), Unavailable: vcs.Unavailable{Dir: root.Dir}}
+		cached := &recordingRepo{Repo: fake, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyPhaseReviewPlanningRevision(root, ctxs[0], review, func(d Diagnostic) { diags = append(diags, d) })
@@ -1675,10 +1715,14 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		committedPhase := []byte(files["Plans/Sample/01-One.md"])
 		fake := fakeGitRepo{
 			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
-			Unavailable: vcs.Unavailable{Dir: dir},
+			Unavailable: vcs.Unavailable{Dir: root.Dir},
 		}
 		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+		cached := &recordingRepo{Repo: wrapped, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1710,10 +1754,14 @@ func TestContentQueryFailuresAreOperational(t *testing.T) {
 		committedPhase := []byte(files["Plans/Sample/01-One.md"])
 		fake := fakeGitRepo{
 			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
-			Unavailable: vcs.Unavailable{Dir: dir},
+			Unavailable: vcs.Unavailable{Dir: root.Dir},
 		}
 		wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
-		root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+		cached := &recordingRepo{Repo: wrapped, root: root}
+		root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+		if got := root.Repo(root.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+		}
 
 		var diags []Diagnostic
 		verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1819,11 +1867,15 @@ func TestMissingEvidenceHeadingSurvivesPlanLookupFailure(t *testing.T) {
 	committedPhase := []byte(files["Plans/Sample/01-One.md"])
 	fake := fakeGitRepo{
 		fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": committedPhase},
-		Unavailable: vcs.Unavailable{Dir: dir},
+		Unavailable: vcs.Unavailable{Dir: root.Dir},
 	}
 	opErr := fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrOperational)
 	wrapped := planFileAtFails{fakeGitRepo: fake, planKey: "HEAD:Plans/Sample/README.md", err: opErr}
-	root.repoCache = map[string]vcs.Repo{dir: recordingRepo{Repo: wrapped, root: root}}
+	cached := &recordingRepo{Repo: wrapped, root: root}
+	root.repoCache = map[string]vcs.Repo{root.Dir: cached}
+	if got := root.Repo(root.Dir); got != cached {
+		t.Fatalf("Repo(%q) = %T, want cached recording repo", root.Dir, got)
+	}
 
 	var diags []Diagnostic
 	verifyGitEvidenceCommitted(root, phase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { diags = append(diags, d) })
@@ -1854,11 +1906,15 @@ func TestMissingEvidenceHeadingSurvivesPlanLookupFailure(t *testing.T) {
 		controlCommitted := []byte(controlFiles["Plans/Sample/01-One.md"])
 		controlFake := fakeGitRepo{
 			fileAtVal:   map[string][]byte{"HEAD:Plans/Sample/01-One.md": controlCommitted},
-			Unavailable: vcs.Unavailable{Dir: controlDir},
+			Unavailable: vcs.Unavailable{Dir: controlRoot.Dir},
 		}
 		controlOpErr := fmt.Errorf("%w: HEAD:Plans/Sample/README.md", vcs.ErrOperational)
 		controlWrapped := planFileAtFails{fakeGitRepo: controlFake, planKey: "HEAD:Plans/Sample/README.md", err: controlOpErr}
-		controlRoot.repoCache = map[string]vcs.Repo{controlDir: recordingRepo{Repo: controlWrapped, root: controlRoot}}
+		cached := &recordingRepo{Repo: controlWrapped, root: controlRoot}
+		controlRoot.repoCache = map[string]vcs.Repo{controlRoot.Dir: cached}
+		if got := controlRoot.Repo(controlRoot.Dir); got != cached {
+			t.Fatalf("Repo(%q) = %T, want cached recording repo", controlRoot.Dir, got)
+		}
 
 		var controlDiags []Diagnostic
 		verifyGitEvidenceCommitted(controlRoot, controlPhase, "Phase Completion Evidence", "", 1, func(d Diagnostic) { controlDiags = append(controlDiags, d) })

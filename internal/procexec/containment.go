@@ -14,8 +14,8 @@ var ErrNoContainmentAdapter = errors.New("no process-containment adapter")
 var ContainmentProbe = platformContainmentSupported
 
 // ContainmentSupported reports whether commands can be run under process
-// containment here. When it reports false the reason names the platform, the
-// missing adapter, and the follow-on plan that would supply it.
+// containment here. When it reports false the reason names the platform and
+// missing adapter, with additional remediation context when available.
 func ContainmentSupported() (bool, string) { return ContainmentProbe() }
 
 // noAdapterError is the refusal Run returns when this build has no containment
@@ -33,7 +33,7 @@ func (e *noAdapterError) Error() string {
 func (e *noAdapterError) Unwrap() error { return ErrNoContainmentAdapter }
 
 // errNoAdapter renders the refusal Run returns when this build has no
-// containment adapter. It carries the platform and the follow-on plan in the
+// containment adapter. It carries the platform and any remediation context in the
 // message a user actually reads, so a CLI can prefix a label without having to
 // restate the reason itself.
 func errNoAdapter() error {

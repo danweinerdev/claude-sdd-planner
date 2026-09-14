@@ -58,7 +58,11 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		return Result{}, e
 	}
 
-	path, err := lookPath(name, p.Env)
+	resolveName := name
+	if runtime.GOOS == "windows" && p.Dir != "" && !filepath.IsAbs(name) && strings.ContainsAny(name, `/\`) {
+		resolveName = filepath.Join(p.Dir, name)
+	}
+	path, err := lookPath(resolveName, p.Env)
 	if err != nil {
 		if errors.Is(err, fs.ErrPermission) || errors.Is(err, errNotExecutable) {
 			return fail(CauseAccess, err, nil)
@@ -76,55 +80,16 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		cancel()
 	}}
 
-	cmd := exec.CommandContext(runCtx, path, args...)
-	cmd.Args = argv
-	cmd.Dir = p.Dir
-	cmd.Env = p.Env
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	// WaitDelay bounds the drain of pipes a descendant may still hold, so
-	// Wait can never block forever; the containment adapter owns the
-	// descendants themselves (DD-4) and makes cancellation kill the group.
-	cmd.WaitDelay = p.Cleanup
-	if err := configureContainment(cmd); err != nil {
-		return fail(CauseContainment, err, nil)
-	}
-
-	start := time.Now()
-	if err := cmd.Start(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return fail(CauseUnavailable, err, nil)
+	outcome, launchCause, launchErr := runPlatform(runCtx, path, argv, p, stdout, stderr)
+	if launchErr != nil {
+		if ctx.Err() != nil && errors.Is(launchErr, ctx.Err()) {
+			launchCause = CauseCancelled
+		} else if errors.Is(runCtx.Err(), context.DeadlineExceeded) && errors.Is(launchErr, context.DeadlineExceeded) {
+			launchCause = CauseDeadline
 		}
-		return fail(CauseAccess, err, nil)
+		return fail(launchCause, launchErr, stderr)
 	}
-	if observeStart != nil {
-		observeStart(cmd.Process.Pid)
-	}
-	// Owned descendants are swept before the leader is reaped: while the
-	// leader is a zombie its pid is still its own, so signalling -pgid cannot
-	// reach a group the kernel handed that pid to after a reap (review-fixtures 4d10f15 F-02).
-	cleaned, swept, _ := sweepGroupBeforeReap(cmd)
-	waitErr := cmd.Wait()
-	// After the reap the group is only polled for emptiness, never signalled
-	// again; when the sweep could not run the fallback still probes and kills
-	// here, within the cleanup allowance. A failure to clean up is reported
-	// ahead of the command's own result.
-	postCleaned, postErr := cleanupGroup(cmd, p.Cleanup, swept)
-	// The post-reap step is the authority on whether descendants leaked, so its
-	// answer replaces the pre-reap one outright. Every pre-reap failure is
-	// provisional: a probe that failed before any kill leaves swept false and
-	// the fallback re-probes and re-kills the same group, while a kill that
-	// reported an error was still attempted at the only safe moment and the
-	// poll then watches that group until it is empty. postErr nil therefore
-	// means the group was observed gone, and reporting the superseded error
-	// would discard a valid result (review-execution 57d4ffb F-01). A post-reap step that itself
-	// failed — the fallback erroring, or the swept poll erroring or timing out
-	// with descendants still live — surfaces as containment. The pre-reap
-	// result is discarded outright (never merged in): postErr is the sole
-	// authority.
-	containErr := postErr
-	cleaned = cleaned || postCleaned
-	end := time.Now()
+	start, end := outcome.start, outcome.end
 
 	run := end.Sub(start)
 	var cleanup time.Duration
@@ -140,36 +105,43 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 	}
 
 	switch {
-	case containErr != nil:
-		return fail(CauseContainment, containErr, stderr)
+	case outcome.containErr != nil:
+		return fail(CauseContainment, outcome.containErr, stderr)
 	case stdout.overflowed():
 		return fail(CauseOverflow, errMachineOverflow, stderr)
 	case ctx.Err() != nil:
 		return fail(CauseCancelled, ctx.Err(), stderr)
 	case errors.Is(runCtx.Err(), context.DeadlineExceeded):
 		return fail(CauseDeadline, runCtx.Err(), stderr)
-	case waitErr == nil:
-	case errors.Is(waitErr, exec.ErrWaitDelay):
+	case outcome.drainErr != nil:
+		return fail(CauseDrain, outcome.drainErr, stderr)
+	case outcome.waitErr == nil && outcome.exitCode == 0:
+	case errors.Is(outcome.waitErr, exec.ErrWaitDelay):
 		// The command itself exited successfully; only inherited pipes were
 		// still open. They belonged to descendants the adapter has now
 		// cleaned (cleaned == true) — a success with the cleanup recorded.
 		// If nothing was left to clean, the pipe holder escaped ownership.
-		if !cleaned {
-			return fail(CauseDrain, waitErr, stderr)
+		if !outcome.cleaned {
+			return fail(CauseDrain, outcome.waitErr, stderr)
 		}
 	default:
 		var exitErr *exec.ExitError
-		if errors.As(waitErr, &exitErr) {
+		if errors.As(outcome.waitErr, &exitErr) {
 			// The runner never re-executes a command on its own: a failure here
 			// is reported once, exactly as observed.
-			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: exitErr.ExitCode(), Err: waitErr}
+			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: exitErr.ExitCode(), Err: outcome.waitErr}
 			e.Stderr, e.Truncated = stderr.excerpt()
 			return Result{}, e
 		}
-		return fail(CauseAccess, waitErr, stderr)
+		if outcome.exitCode != 0 {
+			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: outcome.exitCode, Err: outcome.waitErr}
+			e.Stderr, e.Truncated = stderr.excerpt()
+			return Result{}, e
+		}
+		return fail(CauseAccess, outcome.waitErr, stderr)
 	}
 
-	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup, DescendantsCleaned: cleaned}
+	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup, DescendantsCleaned: outcome.cleaned}
 	res.Stderr, res.StderrTruncated = stderr.excerpt()
 	return res, nil
 }
@@ -177,6 +149,16 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 // observeStart lets a test learn the leader pid the instant the command is
 // started; production never sets it.
 var observeStart func(pid int)
+
+type platformOutcome struct {
+	start      time.Time
+	end        time.Time
+	waitErr    error
+	exitCode   int
+	cleaned    bool
+	containErr error
+	drainErr   error
+}
 
 var (
 	errMachineOverflow = errors.New("machine output exceeded the policy limit; result incomplete")

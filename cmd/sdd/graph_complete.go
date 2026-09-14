@@ -37,6 +37,11 @@ import (
 // the call site's comment. Production code leaves it nil.
 var beforeStatusFlip func(readme string)
 
+// writeGraphReadmeExpecting is the status flip's atomic-write seam. Production
+// always uses the store implementation; tests replace it only to exercise
+// write-phase operational failures deterministically across platforms.
+var writeGraphReadmeExpecting = store.WriteAtomicExpecting
+
 // statGraphStore is the graph-store existence probe graphPlanDir and
 // graphPhaseComplete perform, exposed as a package-level variable so tests
 // can inject a non-not-exist failure without a real unreadable filesystem
@@ -334,7 +339,7 @@ func writeReadmeStatusComplete(readme, expectDigest string) error {
 		return fmt.Errorf("no top-level `status:` field to advance")
 	}
 	updated := restampUpdated(strings.Join(lines, "\n"), time.Now().Format("2006-01-02"))
-	if err := store.WriteAtomicExpecting(art.Path, updated, expectDigest); err != nil {
+	if err := writeGraphReadmeExpecting(art.Path, updated, expectDigest); err != nil {
 		var conflict *store.ErrConcurrentWrite
 		if errors.As(err, &conflict) {
 			// A compare-and-swap conflict is a refused mutation (FR-03: exit

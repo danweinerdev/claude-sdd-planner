@@ -110,6 +110,21 @@ func runFixtureGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func assertSameFile(t *testing.T, actual, expected string) {
+	t.Helper()
+	actualInfo, err := os.Stat(actual)
+	if err != nil {
+		t.Fatalf("stat actual path %q: %v", actual, err)
+	}
+	expectedInfo, err := os.Stat(expected)
+	if err != nil {
+		t.Fatalf("stat expected path %q: %v", expected, err)
+	}
+	if !os.SameFile(actualInfo, expectedInfo) {
+		t.Fatalf("paths identify different files: actual %q, expected %q", actual, expected)
+	}
+}
+
 func TestPostRewriteAbsentInstallCheckAndRepair(t *testing.T) {
 	repo := gitHookRepo(t)
 	before, err := CheckPostRewrite(repo)
@@ -249,18 +264,17 @@ func TestPostRewriteResolvesHooksPathAndLinkedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.HookPath != filepath.Join(repo, rel, "post-rewrite") {
-		t.Fatalf("relative hooksPath resolved to %q", state.HookPath)
-	}
+	assertSameFile(t, state.HookPath, filepath.Join(repo, rel, "post-rewrite"))
 	if got := runFixtureGit(t, repo, "config", "--get", "core.hooksPath"); got != rel {
 		t.Fatalf("installation altered relative core.hooksPath: %q", got)
 	}
 	abs := filepath.Join(t.TempDir(), "absolute-hooks")
 	runFixtureGit(t, repo, "config", "core.hooksPath", abs)
 	state, err = InstallPostRewrite(repo)
-	if err != nil || state.HookPath != filepath.Join(abs, "post-rewrite") {
+	if err != nil {
 		t.Fatalf("absolute hooksPath install = %+v, %v", state, err)
 	}
+	assertSameFile(t, state.HookPath, filepath.Join(abs, "post-rewrite"))
 	if got := runFixtureGit(t, repo, "config", "--get", "core.hooksPath"); got != abs {
 		t.Fatalf("installation altered absolute core.hooksPath: %q", got)
 	}
@@ -282,9 +296,7 @@ func TestPostRewriteResolvesHooksPathAndLinkedWorktree(t *testing.T) {
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(linked, common)
 	}
-	if linkedState.HookPath != filepath.Join(filepath.Clean(common), "hooks", "post-rewrite") {
-		t.Fatalf("linked-worktree hook = %q, want common-dir hook", linkedState.HookPath)
-	}
+	assertSameFile(t, linkedState.HookPath, filepath.Join(filepath.Clean(common), "hooks", "post-rewrite"))
 }
 
 func TestPostRewriteRefusesSymlinkAndBackupCollision(t *testing.T) {
