@@ -12,6 +12,7 @@ import (
 var racePackages = []string{
 	"./internal/rules",
 	"./internal/procexec",
+	"./internal/testevidence",
 	"./internal/vcs",
 	"./internal/graph/sync",
 	"./internal/graph/ops",

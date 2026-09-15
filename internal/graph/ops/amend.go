@@ -10,6 +10,7 @@ package ops
 // review node's deps so the review cannot re-green until it is GREEN.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -279,6 +280,13 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			}
 			oldTests := n.Gate.Tests
 			oldRed := n.RedSeqs
+			oldGate := n.Gate
+			if oldGate.Evidence == model.EvidenceObservedV1 && a.After.Gate.Evidence == "" {
+				return nil, 0, fmt.Errorf("graph amend: %q: replacing an observed-v1 gate must explicitly preserve observed-v1 or explicitly select legacy", n.ID)
+			}
+			if problems := model.ValidateEvidenceGate(a.After); len(problems) > 0 {
+				return nil, 0, fmt.Errorf("graph amend: %q: %s", n.ID, strings.Join(problems, "; "))
+			}
 			n.Contract = a.After.Contract
 			n.Gate = a.After.Gate
 			n.Justifies = a.After.Justifies
@@ -289,6 +297,7 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			// red — the proof it discharges is unchanged. A changed,
 			// removed, or new test owes a fresh red at the new revision.
 			n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
+			n.RedEvidence = carryOverRedEvidence(oldGate, n.Gate, n.RedEvidence)
 			if len(oldTests) > 0 {
 				preimageTests[n.ID] = oldTests
 			}
@@ -348,6 +357,39 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 	record.Seq = out.SeqCounter
 	out.Amendments = append(out.Amendments, record)
 	return &out, record.Seq, nil
+}
+
+func carryOverRedEvidence(oldGate, newGate model.Gate, old map[string]model.RedEvidence) map[string]model.RedEvidence {
+	if len(old) == 0 || oldGate.Evidence != model.EvidenceObservedV1 || newGate.Evidence != model.EvidenceObservedV1 {
+		return nil
+	}
+	oldProfile, _ := json.Marshal(oldGate.Execution)
+	newProfile, _ := json.Marshal(newGate.Execution)
+	if string(oldProfile) != string(newProfile) {
+		return nil
+	}
+	compatible := map[string]bool{}
+	for _, before := range oldGate.Tests {
+		for _, after := range newGate.Tests {
+			if testProofKey(before) == testProofKey(after) {
+				compatible[before.ID] = true
+			}
+		}
+	}
+	out := map[string]model.RedEvidence{}
+	for qualified, rec := range old {
+		id := qualified
+		if sep := strings.LastIndex(qualified, "::"); sep >= 0 {
+			id = qualified[sep+2:]
+		}
+		if compatible[id] {
+			out[qualified] = rec
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func containsString(list []string, s string) bool {

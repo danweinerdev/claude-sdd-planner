@@ -9,6 +9,11 @@
       ],
       "gate": {
         "type": "tests",
+        "evidence": "observed-v1",
+        "execution": {
+          "adapter": "go-test-v1",
+          "timeout_seconds": 120
+        },
         "tests": [
           {
             "id": "test_schema_covers_every_key",
@@ -18,7 +23,8 @@
       },
       "hazards": [],
       "artifacts": [
-        "src/schema.ext"
+        "src/schema.ext",
+        "tests/test_schema.ext"
       ],
       "estimate": 1,
       "phase": "01-example"

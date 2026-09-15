@@ -293,6 +293,9 @@ func planRedRepair(g *model.Graph, nodeID string) (*RepairRedResult, error) {
 		if n.Gate.Type != model.GateTests {
 			continue
 		}
+		if n.Gate.Evidence == model.EvidenceObservedV1 {
+			return nil, &RefusedError{Reasons: []string{fmt.Sprintf("%s uses observed-v1 evidence; repair-red cannot backfill observed compatibility metadata", n.ID)}}
+		}
 		// Find this node's most recent revise carrying a recorded preimage:
 		// PreimageTests/PreimageRedSeqs only exist from this fix forward, so
 		// an older revise on a graph never touched by this fix has no

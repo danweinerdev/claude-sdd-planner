@@ -24,7 +24,9 @@ package states
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -89,6 +91,9 @@ type NodeState struct {
 	// history, not current proof; the node derives as if unobserved
 	// (ReviewDrivenAmendment DD-3).
 	RevIncompatible bool
+	// ObservedEvidenceStale means an observed-v1 pass lacks its captured
+	// protocol marker or matching immutable consumed-attempt index entry.
+	ObservedEvidenceStale bool
 	// ReviewStale lists, for a review node, the reviewed nodes whose
 	// contract revision or artifact digests no longer match the recorded
 	// reviewed set (ReviewDrivenAmendment DD-9).
@@ -352,6 +357,13 @@ func Derive(in Inputs) map[string]NodeState {
 			// deps look like now does not un-happen it.
 			ns.State = Red
 		default: // a recorded pass
+			if n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceObservedV1 {
+				if v.Attempt == nil || v.Attempt.Protocol != model.EvidenceObservedV1 || v.Attempt.ID == "" || !validDigestIdentity(v.Attempt.Digest) || !validDigestIdentity(v.Attempt.CandidateDigest) {
+					ns.ObservedEvidenceStale = true
+				} else if consumed, ok := n.ConsumedAttempts[v.Attempt.ID]; !ok || consumed.Digest != v.Attempt.Digest || consumed.Seq != v.Seq || consumed.Result != v.Result || !reflect.DeepEqual(consumed.RedEvidence, v.RedEvidence) {
+					ns.ObservedEvidenceStale = true
+				}
+			}
 			if v.DependencyDigests == nil {
 				// Legacy observation: no record of what it exercised
 				// below it, so observation order is the only proxy.
@@ -559,7 +571,7 @@ func Derive(in Inputs) map[string]NodeState {
 			}
 			sort.Strings(ns.ReviewStale)
 			sort.Strings(ns.AnchorAdvisory)
-			if ns.SeqStale || len(ns.DependencyStale) > 0 || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || len(ns.ReviewStale) > 0 {
+			if ns.SeqStale || len(ns.DependencyStale) > 0 || len(ns.DigestStale) > 0 || len(ns.IntentStale) > 0 || len(ns.InputStale) > 0 || ns.IsolationStale || ns.ObservedEvidenceStale || len(ns.ReviewStale) > 0 {
 				ns.State = Stale
 			} else {
 				ns.State = Green
@@ -580,6 +592,18 @@ func Derive(in Inputs) map[string]NodeState {
 		}
 	}
 	return out
+}
+
+func validDigestIdentity(s string) bool {
+	if !strings.HasPrefix(s, "sha256:") || len(s) != 71 {
+		return false
+	}
+	for _, c := range s[7:] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // Frontier returns the frontier node ids in deterministic (sorted) order;

@@ -14,6 +14,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
@@ -253,6 +254,226 @@ func TestSetTestsHolderDisciplineAndRedSeqPrune(t *testing.T) {
 	}
 	if err := SetTests(planDir, "big", "holder", nil); err == nil {
 		t.Fatal("an empty tests gate verifies nothing")
+	}
+}
+
+func TestObservedSettersRefuseDanglingDeclarationsAtomically(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	if err := os.WriteFile(filepath.Join(root, "support.txt"), []byte("support"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	key := model.InputKey(model.Input{Root: model.InputRootRepository, Path: "support.txt"})
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Artifacts = []string{"t.ext", "fixture.txt"}
+		n.Inputs = []model.Input{{Root: model.InputRootRepository, Path: "support.txt"}}
+		n.Gate.Evidence = model.EvidenceObservedV1
+		n.Gate.Execution = &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30, TestSupportInputs: []string{key}, TestSupportArtifacts: []string{"fixture.txt"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := gstore.PathFor(planDir)
+	before, _ := os.ReadFile(path)
+	if err := SetTests(planDir, "big", "", []model.Test{{ID: "TestMissing", File: "missing_test.go", Satisfies: []string{"external-format"}}}); err == nil {
+		t.Fatal("set-tests accepted an unowned selected test file")
+	}
+	if err := SetArtifacts(planDir, "big", "", []string{"t.ext"}); err == nil {
+		t.Fatal("set-artifacts removed selected/support artifacts")
+	}
+	if _, err := SetInputs(root, root, "SamplePlan", "big", nil, false); err == nil {
+		t.Fatal("set-inputs removed a test-support key")
+	}
+	after, _ := os.ReadFile(path)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused observed setters changed the graph")
+	}
+}
+
+func TestObservedArtifactChangesAdvanceContractRevision(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(planDir string) error
+	}{
+		{"set removes implementation artifact", func(planDir string) error {
+			return SetArtifacts(planDir, "big", "holder", []string{"t.ext"})
+		}},
+		{"set adds implementation artifact", func(planDir string) error {
+			return SetArtifacts(planDir, "big", "holder", []string{"impl.go", "t.ext", "extra.go"})
+		}},
+		{"edit removes implementation artifact", func(planDir string) error {
+			return EditArtifacts(planDir, "big", "holder", nil, []string{"impl.go"})
+		}},
+		{"edit adds implementation artifact", func(planDir string) error {
+			return EditArtifacts(planDir, "big", "holder", []string{"extra.go"}, nil)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, planDir := fixtureRoot(t)
+			if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				n := g.NodeByID("big")
+				n.Artifacts = []string{"impl.go", "t.ext"}
+				n.Hazards = model.Hazards{}
+				n.Gate.Tests = []model.Test{{ID: "test_big", File: "t.ext"}}
+				n.Gate.Evidence = model.EvidenceObservedV1
+				n.Gate.Execution = &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30}
+				n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+				digest := "sha256:" + strings.Repeat("a", 64)
+				n.Verification = &model.Verification{Result: model.ResultPass, Seq: 2, ContractRev: 1, Isolation: model.IsolationClean,
+					ArtifactDigests: map[string]string{"impl.go": "old", "t.ext": "same"}, DependencyDigests: map[string]map[string]string{},
+					Attempt: &model.AttemptSummary{ID: "attempt", Digest: digest, CandidateDigest: digest, Protocol: model.EvidenceObservedV1,
+						ClaimInstance: "claim", By: "holder", Phase: "green", Started: "2026-09-14T00:00:00Z", Completed: "2026-09-14T00:00:01Z"}}
+				n.ConsumedAttempts = map[string]model.ConsumedAttempt{"attempt": {Digest: digest, Seq: 2, Result: model.ResultPass}}
+				n.RedEvidence = map[string]model.RedEvidence{"example/pkg::test_big": {AttemptID: "a", Seq: 1, CompatibilityKey: "k", Kind: "baseline"}}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			g, err := gstore.Load(gstore.PathFor(planDir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			digestArtifact := func(path string) string {
+				if path == "t.ext" {
+					return "same"
+				}
+				return "changed"
+			}
+			if st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digestArtifact})["big"]; st.State != states.Stale {
+				t.Fatalf("fixture node is not stale before narrowing: %+v", st)
+			}
+			if err := tc.mutate(planDir); err != nil {
+				t.Fatal(err)
+			}
+			g, err = gstore.Load(gstore.PathFor(planDir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			n := g.NodeByID("big")
+			if n.ContractRev != 2 {
+				t.Fatalf("artifact change contract_rev=%d, want 2", n.ContractRev)
+			}
+			if len(n.RedEvidence) != 1 {
+				t.Fatalf("implementation artifact change cleared compatible red evidence: %+v", n.RedEvidence)
+			}
+			if st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digestArtifact})["big"]; st.State == states.Green || !st.RevIncompatible {
+				t.Fatalf("old wide observation was reinterpreted as current proof: %+v", st)
+			}
+		})
+	}
+}
+
+func TestObservedArtifactSetNoOpsAndLegacyChangesDoNotAdvanceRevision(t *testing.T) {
+	t.Run("observed direct reorder", func(t *testing.T) {
+		_, planDir := fixtureRoot(t)
+		seedObservedArtifacts(t, planDir)
+		if err := SetArtifacts(planDir, "big", "holder", []string{"t.ext", "impl.go"}); err != nil {
+			t.Fatal(err)
+		}
+		g, _ := gstore.Load(gstore.PathFor(planDir))
+		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
+			t.Fatalf("same normalized artifact set advanced revision to %d", got)
+		}
+	})
+
+	t.Run("observed edit no-op", func(t *testing.T) {
+		_, planDir := fixtureRoot(t)
+		seedObservedArtifacts(t, planDir)
+		if err := EditArtifacts(planDir, "big", "holder", nil, []string{"absent.go"}); err != nil {
+			t.Fatal(err)
+		}
+		g, _ := gstore.Load(gstore.PathFor(planDir))
+		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
+			t.Fatalf("no-op edit advanced revision to %d", got)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(string) error
+	}{
+		{"legacy direct", func(planDir string) error { return SetArtifacts(planDir, "big", "holder", []string{"t.ext"}) }},
+		{"legacy edit", func(planDir string) error { return EditArtifacts(planDir, "big", "holder", []string{"extra.go"}, nil) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, planDir := fixtureRoot(t)
+			if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				n := g.NodeByID("big")
+				n.Artifacts = []string{"impl.go", "t.ext"}
+				n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+				n.Verification = &model.Verification{Result: model.ResultPass, Seq: 2, ContractRev: 1, Isolation: model.IsolationClean}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.mutate(planDir); err != nil {
+				t.Fatal(err)
+			}
+			g, _ := gstore.Load(gstore.PathFor(planDir))
+			if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
+				t.Fatalf("legacy behavior advanced revision to %d", got)
+			}
+		})
+	}
+}
+
+func seedObservedArtifacts(t *testing.T, planDir string) {
+	t.Helper()
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Artifacts = []string{"impl.go", "t.ext"}
+		n.Hazards = model.Hazards{}
+		n.Gate.Tests = []model.Test{{ID: "test_big", File: "t.ext"}}
+		n.Gate.Evidence = model.EvidenceObservedV1
+		n.Gate.Execution = &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30}
+		n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
+		n.Verification = &model.Verification{Result: model.ResultPass, Seq: 2, ContractRev: 1, Isolation: model.IsolationClean}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestObservedEditArtifactsRefusesReferencedTestRemovalAtomically(t *testing.T) {
+	_, planDir := fixtureRoot(t)
+	seedObservedArtifacts(t, planDir)
+	path := gstore.PathFor(planDir)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EditArtifacts(planDir, "big", "holder", nil, []string{"t.ext"}); err == nil {
+		t.Fatal("edit-artifacts removed the selected observed test path")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused referenced test removal changed the graph")
+	}
+}
+
+func TestAmendObservedGateRequiresExplicitEvidenceSelection(t *testing.T) {
+	root, _ := fixtureRoot(t)
+	sources, err := gcompile.NewSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := model.Node{ID: "work", Contract: "old", Gate: model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30}, Tests: []model.Test{{ID: "TestWork", File: "work_test.go"}}}, Hazards: model.Hazards{}, Artifacts: []string{"work_test.go"}, Estimate: 1}
+	after := old
+	after.Contract = "new"
+	after.Gate.Evidence = ""
+	after.Gate.Execution = nil
+	g := &model.Graph{Version: 1, Nodes: []model.Node{old, {ID: "review", Role: model.RoleReview, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}}}
+	plan := &review.Plan{Review: "review", Amendments: []review.Amendment{{Action: review.ActionRevise, Node: "work", After: &after}}}
+	if _, _, err := applyAmendments(g, plan, "", sources, root); err == nil || !strings.Contains(err.Error(), "explicitly") {
+		t.Fatalf("implicit downgrade was not refused: %v", err)
+	}
+	after.Gate.Evidence = model.EvidenceLegacy
+	if _, _, err := applyAmendments(g, plan, "", sources, root); err != nil {
+		t.Fatalf("explicit legacy downgrade refused: %v", err)
 	}
 }
 
@@ -1415,6 +1636,56 @@ func TestSetTestsUnderObservationAdvancesRevision(t *testing.T) {
 	}
 	if st := states.Derive(states.Inputs{Graph: g}); st["helper"].State == states.Green {
 		t.Fatalf("old proof must not survive a gate change: %+v", st["helper"])
+	}
+}
+
+func TestObservedSetTestsPrunesOnlyIncompatibleRedEvidence(t *testing.T) {
+	cases := []struct {
+		name             string
+		withVerification bool
+		next             []model.Test
+		wantEvidence     bool
+		wantInteger      bool
+	}{
+		{"unchanged without verification", false, []model.Test{{ID: "test_big", File: "t.ext", Satisfies: []string{"external-format"}}}, true, true},
+		{"renamed without verification", false, []model.Test{{ID: "test_big_v2", File: "t.ext", Satisfies: []string{"external-format"}}}, false, false},
+		{"file changed without verification", false, []model.Test{{ID: "test_big", File: "other.ext", Satisfies: []string{"external-format"}}}, false, true},
+		{"hazard changed without verification", false, []model.Test{{ID: "test_big", File: "t.ext"}}, false, true},
+		{"removed without verification", false, []model.Test{{ID: "other", File: "t.ext"}}, false, false},
+		{"renamed with verification", true, []model.Test{{ID: "test_big_v2", File: "t.ext", Satisfies: []string{"external-format"}}}, false, false},
+		{"file changed with verification", true, []model.Test{{ID: "test_big", File: "other.ext", Satisfies: []string{"external-format"}}}, false, false},
+		{"hazard changed with verification", true, []model.Test{{ID: "test_big", File: "t.ext"}}, false, false},
+		{"removed with verification", true, []model.Test{{ID: "other", File: "t.ext"}}, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, planDir := fixtureRoot(t)
+			if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				n := g.NodeByID("big")
+				n.Gate.Evidence = model.EvidenceObservedV1
+				n.Gate.Execution = &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30}
+				n.Artifacts = []string{"t.ext", "other.ext"}
+				n.RedSeqs = map[string]int{"test_big": 3}
+				n.RedEvidence = map[string]model.RedEvidence{"example/pkg::test_big": {AttemptID: "a", Seq: 3, CompatibilityKey: "k", Kind: "baseline"}}
+				if tc.withVerification {
+					n.Verification = &model.Verification{Result: model.ResultPass, Seq: 4, Isolation: model.IsolationClean, ContractRev: 1}
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := SetTests(planDir, "big", "", tc.next); err != nil {
+				t.Fatal(err)
+			}
+			g, _ := gstore.Load(gstore.PathFor(planDir))
+			n := g.NodeByID("big")
+			if got := len(n.RedEvidence) == 1; got != tc.wantEvidence {
+				t.Fatalf("red evidence retained=%v, want %v: %+v", got, tc.wantEvidence, n.RedEvidence)
+			}
+			if _, got := n.RedSeqs["test_big"]; got != tc.wantInteger {
+				t.Fatalf("integer first-red retained=%v, want %v: %+v", got, tc.wantInteger, n.RedSeqs)
+			}
+		})
 	}
 }
 

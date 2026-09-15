@@ -52,29 +52,35 @@ func (d *decoder) errf(path, format string, args ...any) {
 // same posture the artifact compiler takes for tool-owned frontmatter: a
 // payload asserting one is refused loudly, never silently discarded.
 var toolOwnedNodeKeys = map[string]string{
-	"intent_hashes": "compile embeds requirement hashes",
-	"input_hashes":  "compile embeds input fingerprints",
-	"claim":         "`next --claim` records claims under the store lock",
-	"verification":  "`graph sync` records observations from parsed reports",
-	"red_seqs":      "`graph sync` records first-failure seqs from parsed reports",
-	"contract_rev":  "`graph amend` advances contract revisions",
-	"origin":        "`graph amend` records which finding created a node",
+	"intent_hashes":     "compile embeds requirement hashes",
+	"input_hashes":      "compile embeds input fingerprints",
+	"claim":             "`next --claim` records claims under the store lock",
+	"verification":      "`graph sync` records observations from parsed reports",
+	"red_seqs":          "`graph sync` records first-failure seqs from parsed reports",
+	"red_evidence":      "`graph sync` records observed red compatibility",
+	"consumed_attempts": "`graph sync` records admitted attempt identities",
+	"contract_rev":      "`graph amend` advances contract revisions",
+	"origin":            "`graph amend` records which finding created a node",
 }
 
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
 	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements", "completed_at"}
 	proposalKeys     = []string{"version", "nodes"}
-	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs"}
+	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs", "red_evidence", "consumed_attempts"}
 	originKeys       = []string{"review", "finding"}
 	amendmentKeys    = []string{"seq", "review", "artifact", "report_digest", "revised", "extended", "preimage_tests", "preimage_red_seqs"}
 	reviewedKeys     = []string{"contract_rev", "artifact_digests"}
-	gateKeys         = []string{"type", "tests", "command", "lanes"}
+	gateKeys         = []string{"type", "evidence", "execution", "tests", "command", "lanes"}
+	executionKeys    = []string{"adapter", "args", "timeout_seconds", "environment_keys", "test_support_inputs", "test_support_artifacts"}
 	testKeys         = []string{"id", "file", "satisfies"}
 	inputKeys        = []string{"root", "path", "section"}
 	inputSectionKeys = []string{"heading_path"}
-	claimKeys        = []string{"by", "lease_expires", "workspace"}
-	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "isolation_dirty_paths", "provenance"}
+	claimKeys        = []string{"by", "lease_expires", "workspace", "instance"}
+	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "isolation_dirty_paths", "provenance", "attempt", "red_evidence"}
+	redEvidenceKeys  = []string{"attempt_id", "seq", "compatibility_key", "kind", "fault"}
+	consumedKeys     = []string{"digest", "seq", "result", "by", "phase", "red_kind", "fault", "red_evidence"}
+	attemptKeys      = []string{"id", "digest", "protocol", "claim_instance", "by", "phase", "red_kind", "fault", "started", "completed", "candidate_digest", "execution_revision"}
 	ackKeys          = []string{"seq", "node", "kind", "key", "old", "new", "by"}
 	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
@@ -95,10 +101,11 @@ func KeySets() map[string][]string {
 	}
 	cp := func(s []string) []string { return append([]string(nil), s...) }
 	return map[string][]string{
-		"proposal": cp(proposalKeys),
-		"node":     proposalNodeKeys,
-		"gate":     cp(gateKeys),
-		"test":     cp(testKeys),
+		"proposal":  cp(proposalKeys),
+		"node":      proposalNodeKeys,
+		"gate":      cp(gateKeys),
+		"test":      cp(testKeys),
+		"execution": cp(executionKeys),
 	}
 }
 
@@ -469,6 +476,12 @@ func (d *decoder) node(path string, raw any) Node {
 		if v, present := obj["red_seqs"]; present {
 			n.RedSeqs = d.intMap(path+".red_seqs", v)
 		}
+		if v, present := obj["red_evidence"]; present {
+			n.RedEvidence = d.redEvidenceMap(path+".red_evidence", v)
+		}
+		if v, present := obj["consumed_attempts"]; present {
+			n.ConsumedAttempts = d.consumedAttemptMap(path+".consumed_attempts", v)
+		}
 		if v, present := obj["contract_rev"]; present {
 			if r, ok := d.intVal(path+".contract_rev", v); ok {
 				if r < 1 {
@@ -486,6 +499,9 @@ func (d *decoder) node(path string, raw any) Node {
 				n.Origin = &Origin{Review: d.requiredString(path+".origin", obj2, "review"), Finding: d.requiredString(path+".origin", obj2, "finding")}
 			}
 		}
+	}
+	for _, problem := range ValidateEvidenceGate(&n) {
+		d.errf(path+".gate", "%s", problem)
 	}
 	return n
 }
@@ -574,6 +590,7 @@ func (d *decoder) gate(path string, raw any) Gate {
 
 	g := Gate{}
 	g.Type = d.requiredString(path, obj, "type")
+	g.Evidence = d.optionalString(path+".evidence", obj["evidence"])
 	switch g.Type {
 	case GateTests, GateCommand, GateReview, "":
 	case GateUnspecified:
@@ -596,7 +613,32 @@ func (d *decoder) gate(path string, raw any) Gate {
 	if v, present := obj["lanes"]; present {
 		g.Lanes = d.lanes(path+".lanes", v)
 	}
+	if v, present := obj["execution"]; present {
+		g.Execution = d.execution(path+".execution", v)
+	}
 	return g
+}
+
+func (d *decoder) execution(path string, raw any) *ExecutionProfile {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return nil
+	}
+	d.unknownKeys(path, obj, executionKeys)
+	p := &ExecutionProfile{
+		Adapter:              d.requiredString(path, obj, "adapter"),
+		Args:                 d.stringList(path+".args", obj["args"]),
+		EnvironmentKeys:      d.stringList(path+".environment_keys", obj["environment_keys"]),
+		TestSupportInputs:    d.stringList(path+".test_support_inputs", obj["test_support_inputs"]),
+		TestSupportArtifacts: d.stringList(path+".test_support_artifacts", obj["test_support_artifacts"]),
+	}
+	if v, present := obj["timeout_seconds"]; present {
+		p.TimeoutSeconds, _ = d.intVal(path+".timeout_seconds", v)
+	} else {
+		d.errf(path+".timeout_seconds", "missing required field")
+	}
+	return p
 }
 
 // lanes accepts the string "full" (nil in memory) or a non-empty list of
@@ -748,6 +790,7 @@ func (d *decoder) claim(path string, raw any) *Claim {
 		By:           d.requiredString(path, obj, "by"),
 		LeaseExpires: d.requiredString(path, obj, "lease_expires"),
 		Workspace:    d.optionalString(path+".workspace", obj["workspace"]),
+		Instance:     d.optionalString(path+".instance", obj["instance"]),
 	}
 }
 
@@ -854,7 +897,78 @@ func (d *decoder) verification(path string, raw any) *Verification {
 	if pv, present := obj["provenance"]; present {
 		v.Provenance = d.provenance(path+".provenance", pv)
 	}
+	if av, present := obj["attempt"]; present {
+		v.Attempt = d.attempt(path+".attempt", av)
+	}
+	if rv, present := obj["red_evidence"]; present {
+		v.RedEvidence = d.redEvidenceMap(path+".red_evidence", rv)
+	}
 	return v
+}
+
+func (d *decoder) redEvidenceMap(path string, raw any) map[string]RedEvidence {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object keyed by test identity")
+		return nil
+	}
+	out := map[string]RedEvidence{}
+	for _, key := range sortedKeys(obj) {
+		p := path + "." + key
+		rec, ok := obj[key].(map[string]any)
+		if !ok {
+			d.errf(p, "must be an object")
+			continue
+		}
+		d.unknownKeys(p, rec, redEvidenceKeys)
+		r := RedEvidence{AttemptID: d.requiredString(p, rec, "attempt_id"), CompatibilityKey: d.requiredString(p, rec, "compatibility_key"), Kind: d.requiredString(p, rec, "kind"), Fault: d.optionalString(p+".fault", rec["fault"])}
+		if x, present := rec["seq"]; present {
+			r.Seq, _ = d.intVal(p+".seq", x)
+		} else {
+			d.errf(p+".seq", "missing required field")
+		}
+		out[key] = r
+	}
+	return out
+}
+
+func (d *decoder) consumedAttemptMap(path string, raw any) map[string]ConsumedAttempt {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object keyed by attempt id")
+		return nil
+	}
+	out := map[string]ConsumedAttempt{}
+	for _, key := range sortedKeys(obj) {
+		p := path + "." + key
+		rec, ok := obj[key].(map[string]any)
+		if !ok {
+			d.errf(p, "must be an object")
+			continue
+		}
+		d.unknownKeys(p, rec, consumedKeys)
+		c := ConsumedAttempt{Digest: d.requiredString(p, rec, "digest"), Result: d.requiredString(p, rec, "result"), By: d.optionalString(p+".by", rec["by"]), Phase: d.optionalString(p+".phase", rec["phase"]), RedKind: d.optionalString(p+".red_kind", rec["red_kind"]), Fault: d.optionalString(p+".fault", rec["fault"])}
+		if x, present := rec["seq"]; present {
+			c.Seq, _ = d.intVal(p+".seq", x)
+		} else {
+			d.errf(p+".seq", "missing required field")
+		}
+		if x, present := rec["red_evidence"]; present {
+			c.RedEvidence = d.redEvidenceMap(p+".red_evidence", x)
+		}
+		out[key] = c
+	}
+	return out
+}
+
+func (d *decoder) attempt(path string, raw any) *AttemptSummary {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object")
+		return nil
+	}
+	d.unknownKeys(path, obj, attemptKeys)
+	return &AttemptSummary{ID: d.requiredString(path, obj, "id"), Digest: d.requiredString(path, obj, "digest"), Protocol: d.requiredString(path, obj, "protocol"), ClaimInstance: d.requiredString(path, obj, "claim_instance"), By: d.requiredString(path, obj, "by"), Phase: d.requiredString(path, obj, "phase"), RedKind: d.optionalString(path+".red_kind", obj["red_kind"]), Fault: d.optionalString(path+".fault", obj["fault"]), Started: d.requiredString(path, obj, "started"), Completed: d.requiredString(path, obj, "completed"), CandidateDigest: d.requiredString(path, obj, "candidate_digest"), ExecutionRevision: d.optionalString(path+".execution_revision", obj["execution_revision"])}
 }
 
 func (d *decoder) provenance(path string, raw any) *Provenance {
@@ -982,6 +1096,10 @@ func (d *decoder) intVal(path string, v any) (int, bool) {
 	i, err := num.Int64()
 	if err != nil {
 		d.errf(path, "must be an integer, got %s", num.String())
+		return 0, false
+	}
+	if int64(int(i)) != i {
+		d.errf(path, "integer %s is not representable on this platform", num.String())
 		return 0, false
 	}
 	return int(i), true

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal/schema.json",
   "title": "sdd graph proposal payload",
-  "description": "A batched node proposal for `sdd graph propose` (Designs/SddGraph DD-11, DD-12). The same node shape as the committed graph minus tool-owned fields: intent_hashes, claim, verification, and red_seqs are computed by the tool and refused in payloads. Authoring flow: `sdd template graph-proposal` emits a placeholder-complete exemplar; fill it, stage with `sdd graph propose`, and let `sdd compile` report every finding in one pass.",
+  "description": "A batched node proposal for `sdd graph propose`. Observation, claim, red-evidence, consumed-attempt, hash, revision, and origin fields are tool-owned and refused in payloads.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "nodes"],
@@ -122,9 +122,15 @@
         },
         "tests": {
           "type": "array",
+          "minItems": 1,
           "items": { "$ref": "#/definitions/test" },
           "description": "The runner-reported tests a `tests` gate is satisfied by."
         },
+        "evidence": {
+          "enum": ["legacy", "observed-v1"],
+          "description": "Tests evidence protocol. Absence is legacy; observed-v1 requires an execution profile."
+        },
+        "execution": { "$ref": "#/definitions/execution" },
         "command": {
           "type": "string",
           "description": "The check command whose exit code is a `command` gate's observation."
@@ -136,6 +142,45 @@
           ],
           "description": "A `review` gate's lane set: \"full\" (all four lanes; the only form that carries completion-grade closure) or a named subset for lighter checkpoints. The closed vocabulary: review_blind_spots, review_plan_drift, review_quality, review_spec_compliance — compile refuses unknown lane names."
         }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "tests" } }, "required": ["type"] },
+          "then": {
+            "required": ["tests"],
+            "not": { "anyOf": [{ "required": ["command"] }, { "required": ["lanes"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "command" } }, "required": ["type"] },
+          "then": {
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["lanes"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "review" } }, "required": ["type"] },
+          "then": {
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["command"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "evidence": { "const": "observed-v1" } }, "required": ["evidence"] },
+          "then": { "required": ["execution"] },
+          "else": { "not": { "required": ["execution"] } }
+        }
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "timeout_seconds"],
+      "properties": {
+        "adapter": { "const": "go-test-v1" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 9223372031 },
+        "environment_keys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+        "test_support_inputs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "test_support_artifacts": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
       }
     },
     "test": {

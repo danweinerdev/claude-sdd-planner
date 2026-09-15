@@ -64,7 +64,7 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 		"hook":  true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
 		"review": true, "schema": true, "section": true, "show": true,
-		"spec": true, "design": true,
+		"spec": true, "design": true, "test": true,
 		"task": true, "template": true, "validate": true, "version": true,
 	}
 	got := map[string]bool{}
@@ -88,7 +88,7 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 }
 
 // TestGuardClassifiesEverySubcommand enforces FR-44 against the real command
-// tree: every top-level verb and every `sdd graph` sub-verb must be
+// tree: every top-level verb and every `sdd graph` and `sdd test` sub-verb must be
 // deliberately classified in the hook's exported read-only maps. A verb
 // added to the binary without a guard posture fails here — classification
 // is never an accident of the allowlist's default-deny.
@@ -102,7 +102,13 @@ func TestGuardClassifiesEverySubcommand(t *testing.T) {
 		if _, classified := hook.SddVerbReadOnly[n]; !classified {
 			t.Errorf("subcommand %q has no guard classification; add it to hook.SddVerbReadOnly deliberately (FR-44)", n)
 		}
-		if n != "graph" {
+		var verbs map[string]bool
+		switch n {
+		case "graph":
+			verbs = hook.SddGraphVerbReadOnly
+		case "test":
+			verbs = hook.SddTestVerbReadOnly
+		default:
 			continue
 		}
 		for _, sub := range c.Commands() {
@@ -110,8 +116,8 @@ func TestGuardClassifiesEverySubcommand(t *testing.T) {
 			if sn == "help" || sn == "completion" {
 				continue
 			}
-			if _, classified := hook.SddGraphVerbReadOnly[sn]; !classified {
-				t.Errorf("graph sub-verb %q has no guard classification; add it to hook.SddGraphVerbReadOnly deliberately (FR-44)", sn)
+			if _, classified := verbs[sn]; !classified {
+				t.Errorf("%s sub-verb %q has no guard classification; add it to hook.Sdd%sVerbReadOnly deliberately (FR-44)", n, sn, strings.ToUpper(n[:1])+n[1:])
 			}
 		}
 	}
@@ -247,7 +253,10 @@ func handlerFlagSets() []struct {
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json", "claim", "by", "plan", "show", "node"}},
 		{"sdd graph release", []string{"plan", "by", "force", "json"}},
-		{"sdd graph sync", []string{"plan", "node", "by", "report", "command-exit", "command-log", "json", "verbose"}},
+		{"sdd graph sync", []string{"plan", "node", "by", "report", "attempt", "command-exit", "command-log", "json", "verbose"}},
+		{"sdd test run", []string{"plan", "node", "by", "phase", "red-kind", "fault", "json"}},
+		{"sdd test check", []string{"plan", "node", "attempt", "expect", "json"}},
+		{"sdd test cleanup", []string{"plan", "node", "attempt", "abandon", "json"}},
 		{"sdd graph reverify", []string{"plan", "report", "command-exit", "command-log", "json", "verbose", "all"}},
 		{"sdd graph review", []string{"plan", "node", "artifact", "by", "json", "check", "dry-run"}},
 		{"sdd graph path", []string{"plan", "json"}},

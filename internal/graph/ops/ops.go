@@ -357,6 +357,13 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 			return nil
 		}
 		oldTests := n.Gate.Tests
+		oldGate := n.Gate
+		candidate := *n
+		candidate.Gate = n.Gate
+		candidate.Gate.Tests = tests
+		if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
+			return fmt.Errorf("graph set-tests: %s", strings.Join(problems, "; "))
+		}
 		n.Gate.Tests = tests
 		if n.Verification != nil {
 			// The gate is owned normative content (ReviewDrivenAmendment
@@ -367,8 +374,10 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 			// or new test owes a fresh red at the new revision.
 			n.ContractRev = n.EffectiveContractRev() + 1
 			n.RedSeqs = carryOverRedSeqs(oldTests, tests, n.RedSeqs)
+			n.RedEvidence = carryOverRedEvidence(oldGate, candidate.Gate, n.RedEvidence)
 			return nil
 		}
+		n.RedEvidence = carryOverRedEvidence(oldGate, candidate.Gate, n.RedEvidence)
 		for id := range n.RedSeqs {
 			if !seen[id] {
 				delete(n.RedSeqs, id)
@@ -399,6 +408,18 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 		n, err := artifactsNode(g, nodeID, by)
 		if err != nil {
 			return err
+		}
+		candidate := *n
+		candidate.Artifacts = artifacts
+		if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
+			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
+		}
+		changed := !sameArtifactSet(n.Artifacts, artifacts)
+		if !changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+			return nil
+		}
+		if changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+			n.ContractRev = n.EffectiveContractRev() + 1
 		}
 		n.Artifacts = artifacts
 		return nil
@@ -446,6 +467,18 @@ func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
 		if len(next) == 0 {
 			return fmt.Errorf("graph set-artifacts: at least one artifact is required (a node with no write-set anchors nothing)")
 		}
+		candidate := *n
+		candidate.Artifacts = next
+		if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
+			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
+		}
+		changed := !sameArtifactSet(n.Artifacts, next)
+		if !changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+			return nil
+		}
+		if changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+			n.ContractRev = n.EffectiveContractRev() + 1
+		}
 		n.Artifacts = next
 		return nil
 	})
@@ -466,6 +499,25 @@ func validateArtifactSet(artifacts []string) error {
 		seen[a] = true
 	}
 	return nil
+}
+
+// sameArtifactSet compares declared write-sets independent of presentation
+// order. Reordering an observed node's existing set changes no obligation and
+// must not invalidate its observation gratuitously.
+func sameArtifactSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]bool, len(a))
+	for _, path := range a {
+		seen[path] = true
+	}
+	for _, path := range b {
+		if !seen[path] {
+			return false
+		}
+	}
+	return true
 }
 
 // artifactsNode resolves the node under the holder-only and review-gate

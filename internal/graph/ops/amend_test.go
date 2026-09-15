@@ -202,6 +202,32 @@ func TestAmendReviseChangingHazardTestClearsItsRed(t *testing.T) {
 	}
 }
 
+func TestCarryOverRedEvidenceUsesQualifiedTestIdentityAndFullDeclaration(t *testing.T) {
+	profile := &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30}
+	oldGate := model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: profile,
+		Tests: []model.Test{{ID: "TestWork", File: "work_test.go", Satisfies: []string{"wrong-result"}}}}
+	old := map[string]model.RedEvidence{"example/pkg::TestWork": {AttemptID: "a", Seq: 1, CompatibilityKey: "k", Kind: "baseline"}}
+
+	if got := carryOverRedEvidence(oldGate, oldGate, old); len(got) != 1 {
+		t.Fatalf("unchanged qualified evidence was lost: %+v", got)
+	}
+	for _, tc := range []struct {
+		name string
+		gate model.Gate
+	}{
+		{"rename", model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: profile, Tests: []model.Test{{ID: "TestWorkV2", File: "work_test.go", Satisfies: []string{"wrong-result"}}}}},
+		{"remove", model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: profile, Tests: []model.Test{{ID: "TestOther", File: "work_test.go"}}}},
+		{"file", model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: profile, Tests: []model.Test{{ID: "TestWork", File: "other_test.go", Satisfies: []string{"wrong-result"}}}}},
+		{"hazard", model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Execution: profile, Tests: []model.Test{{ID: "TestWork", File: "work_test.go"}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := carryOverRedEvidence(oldGate, tc.gate, old); got != nil {
+				t.Fatalf("incompatible evidence survived: %+v", got)
+			}
+		})
+	}
+}
+
 func TestAmendExtendAddsSourcedNodeAndGrowsReviewDeps(t *testing.T) {
 	root, planDir := fixtureRoot(t)
 	rel := frozenReview(t, root, "  - id: F-02\n    severity: minor\n    title: \"no audit event on refusal\"\n    status: open\n    action: extend\n    node:\n      id: big-audit\n      contract: \"emits an audit event when big refuses\"\n      deps: [big]\n      gate:\n        type: tests\n        tests:\n          - id: test_big_audit\n            file: t.ext\n      hazards: []\n")

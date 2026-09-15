@@ -111,6 +111,7 @@ var SddVerbReadOnly = map[string]bool{
 	"provision": false, "plugin": false,
 	"decide":  false, // sub-verbs classified separately below
 	"graph":   false, // sub-verbs classified separately below
+	"test":    false, // sub-verbs classified separately below
 	"compile": false, // appends to the committed plan graph
 }
 
@@ -152,6 +153,15 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"rehash": false,
 	// mutating: appends Git rewrite identity under a caller-supplied digest
 	"remap-revisions": false,
+}
+
+// SddTestVerbReadOnly classifies every `sdd test` subcommand. Checking an
+// immutable attempt is read-only; recording or removing an attempt mutates
+// evidence. Absent = unclassified = parity failure and guard denial.
+var SddTestVerbReadOnly = map[string]bool{
+	"run":     false,
+	"check":   true,
+	"cleanup": false,
 }
 
 var (
@@ -401,6 +411,16 @@ func checkSdd(tokens []string, segment string) Decision {
 				verb = args[1]
 			}
 			return deny("Blocked `" + segment + "`: `sdd graph " + verb + "` mutates the plan graph or its workspace.")
+		}
+		return Decision{}
+	}
+	if sub == "test" {
+		if len(args) < 2 || !SddTestVerbReadOnly[args[1]] {
+			verb := "<verb>"
+			if len(args) >= 2 {
+				verb = args[1]
+			}
+			return deny("Blocked `" + segment + "`: `sdd test " + verb + "` mutates test evidence or is not on the read-only allowlist.")
 		}
 		return Decision{}
 	}

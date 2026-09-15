@@ -143,6 +143,8 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 			out.Skipped = "claimed by " + n.Claim.By + " (the holder owns its observations)"
 		case n.Gate.Type == model.GateReview:
 			out.Skipped = "review gate (its observation is a frozen review artifact; use `sdd graph review`)"
+		case n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceObservedV1:
+			out.Skipped = "requires observed capture (`sdd test run` then `sdd graph sync --attempt`)"
 		case !o.All && statesByID[id].State == states.Green:
 			out.Skipped = "fresh, skipped (already a current pass; pass --all to re-verify anyway)"
 		case n.Gate.Type == model.GateTests && o.ReportBytes == nil:

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -329,7 +330,7 @@ func TestCompileResolvesEvidenceRepoOnce(t *testing.T) {
 	if _, err := gstore.Update(graphPath, func(g *model.Graph) error {
 		g.Nodes = append(g.Nodes, model.Node{
 			ID: "existing-work", Contract: "already done", Phase: "existing",
-			Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1,
+			Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "TestExistingWork", File: "existing_test.go"}}}, Hazards: model.Hazards{}, Estimate: 1,
 			Justifies: []string{"FR-01"}, IntentHashes: map[string]string{"FR-01": frHash},
 			Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
 				Provenance: &model.Provenance{Kind: "git", Revision: rev}},
@@ -683,7 +684,7 @@ func TestCompileInputSelection(t *testing.T) {
 
 	// Two fragments: points at assemble.
 	stage(t, root, happyProposalCiting(fixtureDecisionID()))
-	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests"}, "hazards": []}]}`)
+	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests", "tests": [{"id":"TestExtra","file":"extra_test.go"}]}, "hazards": []}]}`)
 	_, _, err = Run(root, root, "SamplePlan")
 	if err == nil || !strings.Contains(err.Error(), "sdd graph assemble") {
 		t.Fatalf("multiple fragments must point at assemble: %v", err)
@@ -700,7 +701,7 @@ func TestCompileInputSelection(t *testing.T) {
 	stage(t, root, strings.Replace(happyProposalCiting(fixtureDecisionID()),
 		`"deps": ["impl-ac1", "impl-ac2"]`,
 		`"deps": ["impl-ac1", "impl-ac2", "extra"]`, 1))
-	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests"}, "hazards": []}]}`)
+	stage(t, root, `{"version": 1, "nodes": [{"id": "extra", "contract": "c", "justifies": ["AC-01"], "gate": {"type": "tests", "tests": [{"id":"TestExtra","file":"extra_test.go"}]}, "hazards": []}]}`)
 	if _, _, err := proposal.Assemble(planDir); err != nil {
 		t.Fatal(err)
 	}
@@ -708,6 +709,84 @@ func TestCompileInputSelection(t *testing.T) {
 	if err != nil || len(findings) != 0 {
 		t.Fatalf("assembled compile: %v %v", err, findings)
 	}
+}
+
+func TestCompileRefusesEmptyTestsAndObservedOwnOutputs(t *testing.T) {
+	t.Run("empty tests", func(t *testing.T) {
+		root := fixtureRoot(t, fixtureSpec)
+		stage(t, root, `{"version":1,"nodes":[{"id":"empty","contract":"empty","justifies":["AC-01"],"gate":{"type":"tests"},"hazards":[]}]}`)
+		_, findings, err := Run(root, root, "SamplePlan")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := fmt.Sprint(findings); !strings.Contains(got, "declares no tests") {
+			t.Fatalf("missing empty-gate finding: %v", findings)
+		}
+	})
+	t.Run("live graph input", func(t *testing.T) {
+		root := fixtureRoot(t, fixtureSpec)
+		stage(t, root, `{"version":1,"nodes":[{"id":"observed","contract":"observed","justifies":["AC-01"],"inputs":[{"root":"planning","path":"Plans/SamplePlan/SamplePlan-Graph.json"}],"gate":{"type":"tests","evidence":"observed-v1","execution":{"adapter":"go-test-v1","timeout_seconds":30},"tests":[{"id":"TestObserved","file":"observed_test.go"}]},"hazards":[],"artifacts":["observed_test.go"]}]}`)
+		_, findings, err := Run(root, root, "SamplePlan")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := fmt.Sprint(findings); !strings.Contains(got, "live graph") {
+			t.Fatalf("missing own-output finding: %v", findings)
+		}
+	})
+}
+
+func TestObservedOwnOutputGuardUsesFilesystemIdentity(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	sources, err := identifierSources(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	planDir := filepath.Join(root, "Plans", "SamplePlan")
+	graphPath := gstore.PathFor(planDir)
+
+	t.Run("normal unrelated json input allowed", func(t *testing.T) {
+		path := filepath.Join(root, "fixture.json")
+		if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: "fixture.json"}, sources) {
+			t.Fatal("unrelated JSON was blanket-refused")
+		}
+	})
+
+	t.Run("symlink alias", func(t *testing.T) {
+		alias := filepath.Join(root, "graph-alias.json")
+		if err := os.Symlink(graphPath, alias); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		if !observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: "graph-alias.json"}, sources) {
+			t.Fatal("physical alias of the live graph was accepted")
+		}
+	})
+
+	t.Run("windows case alias", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows case-alias behavior")
+		}
+		rel, err := filepath.Rel(root, graphPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		alias := strings.ToUpper(filepath.ToSlash(rel))
+		if !observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: alias}, sources) {
+			t.Fatalf("case alias of live graph was accepted: %s", alias)
+		}
+	})
+
+	t.Run("pending evidence path under mapped target", func(t *testing.T) {
+		mapped := filepath.Join(root, "mapped")
+		sources.inputRepoRoot = mapped
+		path := "Plans/SamplePlan/.graph/test-evidence/work/pending.json"
+		if !observedOwnOutput(model.Input{Root: model.InputRootRepository, Path: path}, sources) {
+			t.Fatal("normalized pending evidence path under mapped target was accepted")
+		}
+	})
 }
 
 // TestValidateFlagsMissingAndPartialFingerprints: the transition gate flags a

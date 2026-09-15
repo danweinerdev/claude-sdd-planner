@@ -29,7 +29,7 @@ full review gates and is never stored or hand-edited here.
 - Depends on: (nothing)
 - Gate: tests — `test_schema_covers_every_key` in tests/test_schema.ext
 - Hazards: none (explicit claim)
-- Artifacts: src/schema.ext
+- Artifacts: src/schema.ext, tests/test_schema.ext
 - Estimate: 1
 - Observation: none yet
 - Closure: open — state READY

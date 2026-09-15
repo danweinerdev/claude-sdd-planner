@@ -63,6 +63,11 @@ const (
 	GateUnspecified = "unspecified"
 )
 
+const (
+	EvidenceObservedV1 = "observed-v1"
+	EvidenceLegacy     = "legacy"
+)
+
 // NeedsContractPrefix marks a converted node whose v1 task title could not
 // be reduced to a falsifiable contract mechanically — which is every one of
 // them: titles name work, contracts state truths, and deriving one from the
@@ -246,7 +251,9 @@ type Node struct {
 	// observed failure. The merge gate's red-before-green check reads it —
 	// a test never seen to fail proves nothing about the code that makes it
 	// pass (DD-5).
-	RedSeqs map[string]int `json:"red_seqs,omitempty"`
+	RedSeqs          map[string]int             `json:"red_seqs,omitempty"`
+	RedEvidence      map[string]RedEvidence     `json:"red_evidence,omitempty"`
+	ConsumedAttempts map[string]ConsumedAttempt `json:"consumed_attempts,omitempty"`
 }
 
 // Origin records which review finding created an extend node.
@@ -291,7 +298,9 @@ func (h Hazards) MarshalJSON() ([]byte, error) {
 // Gate is how a node's contract is verified. Exactly one of the type-specific
 // fields is meaningful, keyed by Type (DD-9).
 type Gate struct {
-	Type string `json:"type"`
+	Type      string            `json:"type"`
+	Evidence  string            `json:"evidence,omitempty"`
+	Execution *ExecutionProfile `json:"execution,omitempty"`
 	// Tests names the runner-reported test ids a `tests` gate is satisfied
 	// by.
 	Tests []Test `json:"tests,omitempty"`
@@ -311,15 +320,26 @@ type Gate struct {
 func (g Gate) MarshalJSON() ([]byte, error) {
 	type wireTest = Test
 	out := struct {
-		Type    string     `json:"type"`
-		Tests   []wireTest `json:"tests,omitempty"`
-		Command string     `json:"command,omitempty"`
-		Lanes   *Lanes     `json:"lanes,omitempty"`
-	}{Type: g.Type, Tests: g.Tests, Command: g.Command}
+		Type      string            `json:"type"`
+		Evidence  string            `json:"evidence,omitempty"`
+		Execution *ExecutionProfile `json:"execution,omitempty"`
+		Tests     []wireTest        `json:"tests,omitempty"`
+		Command   string            `json:"command,omitempty"`
+		Lanes     *Lanes            `json:"lanes,omitempty"`
+	}{Type: g.Type, Evidence: g.Evidence, Execution: g.Execution, Tests: g.Tests, Command: g.Command}
 	if g.Type == GateReview || g.Lanes != nil {
 		out.Lanes = &g.Lanes
 	}
 	return json.Marshal(out)
+}
+
+type ExecutionProfile struct {
+	Adapter              string   `json:"adapter"`
+	Args                 []string `json:"args,omitempty"`
+	TimeoutSeconds       int      `json:"timeout_seconds"`
+	EnvironmentKeys      []string `json:"environment_keys,omitempty"`
+	TestSupportInputs    []string `json:"test_support_inputs,omitempty"`
+	TestSupportArtifacts []string `json:"test_support_artifacts,omitempty"`
 }
 
 // ReviewLanes is the closed four-lane vocabulary (DD-9): the same lanes the
@@ -413,6 +433,26 @@ type Claim struct {
 	By           string `json:"by"`
 	LeaseExpires string `json:"lease_expires"`
 	Workspace    string `json:"workspace,omitempty"`
+	Instance     string `json:"instance,omitempty"`
+}
+
+type RedEvidence struct {
+	AttemptID        string `json:"attempt_id"`
+	Seq              int    `json:"seq"`
+	CompatibilityKey string `json:"compatibility_key"`
+	Kind             string `json:"kind"`
+	Fault            string `json:"fault,omitempty"`
+}
+
+type ConsumedAttempt struct {
+	Digest      string                 `json:"digest"`
+	Seq         int                    `json:"seq"`
+	Result      string                 `json:"result"`
+	By          string                 `json:"by,omitempty"`
+	Phase       string                 `json:"phase,omitempty"`
+	RedKind     string                 `json:"red_kind,omitempty"`
+	Fault       string                 `json:"fault,omitempty"`
+	RedEvidence map[string]RedEvidence `json:"red_evidence,omitempty"`
 }
 
 // Verification is one recorded observation: what a parsed report said, with
@@ -449,8 +489,25 @@ type Verification struct {
 	// observed in the workspace when Isolation is shared-dirty — the cause
 	// behind a later `reasons.isolation`, best-effort (nil when the VCS
 	// could not be asked, e.g. p4/plain).
-	IsolationDirtyPaths []string    `json:"isolation_dirty_paths,omitempty"`
-	Provenance          *Provenance `json:"provenance,omitempty"`
+	IsolationDirtyPaths []string               `json:"isolation_dirty_paths,omitempty"`
+	Provenance          *Provenance            `json:"provenance,omitempty"`
+	Attempt             *AttemptSummary        `json:"attempt,omitempty"`
+	RedEvidence         map[string]RedEvidence `json:"red_evidence,omitempty"`
+}
+
+type AttemptSummary struct {
+	ID                string `json:"id"`
+	Digest            string `json:"digest"`
+	Protocol          string `json:"protocol"`
+	ClaimInstance     string `json:"claim_instance"`
+	By                string `json:"by"`
+	Phase             string `json:"phase"`
+	RedKind           string `json:"red_kind,omitempty"`
+	Fault             string `json:"fault,omitempty"`
+	Started           string `json:"started"`
+	Completed         string `json:"completed"`
+	CandidateDigest   string `json:"candidate_digest"`
+	ExecutionRevision string `json:"execution_revision,omitempty"`
 }
 
 // AcknowledgementRecord is one recorded judgment that a citation's or

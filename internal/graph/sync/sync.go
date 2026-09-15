@@ -14,6 +14,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/testevidence"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 )
 
@@ -28,6 +29,9 @@ type Options struct {
 	// Tests gate: the report file's name (format routing) and bytes.
 	ReportName  string
 	ReportBytes []byte
+	// AttemptID admits one immutable observed-v1 capture. It is mutually
+	// exclusive with legacy report and command inputs.
+	AttemptID string
 	// Command gate: the check command's exit code and captured output.
 	CommandExit *int
 	CommandLog  []byte
@@ -73,7 +77,13 @@ type Result struct {
 	Merged bool `json:"merged,omitempty"`
 	// WorkspaceReleased names the workspace handle torn down on merge.
 	WorkspaceReleased string `json:"workspace_released,omitempty"`
+	Historical        bool   `json:"historical,omitempty"`
+	AttemptID         string `json:"attempt_id,omitempty"`
 }
+
+type historicalAdmission struct{ prior model.ConsumedAttempt }
+
+func (e *historicalAdmission) Error() string { return "attempt was admitted concurrently" }
 
 func (o *Options) fill() {
 	if o.Now == nil {
@@ -99,6 +109,18 @@ func Run(o Options) (*Result, error) {
 	if node == nil {
 		return nil, fmt.Errorf("graph sync: node %q does not exist", o.Node)
 	}
+	if o.AttemptID != "" && (node.Gate.Type == model.GateCommand || node.Gate.Type == model.GateReview) {
+		return nil, fmt.Errorf("graph sync: --attempt is unsupported for %s gate %q; observed attempts apply only to observed-v1 tests gates", node.Gate.Type, o.Node)
+	}
+	if o.AttemptID != "" {
+		if o.ReportBytes != nil || o.ReportName != "" || o.CommandExit != nil || len(o.CommandLog) != 0 {
+			return nil, fmt.Errorf("graph sync: --attempt is mutually exclusive with --report and command inputs")
+		}
+		if prior, ok := node.ConsumedAttempts[o.AttemptID]; ok {
+			return &Result{Node: o.Node, Recorded: true, Historical: true, AttemptID: o.AttemptID,
+				Observation: &model.Verification{Result: prior.Result, Seq: prior.Seq}}, nil
+		}
+	}
 
 	// The claim check runs before any parsing: a stale claimant's late sync
 	// is refused whole (their takeover successor owns the node now).
@@ -120,6 +142,7 @@ func Run(o Options) (*Result, error) {
 	var result string
 	var reportDigest string
 	var failedTests []string
+	var observed *testevidence.CheckResult
 
 	switch node.Gate.Type {
 	case model.GateReview:
@@ -150,6 +173,45 @@ func Run(o Options) (*Result, error) {
 	case model.GateTests:
 		if o.CommandExit != nil {
 			return nil, fmt.Errorf("graph sync: %q is a tests gate; --command-exit does not apply", o.Node)
+		}
+		if len(node.Gate.Tests) == 0 {
+			return nil, fmt.Errorf("graph sync: %q has an empty tests gate; declare at least one test before admission", o.Node)
+		}
+		if node.Gate.Evidence == model.EvidenceObservedV1 {
+			if o.AttemptID == "" {
+				if o.ReportBytes != nil || o.ReportName != "" {
+					res.Refusal = fmt.Sprintf("%q requires observed capture; pass --attempt from `sdd test run`, not --report", o.Node)
+					return res, nil
+				}
+				return nil, fmt.Errorf("graph sync: %q requires observed capture; pass --attempt from `sdd test run`, not --report", o.Node)
+			}
+			a, loadErr := testevidence.Load(o.PlanDir, o.Node, o.AttemptID)
+			if loadErr != nil {
+				return nil, fmt.Errorf("graph sync: %w", loadErr)
+			}
+			if a.Phase != "red" && a.Phase != "green" {
+				return nil, fmt.Errorf("graph sync: diagnostic attempts cannot be admitted")
+			}
+			planningRoot := filepath.Dir(filepath.Dir(o.PlanDir))
+			observed, err = testevidence.Check(testevidence.CheckOptions{PlanDir: o.PlanDir, PlanningRoot: planningRoot, RepoRoot: o.RepoRoot, Node: o.Node, By: o.By, AttemptID: o.AttemptID, Expect: a.Phase, Now: o.Now})
+			if err != nil {
+				return nil, fmt.Errorf("graph sync: checking attempt: %w", err)
+			}
+			if !observed.Eligible {
+				return nil, fmt.Errorf("graph sync: attempt is inadmissible: %s", observed.Refusal)
+			}
+			result = observed.Attempt.Report.Result
+			reportDigest = observed.Attempt.Digest
+			for _, tr := range observed.Attempt.Report.Tests {
+				res.Buckets.Updated = append(res.Buckets.Updated, tr.QualifiedID)
+				if tr.Outcome == model.ResultFail {
+					failedTests = append(failedTests, tr.ID)
+				}
+			}
+			break
+		}
+		if o.AttemptID != "" {
+			return nil, fmt.Errorf("graph sync: --attempt applies only to observed-v1 tests gates")
 		}
 		if len(o.ReportBytes) == 0 {
 			return nil, fmt.Errorf("graph sync: %q is a tests gate; pass --report with the runner's output file", o.Node)
@@ -282,6 +344,12 @@ func Run(o Options) (*Result, error) {
 			}
 		}
 	}
+	if observed != nil {
+		artifactDigests = observed.Attempt.Before.Artifacts
+		dependencyDigests = observed.Attempt.Before.Dependencies
+		runIntent = observed.Attempt.Before.Intent
+		runInputs = observed.Attempt.Before.Inputs
+	}
 
 	// Merge-gate preconditions bind the RECORDING of a pass (DD-5): a pass
 	// that fails them is refused whole with the failing condition named, so
@@ -296,14 +364,25 @@ func Run(o Options) (*Result, error) {
 			if len(t.Satisfies) == 0 {
 				continue
 			}
-			if _, seen := node.RedSeqs[t.ID]; !seen {
+			if observed != nil {
+				qualified := ""
+				for _, selected := range observed.Attempt.Selected {
+					if selected.ID == t.ID && selected.File == t.File {
+						qualified = selected.Qualified()
+					}
+				}
+				record, seen := node.RedEvidence[qualified]
+				if !seen || record.CompatibilityKey != observed.Compatibility[qualified] {
+					unproven = append(unproven, t.ID)
+				}
+			} else if _, seen := node.RedSeqs[t.ID]; !seen {
 				unproven = append(unproven, t.ID)
 			}
 		}
 		if len(unproven) > 0 {
 			return nil, fmt.Errorf("graph sync: red-before-green: hazard-discharging test(s) %v have never been observed failing; run them against the broken or unimplemented state and sync that failing report first — a test that passes against both correct and broken code guards nothing", unproven)
 		}
-		if handle != "" {
+		if handle != "" || observed != nil {
 			// The probe's ANSWER gates the pass, so an unrunnable probe is
 			// not an answer: a failed detection or a failed Clean() aborts
 			// the sync rather than letting an unprobed workspace pass as
@@ -311,7 +390,7 @@ func Run(o Options) (*Result, error) {
 			// confirmed were the tested ones (FR-16, DD-10).
 			repo, detErr := vcs.DetectChecked(digestRoot)
 			if detErr != nil {
-				return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", handle, detErr)
+				return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", workspaceLabel(handle), detErr)
 			}
 			clean, dirty, cleanErr := repo.Clean()
 			if cleanErr != nil {
@@ -320,7 +399,7 @@ func Run(o Options) (*Result, error) {
 					// about, and the digest anchor carries the identity.
 					clean = true
 				} else {
-					return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", handle, cleanErr)
+					return nil, fmt.Errorf("graph sync: workspace %s: its cleanliness could not be established: %w", workspaceLabel(handle), cleanErr)
 				}
 			}
 			if !clean {
@@ -328,7 +407,7 @@ func Run(o Options) (*Result, error) {
 				if len(dirty) > 0 {
 					example = " (e.g. " + dirty[0] + ")"
 				}
-				return nil, fmt.Errorf("graph sync: workspace %s has %d uncommitted path(s)%s; commit the complete slice, then re-sync the passing report — the revision anchor must name the tested bytes", handle, len(dirty), example)
+				return nil, fmt.Errorf("graph sync: workspace %s has %d uncommitted path(s)%s; commit the complete slice, then re-sync the passing report — the revision anchor must name the tested bytes", workspaceLabel(handle), len(dirty), example)
 			}
 		}
 	}
@@ -339,12 +418,25 @@ func Run(o Options) (*Result, error) {
 	merged := false
 	hookRan := false
 	if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
+		attemptRedAdded := map[string]int{}
 		n := fresh.NodeByID(o.Node)
 		if n == nil {
 			return fmt.Errorf("graph sync: node %q vanished mid-sync", o.Node)
 		}
 		if n.Claim != nil && n.Claim.By != o.By {
 			return fmt.Errorf("graph sync: %q was claimed by %q while this sync ran", o.Node, n.Claim.By)
+		}
+		if observed != nil {
+			if prior, ok := n.ConsumedAttempts[o.AttemptID]; ok {
+				return &historicalAdmission{prior: prior}
+			}
+			if n.Claim == nil || n.Claim.Instance != observed.Attempt.ClaimInstance || n.Claim.By != observed.Attempt.By {
+				return fmt.Errorf("graph sync: %q's observed claim changed before publication", o.Node)
+			}
+			expires, e := time.Parse(time.RFC3339, n.Claim.LeaseExpires)
+			if e != nil || !expires.After(o.Now()) {
+				return fmt.Errorf("graph sync: %q's observed claim expired before publication", o.Node)
+			}
 		}
 		workspace := ""
 		if n.Claim != nil {
@@ -359,12 +451,39 @@ func Run(o Options) (*Result, error) {
 				return err
 			}
 		}
+		if observed != nil {
+			freshChecked, e := testevidence.CheckCurrent(testevidence.CheckOptions{PlanDir: o.PlanDir, PlanningRoot: filepath.Dir(filepath.Dir(o.PlanDir)), RepoRoot: o.RepoRoot, Node: o.Node, By: o.By, AttemptID: o.AttemptID, Expect: observed.Attempt.Phase, Now: o.Now}, fresh, n)
+			if e != nil {
+				return fmt.Errorf("graph sync: rechecking attempt before publication: %w", e)
+			}
+			if !freshChecked.Eligible {
+				return fmt.Errorf("graph sync: attempt became inadmissible before publication: %s", freshChecked.Refusal)
+			}
+			observed = freshChecked
+			if result == model.ResultPass {
+				repo, e := vcs.DetectChecked(digestRoot)
+				if e != nil {
+					return fmt.Errorf("graph sync: rechecking workspace cleanliness: %w", e)
+				}
+				clean, dirty, e := repo.Clean()
+				if errors.Is(e, vcs.ErrUnsupported) {
+					clean = true
+					e = nil
+				}
+				if e != nil {
+					return fmt.Errorf("graph sync: rechecking workspace cleanliness: %w", e)
+				}
+				if !clean {
+					return fmt.Errorf("graph sync: workspace became dirty before publication (%v)", dirty)
+				}
+			}
+		}
 		fresh.SeqCounter++
 		seq := fresh.SeqCounter
 		v := &model.Verification{
 			Result:              result,
 			Seq:                 seq,
-			ContractRev:         node.EffectiveContractRev(),
+			ContractRev:         n.EffectiveContractRev(),
 			ArtifactDigests:     artifactDigests,
 			DependencyDigests:   dependencyDigests,
 			InputHashes:         runInputs,
@@ -373,6 +492,30 @@ func Run(o Options) (*Result, error) {
 			Isolation:           isolation,
 			IsolationDirtyPaths: isolationDirtyPaths,
 			Provenance:          provenance,
+		}
+		if observed != nil {
+			v.ArtifactDigests = observed.Attempt.Before.Artifacts
+			v.DependencyDigests = observed.Attempt.Before.Dependencies
+			v.IntentHashes = observed.Attempt.Before.Intent
+			v.InputHashes = observed.Attempt.Before.Inputs
+			v.Attempt = &model.AttemptSummary{ID: observed.Attempt.ID, Digest: observed.Attempt.Digest, Protocol: testevidence.Protocol,
+				ClaimInstance: observed.Attempt.ClaimInstance, By: observed.Attempt.By, Phase: observed.Attempt.Phase, RedKind: observed.Attempt.RedKind,
+				Fault: observed.Attempt.Fault, Started: observed.Attempt.Started, Completed: observed.Attempt.Completed, CandidateDigest: testevidence.CandidateDigest(observed.Attempt.Before), ExecutionRevision: observed.Attempt.ExecutionRevision}
+			v.RedEvidence = map[string]model.RedEvidence{}
+			if result == model.ResultPass {
+				for _, t := range node.Gate.Tests {
+					if len(t.Satisfies) == 0 {
+						continue
+					}
+					for _, s := range observed.Attempt.Selected {
+						if s.ID == t.ID && s.File == t.File {
+							if r, ok := n.RedEvidence[s.Qualified()]; ok {
+								v.RedEvidence[s.Qualified()] = r
+							}
+						}
+					}
+				}
+			}
 		}
 		n.Verification = v
 		// red_seq: the first observed failure per declared test, recorded
@@ -383,8 +526,24 @@ func Run(o Options) (*Result, error) {
 			}
 			if _, seen := n.RedSeqs[id]; !seen {
 				n.RedSeqs[id] = seq
-				redAdded[id] = seq
+				attemptRedAdded[id] = seq
 			}
+		}
+		if observed != nil && result == model.ResultFail {
+			if n.RedEvidence == nil {
+				n.RedEvidence = map[string]model.RedEvidence{}
+			}
+			for _, qid := range observed.Failed {
+				r := model.RedEvidence{AttemptID: observed.Attempt.ID, Seq: seq, CompatibilityKey: observed.Compatibility[qid], Kind: observed.Attempt.RedKind, Fault: observed.Attempt.Fault}
+				n.RedEvidence[qid] = r
+				v.RedEvidence[qid] = r
+			}
+		}
+		if observed != nil {
+			if n.ConsumedAttempts == nil {
+				n.ConsumedAttempts = map[string]model.ConsumedAttempt{}
+			}
+			n.ConsumedAttempts[observed.Attempt.ID] = model.ConsumedAttempt{Digest: observed.Attempt.Digest, Seq: seq, Result: result, By: observed.Attempt.By, Phase: observed.Attempt.Phase, RedKind: observed.Attempt.RedKind, Fault: observed.Attempt.Fault, RedEvidence: v.RedEvidence}
 		}
 		merged = false
 		switch {
@@ -403,8 +562,13 @@ func Run(o Options) (*Result, error) {
 			leaseRenewed = n.Claim.LeaseExpires
 		}
 		recorded = v
+		redAdded = attemptRedAdded
 		return nil
 	}); err != nil {
+		var historical *historicalAdmission
+		if errors.As(err, &historical) {
+			return &Result{Node: o.Node, Recorded: true, Historical: true, AttemptID: o.AttemptID, Observation: &model.Verification{Result: historical.prior.Result, Seq: historical.prior.Seq}}, nil
+		}
 		return nil, err
 	}
 	res.Recorded = true
@@ -413,6 +577,7 @@ func Run(o Options) (*Result, error) {
 	res.RedSeqsAdded = redAdded
 	res.LeaseRenewed = leaseRenewed
 	res.Merged = merged
+	res.AttemptID = o.AttemptID
 	if merged && handle != "" {
 		if err := prov.Release(handle); err != nil {
 			return res, fmt.Errorf("graph sync: merged, but workspace %s could not be released (reap it with `sdd graph gc`): %w", handle, err)
@@ -420,6 +585,13 @@ func Run(o Options) (*Result, error) {
 		res.WorkspaceReleased = handle
 	}
 	return res, nil
+}
+
+func workspaceLabel(handle string) string {
+	if handle == "" {
+		return "shared"
+	}
+	return handle
 }
 
 // untracked lists report ids no node in the graph declares, directly or as

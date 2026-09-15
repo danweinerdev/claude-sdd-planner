@@ -23,6 +23,8 @@
 package claims
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -187,6 +189,10 @@ func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (stri
 		// concurrent gc can never mistake an allocation in flight for an
 		// unreferenced leftover.
 		handle := o.Provider.HandleFor(candidate)
+		instance, err := newInstance()
+		if err != nil {
+			return nil, fmt.Errorf("graph claim: allocate claim instance: %w", err)
+		}
 		leaseExpires := o.Now().Add(o.TTL).UTC().Format(time.RFC3339)
 		var claimedNode model.Node
 		raced := false
@@ -207,7 +213,7 @@ func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (stri
 					return err
 				}
 			}
-			n.Claim = &model.Claim{By: o.By, LeaseExpires: leaseExpires, Workspace: handle}
+			n.Claim = &model.Claim{By: o.By, LeaseExpires: leaseExpires, Workspace: handle, Instance: instance}
 			claimedNode = *n
 			return nil
 		})
@@ -227,7 +233,7 @@ func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (stri
 			// lease so a concurrent expiry+reclaim is never clobbered.
 			_, _ = gstore.Update(graphPath, func(fresh *model.Graph) error {
 				if n := fresh.NodeByID(candidate); n != nil && n.Claim != nil &&
-					n.Claim.By == o.By && n.Claim.LeaseExpires == leaseExpires {
+					n.Claim.By == o.By && n.Claim.Instance == instance {
 					n.Claim = nil
 				}
 				return nil
@@ -239,7 +245,7 @@ func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (stri
 			// carries the truth.
 			if _, err := gstore.Update(graphPath, func(fresh *model.Graph) error {
 				if n := fresh.NodeByID(candidate); n != nil && n.Claim != nil &&
-					n.Claim.By == o.By && n.Claim.LeaseExpires == leaseExpires {
+					n.Claim.By == o.By && n.Claim.Instance == instance {
 					n.Claim.Workspace = workspace
 				}
 				return nil
@@ -256,6 +262,14 @@ func claim(planDir string, o Options, selectFn func(*model.Graph, Options) (stri
 		}, nil
 	}
 	return nil, fmt.Errorf("graph claim: gave up after %d selection races; the frontier is contended, retry", claimAttempts)
+}
+
+func newInstance() (string, error) {
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(nonce[:]), nil
 }
 
 // ExpireLapsed persists the expiry of every lapsed claim: the crash story's

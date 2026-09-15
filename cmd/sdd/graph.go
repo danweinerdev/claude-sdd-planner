@@ -629,7 +629,7 @@ func graphGCCmd() *cobra.Command {
 // path toward GREEN (DD-5). A red run is a SUCCESSFUL sync: recording the
 // failure is what arms red-before-green.
 func graphSyncCmd() *cobra.Command {
-	var plan, node, by, report, commandLog string
+	var plan, node, by, report, commandLog, attempt string
 	var commandExit int
 	var asJSON, verbose bool
 	c := &cobra.Command{
@@ -644,11 +644,17 @@ func graphSyncCmd() *cobra.Command {
 			if node == "" {
 				return fmt.Errorf("graph sync: --node is required")
 			}
-			_, repoRoot, err := resolveRoots(".", "")
+			planningRoot, repoRoot, err := resolveRoots(".", "")
 			if err != nil {
 				return fmt.Errorf("graph sync: %w", err)
 			}
 			opts := gsync.Options{PlanDir: planDir, RepoRoot: repoRoot, Node: node, By: by}
+			if sources, serr := gcompile.NewSources(planningRoot, repoRoot, plan); serr == nil {
+				opts.RepoRoot = sources.RepositoryRoot()
+			} else {
+				return fmt.Errorf("graph sync: resolve plan sources: %w", serr)
+			}
+			opts.AttemptID = attempt
 			if report != "" {
 				raw, err := os.ReadFile(report)
 				if err != nil {
@@ -682,6 +688,10 @@ func graphSyncCmd() *cobra.Command {
 				}
 				return nil
 			}
+			if res.Historical {
+				fmt.Fprintf(c.OutOrStdout(), "attempt %s was already admitted at seq %d (%s); graph unchanged\n", res.AttemptID, res.Observation.Seq, res.Observation.Result)
+				return nil
+			}
 			printBucket := func(name string, ids []string) {
 				if len(ids) > 0 {
 					fmt.Fprintf(c.OutOrStdout(), "%s: %s\n", name, strings.Join(ids, ", "))
@@ -692,7 +702,7 @@ func graphSyncCmd() *cobra.Command {
 			printUntracked(c.OutOrStdout(), res.Buckets.Untracked, verbose)
 			printBucket("ambiguous", res.Buckets.Ambiguous)
 			if !res.Recorded {
-				return fmt.Errorf("graph sync: %s", res.Refusal)
+				return &refusedError{n: 1, msg: "graph sync: " + res.Refusal}
 			}
 			fmt.Fprintf(c.OutOrStdout(), "recorded %s at seq %d (isolation %s)\n",
 				res.Observation.Result, res.Observation.Seq, res.Observation.Isolation)
@@ -712,6 +722,7 @@ func graphSyncCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id to record the observation for")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the node is claimed; renews the lease)")
 	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
+	c.Flags().StringVar(&attempt, "attempt", "", "observed-v1 immutable attempt id")
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
@@ -1185,7 +1196,7 @@ func compileCmd() *cobra.Command {
 				for _, f := range findings {
 					fmt.Fprintf(&b, "  %s\n", f.String())
 				}
-				return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
+				return &refusedError{n: len(findings), msg: strings.TrimRight(b.String(), "\n")}
 			}
 			if asJSON {
 				views := make([]string, len(res.Views))
@@ -1573,6 +1584,9 @@ func graphReleaseCmd() *cobra.Command {
 func planDirFor(plan, verb string) (string, error) {
 	if plan == "" {
 		return "", fmt.Errorf("graph %s: --plan is required", verb)
+	}
+	if err := validPlanName(plan); err != nil {
+		return "", fmt.Errorf("graph %s: %w", verb, err)
 	}
 	root, err := store.FindPlanningRoot(".")
 	if err != nil {

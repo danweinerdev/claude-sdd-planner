@@ -151,6 +151,30 @@ func TestRenewIsHolderOnly(t *testing.T) {
 	}
 }
 
+func TestClaimInstanceIsStableOnRenewAndChangesOnTakeover(t *testing.T) {
+	dir := testPlanDir(t, n("a", nil, 1))
+	t0 := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	first, err := Claim(dir, Options{By: "a1", TTL: time.Minute, Now: fixedNow(t0)})
+	if err != nil || first.Node.Claim.Instance == "" {
+		t.Fatalf("first claim: %+v %v", first, err)
+	}
+	instance := first.Node.Claim.Instance
+	if _, err := Renew(dir, "a", "a1", time.Minute, fixedNow(t0.Add(30*time.Second))); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := gstore.Load(gstore.PathFor(dir))
+	if g.NodeByID("a").Claim.Instance != instance {
+		t.Fatal("renew rewrote the claim instance")
+	}
+	second, err := Claim(dir, Options{By: "a2", TTL: time.Minute, Now: fixedNow(t0.Add(2 * time.Minute))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Node.Claim.Instance == "" || second.Node.Claim.Instance == instance {
+		t.Fatal("takeover must allocate a fresh claim instance")
+	}
+}
+
 func TestReleaseIsHolderOnlyUnlessForced(t *testing.T) {
 	dir := testPlanDir(t, n("a", nil, 1))
 	if _, err := Claim(dir, Options{By: "a1"}); err != nil {

@@ -46,7 +46,9 @@ func Exemplar() *model.Proposal {
 				Contract:  "the schema describes every supported key and rejects an unknown one",
 				Justifies: []string{"FR-NN"},
 				Gate: model.Gate{
-					Type: model.GateTests,
+					Type:      model.GateTests,
+					Evidence:  model.EvidenceObservedV1,
+					Execution: &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 120},
 					Tests: []model.Test{
 						{ID: "test_schema_covers_every_key", File: "tests/test_schema.ext"},
 					},
@@ -54,7 +56,7 @@ func Exemplar() *model.Proposal {
 				// An explicit empty list is a claim: this node was triaged
 				// and carries no failure class from the closed vocabulary.
 				Hazards:   model.Hazards{},
-				Artifacts: []string{"src/schema.ext"},
+				Artifacts: []string{"src/schema.ext", "tests/test_schema.ext"},
 				Estimate:  1,
 				Phase:     "01-example",
 			},

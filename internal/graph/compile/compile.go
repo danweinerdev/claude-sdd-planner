@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -522,6 +523,19 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 	citedACs := map[string]bool{}
 	for _, id := range ids {
 		n := merged[id]
+		if n.Gate.Type == model.GateTests && len(n.Gate.Tests) == 0 {
+			add(id, "tests gate declares no tests; every new compile requires at least one honest test declaration")
+		}
+		for _, problem := range model.ValidateEvidenceGate(n) {
+			add(id, "%s", problem)
+		}
+		if n.Gate.Evidence == model.EvidenceObservedV1 {
+			for _, in := range n.Inputs {
+				if observedOwnOutput(in, sources) {
+					add(id, "observed-v1 gate cannot declare its live graph or test-evidence output as input %q", in.Path)
+				}
+			}
+		}
 
 		// Dangling deps.
 		for _, dep := range n.Deps {
@@ -769,4 +783,66 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 		return out[i].Msg < out[j].Msg
 	})
 	return out, nil
+}
+
+// observedOwnOutput recognizes the plan's live graph and private evidence
+// tree by both normalized spelling and filesystem identity. The latter is
+// needed on case-insensitive filesystems and for existing symlink aliases;
+// the former keeps pending paths fail-closed before they exist. Both the
+// planning checkout and a mapped target repository are plan roots.
+func observedOwnOutput(in model.Input, sources *sourceSet) bool {
+	var inputRoot string
+	switch in.Root {
+	case model.InputRootPlanning:
+		inputRoot = filepath.Dir(filepath.Dir(sources.planDir))
+	case model.InputRootRepository:
+		inputRoot = sources.inputRepoRoot
+	default:
+		return false
+	}
+	inputPath := filepath.Join(inputRoot, filepath.FromSlash(in.Path))
+	planName := filepath.Base(sources.planDir)
+	planDirs := []string{
+		sources.planDir,
+		filepath.Join(sources.inputRepoRoot, "Plans", planName),
+	}
+	for _, planDir := range planDirs {
+		graphPath := gstore.PathFor(planDir)
+		evidenceDir := filepath.Join(planDir, gstore.GraphDirName, "test-evidence")
+		if sameNormalizedPath(inputPath, graphPath) || normalizedPathWithin(inputPath, evidenceDir) || sameExistingFile(inputPath, graphPath) {
+			return true
+		}
+		resolvedInput, err := filepath.EvalSymlinks(inputPath)
+		if err != nil {
+			continue
+		}
+		if resolvedGraph, err := filepath.EvalSymlinks(graphPath); err == nil && sameNormalizedPath(resolvedInput, resolvedGraph) {
+			return true
+		}
+		if resolvedEvidence, err := filepath.EvalSymlinks(evidenceDir); err == nil && normalizedPathWithin(resolvedInput, resolvedEvidence) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizedPath(path string) string {
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+	}
+	return path
+}
+
+func sameNormalizedPath(a, b string) bool { return normalizedPath(a) == normalizedPath(b) }
+
+func normalizedPathWithin(path, dir string) bool {
+	path, dir = normalizedPath(path), normalizedPath(dir)
+	return path == dir || strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
+func sameExistingFile(a, b string) bool {
+	aInfo, aErr := os.Stat(a)
+	bInfo, bErr := os.Stat(b)
+	return aErr == nil && bErr == nil && os.SameFile(aInfo, bInfo)
 }

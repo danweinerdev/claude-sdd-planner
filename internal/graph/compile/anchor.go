@@ -86,6 +86,11 @@ func (s *Sources) InputResolver() *InputResolver {
 	return s.inRes
 }
 
+// RepositoryRoot returns the explicitly resolved target repository for this
+// plan. Runtime consumers use it rather than assuming the planning checkout
+// is also where claimed source artifacts live.
+func (s *Sources) RepositoryRoot() string { return s.set.inputRepoRoot }
+
 // Validate runs the semantic pass over g, treating every node as stored (an
 // empty proposal against it) — the same gate compile applies, including the
 // missing-fingerprint guard, against this snapshot. The returned error is

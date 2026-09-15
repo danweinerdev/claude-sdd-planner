@@ -115,6 +115,14 @@ func planSetInputs(g *model.Graph, nodeID string, decl []model.Input, hashes map
 	if n == nil {
 		return nil, fmt.Errorf("graph set-inputs: node %q does not exist", nodeID)
 	}
+	candidate := *n
+	candidate.Inputs = decl
+	if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
+		for _, problem := range problems {
+			*refusals = append(*refusals, fmt.Sprintf("%s: %s", nodeID, problem))
+		}
+		return nil, nil
+	}
 	if n.Claim != nil {
 		*refusals = append(*refusals, fmt.Sprintf("%s is claimed by %q; release the claim before re-setting inputs", nodeID, n.Claim.By))
 		return nil, nil
