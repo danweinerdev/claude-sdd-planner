@@ -16,7 +16,8 @@ claude-sdd-planner/               # Repository root = canonical Claude plugin ro
 ├── skills/                       # Model-only reference skills (auto-loaded by description, not /-invocable)
 │   ├── <lang>-specifications/    #   per-language structural verification (cpp, rust, go, python, typescript, java, swift)
 │   ├── decision-log/             #   ad-hoc plan-decision capture outside lifecycle skills
-│   └── sdd-cli/                  #   how to drive the sdd binary — task→command map + write-path discipline
+│   ├── sdd-cli/                  #   how to drive the sdd binary — task→command map + write-path discipline
+│   └── test-{design,generate,assess}/ # composed test-quality instruction skills
 ├── agents/                       # Subagent definitions — also the source for the portable role prompts
 ├── hooks/                        # Wrappers that locate the binary; hooks.json is NOT shipped —
 │   ├── sdd-hook.sh               #   `sdd provision` generates it per-platform (see below)
@@ -134,7 +135,7 @@ Plans: `Plans/<PlanName>/README.md` with zero-padded phase docs (`01-Phase-Name.
 In the portable trees the same skills ship as `sdd-research`, `sdd-plan`, …, selected by description matching rather than slash invocation.
 
 ### Model-only reference skills (`skills/`)
-Not user-invocable (`disable-model-invocation: true`); the model auto-loads them by description. `<lang>-specifications` (7 languages) supplies structural-verification tools when planning/implementing/reviewing that language, coordinated by `shared/language-verification.md`; `decision-log` carries the three-step write protocol for ad-hoc plan decisions; `sdd-cli` carries the binary's task→command map and write-path discipline (statuses move through transitions, evidence records what ran, exit 1 is a working gate — never hand-edit around it) for `sdd` use outside a lifecycle skill. In the portable trees the language skills flatten to `shared/language-specs/<lang>.md`; `decision-log` and `sdd-cli` ship as skills. Restricted agents read skill bodies as plain files when they need them.
+Not user-invocable (`disable-model-invocation: true`); the model auto-loads them by description. `<lang>-specifications` (7 languages) supplies structural-verification tools when planning/implementing/reviewing that language, coordinated by `shared/language-verification.md`; `test-design`, `test-generate`, and `test-assess` compose prospective test selection, authoring, and semantic result interpretation without changing graph authority; `decision-log` carries the three-step write protocol for ad-hoc plan decisions; `sdd-cli` carries the binary's task→command map and write-path discipline. In the portable trees the language skills flatten to `shared/language-specs/<lang>.md`; the test-quality standard is generated as `shared/test-design.md`; the other model-only references ship as skills. Restricted agents read skill bodies as plain files when they need them.
 
 ## Agents
 

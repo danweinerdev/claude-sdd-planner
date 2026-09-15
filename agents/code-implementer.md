@@ -29,8 +29,9 @@ You receive from the coordinator one of two dispatch shapes.
 - **Hazard triage** — the node's declared failure classes and the shape each discharging test must take
 - **Workspace path and VCS label** — you work **inside the claimed workspace** (git targets: a dedicated worktree), never the shared tree
 - **The red-first rule** — write the named tests first, run them against the unimplemented/broken state, and save that failing report; only then implement
+- **Assessed test design card and evidence mode** — preserve every fixed heading and whether the node is legacy or `observed-v1`; do not silently change either
 
-For graph nodes your deliverables change shape: the coordinator holds the claim and runs every `sdd graph sync` itself — you hand back the **red report file, the green report file, and the workspace commit** (one clean commit of the complete slice inside the workspace; the sync's revision anchor must name the tested bytes). Everything else on this page — premise checks, spec fidelity, comment policy, evidence-not-assertion — applies unchanged.
+For graph nodes your deliverables change shape: the coordinator holds the claim and runs every `sdd graph sync` itself — you hand back the **raw RED/GREEN execution material appropriate to the selected evidence mode, assessment findings, and the workspace commit** (one clean commit of the complete slice inside the workspace; the passing admission's revision anchor must name the tested bytes). Everything else on this page — premise checks, spec fidelity, comment policy, evidence-not-assertion — applies unchanged.
 
 ## Path Resolution
 
@@ -52,6 +53,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 ## Process
 
 ### 1. Analyze
+- From the already resolved active plugin root, read `skills/test-design/SKILL.md`, `skills/test-generate/SKILL.md`, `skills/test-assess/SKILL.md`, and `docs/TDD-TEST-DESIGN.md` in place; never resolve them from the target workspace. Challenge the supplied card; if it is absent or incompatible, reconstruct and assess it before generation. A fresh design-challenge context is optional; label the same-context fallback.
 - Break down the subtasks into an implementation order
 - Identify files to create or modify
 - Note any dependencies between subtasks
@@ -62,6 +64,8 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 - Keep changes minimal and focused on the task
 
 ### 3. Implement
+- Generate the assessed named tests first using the actual fixtures and discovery conventions. Return the skill's `Files changed`, `Test identities`, `Scaffolding introduced`, and `Unresolved findings`; stop on unresolved identity, seam, oracle, or scope mismatches.
+- Keep evidence modes distinct. For `observed-v1`, the coordinator checks help for runtime capability and owns capture/check/admission; do not pretend commands or an installed version exist or fall back to legacy. Preserve the real GREEN run while the same tested bytes are committed—do not request a duplicate run solely for the commit. For legacy nodes, return ordinary report evidence without claiming observed provenance. In either mode keep binary checker facts separate from assessment judgment; distinguish absent-behavior RED, valid sensitivity RED, and deliberate compiler-rejection harness tests from accidental setup/build/import/discovery/capture failure.
 - Write code for each subtask
 - Write tests alongside the code (not as an afterthought)
 - Follow the project's existing conventions for:
@@ -87,6 +91,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 - Fix any failures before reporting back
 - If tests fail and you can't resolve after 2 attempts, report the failure to the coordinator
 - **Verification is evidence, not assertion.** A step counts as verified only when you have the command's actual output in hand. "It should pass", "verified", or a paraphrase of what the output would say are not verification — if you didn't run it, the task is not done.
+- Never weaken generated assertions, add production scope outside the task/node, or report a generative pseudo-outcome as RED or GREEN.
 
 ### 5. Commit
 Use the VCS label the coordinator passed (consult `shared/vcs-detection.md` in the plugin directory only for the operations table, or if no label was passed).

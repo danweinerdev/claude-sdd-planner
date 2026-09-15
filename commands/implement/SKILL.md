@@ -36,7 +36,25 @@ When nothing is claimable, the refusal explains the frontier (state counts, acti
 
 ### 2. Red — prove the tests can fail
 
-Write the node's **named tests first** (the ids in the claim payload; the runner-visible ids must match exactly), run them in the workspace against the unimplemented or broken state, and sync the failing report:
+Before editing, compose the test skills from the already resolved active plugin root, reading each `SKILL.md` in place rather than resolving it from the claimed workspace. Read the fixed-heading design card passed from planning; if it is missing or incompatible with the current node/source, run `skills/test-design/SKILL.md` to reconstruct it from cited intent and inspected code. Challenge it with `skills/test-assess/SKILL.md` (fresh non-inheriting context when useful and available; labeled same-context assessment otherwise). Only `ready` proceeds. Then run `skills/test-generate/SKILL.md`; reconcile any changed identity or newly discovered engineering obligation through the normal proposal/amendment path rather than silently substituting tests or expanding implementation scope.
+
+Write **all named tests first** (the ids in the claim payload; runner-visible ids must match exactly). Select the evidence branch from the node's committed tests gate, then check capability instead of assuming new commands exist:
+
+- **`observed-v1`:** first run `sdd test run --help`, `sdd test check --help`, and `sdd graph sync --help` against the active installation. If their help does not expose the required attempt capture, checking, and admission flags, stop with a binary-capability mismatch without downgrading or claiming an installed version. Use one of these RED sequences; do not admit diagnostics that assessment rejects:
+  ```
+  sdd test run --plan <Name> --node <id> --by <identity> --phase red --red-kind baseline
+  sdd test check --plan <Name> --node <id> --attempt <attempt-id> --expect red
+  sdd graph sync --plan <Name> --node <id> --by <identity> --attempt <attempt-id>
+  ```
+  ```
+  sdd test run --plan <Name> --node <id> --by <identity> --phase red --red-kind sensitivity --fault "<named injected fault>"
+  sdd test check --plan <Name> --node <id> --attempt <attempt-id> --expect red
+  sdd graph sync --plan <Name> --node <id> --by <identity> --attempt <attempt-id>
+  ```
+  Assess raw output and checker facts before the coordinator runs the shown sync. Baseline absent-behavior failure, valid sensitivity RED, and deliberate compiler-rejection harness tests are eligible when assessment rates them `ready`; accidental build/import/setup failure is not.
+- **Legacy tests gate:** keep the existing targeted runner/report flow below. Assess its raw output before sync and distinguish intended assertion failure from discovery, setup, build, timeout, or capture failure. This path remains supported but must be described as legacy report evidence, never as `observed-v1` provenance.
+
+For the legacy branch, sync the usable failing report:
 
 ```
 sdd graph sync --plan <Name> --node <id> --by <identity> --report red.xml
@@ -46,7 +64,16 @@ A red run is a **successful** sync — recording the failure is the point. It st
 
 ### 3. Green — implement, commit, sync the pass
 
-Implement inside the workspace until the named tests pass. **Commit the complete slice in the workspace first** — the revision anchor must name the tested bytes, and sync refuses a passing report from a dirty worktree. Then:
+Implement inside the workspace until the named tests pass. Do not weaken assertions, add implementation outside the node contract, or hardcode the generated cases. Assess the real GREEN output with `skills/test-assess/SKILL.md`; setup/capture failure is not GREEN. For `observed-v1`, capture the real run against the final bytes, commit those same bytes without modifying them, then check and sync that attempt—do not duplicate the run merely to attach a commit:
+
+```
+sdd test run --plan <Name> --node <id> --by <identity> --phase green
+git commit <the complete tested slice using the repository's normal non-interactive workflow>
+sdd test check --plan <Name> --node <id> --attempt <attempt-id> --expect green
+sdd graph sync --plan <Name> --node <id> --by <identity> --attempt <attempt-id>
+```
+
+The revision anchor must name the tested bytes and sync requires the worktree to remain clean. For legacy gates, commit the complete tested slice and continue with the report path:
 
 ```
 sdd graph sync --plan <Name> --node <id> --by <identity> --report green.xml
@@ -84,7 +111,7 @@ Until the bytes land on the mainline, the node honestly derives STALE from the s
   sdd graph amend --plan <Name> --node <id> --from-review <artifact path> --expect-digest <digest> --expect-report-digest <report-digest> --by <identity>
   ```
 
-  `--dry-run` re-prints the preview without writing. A successful amend bumps `contract_rev` and clears red bookkeeping on every revised node (it owes a fresh RED before it can green again) and adds any extended node — both re-enter the frontier as ordinary work, deps of the review node. The review node stays BLOCKED behind them; walk those nodes through the usual red → green → sync cycle, then re-claim the review node and re-review. `integration-acceptance` nodes depend on review nodes, so closure requires the review to have passed on the bytes that ship.
+  `--dry-run` re-prints the preview without writing. A successful amend bumps `contract_rev`, recomputes each revised test's red compatibility, and adds any extended node. Do not assume all red bookkeeping or a provenance SHA resets: the binary's compatibility result is authoritative. A revised test whose prior RED is absent or incompatible needs an actual fresh intended failure; compatible legacy metadata may carry forward. New or extended hazard-discharging tests need their intended RED before GREEN can count. Revised and extended nodes re-enter the frontier as ordinary work, deps of the review node. The review node stays BLOCKED behind them; walk those nodes through the required red → green → sync work, then re-claim the review node and re-review. `integration-acceptance` nodes depend on review nodes, so closure requires the review to have passed on the bytes that ship.
 
 ### Stopping Rules
 
@@ -99,7 +126,7 @@ Until the bytes land on the mainline, the node honestly derives STALE from the s
 - **advisory** (`show` lists a citation or input under "advisory"): the text changed since the node's compile anchor but the node's latest run already saw the current text, so it is GREEN. A judgment is still owed: `sdd graph acknowledge` records it and clears the advisory. Acknowledge writes no observation and can never green a node.
 - **Changing a node's declared inputs**: `sdd graph set-inputs --plan <Name> --node <id> --file inputs.json [--dry-run]` — a JSON array of `{"root", "path", "section?"}`. It resolves each input and owns the embedded `input_hashes`; eligibility is deliberately conservative (unclaimed, no red observations, and on a verified node only a narrowing of an already-declared file whose bytes the run saw unchanged), so a node with evidence is never re-pointed at different input text. Use `--dry-run` to preview; it refuses atomically on an unresolvable declaration or an ineligible node. `sdd graph set-artifacts --plan <Name> --node <id> --by <identity> --add <path> [--remove <path>]` edits the declared write set (holder-only) when a slice needs a collateral file the planner did not declare. It also re-renders the plan's generated phase views and README so they reflect the new write-set, reporting them as `views_rendered`; pass `--no-render` to edit the graph only and leave the views stale until the next compile.
 - **Missing fingerprints** (a node cites a fingerprintable requirement but carries no `intent_hashes` entry — e.g. children from an older `split`): `sdd graph repair-intent --plan <Name> [--node <id>] [--dry-run]` backfills only the *missing/empty* hashes on unclaimed, unverified nodes with no red observations. It never overwrites an existing hash and refuses atomically (no partial repair) on any claimed, verified, red-observed, or ambiguous/unresolved node — evidence is never re-blessed against today's text.
-- **Revised or extended nodes from an amendment**: they enter the frontier like any red/new node — a revised node owes a fresh RED at its new `contract_rev` even if it keeps a test's name; an extended node starts its own red → green cycle. The review node they depend on goes GREEN again only after they do and the review is re-run — that is the system asking for re-review, not a malfunction.
+- **Revised or extended nodes from an amendment**: react to the committed evidence mode and the binary's authoritative per-test compatibility result, not merely a changed `contract_rev` or unchanged test name. Only an absent or incompatible prior RED requires an actual fresh intended failure; compatible legacy red metadata can carry over, with no assumed provenance-SHA reset. New or extended hazard-discharging tests still require their intended RED before GREEN can count. The review node goes GREEN again only after its dependencies do and the review is re-run — that is the system asking for re-review, not a malfunction.
 - **Lease expiry / crashes**: an expired claim's workspace is preserved as post-mortem evidence. Inspect it if useful, then `sdd graph gc --plan <Name>` — gc persists the expiry and reaps the workspace; the node returns to the frontier. A stale claimant's late sync is refused by claim discipline.
 - **Abandoning a node**: `sdd graph release <id> --by <identity>` — never squat on a claim you aren't working.
 
@@ -109,7 +136,7 @@ For graph plans, **observation records and rendered views are the completion rec
 
 ### Delegating Node Execution
 
-Node work may be dispatched to `sdd-planner:code-implementer` agents. The dispatch carries the **claim payload verbatim** — contract, cited requirement text, named tests, hazards and the shapes their tests must take, workspace path, VCS label — plus the red-first rule. The agent writes tests and implementation **inside the claimed workspace** and returns the report files and the workspace commit; the coordinator (the claim holder) runs every `sync` — observation recording stays with the identity that holds the lease. Reject any agent report that asserts outcomes without report files; the tool would refuse them anyway.
+Node work may be dispatched to `sdd-planner:code-implementer` agents under the unchanged `implement_task` routing. The dispatch carries the **claim payload verbatim** — contract, cited requirement text, named tests, hazards and the shapes their tests must take, workspace path, VCS label — plus the assessed design card, selected evidence mode, and red-first rule. The agent composes test generation, implementation, and assessment **inside the claimed workspace** and returns generated-test findings, raw execution/report material, and the workspace commit; the coordinator (the claim holder) performs capability checks and runs every `sync` — graph writes and observation admission stay with the lease holder. Reject any report that asserts outcomes without execution evidence.
 
 ## v1 Plans (no graph)
 
@@ -144,6 +171,7 @@ Everything else is autonomous. When an escalation resolution binds work beyond t
 
 ## Context
 - Orchestration and role prompts: `shared/orchestration.md`
+- Test composition: `skills/test-design/SKILL.md`, `skills/test-generate/SKILL.md`, `skills/test-assess/SKILL.md`; quality standard: `docs/TDD-TEST-DESIGN.md`
 - Evidence rules (v1): `shared/completion-evidence.md`; review gate: `shared/review-artifacts.md`
 - Hazard vocabulary: `sdd graph hazards`; state model: `sdd graph status`
 - Plan decisions discipline: `shared/decision-log.md`

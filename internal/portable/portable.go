@@ -154,7 +154,7 @@ func Generate(repoRoot string) (*Result, error) {
 
 	// Model-only reference skills that keep skill form in the portable tree
 	// (the language-specification skills flatten to shared docs instead).
-	for _, name := range []string{"decision-log", "sdd-cli"} {
+	for _, name := range []string{"decision-log", "sdd-cli", "test-design", "test-generate", "test-assess"} {
 		src := filepath.Join(repoRoot, "skills", name, "SKILL.md")
 		outName := name
 		if !strings.HasPrefix(outName, "sdd-") {
@@ -178,6 +178,24 @@ func Generate(repoRoot string) (*Result, error) {
 		}
 		r.Files[rel] = []byte(out)
 		r.Generated = append(r.Generated, rel)
+	}
+
+	// Canonical guides that installed portable skills need in place. These are
+	// explicit mappings rather than hand-maintained copies so provenance points
+	// to the repository's single editable source.
+	for srcRel, outRel := range map[string]string{
+		"docs/TDD-TEST-DESIGN.md": "shared/test-design.md",
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(srcRel)))
+		if err != nil {
+			return nil, err
+		}
+		out, err := transformDoc(string(raw), srcRel)
+		if err != nil {
+			return nil, err
+		}
+		r.Files[outRel] = []byte(out)
+		r.Generated = append(r.Generated, outRel)
 	}
 
 	// Language reference skills flatten to shared/language-specs/<lang>.md.

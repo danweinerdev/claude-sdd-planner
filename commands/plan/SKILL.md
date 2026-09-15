@@ -56,6 +56,10 @@ Ask the researcher for a **structured** summary aimed at the payload you are abo
 
 ### 4. Decompose into Nodes (DD-13)
 
+Before authoring each work node, compose `skills/test-design/SKILL.md` using the gathered intent, inspected code, existing tests, hazard discussion, and the canonical standard at `docs/TDD-TEST-DESIGN.md`. Keep its complete fixed-heading card in working context. Run `skills/test-assess/SKILL.md` in design-challenge mode before proposal: a fresh non-inheriting context is useful when available, but the same planning context performs and labels the challenge otherwise. A `changes-required` card returns to test design; a `blocked` card returns to investigation or scope reconciliation. Do not propose invented or infeasible tests merely to fill node fields.
+
+The card informs the normative contract, named tests, artifacts, inputs, and hazards below but is not another plan artifact and grants no graph authority. The coordinator alone writes proposal payloads and invokes graph mutation commands.
+
 A node is **one red→green cycle**: one falsifiable contract, verified by named tests that fail before the work and pass after. For each node:
 
 - **Contract** — 1–2 sentences stating what is *true* when the node is done. Falsifiable, not aspirational ("the parser refuses duplicate keys naming the path", not "improve parsing").
@@ -109,6 +113,7 @@ The graph is the plan. Rendered views carry a generation marker and are overwrit
 
 ## Context
 - Orchestration and role prompts: `shared/orchestration.md`
+- Test composition: `skills/test-design/SKILL.md`, `skills/test-assess/SKILL.md`; quality standard: `docs/TDD-TEST-DESIGN.md`
 - Payload template: `sdd template graph-proposal` (exemplar + `--schema`)
 - Hazard vocabulary: `sdd graph hazards`
 - Frontmatter schema (README identity, v1 plans): `shared/frontmatter-schema.md`

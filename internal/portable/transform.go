@@ -27,6 +27,7 @@ var skillNames = []string{
 	"plan", "poke-holes", "research", "setup", "specify", "validate",
 	// Model-only reference skill that ships in both trees.
 	"decision-log",
+	"test-design", "test-generate", "test-assess",
 }
 
 var (
@@ -53,11 +54,13 @@ var (
 	// skills/decision-log → skills/sdd-decision-log (the one model-only skill
 	// that keeps skill form in the portable tree).
 	decisionLogPathRe = regexp.MustCompile(`skills/decision-log\b`)
+	testSkillPathRe = regexp.MustCompile(`skills/(test-design|test-generate|test-assess)\b`)
 
 	// skills/<lang>-specifications → shared/language-specs/<lang>.md: the
 	// language reference skills flatten to plain shared docs in the portable
 	// tree, since only Claude auto-loads description-matched skills.
 	langSkillPathRe = regexp.MustCompile(`skills/(cpp|rust|go|python|typescript|java|swift)-specifications(?:/SKILL\.md|/)?`)
+	testDesignGuidePathRe = regexp.MustCompile(`docs/TDD-TEST-DESIGN\.md`)
 )
 
 // Marker grammar, chosen so canonical files remain valid Claude content:
@@ -137,7 +140,9 @@ func rewriteTerms(content string) string {
 	content = commandsPathRe.ReplaceAllString(content, "skills/sdd-$1/")
 	content = backtickSlashRe.ReplaceAllString(content, "`sdd-$1$2`")
 	content = decisionLogPathRe.ReplaceAllString(content, "skills/sdd-decision-log")
+	content = testSkillPathRe.ReplaceAllString(content, "skills/sdd-$1")
 	content = langSkillPathRe.ReplaceAllString(content, "shared/language-specs/$1.md")
+	content = testDesignGuidePathRe.ReplaceAllString(content, "shared/test-design.md")
 	return content
 }
 

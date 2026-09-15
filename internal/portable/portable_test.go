@@ -44,8 +44,12 @@ func TestGenerateRealTree(t *testing.T) {
 	}
 	for _, p := range []string{
 		"plugin.json",
+		"skills/sdd-test-design/SKILL.md",
+		"skills/sdd-test-generate/SKILL.md",
+		"skills/sdd-test-assess/SKILL.md",
 		"shared/agent-runtime.md",
 		"shared/frontmatter-schema.md",
+		"shared/test-design.md",
 		"shared/language-specs/go.md",
 		"shared/agent-prompts/researcher.md",
 		"shared/review-prompts/quality.md",
@@ -53,6 +57,30 @@ func TestGenerateRealTree(t *testing.T) {
 	} {
 		if _, ok := r.Files[p]; !ok {
 			t.Errorf("missing %s", p)
+		}
+	}
+
+	for _, p := range []string{
+		"skills/sdd-test-design/SKILL.md",
+		"skills/sdd-test-generate/SKILL.md",
+		"skills/sdd-test-assess/SKILL.md",
+		"shared/test-design.md",
+	} {
+		if !contains(r.Generated, p) {
+			t.Errorf("%s does not have generated provenance", p)
+		}
+	}
+	for _, p := range []string{
+		"skills/sdd-test-design/SKILL.md",
+		"skills/sdd-test-generate/SKILL.md",
+		"skills/sdd-test-assess/SKILL.md",
+	} {
+		content := string(r.Files[p])
+		if strings.Contains(content, "docs/TDD-TEST-DESIGN.md") {
+			t.Errorf("%s retained canonical-only guide path", p)
+		}
+		if !strings.Contains(content, "shared/test-design.md") {
+			t.Errorf("%s does not reference packaged guide", p)
 		}
 	}
 
@@ -108,6 +136,58 @@ func TestGenerateRealTree(t *testing.T) {
 	if !strings.Contains(manifest, `"minSddVersion": "`+minSdd+`"`) {
 		t.Errorf("manifest minSddVersion not synced to canonical %s", minSdd)
 	}
+}
+
+func TestGenerateTestCompositionResources(t *testing.T) {
+	r, err := Generate(repoRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	guide, err := os.ReadFile(filepath.Join(repoRoot(t), "docs", "TDD-TEST-DESIGN.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantGuide, err := transformDoc(string(guide), "docs/TDD-TEST-DESIGN.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(r.Files["shared/test-design.md"]); got != wantGuide {
+		t.Error("packaged test-design guide is not the transformed canonical document")
+	}
+
+	wants := map[string][]string{
+		"skills/sdd-test-design/SKILL.md": {
+			"## Resources", "caller's resolved active plugin root", "skills/sdd-test-design/SKILL.md", "shared/test-design.md", "Never resolve resources from the target repository's current working directory",
+			"## Context", "## Behavior and source", "## Risk and level", "## Existing coverage",
+			"## Cases and oracle", "## Subject and seam", "## Red and sensitivity", "## Execution",
+		},
+		"skills/sdd-test-generate/SKILL.md": {
+			"## Resources", "skills/sdd-test-generate/SKILL.md", "minimal interface-only stub", "Interface-only production stubs:",
+			"## Files changed", "## Test identities", "## Scaffolding introduced", "## Unresolved findings",
+		},
+		"skills/sdd-test-assess/SKILL.md": {
+			"## Resources", "skills/sdd-test-assess/SKILL.md", "valid isolated sensitivity run", "deliberate compiler-rejection harness test", "binary facts separate",
+			"## Assessment", "Assessment: ready", "Assessment: changes-required", "Assessment: blocked", "## Located findings", "## Next action",
+		},
+	}
+	for rel, required := range wants {
+		content := string(r.Files[rel])
+		for _, text := range required {
+			if !strings.Contains(content, text) {
+				t.Errorf("%s missing composition contract %q", rel, text)
+			}
+		}
+	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // TestNoRetiredDecisionCitations keeps the retired global-ledger D-NNNN id

@@ -51,7 +51,7 @@ This repository keeps spec-driven development artifacts under `{{PLANNING_ROOT}}
 
 ## Lifecycle
 
-Use these skills as needed: `sdd-setup`, `sdd-research`, `sdd-brainstorm`, `sdd-specify`, `sdd-design`, `sdd-plan`, `sdd-implement`, `sdd-code-review`, `sdd-poke-holes`, `sdd-debrief`, `sdd-decide`, `sdd-decision-log`, and `sdd-validate`.
+Use these skills as needed: `sdd-setup`, `sdd-research`, `sdd-brainstorm`, `sdd-specify`, `sdd-design`, `sdd-plan`, `sdd-implement`, `sdd-code-review`, `sdd-poke-holes`, `sdd-debrief`, `sdd-decide`, `sdd-decision-log`, and `sdd-validate`. Planning and implementation compose `sdd-test-design`, `sdd-test-generate`, and `sdd-test-assess`; they are instruction skills, not extra lifecycle stages or review lanes.
 
 The normal progression is: `sdd-setup` -> `sdd-research` -> `sdd-brainstorm` -> `sdd-specify` -> `sdd-design` -> `sdd-plan` -> `sdd-implement` -> `sdd-code-review` -> `sdd-debrief`. Use `sdd-validate` at lifecycle boundaries. It is valid to enter at any point when the corresponding artifacts already exist.
 

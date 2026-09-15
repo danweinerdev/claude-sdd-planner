@@ -41,12 +41,14 @@ func TestFilterMarkersErrors(t *testing.T) {
 
 func TestRewriteTerms(t *testing.T) {
 	cases := map[string]string{
-		"`/sdd-planner:plan`":            "`sdd-plan`",
-		"see commands/plan/SKILL.md §3":  "see skills/sdd-plan/SKILL.md §3",
-		"run `/decide check` weekly":     "run `sdd-decide check` weekly",
-		"the skills/decision-log skill":  "the skills/sdd-decision-log skill",
-		"read skills/go-specifications/": "read shared/language-specs/go.md",
-		"a plan for the design":          "a plan for the design", // bare words untouched
+		"`/sdd-planner:plan`":              "`sdd-plan`",
+		"see commands/plan/SKILL.md §3":    "see skills/sdd-plan/SKILL.md §3",
+		"run `/decide check` weekly":       "run `sdd-decide check` weekly",
+		"the skills/decision-log skill":    "the skills/sdd-decision-log skill",
+		"read skills/test-design/SKILL.md": "read skills/sdd-test-design/SKILL.md",
+		"read skills/go-specifications/":   "read shared/language-specs/go.md",
+		"read docs/TDD-TEST-DESIGN.md":     "read shared/test-design.md",
+		"a plan for the design":            "a plan for the design", // bare words untouched
 	}
 	for in, want := range cases {
 		if got := rewriteTerms(in); got != want {
