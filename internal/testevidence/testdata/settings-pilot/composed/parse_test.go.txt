@@ -1,0 +1,62 @@
+package settings
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestParseContract(t *testing.T) {
+	t.Run("preserves_string_values_and_whitespace", func(t *testing.T) {
+		raw := []byte(" \n{\"quote\":\"\\\"\",\"slash\":\"\\\\\",\"line\":\"a\\nb\",\"unicode\":\"雪\",\"empty\":\"\"}\t")
+		want := map[string]string{
+			"quote":   "\"",
+			"slash":   "\\",
+			"line":    "a\nb",
+			"unicode": "雪",
+			"empty":   "",
+		}
+
+		got, err := Parse(raw)
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Parse() = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("empty_object_returns_non_nil_map", func(t *testing.T) {
+		got, err := Parse([]byte("{}"))
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+		if got == nil {
+			t.Fatal("Parse() returned a nil map")
+		}
+		if len(got) != 0 {
+			t.Fatalf("Parse() returned %d entries, want 0", len(got))
+		}
+	})
+
+	invalid := []struct {
+		name string
+		raw  string
+	}{
+		{name: "rejects_duplicate_keys", raw: `{"same":"first","same":"second"}`},
+		{name: "rejects_array", raw: `[]`},
+		{name: "rejects_null", raw: `null`},
+		{name: "rejects_nested_value", raw: `{"key":{"nested":"value"}}`},
+		{name: "rejects_number_value", raw: `{"key":1}`},
+		{name: "rejects_boolean_value", raw: `{"key":true}`},
+		{name: "rejects_null_value", raw: `{"key":null}`},
+		{name: "rejects_malformed_input", raw: `{"key":"value"`},
+		{name: "rejects_trailing_data", raw: `{"key":"value"} {}`},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, err := Parse([]byte(tc.raw)); err == nil {
+				t.Fatalf("Parse(%q) = %#v, nil error; want rejection", tc.raw, got)
+			}
+		})
+	}
+}

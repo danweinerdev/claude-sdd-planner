@@ -1,0 +1,56 @@
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+)
+
+func Parse(raw []byte) (map[string]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
+		return nil, fmt.Errorf("settings must be a JSON object")
+	}
+
+	settings := make(map[string]string)
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return nil, fmt.Errorf("object key is not a string")
+		}
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		text, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("value for %q is not a string", key)
+		}
+		settings[key] = text
+	}
+
+	closing, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
+		return nil, fmt.Errorf("settings object is not closed")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("trailing JSON value")
+		}
+		return nil, err
+	}
+	return settings, nil
+}

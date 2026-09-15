@@ -1,0 +1,29 @@
+package settings
+
+import (
+	"bytes"
+	"sort"
+)
+
+func Render(settings map[string]string) ([]byte, error) {
+	keys := make([]string, 0, len(settings))
+	for key := range settings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var rendered bytes.Buffer
+	rendered.WriteByte('{')
+	for index, key := range keys {
+		if index != 0 {
+			rendered.WriteByte(',')
+		}
+		rendered.WriteByte('"')
+		rendered.WriteString(key)
+		rendered.WriteString("\":\"")
+		rendered.WriteString(settings[key])
+		rendered.WriteByte('"')
+	}
+	rendered.WriteByte('}')
+	return rendered.Bytes(), nil
+}

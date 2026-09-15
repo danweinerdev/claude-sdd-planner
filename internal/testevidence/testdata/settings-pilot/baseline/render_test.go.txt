@@ -1,0 +1,75 @@
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"testing"
+)
+
+func TestRenderContract(t *testing.T) {
+	t.Run("orders keys and omits trailing newline", func(t *testing.T) {
+		got, err := Render(map[string]string{"z": "last", "a": "first", "middle": "value"})
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		want := []byte(`{"a":"first","middle":"value","z":"last"}`)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("Render() = %q, want %q", got, want)
+		}
+		if bytes.HasSuffix(got, []byte("\n")) {
+			t.Fatalf("Render() has a trailing newline: %q", got)
+		}
+	})
+
+	t.Run("nil map is empty object", func(t *testing.T) {
+		got, err := Render(nil)
+		if err != nil {
+			t.Fatalf("Render(nil) error = %v", err)
+		}
+		if string(got) != "{}" {
+			t.Fatalf("Render(nil) = %q, want %q", got, "{}")
+		}
+	})
+
+	t.Run("escapes JSON and preserves decoded text", func(t *testing.T) {
+		input := map[string]string{
+			"quote\"key": "a \"quote\" and \\ slash",
+			"controls":   "first\nsecond\tthird\r\b\f",
+			"unicode":    "雪 ☃ café",
+			"empty":      "",
+		}
+		got, err := Render(input)
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		var decoded map[string]string
+		if err := json.Unmarshal(got, &decoded); err != nil {
+			t.Fatalf("standard JSON decoder rejected Render output %q: %v", got, err)
+		}
+		if !reflect.DeepEqual(decoded, input) {
+			t.Fatalf("decoded output = %#v, want %#v", decoded, input)
+		}
+	})
+
+	t.Run("does not mutate input and is deterministic", func(t *testing.T) {
+		input := map[string]string{"b": "two", "a": "one"}
+		before := map[string]string{"b": "two", "a": "one"}
+		first, err := Render(input)
+		if err != nil {
+			t.Fatalf("first Render() error = %v", err)
+		}
+		if !reflect.DeepEqual(input, before) {
+			t.Fatalf("Render() mutated input to %#v, want %#v", input, before)
+		}
+		for i := 0; i < 5; i++ {
+			next, err := Render(input)
+			if err != nil {
+				t.Fatalf("Render() iteration %d error = %v", i, err)
+			}
+			if !bytes.Equal(next, first) {
+				t.Fatalf("Render() iteration %d = %q, first result %q", i, next, first)
+			}
+		}
+	})
+}

@@ -1,0 +1,67 @@
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"testing"
+)
+
+func TestRenderContract(t *testing.T) {
+	t.Run("orders_keys", func(t *testing.T) {
+		got, err := Render(map[string]string{"z": "last", "a": "first", "m": "middle"})
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		want := []byte(`{"a":"first","m":"middle","z":"last"}`)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("Render() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("escapes_preserves_and_is_stable", func(t *testing.T) {
+		input := map[string]string{
+			"empty":   "",
+			"hostile": "quote=\" slash=\\ newline=\n unicode=雪 <&>",
+		}
+		before := map[string]string{
+			"empty":   "",
+			"hostile": "quote=\" slash=\\ newline=\n unicode=雪 <&>",
+		}
+
+		first, err := Render(input)
+		if err != nil {
+			t.Fatalf("first Render() error = %v", err)
+		}
+		second, err := Render(input)
+		if err != nil {
+			t.Fatalf("second Render() error = %v", err)
+		}
+		if !bytes.Equal(first, second) {
+			t.Fatalf("repeated Render() outputs differ: %q and %q", first, second)
+		}
+		if bytes.HasSuffix(first, []byte("\n")) {
+			t.Fatalf("Render() output has trailing newline: %q", first)
+		}
+		var decoded map[string]string
+		if err := json.Unmarshal(first, &decoded); err != nil {
+			t.Fatalf("Render() output is not one valid JSON object: %v; output %q", err, first)
+		}
+		if !reflect.DeepEqual(decoded, before) {
+			t.Fatalf("decoded Render() output = %#v, want %#v", decoded, before)
+		}
+		if !reflect.DeepEqual(input, before) {
+			t.Fatalf("Render() mutated input to %#v, want %#v", input, before)
+		}
+	})
+
+	t.Run("nil_map_is_empty_object", func(t *testing.T) {
+		got, err := Render(nil)
+		if err != nil {
+			t.Fatalf("Render(nil) error = %v", err)
+		}
+		if string(got) != "{}" {
+			t.Fatalf("Render(nil) = %q, want %q", got, "{}")
+		}
+	})
+}

@@ -1,0 +1,9 @@
+package settings
+
+func Save(path string, settings map[string]string, beforeReplace func() error) error {
+	return nil
+}
+
+func Load(path string) (map[string]string, error) {
+	return nil, nil
+}

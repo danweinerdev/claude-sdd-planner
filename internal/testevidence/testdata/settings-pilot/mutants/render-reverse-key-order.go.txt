@@ -1,0 +1,36 @@
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"sort"
+)
+
+func Render(settings map[string]string) ([]byte, error) {
+	keys := make([]string, 0, len(settings))
+	for key := range settings {
+		keys = append(keys, key)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+
+	var rendered bytes.Buffer
+	rendered.WriteByte('{')
+	for index, key := range keys {
+		if index != 0 {
+			rendered.WriteByte(',')
+		}
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		encodedValue, err := json.Marshal(settings[key])
+		if err != nil {
+			return nil, err
+		}
+		rendered.Write(encodedKey)
+		rendered.WriteByte(':')
+		rendered.Write(encodedValue)
+	}
+	rendered.WriteByte('}')
+	return rendered.Bytes(), nil
+}

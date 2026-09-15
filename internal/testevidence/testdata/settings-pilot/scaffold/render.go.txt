@@ -1,0 +1,5 @@
+package settings
+
+func Render(settings map[string]string) ([]byte, error) {
+	return nil, nil
+}

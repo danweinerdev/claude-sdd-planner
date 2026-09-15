@@ -1,0 +1,52 @@
+package settings
+
+import (
+	"os"
+	"path/filepath"
+)
+
+func Save(path string, settings map[string]string, beforeReplace func() error) error {
+	rendered, err := Render(settings)
+	if err != nil {
+		return err
+	}
+
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".settings-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+	}()
+
+	if _, err := temporary.Write(rendered); err != nil {
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+
+	if beforeReplace != nil {
+		if err := beforeReplace(); err != nil {
+			return err
+		}
+	}
+
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func Load(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(raw)
+}

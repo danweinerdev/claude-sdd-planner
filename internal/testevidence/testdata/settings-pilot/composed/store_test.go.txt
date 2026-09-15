@@ -1,0 +1,144 @@
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+func TestStoreContract(t *testing.T) {
+	t.Run("save_load_round_trip", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "settings.json")
+		want := map[string]string{
+			"empty":   "",
+			"hostile": "quote=\" slash=\\ newline=\n unicode=雪",
+		}
+
+		if err := Save(path, want, nil); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile() after Save() error = %v", err)
+		}
+		if bytes.HasSuffix(raw, []byte("\n")) {
+			t.Fatalf("saved bytes have trailing newline: %q", raw)
+		}
+		var independentlyDecoded map[string]string
+		if err := json.Unmarshal(raw, &independentlyDecoded); err != nil {
+			t.Fatalf("saved bytes are not valid JSON: %v; bytes %q", err, raw)
+		}
+		if !reflect.DeepEqual(independentlyDecoded, want) {
+			t.Fatalf("independently decoded settings = %#v, want %#v", independentlyDecoded, want)
+		}
+
+		got, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Load() = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("fault_before_replace_preserves_destination", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "settings.json")
+		oldBytes := []byte(`{"old":"before"}`)
+		if err := os.WriteFile(path, oldBytes, 0o600); err != nil {
+			t.Fatalf("seed destination: %v", err)
+		}
+		beforeEntries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("read initial directory: %v", err)
+		}
+		beforeNames := make([]string, len(beforeEntries))
+		for i, entry := range beforeEntries {
+			beforeNames[i] = entry.Name()
+		}
+
+		sentinel := errors.New("stop before replace")
+		callbackReached := false
+		var boundaryErr error
+		err = Save(path, map[string]string{"new": "after"}, func() error {
+			callbackReached = true
+			atBoundary, readErr := os.ReadFile(path)
+			if readErr != nil {
+				boundaryErr = fmt.Errorf("read destination at callback boundary: %w", readErr)
+			} else if !bytes.Equal(atBoundary, oldBytes) {
+				boundaryErr = fmt.Errorf("destination at callback boundary = %q, want %q", atBoundary, oldBytes)
+			}
+			entries, readDirErr := os.ReadDir(dir)
+			if readDirErr != nil && boundaryErr == nil {
+				boundaryErr = fmt.Errorf("read directory at callback boundary: %w", readDirErr)
+			} else if readDirErr == nil && len(entries) <= len(beforeEntries) && boundaryErr == nil {
+				boundaryErr = errors.New("no prepared temporary file visible at callback boundary")
+			}
+			return sentinel
+		})
+		if !callbackReached {
+			t.Fatal("beforeReplace callback was not reached")
+		}
+		if boundaryErr != nil {
+			t.Fatal(boundaryErr)
+		}
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("Save() error = %v, want errors.Is(error, sentinel)", err)
+		}
+
+		afterBytes, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read destination after failed Save(): %v", err)
+		}
+		if !bytes.Equal(afterBytes, oldBytes) {
+			t.Fatalf("destination after failed Save() = %q, want %q", afterBytes, oldBytes)
+		}
+		loaded, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load() after failed Save() error = %v", err)
+		}
+		if want := map[string]string{"old": "before"}; !reflect.DeepEqual(loaded, want) {
+			t.Fatalf("Load() after failed Save() = %#v, want %#v", loaded, want)
+		}
+
+		afterEntries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("read directory after failed Save(): %v", err)
+		}
+		afterNames := make([]string, len(afterEntries))
+		for i, entry := range afterEntries {
+			afterNames[i] = entry.Name()
+		}
+		if !reflect.DeepEqual(afterNames, beforeNames) {
+			t.Fatalf("directory entries after failed Save() = %v, want %v", afterNames, beforeNames)
+		}
+	})
+
+	t.Run("load_rejects_invalid_persisted_content", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			content string
+		}{
+			{name: "duplicate_keys", content: `{"duplicate":"one","duplicate":"two"}`},
+			{name: "non_string_value", content: `{"value":1}`},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "settings.json")
+				if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
+					t.Fatalf("WriteFile() error = %v", err)
+				}
+				if _, err := Load(path); err == nil {
+					t.Fatalf("Load() succeeded for %s, want parser error", tc.name)
+				}
+			})
+		}
+	})
+}

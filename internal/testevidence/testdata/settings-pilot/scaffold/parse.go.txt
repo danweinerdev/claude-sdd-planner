@@ -1,0 +1,5 @@
+package settings
+
+func Parse(raw []byte) (map[string]string, error) {
+	return nil, nil
+}

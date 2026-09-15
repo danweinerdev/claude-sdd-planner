@@ -1,0 +1,138 @@
+package settings
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"testing"
+)
+
+func TestStoreContract(t *testing.T) {
+	t.Run("successful save and load round trip", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "settings.json")
+		want := map[string]string{
+			"quote\"key": "a \"quote\" and \\ slash",
+			"multiline":  "first\nsecond\tthird",
+			"unicode":    "雪 ☃ café",
+			"empty":      "",
+		}
+
+		if err := Save(path, want, nil); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		got, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Load() = %#v, want %#v", got, want)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile() error = %v", err)
+		}
+		rendered, err := Render(want)
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if !bytes.Equal(raw, rendered) {
+			t.Fatalf("saved bytes = %q, want rendered bytes %q", raw, rendered)
+		}
+	})
+
+	t.Run("callback failure preserves destination and removes temporary file", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "settings.json")
+		oldBytes := []byte(" {\"generation\":\"old\"} \n")
+		if err := os.WriteFile(path, oldBytes, 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		beforeNames := directoryNames(t, dir)
+		sentinel := errors.New("stop before replacement")
+		callbackReached := false
+		var boundaryErr error
+
+		err := Save(path, map[string]string{"generation": "new"}, func() error {
+			callbackReached = true
+			current, readErr := os.ReadFile(path)
+			if readErr != nil {
+				boundaryErr = readErr
+			} else if !bytes.Equal(current, oldBytes) {
+				boundaryErr = errors.New("destination changed before replacement")
+			}
+			loaded, loadErr := Load(path)
+			if boundaryErr == nil && loadErr != nil {
+				boundaryErr = loadErr
+			}
+			if boundaryErr == nil && !reflect.DeepEqual(loaded, map[string]string{"generation": "old"}) {
+				boundaryErr = errors.New("destination was not readable as prior settings")
+			}
+			entries, listErr := os.ReadDir(dir)
+			if boundaryErr == nil && listErr != nil {
+				boundaryErr = listErr
+			}
+			known := make(map[string]bool, len(beforeNames))
+			for _, name := range beforeNames {
+				known[name] = true
+			}
+			preparedFileFound := false
+			for _, entry := range entries {
+				if !known[entry.Name()] && !entry.IsDir() {
+					preparedFileFound = true
+				}
+			}
+			if boundaryErr == nil && !preparedFileFound {
+				boundaryErr = errors.New("no prepared temporary file in destination directory")
+			}
+			return sentinel
+		})
+		if !callbackReached {
+			t.Fatal("beforeReplace callback was not reached")
+		}
+		if boundaryErr != nil {
+			t.Fatalf("destination boundary check failed: %v", boundaryErr)
+		}
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("Save() error = %v, want errors.Is(error, sentinel)", err)
+		}
+		after, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("ReadFile() after failed Save error = %v", readErr)
+		}
+		if !bytes.Equal(after, oldBytes) {
+			t.Fatalf("destination after failed Save = %q, want %q", after, oldBytes)
+		}
+		afterNames := directoryNames(t, dir)
+		if !reflect.DeepEqual(afterNames, beforeNames) {
+			t.Fatalf("directory entries after failed Save = %v, want %v", afterNames, beforeNames)
+		}
+	})
+
+	t.Run("load rejects content rejected by parser", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "settings.json")
+		if err := os.WriteFile(path, []byte(`{"duplicate":"one","duplicate":"two"}`), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Fatal("Load() succeeded for duplicate keys, want parser error")
+		}
+	})
+}
+
+func directoryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%q) error = %v", dir, err)
+	}
+	names := make([]string, len(entries))
+	for i, entry := range entries {
+		names[i] = entry.Name()
+	}
+	sort.Strings(names)
+	return names
+}

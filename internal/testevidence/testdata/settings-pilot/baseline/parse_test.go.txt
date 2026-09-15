@@ -1,0 +1,77 @@
+package settings
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestParseContract(t *testing.T) {
+	t.Run("accepts object and preserves strings", func(t *testing.T) {
+		raw := []byte(" \n\t{\"plain\":\"value\",\"quote\":\"\\\"\",\"slash\":\"\\\\\",\"line\":\"first\\nsecond\",\"unicode\":\"雪☃\",\"empty\":\"\",\"\":\"empty key\"}\r\n ")
+		want := map[string]string{
+			"plain": "value",
+			"quote": "\"",
+			"slash": "\\",
+			"line": "first\nsecond",
+			"unicode": "雪☃",
+			"empty": "",
+			"": "empty key",
+		}
+
+		got, err := Parse(raw)
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Parse() = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("empty object returns non-nil map", func(t *testing.T) {
+		got, err := Parse([]byte("{}"))
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+		if got == nil {
+			t.Fatal("Parse() returned a nil map")
+		}
+		if len(got) != 0 {
+			t.Fatalf("Parse() returned %d entries, want 0", len(got))
+		}
+	})
+
+	t.Run("rejects duplicate keys", func(t *testing.T) {
+		inputs := [][]byte{
+			[]byte(`{"same":"first","same":"second"}`),
+			[]byte(`{"same":"first","\u0073ame":"second"}`),
+		}
+		for _, raw := range inputs {
+			if _, err := Parse(raw); err == nil {
+				t.Errorf("Parse(%q) succeeded, want duplicate-key error", raw)
+			}
+		}
+	})
+
+	t.Run("rejects invalid inputs", func(t *testing.T) {
+		cases := map[string][]byte{
+			"empty input":       nil,
+			"array":             []byte(`[]`),
+			"null":              []byte(`null`),
+			"nested object":     []byte(`{"key":{"nested":"value"}}`),
+			"number value":      []byte(`{"key":1}`),
+			"boolean value":     []byte(`{"key":true}`),
+			"null value":        []byte(`{"key":null}`),
+			"array value":       []byte(`{"key":["value"]}`),
+			"malformed":         []byte(`{"key":"value"`),
+			"trailing object":   []byte(`{"key":"value"} {}`),
+			"trailing nonspace": []byte(`{"key":"value"}x`),
+		}
+		for name, raw := range cases {
+			t.Run(name, func(t *testing.T) {
+				if _, err := Parse(raw); err == nil {
+					t.Fatalf("Parse(%q) succeeded, want error", raw)
+				}
+			})
+		}
+	})
+}
