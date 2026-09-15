@@ -81,6 +81,16 @@ func runHelper(mode string) int {
 		}
 		w.Flush()
 		return 0
+	case "stdout-bytes-fail":
+		n, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_N"))
+		w := bufio.NewWriterSize(os.Stdout, 1<<16)
+		for i := 0; i < n; i++ {
+			w.WriteByte(byte('a' + i%26))
+		}
+		w.Flush()
+		code, _ := strconv.Atoi(os.Getenv("PROCEXEC_HELPER_CODE"))
+		fmt.Fprintln(os.Stderr, "helper exiting with", code)
+		return code
 	case "spawn-descendant", "spawn-descendant-exit", "spawn-inherit-exit":
 		// Start a grandchild (this binary in sleep mode) that stays in the
 		// group. "inherit" keeps our stdout/stderr open in the grandchild;

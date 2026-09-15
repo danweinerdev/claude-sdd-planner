@@ -135,6 +135,31 @@ func TestEarlyExitInheritedPipes(t *testing.T) {
 	}
 }
 
+func TestCaptureCompletenessAfterDescendantCleanup(t *testing.T) {
+	exe, args, p := helperPolicy(t, "spawn-inherit-exit")
+	p.Timeout = 10 * time.Second
+	p.Cleanup = 500 * time.Millisecond
+	res, err := Capture(context.Background(), exe, args, p)
+	if wnowaitSupported {
+		// A pre-reap sweep closes the descendant's pipes before Cmd.Wait:
+		// capture is complete, so rejecting it as a cut stream would be wrong.
+		if err != nil {
+			t.Fatalf("pre-reap capture: %v", err)
+		}
+		grandchild := pidFrom(t, res.Stdout)
+		killLater(t, grandchild)
+		if !res.DescendantsCleaned || !waitDead(grandchild, 2*time.Second) {
+			t.Fatal("complete capture did not clean its pipe-holding descendant")
+		}
+		return
+	}
+	// Without a pre-reap sweep, WaitDelay closes the inherited pipes first.
+	// Subsequent descendant cleanup cannot make that cut stream complete.
+	if !IsCause(err, CauseDrain) || !emptyResult(res) {
+		t.Fatalf("Capture returned (%+v, %v), want empty CauseDrain result", res, err)
+	}
+}
+
 // FR-14: a detectable containment or cleanup failure is an operational
 // error, never a silent weakening of the guarantee.
 func TestContainmentFailure(t *testing.T) {

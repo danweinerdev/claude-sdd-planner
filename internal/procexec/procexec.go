@@ -14,7 +14,8 @@ import (
 	"time"
 )
 
-// Result is a complete, successful command result.
+// Result is a complete command result. Capture may return a nonzero ExitCode;
+// Run returns results only for exit code zero.
 type Result struct {
 	Stdout          []byte // complete machine output (never truncated on success)
 	Stderr          string // bounded diagnostic excerpt
@@ -33,6 +34,18 @@ type Result struct {
 // when explicit, the process environment otherwise). Mutations are never
 // retried: a failure is reported once with its cause and evidence.
 func Run(ctx context.Context, name string, args []string, p Policy) (Result, error) {
+	return execute(ctx, name, args, p, false)
+}
+
+// Capture executes a command and returns its completed result, including a
+// nonzero exit status. Operational failures return an empty result. Unlike
+// Run's compatibility treatment of a cleaned WaitDelay, Capture requires the
+// machine stream to have reached an ordinary complete drain.
+func Capture(ctx context.Context, name string, args []string, p Policy) (Result, error) {
+	return execute(ctx, name, args, p, true)
+}
+
+func execute(ctx context.Context, name string, args []string, p Policy, capture bool) (Result, error) {
 	p = p.withDefaults()
 	argv := append([]string{name}, args...)
 	// A platform with no containment adapter refuses before anything else, so
@@ -115,18 +128,20 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 		return fail(CauseDeadline, runCtx.Err(), stderr)
 	case outcome.drainErr != nil:
 		return fail(CauseDrain, outcome.drainErr, stderr)
-	case outcome.waitErr == nil && outcome.exitCode == 0:
 	case errors.Is(outcome.waitErr, exec.ErrWaitDelay):
 		// The command itself exited successfully; only inherited pipes were
 		// still open. They belonged to descendants the adapter has now
 		// cleaned (cleaned == true) — a success with the cleanup recorded.
 		// If nothing was left to clean, the pipe holder escaped ownership.
-		if !outcome.cleaned {
+		if capture || !outcome.cleaned {
 			return fail(CauseDrain, outcome.waitErr, stderr)
 		}
 	default:
 		var exitErr *exec.ExitError
 		if errors.As(outcome.waitErr, &exitErr) {
+			if capture {
+				break
+			}
 			// The runner never re-executes a command on its own: a failure here
 			// is reported once, exactly as observed.
 			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: exitErr.ExitCode(), Err: outcome.waitErr}
@@ -134,14 +149,19 @@ func Run(ctx context.Context, name string, args []string, p Policy) (Result, err
 			return Result{}, e
 		}
 		if outcome.exitCode != 0 {
+			if capture && outcome.waitErr == nil {
+				break
+			}
 			e := &Error{Cause: CauseExit, Argv: argv, ExitCode: outcome.exitCode, Err: outcome.waitErr}
 			e.Stderr, e.Truncated = stderr.excerpt()
 			return Result{}, e
 		}
-		return fail(CauseAccess, outcome.waitErr, stderr)
+		if outcome.waitErr != nil {
+			return fail(CauseAccess, outcome.waitErr, stderr)
+		}
 	}
 
-	res := Result{Stdout: stdout.bytes(), ExitCode: 0, Run: run, Cleanup: cleanup, DescendantsCleaned: outcome.cleaned}
+	res := Result{Stdout: stdout.bytes(), ExitCode: outcome.exitCode, Run: run, Cleanup: cleanup, DescendantsCleaned: outcome.cleaned}
 	res.Stderr, res.StderrTruncated = stderr.excerpt()
 	return res, nil
 }

@@ -81,6 +81,61 @@ func TestLargeMachineOutput(t *testing.T) {
 	}
 }
 
+func TestCaptureReturnsCompleteNonzeroOutput(t *testing.T) {
+	const n = 1 << 20
+	exe, args, p := helperPolicy(t, "stdout-bytes-fail",
+		"PROCEXEC_HELPER_N="+strconv.Itoa(n), "PROCEXEC_HELPER_CODE=7")
+	p.DiagnosticLimit = 1024
+	res, err := Capture(context.Background(), exe, args, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 7 {
+		t.Fatalf("exit code %d, want 7", res.ExitCode)
+	}
+	if len(res.Stdout) != n {
+		t.Fatalf("stdout length %d, want %d", len(res.Stdout), n)
+	}
+	for i := 0; i < n; i += 4093 {
+		if res.Stdout[i] != byte('a'+i%26) {
+			t.Fatalf("stdout byte %d corrupted", i)
+		}
+	}
+}
+
+func TestCaptureOperationalFailuresReturnNoResult(t *testing.T) {
+	t.Run("overflow", func(t *testing.T) {
+		exe, args, p := helperPolicy(t, "stdout-forever")
+		p.MachineLimit = 1 << 20
+		p.Timeout = 10 * time.Second
+		res, err := Capture(context.Background(), exe, args, p)
+		if !IsCause(err, CauseOverflow) || !emptyResult(res) {
+			t.Fatalf("got (%+v, %v), want empty overflow result", res, err)
+		}
+	})
+	t.Run("deadline", func(t *testing.T) {
+		exe, args, p := helperPolicy(t, "sleep")
+		p.Timeout = 100 * time.Millisecond
+		res, err := Capture(context.Background(), exe, args, p)
+		if !IsCause(err, CauseDeadline) || !emptyResult(res) {
+			t.Fatalf("got (%+v, %v), want empty deadline result", res, err)
+		}
+	})
+	t.Run("cancel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		exe, args, p := helperPolicy(t, "exit")
+		res, err := Capture(ctx, exe, args, p)
+		if !IsCause(err, CauseCancelled) || !emptyResult(res) {
+			t.Fatalf("got (%+v, %v), want empty cancellation result", res, err)
+		}
+	})
+}
+
+func emptyResult(res Result) bool {
+	return len(res.Stdout) == 0 && res.Stderr == "" && !res.StderrTruncated && res.ExitCode == 0 && res.Run == 0 && res.Cleanup == 0 && !res.DescendantsCleaned
+}
+
 // FR-15: a bounded stderr reader keeps draining so the child never blocks on
 // a full pipe; the excerpt is exactly the limit and flagged truncated.
 func TestStderrDrain(t *testing.T) {

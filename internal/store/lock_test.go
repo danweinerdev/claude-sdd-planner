@@ -93,6 +93,33 @@ func TestExclusiveLocksSerialize(t *testing.T) {
 	}
 }
 
+func TestTryAcquireExclusiveLockDoesNotWait(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "attempt.active")
+	release, err := AcquireExclusiveLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	start := time.Now()
+	other, acquired, err := TryAcquireExclusiveLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acquired {
+		other()
+		t.Fatal("try-lock acquired while held")
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("try-lock blocked")
+	}
+	release()
+	other, acquired, err = TryAcquireExclusiveLock(path)
+	if err != nil || !acquired {
+		t.Fatalf("try-lock after release acquired=%v err=%v", acquired, err)
+	}
+	other()
+}
+
 // TestWriteAtomicExpectingRefusesStaleContent is the core safety property: a
 // writer whose content was derived from a version that has since been replaced
 // must be refused, not silently applied on top. Without this, the second

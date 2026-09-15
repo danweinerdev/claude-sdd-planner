@@ -197,3 +197,21 @@ func AcquireExclusiveLock(path string) (func(), error) {
 	}
 	return lock.Release, nil
 }
+
+// TryAcquireExclusiveLock attempts the same OS-backed exclusive sidecar lock
+// once. Contention is reported as acquired=false without waiting.
+func TryAcquireExclusiveLock(path string) (release func(), acquired bool, err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, false, fmt.Errorf("creating directory for %s: %w", path, err)
+	}
+	f, err := openLockFile(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("opening lock for %s: %w", path, err)
+	}
+	if err := lockExclusive(f); err != nil {
+		_ = f.Close()
+		return nil, false, nil
+	}
+	l := &fileLock{f: f}
+	return l.Release, true, nil
+}
