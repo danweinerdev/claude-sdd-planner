@@ -21,7 +21,9 @@ You inherit the session's tools, which may include MCP servers — typically a d
 If the document path is missing or does not exist, report that as your finding — do not guess at a document.
 
 ## Process
-1. Read the document in full, frontmatter first.
+1. Read the document in full, frontmatter first. For a plan, route by graph presence:
+   - **Graph plan (`Plans/<Name>/<Name>-Graph.json` exists):** inspect it only through the read-only commands `sdd graph status --plan <Name> --json`, `sdd graph audit --plan <Name>`, `sdd graph shape --plan <Name>`, `sdd graph path --plan <Name>`, and `sdd graph show <id> --plan <Name> --brief` for each node. Do not invoke graph mutation verbs. Treat observations as completion evidence; rendered task statuses, phase-document statuses, and file hashes are never completion authority.
+   - **v1 markdown plan (no graph):** use the document route and v1 lenses below.
 2. Read the artifacts named in its `related` frontmatter.
 3. Run `sdd decide current --plan <Name>` for the document's plan. Cross-check two ways per `shared/decision-log.md`:
    - **Contradiction** — a plan or design that contradicts a standing decision is a **Major** finding; the fix is an explicit supersession (`sdd decide add --supersedes <id>`, user-approved), not silent drift.
@@ -32,7 +34,9 @@ If the document path is missing or does not exist, report that as your finding �
 
 ## Review Lenses
 
-Evaluate the document against these six lenses:
+For a graph plan, judge whether every node contract is falsifiable and cited to its source; named tests match the repository runner, use exact package identities when that runner emits Go test JSON, and discharge declared hazards; dependencies express real consumption; artifacts and inputs are complete review-visible declarations rather than freshness evidence; and every work node is covered by a full review node. Use the status/audit/shape/path/show results to evaluate closure, coverage, feasibility, and decomposition. Observations—not rendered task statuses or file hashes—are completion evidence.
+
+Evaluate v1 markdown plans and design documents against these six lenses:
 
 ### 1. Completeness
 - Are all necessary phases/tasks included?

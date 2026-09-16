@@ -49,9 +49,10 @@ Orientation read order at the start of a planning session — frontmatter answer
 
 1. `planning-config.json` — planning root and repository mappings
 2. The plan-scoped `## Standing decisions for plan <Name>` block the SessionStart hook injects only when exactly one `Plans/*/README.md` has `status: active`; it derives that block from `sdd decide current --plan <Name>`
-3. The active plan's README **frontmatter** — status, `phases[]`, `related` (not the body)
-4. The current phase doc — task list, statuses, verification fields, traps
-5. The latest debrief in `Plans/<PlanName>/notes/` — constraints and gotchas discovered last time
+3. The active plan's README **frontmatter** — status, `phases[]`, `related` (not the body), then route by graph presence:
+   - When `Plans/<Name>/<Name>-Graph.json` exists, run `sdd graph status --plan <Name> --json` for derived state and use `sdd graph show <id> --plan <Name>` for node detail. The rendered views and phase-document statuses are projections, never authority.
+   - For a v1 markdown plan without a graph, read the current phase doc's task statuses, verification fields, and traps; its frontmatter remains authoritative.
+4. The latest debrief in `Plans/<PlanName>/notes/` — constraints and gotchas discovered last time
 
 The SessionStart hook never unions decisions across plans and never treats every plan's decisions as universal standing authority. With zero active plans, multiple active plans, or an unreadable/malformed plan README that prevents safe selection, it injects no standing-decision block; run `sdd decide current --plan <Name>` explicitly when a different known scope is needed.
 
@@ -59,8 +60,7 @@ The SessionStart hook never unions decisions across plans and never treats every
 
 Summaries drop operational detail and misremember statuses. Before resuming work after compaction, re-read from disk:
 
-- The current phase doc's `tasks[]` statuses — the frontmatter is the source of truth for what's done; never trust the summary's recollection of it
-- The plan README frontmatter
+- The plan README frontmatter, then route by graph presence: for a graph plan, re-run `sdd graph status --plan <Name> --json` and use `sdd graph show <id> --plan <Name>` as needed because rendered views and phase-document statuses are projections, never authority; for a v1 markdown plan, re-read the current phase doc's `tasks[]` statuses because its frontmatter is authoritative
 - Re-run `sdd decide current --plan <Name>` for the active plan's standing decisions; summaries never substitute for the fresh read
 - Any escalation or question that was presented to the user and not yet answered
 

@@ -38,7 +38,7 @@ When nothing is claimable, the refusal explains the frontier (state counts, acti
 
 Before editing, compose the test skills from the already resolved active plugin root, reading each `SKILL.md` in place rather than resolving it from the claimed workspace. Read the fixed-heading design card passed from planning; if it is missing or incompatible with the current node/source, run `skills/test-design/SKILL.md` to reconstruct it from cited intent and inspected code. Challenge it with `skills/test-assess/SKILL.md` (fresh non-inheriting context when useful and available; labeled same-context assessment otherwise). Only `ready` proceeds. Then run `skills/test-generate/SKILL.md`; reconcile any changed identity or newly discovered engineering obligation through the normal proposal/amendment path rather than silently substituting tests or expanding implementation scope.
 
-Write **all named tests first** (both package and runner-visible id in the claim payload must match exactly). All declared source artifacts must exist before running them: add the minimum callable scaffolding needed to reach an actual failing assertion, not the intended implementation. A missing file or package build failure is not qualifying RED. Run the repository-owned tests and preserve their native report bytes. When any selected test declares `package`, supply Go test JSON: sync uses the strict package-qualified parser and rejects incomplete, ambiguous, or mismatched package/test execution. Supply `--report-exit <N>` when the captured process exit is needed to classify a package-qualified report. Assess the raw report and distinguish intended assertion failure from discovery, setup, build, timeout, or capture failure.
+Write **all named tests first** (both package and runner-visible id in the claim payload must match exactly). All declared source artifacts must exist before running them: add the minimum callable scaffolding needed to reach an actual failing assertion, not the intended implementation. A missing file or package build failure is not qualifying RED. Run the repository-owned tests and preserve their native report bytes. When any selected test declares `package`, supply Go test JSON: sync uses the strict package-qualified parser and rejects incomplete, ambiguous, or mismatched package/test execution. When the runner emits Go test JSON and the gate has package-qualified tests, pass its captured real process exit with `--report-exit <N>`; never invent an exit code. Assess the raw report and distinguish intended assertion failure from discovery, setup, build, timeout, or capture failure.
 
 Sync the usable failing report, classifying it explicitly:
 
@@ -56,7 +56,7 @@ Implement inside the workspace until the named tests pass. Do not weaken asserti
 
 ```
 git commit <the complete tested slice using the repository's normal non-interactive workflow>
-sdd graph sync --plan <Name> --node <id> --by <identity> --report <report.json> [--report-exit 0]
+sdd graph sync --plan <Name> --node <id> --by <identity> --report <report.json> [--report-exit <captured-N>]
 ```
 
 A passing sync for a claimed workspace requires that workspace to be clean. It records a new observation sequence with the node's `contract_rev`, result, isolation, report identity, and VCS provenance; then it clears the claim and releases the workspace. A shared-dirty pass is provisional and derives STALE until the walker deliberately produces and syncs a clean run. There is no assert path: `--command-exit` needs a real exit code, and asserted isolation is refused by default.
@@ -100,14 +100,16 @@ Follow `shared/vcs-detection.md` § Git integration of parallel graph nodes for 
 
 ### Reaction Protocol
 
-- **Newer direct dependency observation:** when a direct dependency is deliberately re-verified at a higher sequence than this node's pass, this node becomes STALE. Re-run its gate and sync deliberately; no file or declaration edit triggers this automatically.
+- **Newer direct dependency observation:** A new observation on a node stales only its DIRECT consumers whose pass predates it; it does not recursively stale their descendants. No file or declaration edit causes staleness. Re-run a stale consumer's gate when you need current proof for it (before claiming work that depends on it, and before a review/closure) — the walker decides.
 - **Contract revision advanced:** the node's earlier observation no longer proves its current contract. Re-establish any required RED, implement the revised obligation, and sync a new pass at the current `contract_rev`.
 - **Isolation stale:** a shared-dirty passing observation is not GREEN. Produce a clean claimed-workspace run and sync it.
 - **Review stale:** a reviewed scope change, reviewed `contract_rev` advance, or newer reviewed observation invalidates the old review binding. Run the review lanes again and record a new review observation.
-- **Changing declarations:** inputs and artifacts are review-visible declarations, not freshness keys. `sdd graph set-inputs --plan <Name> --node <id> --file inputs.json [--dry-run]` replaces inputs on an unclaimed node: on a verified node it advances `contract_rev` and carries compatible `red_seqs`; an unverified node with red observations is refused. `sdd graph set-artifacts --plan <Name> --node <id> --by <identity> --add <path> [--remove <path>]` edits the holder's declared write set and re-renders views unless `--no-render`; neither command substitutes for deliberate test execution.
+- **Changing declarations:** inputs and artifacts are review-visible declarations, not freshness keys. `sdd graph set-inputs --plan <Name> --node <id> --file inputs.json [--dry-run]` replaces inputs on an unclaimed node: on a verified node it advances `contract_rev` and keeps compatible `red_seqs`; an unverified node with red observations is refused. `sdd graph set-artifacts --plan <Name> --node <id> --file artifacts.json` replaces the artifact set, while `--add <path> [--remove <path>]` updates it incrementally; add `--by <identity>` when the node is claimed, because only its holder may edit it then. It re-renders views unless `--no-render`. Neither command substitutes for deliberate test execution.
 - **Revised or extended nodes from an amendment:** revise clears `red_seqs`; new or revised hazard-discharging tests need an actual intended failure before GREEN can count. The review node goes GREEN again only after its dependencies do and a reviewer deliberately records a new review.
 - **Lease expiry / crashes**: an expired claim's workspace is preserved as post-mortem evidence. Inspect it if useful, then `sdd graph gc --plan <Name>` — gc persists the expiry and reaps the workspace; the node returns to the frontier. A stale claimant's late sync is refused by claim discipline.
 - **Abandoning a node**: `sdd graph release <id> --by <identity>` — never squat on a claim you aren't working.
+
+Digests appearing in amend/apply flags are compare-and-swap write fences, never freshness evidence.
 
 ### Evidence Language
 

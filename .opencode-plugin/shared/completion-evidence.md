@@ -1,9 +1,14 @@
 # Completion Evidence
 
-Prospective `verification` says how work will be judged. Retrospective
-completion evidence records what ran and what it proved. A task, phase, or plan
-may not transition to `complete` until its required evidence is populated and
-durably recorded.
+For **v1 markdown plans**, prospective `verification` says how work will be
+judged and retrospective completion evidence records what ran and what it
+proved. A v1 task, phase, or plan may not transition to `complete` until its
+required evidence is populated and durably recorded. The prose-evidence rules
+below apply to v1 markdown plans only.
+
+Graph plans are the exception: they complete from admitted observations and
+the closure derived by `sdd graph status`; `sdd plan complete` enforces that
+gate. Agents must not author completion-evidence prose as graph gate input.
 
 ## Required sections
 
