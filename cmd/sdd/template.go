@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/reportevidence"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
@@ -48,10 +49,10 @@ type templateOpts struct {
 	JSON     bool
 }
 
-// graphProposalType is the one non-markdown template: a JSON payload skeleton
-// plus its JSON Schema, both generated from one source in
-// internal/graph/proposal (Designs/SddGraph DD-12).
+// The non-markdown templates are JSON payload skeletons plus their JSON
+// Schemas, generated from their owning Go packages.
 const graphProposalType = "graph-proposal"
+const evidenceMetadataType = "evidence-metadata"
 
 func cmdTemplate(artifactType string, o templateOpts) error {
 	if o.Check {
@@ -63,11 +64,19 @@ func cmdTemplate(artifactType string, o templateOpts) error {
 
 	var body string
 	switch {
-	case artifactType == graphProposalType:
+	case artifactType == graphProposalType || artifactType == evidenceMetadataType:
 		if o.ForApply {
-			return fmt.Errorf("template: --for-apply applies to markdown artifact types; a graph proposal is already the payload `sdd graph propose` accepts")
+			return fmt.Errorf("template: --for-apply applies only to markdown artifact types")
 		}
-		if o.Schema {
+		if artifactType == evidenceMetadataType && o.Schema {
+			body = string(reportevidence.SchemaJSON())
+		} else if artifactType == evidenceMetadataType {
+			raw, err := reportevidence.ExemplarJSON()
+			if err != nil {
+				return fmt.Errorf("template: %w", err)
+			}
+			body = string(raw)
+		} else if o.Schema {
 			body = string(proposal.SchemaJSON())
 		} else {
 			raw, err := proposal.ExemplarJSON()
@@ -77,7 +86,7 @@ func cmdTemplate(artifactType string, o templateOpts) error {
 			body = string(raw)
 		}
 	case o.Schema:
-		return fmt.Errorf("template: --schema applies only to %s", graphProposalType)
+		return fmt.Errorf("template: --schema applies only to %s or %s", graphProposalType, evidenceMetadataType)
 	default:
 		var err error
 		body, err = renderTemplateFor(artifactType, o.ForApply)
@@ -299,6 +308,8 @@ func checkTemplates(dir string, jsonOut bool) error {
 	}{
 		{graphProposalType + ".json", proposal.ExemplarJSON},
 		{graphProposalType + ".schema.json", func() ([]byte, error) { return proposal.SchemaJSON(), nil }},
+		{evidenceMetadataType + ".json", reportevidence.ExemplarJSON},
+		{evidenceMetadataType + ".schema.json", func() ([]byte, error) { return reportevidence.SchemaJSON(), nil }},
 	} {
 		path := filepath.Join(dir, gen.name)
 		raw, err := os.ReadFile(path)

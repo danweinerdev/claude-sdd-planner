@@ -34,6 +34,11 @@ func TestTestEvidenceGuard(t *testing.T) {
 			deny:    true,
 		},
 		{
+			name:    "quality scanner may read evidence contract",
+			agent:   "quality-scanner",
+			command: "sdd graph evidence-contract --json",
+		},
+		{
 			name:    "unrestricted agent remains unaffected",
 			agent:   "code-implementer",
 			command: "sdd test run --plan Sample --node n-1 --by implementer --phase green",

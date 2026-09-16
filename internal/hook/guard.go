@@ -127,7 +127,7 @@ var sddDecideReadOnly = map[string]bool{
 // failure, same discipline as the top-level map.
 var SddGraphVerbReadOnly = map[string]bool{
 	// read surface
-	"hazards": true, "status": true, "show": true, "export": true, "evidence-context": true,
+	"hazards": true, "status": true, "show": true, "export": true, "evidence-context": true, "evidence-contract": true,
 	"path": true, "risk": true, "shape": true, "audit": true,
 	// mutating, phase 2
 	"init": false, "propose": false, "assemble": false, "convert": false,

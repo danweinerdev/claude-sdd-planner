@@ -57,6 +57,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
 	c.AddCommand(graphEvidenceContextCmd())
+	c.AddCommand(graphEvidenceContractCmd())
 	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphAmendCmd())
@@ -638,7 +639,15 @@ func graphSyncCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Record a node's observation from a test report or command result",
-		Args:  cobra.NoArgs,
+		Long: `Record a node's observation from a test report or command result.
+
+For reported-v1, --metadata names the repository-tooling-produced metadata
+document described by "sdd graph evidence-contract" and shaped by
+"sdd template evidence-metadata --schema". Its before and after fields must
+embed unchanged objects exported by "sdd graph evidence-context --json"
+immediately before and after execution. SDD validates supplied evidence; it
+does not execute or probe tests.`,
+		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, cmdArgs []string) (outErr error) {
 			var cost *evidencecost.Recorder
 			if withCost {
@@ -795,7 +804,13 @@ func readBoundedFile(path string, limit int64) ([]byte, error) {
 func graphEvidenceContextCmd() *cobra.Command {
 	var plan, node, by string
 	var asJSON bool
-	c := &cobra.Command{Use: "evidence-context", Short: "Export read-only reported test evidence context", Args: cobra.NoArgs, RunE: func(c *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "evidence-context", Short: "Export read-only reported test evidence context", Long: `Export read-only reported test evidence context.
+
+Repository tooling embeds this exported object unchanged as metadata.before,
+runs the selected tests, then exports and embeds another unchanged object as
+metadata.after. The metadata schema is printed by
+"sdd template evidence-metadata --schema"; the refusal contract is printed by
+"sdd graph evidence-contract". This command does not execute or probe tests.`, Args: cobra.NoArgs, RunE: func(c *cobra.Command, args []string) error {
 		if !asJSON {
 			return fmt.Errorf("graph evidence-context: --json is required")
 		}
@@ -833,6 +848,25 @@ func graphEvidenceContextCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id")
 	c.Flags().StringVar(&by, "by", "", "current claim holder")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit JSON")
+	return c
+}
+
+func graphEvidenceContractCmd() *cobra.Command {
+	var asJSON bool
+	c := &cobra.Command{
+		Use:   "evidence-contract",
+		Short: "Print the reported-v1 producer contract",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			body := reportevidence.ContractMarkdown()
+			if asJSON {
+				body = reportevidence.SchemaJSON()
+			}
+			_, err := c.OutOrStdout().Write(body)
+			return err
+		},
+	}
+	c.Flags().BoolVar(&asJSON, "json", false, "emit the metadata JSON Schema")
 	return c
 }
 

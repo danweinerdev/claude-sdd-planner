@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danweinerdev/claude-sdd-planner/v2/internal/reportevidence/metadata.schema.json",
+  "title": "reported-v1 test evidence metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "before", "after", "phase", "started", "completed", "runner", "execution", "report_digest"],
+  "properties": {
+    "protocol": { "const": "reported-v1" },
+    "before": { "$ref": "#/$defs/context" },
+    "after": { "$ref": "#/$defs/context" },
+    "phase": { "enum": ["red", "green", "diagnostic"] },
+    "red_kind": { "enum": ["baseline", "sensitivity"] },
+    "fault": { "type": "string", "pattern": ".*\\S.*" },
+    "started": { "type": "string", "format": "date-time" },
+    "completed": { "type": "string", "format": "date-time" },
+    "runner": { "$ref": "#/$defs/runner" },
+    "execution": { "$ref": "#/$defs/execution" },
+    "report_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "phase": { "const": "red" } }, "required": ["phase"] },
+      "then": {
+        "required": ["red_kind"],
+        "allOf": [
+          {
+            "if": { "properties": { "red_kind": { "const": "baseline" } }, "required": ["red_kind"] },
+            "then": { "not": { "required": ["fault"] } }
+          },
+          {
+            "if": { "properties": { "red_kind": { "const": "sensitivity" } }, "required": ["red_kind"] },
+            "then": { "required": ["fault"] }
+          }
+        ]
+      },
+      "else": { "not": { "anyOf": [{ "required": ["red_kind"] }, { "required": ["fault"] }] } }
+    }
+  ],
+  "$defs": {
+    "selected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "id", "file"],
+      "properties": {
+        "package": { "type": "string" },
+        "id": { "type": "string" },
+        "file": { "type": "string" }
+      }
+    },
+    "string_map": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["obligation", "artifacts", "dependencies", "inputs", "intent", "selected_test_sources"],
+      "properties": {
+        "obligation": { "type": "string" },
+        "artifacts": { "$ref": "#/$defs/string_map" },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/string_map" }
+        },
+        "inputs": { "$ref": "#/$defs/string_map" },
+        "intent": { "$ref": "#/$defs/string_map" },
+        "selected_test_sources": { "$ref": "#/$defs/string_map" }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "plan", "node", "by", "claim_instance", "workspace_identity", "selected", "declared_hazards", "candidate"],
+      "properties": {
+        "protocol": { "const": "reported-v1" },
+        "plan": { "type": "string" },
+        "node": { "type": "string" },
+        "by": { "type": "string" },
+        "claim_instance": { "type": "string" },
+        "workspace_identity": { "type": "string" },
+        "selected": { "type": "array", "items": { "$ref": "#/$defs/selected" } },
+        "declared_hazards": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "candidate": { "$ref": "#/$defs/candidate" }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "environment_identities"],
+      "properties": {
+        "identity": { "type": "string" },
+        "environment_identities": { "$ref": "#/$defs/string_map" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started", "completed", "report_complete", "exit_code"],
+      "properties": {
+        "started": { "type": "boolean" },
+        "completed": { "type": "boolean" },
+        "report_complete": { "type": "boolean" },
+        "exit_code": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

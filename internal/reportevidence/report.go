@@ -5,6 +5,7 @@ package reportevidence
 import (
 	"bytes"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,49 @@ import (
 const Protocol = "reported-v1"
 const MaxMetadataBytes = 4 << 20
 const MaxReportBytes = 64 << 20
+
+//go:embed CONTRACT.md
+var contractMarkdown []byte
+
+//go:embed metadata.schema.json
+var metadataSchemaJSON []byte
+
+// ContractMarkdown returns the canonical reported-v1 producer contract.
+func ContractMarkdown() []byte { return append([]byte(nil), contractMarkdown...) }
+
+// SchemaJSON returns the reported-v1 metadata JSON Schema.
+func SchemaJSON() []byte { return append([]byte(nil), metadataSchemaJSON...) }
+
+// ExemplarJSON returns deterministic illustrative metadata. It strictly
+// decodes and satisfies the metadata-only checks; its placeholder context is
+// intentionally not equal to context captured from a live graph.
+func ExemplarJSON() ([]byte, error) {
+	exit := 0
+	ctx := Context{
+		Protocol: Protocol, Plan: "ExamplePlan", Node: "example-node", By: "repository-tooling",
+		ClaimInstance: "claim-example", WorkspaceIdentity: "workspace:example",
+		Selected:        []testevidence.SelectedTest{{Package: "example.test/project", ID: "TestBehavior", File: "internal/example/behavior_test.go"}},
+		DeclaredHazards: map[string][]string{"example.test/project::TestBehavior": {"external-format"}},
+		Candidate: Candidate{
+			Obligation:   "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Artifacts:    map[string]string{"internal/example/behavior.go": "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
+			Dependencies: map[string]map[string]string{},
+			Inputs:       map[string]string{}, Intent: map[string]string{},
+			SelectedTestSources: map[string]string{"example.test/project::TestBehavior": "sha256:2222222222222222222222222222222222222222222222222222222222222222"},
+		},
+	}
+	raw, err := json.MarshalIndent(Metadata{
+		Protocol: Protocol, Before: ctx, After: ctx, Phase: "green",
+		Started: "2026-01-02T03:04:05Z", Completed: "2026-01-02T03:04:06Z",
+		Runner:       Runner{Identity: "repository-unit-tests", EnvironmentIdentities: map[string]string{"BUILD_CONTEXT": "example-environment"}},
+		Execution:    Execution{Started: true, Completed: true, ReportComplete: true, ExitCode: &exit},
+		ReportDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	}, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(raw, '\n'), nil
+}
 
 type Context struct {
 	Protocol          string                      `json:"protocol"`

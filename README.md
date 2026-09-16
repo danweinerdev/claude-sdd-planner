@@ -49,6 +49,8 @@ go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 
 Go and network access are needed at install time only. Setup verifies the binary against the plugin's `minSddVersion` before touching anything and stops with the exact command if it's missing or too old.
 
+The graph family is `graph init|propose|assemble|convert|hazards|evidence-context|evidence-contract|sync|reverify|review|amend|acknowledge|remap-revisions|release|split|set-tests|set-inputs|set-artifacts|rehash|repair-intent|gc|retire|status|show|path|risk|shape|export|audit`.
+
 SDD owns graph requirements and evidence validation, not test execution. For
 `reported-v1` gates, the graph declares package-qualified tests and the report
 profile; repository-owned tooling captures context before/after its own run and
