@@ -65,7 +65,6 @@ compilation, digest tracking, and the refusal gates the workflow depends on.`,
 		pluginCmd(),
 		hookCmd(),
 		graphCmd(),
-		testCmd(),
 		compileCmd(),
 	)
 	// spec/design lifecycle verbs share one kind-parameterized handler.

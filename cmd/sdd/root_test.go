@@ -64,7 +64,7 @@ func TestSubcommandsMatchDispatch(t *testing.T) {
 		"hook":  true, "list": true, "migrate": true, "next": true,
 		"phase": true, "plan": true, "plugin": true, "provision": true,
 		"review": true, "schema": true, "section": true, "show": true,
-		"spec": true, "design": true, "test": true,
+		"spec": true, "design": true,
 		"task": true, "template": true, "validate": true, "version": true,
 	}
 	got := map[string]bool{}
@@ -106,8 +106,6 @@ func TestGuardClassifiesEverySubcommand(t *testing.T) {
 		switch n {
 		case "graph":
 			verbs = hook.SddGraphVerbReadOnly
-		case "test":
-			verbs = hook.SddTestVerbReadOnly
 		default:
 			continue
 		}
@@ -253,10 +251,8 @@ func handlerFlagSets() []struct {
 		{"sdd validate", []string{"root", "scope", "format", "json", "no-waivers"}},
 		{"sdd next", []string{"json", "claim", "by", "plan", "show", "node"}},
 		{"sdd graph release", []string{"plan", "by", "force", "json"}},
-		{"sdd graph sync", []string{"plan", "node", "by", "report", "attempt", "command-exit", "command-log", "json", "verbose"}},
-		{"sdd test run", []string{"plan", "node", "by", "phase", "red-kind", "fault", "json"}},
-		{"sdd test check", []string{"plan", "node", "attempt", "expect", "json"}},
-		{"sdd test cleanup", []string{"plan", "node", "attempt", "abandon", "json"}},
+		{"sdd graph sync", []string{"plan", "node", "by", "report", "metadata", "command-exit", "command-log", "json", "verbose", "cost"}},
+		{"sdd graph evidence-context", []string{"plan", "node", "by", "json"}},
 		{"sdd graph reverify", []string{"plan", "report", "command-exit", "command-log", "json", "verbose", "all"}},
 		{"sdd graph review", []string{"plan", "node", "artifact", "by", "json", "check", "dry-run"}},
 		{"sdd graph path", []string{"plan", "json"}},

@@ -14,7 +14,7 @@ Read the complete design card, cited intent, and current source/tests. Confirm e
 
 Author the smallest focused tests and necessary test-only scaffolding described by the card. If the approved card requires a new interface so the tests compile, a minimal interface-only stub may be added in the real source; it must contain no production behavior or validation, must not make the intended RED disappear, and must never overwrite existing working code. Preserve exact declared runner-visible identities. Exercise the real subject, keep the oracle independent of unfinished implementation logic, and verify fault injection reaches the intended boundary. Do not implement production behavior, add unrelated implementation, hardcode a pseudo-outcome, weaken an assertion to make it pass, or substitute a renamed test silently.
 
-Do not claim RED, GREEN, discovery, or admissible evidence from generated text. Execution and evidence collection happen through the selected runner path after generation.
+Do not claim RED, GREEN, discovery, or admissible evidence from generated text. Execution and metadata production happen through repository-owned tooling after generation; `sdd` validates the supplied evidence and never supplies the missing execution facts.
 
 Return exactly these headings:
 
@@ -22,7 +22,7 @@ Return exactly these headings:
 Root-relative test, test-support, and approved interface-stub source files actually changed, or `None`.
 
 ## Test identities
-Runner-visible test ID and file for every authored or reused selected test, matched to its card case.
+Package, runner-visible test ID, and file for every authored or reused selected test, matched to its card case.
 
 ## Scaffolding introduced
 Report `Test-only:` fixtures/helpers/stubs introduced and why each is necessary, then `Interface-only production stubs:` each approved declaration-only source stub and why the card requires it. State `None` separately for either category when absent.

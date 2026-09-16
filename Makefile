@@ -168,8 +168,9 @@ test: test-race
 # -race. TestWaiverMemoConcurrencySafe (internal/rules) passes against an
 # unguarded memo unless the detector is on, so without this target deleting a
 # lock is a green build. internal/procexec owns process-group containment,
-# internal/testevidence owns capture and receipt admission, internal/vcs shares
-# command plumbing, and internal/graph/{sync,ops,provider}
+# internal/testevidence owns native report parsing, internal/reportevidence owns
+# strict admission validation, internal/vcs shares command plumbing, and
+# internal/graph/{sync,ops,provider}
 # plus tools/regression drive concurrent graph reads and fixture runs.
 #
 # Why not `-race ./...`: the detector costs roughly 2-10x runtime and memory,
@@ -184,9 +185,11 @@ test: test-race
 # skipping, which is the intended behavior for an authoritative gate.
 test-race:
 	@go test -race -count=1 \
+		./internal/evidencecost \
 		./internal/rules \
 		./internal/procexec \
 		./internal/testevidence \
+		./internal/reportevidence \
 		./internal/vcs \
 		./internal/graph/sync \
 		./internal/graph/ops \

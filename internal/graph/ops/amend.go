@@ -281,8 +281,14 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			oldTests := n.Gate.Tests
 			oldRed := n.RedSeqs
 			oldGate := n.Gate
-			if oldGate.Evidence == model.EvidenceObservedV1 && a.After.Gate.Evidence == "" {
-				return nil, 0, fmt.Errorf("graph amend: %q: replacing an observed-v1 gate must explicitly preserve observed-v1 or explicitly select legacy", n.ID)
+			if a.After.Gate.Evidence == model.EvidenceObservedV1 {
+				return nil, 0, fmt.Errorf("graph amend: %q: observed-v1 is historical and cannot be authored; explicitly amend to reported-v1 with a report profile", n.ID)
+			}
+			if oldGate.Evidence == model.EvidenceObservedV1 && a.After.Gate.Evidence != model.EvidenceReportedV1 {
+				return nil, 0, fmt.Errorf("graph amend: %q: historical observed-v1 must be explicitly upgraded to reported-v1 with a report profile", n.ID)
+			}
+			if oldGate.Evidence == model.EvidenceReportedV1 && a.After.Gate.Evidence != model.EvidenceReportedV1 {
+				return nil, 0, fmt.Errorf("graph amend: %q: reported-v1 cannot be downgraded", n.ID)
 			}
 			if problems := model.ValidateEvidenceGate(a.After); len(problems) > 0 {
 				return nil, 0, fmt.Errorf("graph amend: %q: %s", n.ID, strings.Join(problems, "; "))
@@ -296,7 +302,11 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			// satisfies) is unchanged across the revise keeps its recorded
 			// red — the proof it discharges is unchanged. A changed,
 			// removed, or new test owes a fresh red at the new revision.
-			n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
+			if oldGate.Evidence == n.Gate.Evidence {
+				n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
+			} else {
+				n.RedSeqs = nil
+			}
 			n.RedEvidence = carryOverRedEvidence(oldGate, n.Gate, n.RedEvidence)
 			if len(oldTests) > 0 {
 				preimageTests[n.ID] = oldTests
@@ -315,6 +325,12 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			record.Revised = append(record.Revised, n.ID)
 		case review.ActionExtend:
 			n := *a.New
+			if n.Gate.Evidence == model.EvidenceObservedV1 {
+				return nil, 0, fmt.Errorf("graph amend: %q: observed-v1 is historical and cannot be authored; use reported-v1 with a report profile", n.ID)
+			}
+			if problems := model.ValidateEvidenceGate(&n); len(problems) > 0 {
+				return nil, 0, fmt.Errorf("graph amend: %q: %s", n.ID, strings.Join(problems, "; "))
+			}
 			sources.Anchor(&n)
 			if err := sources.AnchorInputs(&n); err != nil {
 				return nil, 0, fmt.Errorf("graph amend: %q: %w", n.ID, err)
@@ -360,11 +376,16 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 }
 
 func carryOverRedEvidence(oldGate, newGate model.Gate, old map[string]model.RedEvidence) map[string]model.RedEvidence {
-	if len(old) == 0 || oldGate.Evidence != model.EvidenceObservedV1 || newGate.Evidence != model.EvidenceObservedV1 {
+	if len(old) == 0 || oldGate.Evidence != newGate.Evidence ||
+		(oldGate.Evidence != model.EvidenceObservedV1 && oldGate.Evidence != model.EvidenceReportedV1) {
 		return nil
 	}
-	oldProfile, _ := json.Marshal(oldGate.Execution)
-	newProfile, _ := json.Marshal(newGate.Execution)
+	var oldDeclaration, newDeclaration any = oldGate.Execution, newGate.Execution
+	if oldGate.Evidence == model.EvidenceReportedV1 {
+		oldDeclaration, newDeclaration = oldGate.Report, newGate.Report
+	}
+	oldProfile, _ := json.Marshal(oldDeclaration)
+	newProfile, _ := json.Marshal(newDeclaration)
 	if string(oldProfile) != string(newProfile) {
 		return nil
 	}
@@ -372,17 +393,21 @@ func carryOverRedEvidence(oldGate, newGate model.Gate, old map[string]model.RedE
 	for _, before := range oldGate.Tests {
 		for _, after := range newGate.Tests {
 			if testProofKey(before) == testProofKey(after) {
-				compatible[before.ID] = true
+				compatible[before.Package+"::"+before.ID] = true
 			}
 		}
 	}
 	out := map[string]model.RedEvidence{}
 	for qualified, rec := range old {
-		id := qualified
-		if sep := strings.LastIndex(qualified, "::"); sep >= 0 {
-			id = qualified[sep+2:]
+		identity := qualified
+		if oldGate.Evidence == model.EvidenceObservedV1 {
+			id := qualified
+			if sep := strings.LastIndex(qualified, "::"); sep >= 0 {
+				id = qualified[sep+2:]
+			}
+			identity = "::" + id
 		}
-		if compatible[id] {
+		if compatible[identity] {
 			out[qualified] = rec
 		}
 	}

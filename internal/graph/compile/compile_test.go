@@ -725,7 +725,7 @@ func TestCompileRefusesEmptyTestsAndObservedOwnOutputs(t *testing.T) {
 	})
 	t.Run("live graph input", func(t *testing.T) {
 		root := fixtureRoot(t, fixtureSpec)
-		stage(t, root, `{"version":1,"nodes":[{"id":"observed","contract":"observed","justifies":["AC-01"],"inputs":[{"root":"planning","path":"Plans/SamplePlan/SamplePlan-Graph.json"}],"gate":{"type":"tests","evidence":"observed-v1","execution":{"adapter":"go-test-v1","timeout_seconds":30},"tests":[{"id":"TestObserved","file":"observed_test.go"}]},"hazards":[],"artifacts":["observed_test.go"]}]}`)
+		stage(t, root, `{"version":1,"nodes":[{"id":"reported","contract":"reported","justifies":["AC-01"],"inputs":[{"root":"planning","path":"Plans/SamplePlan/SamplePlan-Graph.json"}],"gate":{"type":"tests","evidence":"reported-v1","report":{"format":"go-test-json-v1","runner":"repo-tests","environment_keys":[],"test_support_inputs":[],"test_support_artifacts":[]},"tests":[{"package":"example.test/p","id":"TestReported","file":"reported_test.go"}]},"hazards":[],"artifacts":["reported_test.go"]}]}`)
 		_, findings, err := Run(root, root, "SamplePlan")
 		if err != nil {
 			t.Fatal(err)
@@ -734,6 +734,22 @@ func TestCompileRefusesEmptyTestsAndObservedOwnOutputs(t *testing.T) {
 			t.Fatalf("missing own-output finding: %v", findings)
 		}
 	})
+}
+
+func TestCompileReportedGateRefusesKnownDirectoryDependencyArtifact(t *testing.T) {
+	root := fixtureRoot(t, fixtureSpec)
+	if err := os.Mkdir(filepath.Join(root, "legacy-dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"version":1,"nodes":[{"id":"legacy","contract":"legacy","justifies":["AC-01"],"gate":{"type":"tests","tests":[{"id":"Legacy","file":"legacy_test.go"}]},"hazards":[],"artifacts":["legacy-dir"]},{"id":"reported","contract":"reported","justifies":["AC-01"],"deps":["legacy"],"gate":{"type":"tests","evidence":"reported-v1","report":{"format":"go-test-json-v1","runner":"repo","environment_keys":[],"test_support_inputs":[],"test_support_artifacts":[]},"tests":[{"package":"example.test/p","id":"Reported","file":"reported_test.go"}]},"hazards":[],"artifacts":["reported_test.go"]}]}`
+	stage(t, root, payload)
+	_, findings, err := Run(root, root, "SamplePlan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(findings); !strings.Contains(got, "dependency artifact") || !strings.Contains(got, "regular files only") {
+		t.Fatalf("missing file-only dependency refusal: %v", findings)
+	}
 }
 
 func TestObservedOwnOutputGuardUsesFilesystemIdentity(t *testing.T) {

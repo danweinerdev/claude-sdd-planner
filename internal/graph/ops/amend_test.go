@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -225,6 +226,77 @@ func TestCarryOverRedEvidenceUsesQualifiedTestIdentityAndFullDeclaration(t *test
 				t.Fatalf("incompatible evidence survived: %+v", got)
 			}
 		})
+	}
+}
+
+func TestCarryOverReportedRedEvidenceRequiresSameDeclaration(t *testing.T) {
+	profile := &model.ReportProfile{Format: "go-test-json-v1", Runner: "repo-tests", EnvironmentKeys: []string{}, TestSupportInputs: []string{}, TestSupportArtifacts: []string{}}
+	gate := model.Gate{Type: model.GateTests, Evidence: model.EvidenceReportedV1, Report: profile, Tests: []model.Test{{Package: "example.test/p", ID: "TestWork", File: "work_test.go", Satisfies: []string{"wrong-result"}}}}
+	record := model.RedEvidence{ReportID: "sha256:" + strings.Repeat("a", 64), Seq: 1, CompatibilityKey: "sha256:" + strings.Repeat("b", 64), Kind: "baseline"}
+	old := map[string]model.RedEvidence{"example.test/p::TestWork": record}
+	if got := carryOverRedEvidence(gate, gate, old); !reflect.DeepEqual(got, old) {
+		t.Fatalf("same reported declaration lost red: %#v", got)
+	}
+	for name, mutate := range map[string]func(*model.Gate){
+		"test":    func(g *model.Gate) { g.Tests[0].ID = "TestOther" },
+		"hazard":  func(g *model.Gate) { g.Tests[0].Satisfies = []string{"external-format"} },
+		"profile": func(g *model.Gate) { cp := *g.Report; cp.Runner = "other"; g.Report = &cp },
+	} {
+		t.Run(name, func(t *testing.T) {
+			next := gate
+			next.Tests = append([]model.Test(nil), gate.Tests...)
+			mutate(&next)
+			if got := carryOverRedEvidence(gate, next, old); len(got) != 0 {
+				t.Fatalf("incompatible declaration retained red: %#v", got)
+			}
+		})
+	}
+	observed := gate
+	observed.Evidence, observed.Report = model.EvidenceObservedV1, nil
+	observed.Execution = &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 1}
+	if got := carryOverRedEvidence(observed, gate, old); got != nil {
+		t.Fatalf("observed red became reported: %#v", got)
+	}
+}
+
+func TestReviewAmendReportedNodeRetainsCompatibleHistory(t *testing.T) {
+	root, planDir := fixtureRoot(t)
+	d := func(c string) string { return "sha256:" + strings.Repeat(c, 64) }
+	reportID, qid := d("a"), "example.test/p::test_big"
+	red := model.RedEvidence{ReportID: reportID, Seq: 1, CompatibilityKey: d("b"), Kind: "baseline"}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		n := g.NodeByID("big")
+		n.Gate.Evidence = model.EvidenceReportedV1
+		n.Gate.Execution = nil
+		n.Gate.Report = &model.ReportProfile{Format: "go-test-json-v1", Runner: "repo", EnvironmentKeys: []string{}, TestSupportInputs: []string{}, TestSupportArtifacts: []string{}}
+		n.Gate.Tests[0].Package = "example.test/p"
+		n.Artifacts = append(n.Artifacts, "t.ext")
+		n.RedSeqs = map[string]int{"test_big": 1}
+		n.RedEvidence = map[string]model.RedEvidence{qid: red}
+		n.ReportEvidence = map[string]model.ReportEvidence{reportID: {Protocol: model.EvidenceReportedV1, ReportDigest: d("c"), MetadataDigest: d("d"), ClaimInstance: "nonce", By: "worker", Phase: "red", RedKind: "baseline", CandidateDigest: d("e"), CompatibilityHash: d("f")}}
+		n.ConsumedReports = map[string]model.ConsumedReport{reportID: {Protocol: model.EvidenceReportedV1, ReportDigest: d("c"), MetadataDigest: d("d"), ClaimInstance: "nonce", By: "worker", Phase: "red", CandidateDigest: d("e"), Seq: 1, Result: model.ResultFail, RedEvidence: map[string]model.RedEvidence{qid: red}}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rel := frozenReview(t, root, "  - id: F-01\n    severity: major\n    title: clarify contract\n    status: open\n    action: revise\n    nodes: [big]\n    revise:\n      contract: \"reported contract revised\"\n")
+	preview, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, DryRun: true})
+	if err != nil {
+		t.Fatalf("reported review preview: %v", err)
+	}
+	if _, err := AmendFromReview(AmendOptions{Root: root, RepoRoot: root, Plan: "SamplePlan", Node: "feature-gate", Artifact: rel, ExpectDigest: preview.ExpectDigest, ExpectReportDigest: preview.Plan.ReportDigest}); err != nil {
+		t.Fatalf("reported review amend: %v", err)
+	}
+	g, err := gstore.Load(gstore.PathFor(planDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := g.NodeByID("big")
+	if n.Contract != "reported contract revised" || n.RedEvidence[qid] != red {
+		t.Fatalf("compatible reported red not retained: %+v", n)
+	}
+	if len(n.ReportEvidence) != 1 || len(n.ConsumedReports) != 1 {
+		t.Fatalf("report history was dropped or invented: evidence=%d consumed=%d", len(n.ReportEvidence), len(n.ConsumedReports))
 	}
 }
 

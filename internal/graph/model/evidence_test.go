@@ -77,7 +77,7 @@ func TestObservedGateRejectsUnrepresentableTimeouts(t *testing.T) {
 	}
 
 	raw := fmt.Sprintf(`{"version":1,"nodes":[{"id":"x","contract":"x","gate":{"type":"tests","evidence":"observed-v1","execution":{"adapter":"go-test-v1","timeout_seconds":%d},"tests":[{"id":"T","file":"x_test.go"}]},"hazards":[],"artifacts":["x_test.go"]}]}`, maxTimeout)
-	g, err := DecodeProposal([]byte(raw))
+	g, err := DecodeGraph([]byte(raw))
 	if err != nil {
 		t.Fatalf("decode boundary: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestObservedGateRejectsUnrepresentableTimeouts(t *testing.T) {
 	}
 
 	huge := strings.Replace(raw, strconv.FormatInt(maxTimeout, 10), strconv.FormatInt(math.MaxInt64, 10), 1)
-	if _, err := DecodeProposal([]byte(huge)); err == nil || !strings.Contains(err.Error(), "representable") {
+	if _, err := DecodeGraph([]byte(huge)); err == nil || !strings.Contains(err.Error(), "representable") {
 		t.Fatalf("huge timeout was not refused before duration conversion: %v", err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	graphdigest "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -64,12 +65,16 @@ func TestRunCheckAndTamperRefusal(t *testing.T) {
 	if a.Profile.Environment["GOPATH"] == digestBytes(nil) {
 		t.Fatal("unset GOPATH recorded empty instead of effective go env default")
 	}
-	checked, err := Check(CheckOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", AttemptID: res.AttemptID, Expect: "red", Now: func() time.Time { return now }})
+	checkCost := evidencecost.New(nil)
+	checked, err := Check(CheckOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", AttemptID: res.AttemptID, Expect: "red", Now: func() time.Time { return now }, Cost: checkCost})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !checked.Eligible || len(checked.Failed) != 1 {
 		t.Fatalf("check = %+v", checked)
+	}
+	if got := checked.Cost.Counters[evidencecost.BundleReadRequests]; got != 3 {
+		t.Fatalf("public check bundle reads = %d, want 3 (one header and two raw outputs)", got)
 	}
 	t.Setenv("FEATURE_MODE", "b")
 	profileDrift, err := Check(CheckOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", AttemptID: res.AttemptID, Expect: "red", Now: func() time.Time { return now }})
@@ -143,12 +148,18 @@ func TestRunCheckAndTamperRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteAttempt(t, filepath.Join(root, "subject_test.go"), "package pilot\nimport (\"testing\";\"time\")\nfunc TestValue(t *testing.T){time.Sleep(3*time.Second)}\n")
-	timed, err := Run(context.Background(), RunOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", Phase: "diagnostic", Now: func() time.Time { return now }})
+	timed, err := Run(context.Background(), RunOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", Phase: "diagnostic", Now: func() time.Time { return now }, Cost: evidencecost.New(nil)})
 	if err == nil || timed == nil || timed.AttemptID == "" || timed.Complete || timed.ExecutionStatus != "execution-incomplete" {
 		t.Fatalf("timeout result=%+v err=%v", timed, err)
 	}
-	if _, err := os.Stat(filepath.Join(base, timed.AttemptID, "incomplete.json")); err != nil {
+	incompletePath := filepath.Join(base, timed.AttemptID, "incomplete.json")
+	if _, err := os.Stat(incompletePath); err != nil {
 		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(incompletePath); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(raw), `"cost"`) {
+		t.Fatalf("incomplete bundle persisted invocation cost:\n%s", raw)
 	}
 }
 

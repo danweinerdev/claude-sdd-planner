@@ -10,9 +10,10 @@ func TestTestEvidenceGuard(t *testing.T) {
 		deny    bool
 	}{
 		{
-			name:    "quality scanner may check with flags",
+			name:    "retired test command is not allowlisted",
 			agent:   "quality-scanner",
 			command: "sdd test check --plan Sample --node n-1 --attempt attempt-1 --expect green --json",
+			deny:    true,
 		},
 		{
 			name:    "quality scanner may not run",

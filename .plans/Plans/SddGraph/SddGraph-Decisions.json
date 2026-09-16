@@ -121,5 +121,10 @@
     "date": "2026-09-13",
     "statement": "**DD-16**: Requirement elicitation before decomposition is a structured, resumable interview. Context: decomposition quality (DD-13) is bounded by requirements quality — an assumption that survives elicitation unexamined becomes a wrong contract executed faithfully, which no downstream mechanism in this design can catch (DD-4 catches *drift from* the spec, not a spec that was wrong on arrival). Options considered: (a) free-form clarifying questions at the planning skill's discretion (today's behavior); (b) a structured interview: a standalone scope gate (S/M/L/XL) sets the per-wave question budget, bounded multiple-choice waves continue adaptively until no material assumptions remain, every wave offers an early \"ready to plan\" exit, and answers persist to a resumable ledger under an ignored path. Decision: (b). Rationale: (a) produces unbounded, unresumable conversations whose conclusions live only in session context; (b) bounds token cost by declared scope, makes elicitation interruptible and resumable across sessions, and leaves a durable record of which assumptions were confirmed rather than guessed.",
     "source": "Designs/SddGraph:DD-16"
+  },
+  {
+    "id": "pd-769e9114",
+    "date": "2026-09-15",
+    "statement": "SDD owns graph requirements and evidence validation, not test execution. The graph-walking agent invokes repository-owned test tooling and supplies reports to sdd, which validates that the required tests were present, executed, and satisfied the gate before recording an observation."
   }
 ]

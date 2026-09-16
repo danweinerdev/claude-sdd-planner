@@ -273,8 +273,8 @@ func TestSchemaGatePredicatesForbidFieldsOnWrongGateTypes(t *testing.T) {
 			t.Errorf("schema conditions never require/forbid %q by presence: %s", field, s)
 		}
 	}
-	if !strings.Contains(s, `"else":{"not":{"required":["execution"]}}`) {
-		t.Errorf("legacy/absent evidence does not forbid execution: %s", s)
+	if !strings.Contains(s, `"not":{"required":["execution"]}`) {
+		t.Errorf("authoring schema does not forbid retired execution profiles: %s", s)
 	}
 }
 

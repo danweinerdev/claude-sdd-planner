@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
@@ -16,6 +18,12 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
+
+var errReleaseMeasured = errors.New("release measured failure")
+
+type failingReleaseProvider struct{ cleanWorkspaceProvider }
+
+func (failingReleaseProvider) Release(string) error { return errReleaseMeasured }
 
 // --- parser equivalence ----------------------------------------------------
 
@@ -182,14 +190,18 @@ func TestSyncRecordsObservationWithAnchors(t *testing.T) {
 func TestSyncRedRunRecordsRedSeqOnce(t *testing.T) {
 	planDir, repoRoot := fixture(t, testsNode("a", "test_a"))
 	failing := `<testsuite><testcase name="test_a"><failure/></testcase></testsuite>`
+	cost := evidencecost.New(nil)
 
 	first, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(failing)})
+		ReportName: "r.xml", ReportBytes: []byte(failing), Cost: cost})
 	if err != nil || !first.Recorded || first.Observation.Result != model.ResultFail {
 		t.Fatalf("red run records a fail observation: %+v %v", first, err)
 	}
 	if first.RedSeqsAdded["test_a"] != 1 {
 		t.Fatalf("first failure records red_seq: %+v", first.RedSeqsAdded)
+	}
+	if got := first.Cost.Counters[evidencecost.LegacyAnchorScans]; got != 1 {
+		t.Fatalf("legacy sync anchor scans = %d, want 1", got)
 	}
 	second, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
 		ReportName: "r.xml", ReportBytes: []byte(failing)})
@@ -625,7 +637,8 @@ func TestSyncRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
 	planDir, repoRoot := fixture(t, a, b)
 	hookCalls := 0
 	report := `<testsuite><testcase name="test_a"/></testsuite>`
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
+	cost := evidencecost.New(nil)
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", Cost: cost,
 		ReportName: "green.xml", ReportBytes: []byte(report),
 		beforePublish: func() error {
 			hookCalls++
@@ -641,12 +654,44 @@ func TestSyncRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
 	if hookCalls != 1 {
 		t.Fatalf("publication hook ran %d times; it must run only on the first CAS attempt", hookCalls)
 	}
+	if got := res.Cost.Counters[evidencecost.CASConflicts]; got != 1 {
+		t.Fatalf("cas conflicts = %d, want 1", got)
+	}
+	if got := res.Cost.Counters[evidencecost.CASRetries]; got != 1 {
+		t.Fatalf("cas retries = %d, want 1", got)
+	}
+	if got := res.Cost.Counters[evidencecost.PublicationCallbacks]; got != 2 {
+		t.Fatalf("publication callbacks = %d, want 2", got)
+	}
 	g, err := gstore.Load(gstore.PathFor(planDir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if g.NodeByID("b").Contract != "landed between read and CAS" || g.NodeByID("a").Verification == nil {
 		t.Fatalf("CAS retry lost one of the writes: %+v", g.Nodes)
+	}
+}
+
+func TestSyncAttributesWorkspaceReleaseThroughFailure(t *testing.T) {
+	n := testsNode("a", "test_a")
+	n.Claim = &model.Claim{By: "holder", Instance: "claim", Workspace: "ws", LeaseExpires: "2099-01-01T00:00:00Z"}
+	planDir, repoRoot := fixture(t, n)
+	if err := os.MkdirAll(filepath.Join(repoRoot, "ws"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cost := evidencecost.New(nil)
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", By: "holder", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), Provider: failingReleaseProvider{}, Cost: cost})
+	if !errors.Is(err, errReleaseMeasured) {
+		t.Fatalf("release error = %v", err)
+	}
+	if res == nil || !res.Recorded || !res.Merged || res.Observation == nil {
+		t.Fatalf("recorded result lost on release failure: %+v", res)
+	}
+	if res.Cost == nil || res.Cost.Counters[evidencecost.WorkspaceReleaseRequests] != 1 {
+		t.Fatalf("release request not attributed: %+v", res.Cost)
+	}
+	if _, ok := res.Cost.PhaseNS[evidencecost.WorkspaceRelease]; !ok {
+		t.Fatalf("release return not timed: %+v", res.Cost.PhaseNS)
 	}
 }
 

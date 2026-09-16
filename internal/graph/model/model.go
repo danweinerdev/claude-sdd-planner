@@ -65,6 +65,7 @@ const (
 
 const (
 	EvidenceObservedV1 = "observed-v1"
+	EvidenceReportedV1 = "reported-v1"
 	EvidenceLegacy     = "legacy"
 )
 
@@ -254,6 +255,8 @@ type Node struct {
 	RedSeqs          map[string]int             `json:"red_seqs,omitempty"`
 	RedEvidence      map[string]RedEvidence     `json:"red_evidence,omitempty"`
 	ConsumedAttempts map[string]ConsumedAttempt `json:"consumed_attempts,omitempty"`
+	ReportEvidence   map[string]ReportEvidence  `json:"report_evidence,omitempty"`
+	ConsumedReports  map[string]ConsumedReport  `json:"consumed_reports,omitempty"`
 }
 
 // Origin records which review finding created an extend node.
@@ -301,6 +304,7 @@ type Gate struct {
 	Type      string            `json:"type"`
 	Evidence  string            `json:"evidence,omitempty"`
 	Execution *ExecutionProfile `json:"execution,omitempty"`
+	Report    *ReportProfile    `json:"report,omitempty"`
 	// Tests names the runner-reported test ids a `tests` gate is satisfied
 	// by.
 	Tests []Test `json:"tests,omitempty"`
@@ -323,10 +327,11 @@ func (g Gate) MarshalJSON() ([]byte, error) {
 		Type      string            `json:"type"`
 		Evidence  string            `json:"evidence,omitempty"`
 		Execution *ExecutionProfile `json:"execution,omitempty"`
+		Report    *ReportProfile    `json:"report,omitempty"`
 		Tests     []wireTest        `json:"tests,omitempty"`
 		Command   string            `json:"command,omitempty"`
 		Lanes     *Lanes            `json:"lanes,omitempty"`
-	}{Type: g.Type, Evidence: g.Evidence, Execution: g.Execution, Tests: g.Tests, Command: g.Command}
+	}{Type: g.Type, Evidence: g.Evidence, Execution: g.Execution, Report: g.Report, Tests: g.Tests, Command: g.Command}
 	if g.Type == GateReview || g.Lanes != nil {
 		out.Lanes = &g.Lanes
 	}
@@ -340,6 +345,29 @@ type ExecutionProfile struct {
 	EnvironmentKeys      []string `json:"environment_keys,omitempty"`
 	TestSupportInputs    []string `json:"test_support_inputs,omitempty"`
 	TestSupportArtifacts []string `json:"test_support_artifacts,omitempty"`
+}
+
+type ReportProfile struct {
+	Format               string   `json:"format"`
+	Runner               string   `json:"runner"`
+	EnvironmentKeys      []string `json:"environment_keys"`
+	TestSupportInputs    []string `json:"test_support_inputs"`
+	TestSupportArtifacts []string `json:"test_support_artifacts"`
+}
+
+func (p ReportProfile) MarshalJSON() ([]byte, error) {
+	type wire ReportProfile
+	out := wire(p)
+	if out.EnvironmentKeys == nil {
+		out.EnvironmentKeys = []string{}
+	}
+	if out.TestSupportInputs == nil {
+		out.TestSupportInputs = []string{}
+	}
+	if out.TestSupportArtifacts == nil {
+		out.TestSupportArtifacts = []string{}
+	}
+	return json.Marshal(out)
 }
 
 // ReviewLanes is the closed four-lane vocabulary (DD-9): the same lanes the
@@ -376,6 +404,7 @@ func (l Lanes) MarshalJSON() ([]byte, error) {
 // declared hazard via Satisfies (checked by compile against the hazard
 // vocabulary's required shapes).
 type Test struct {
+	Package   string   `json:"package,omitempty"`
 	ID        string   `json:"id"`
 	File      string   `json:"file"`
 	Satisfies []string `json:"satisfies,omitempty"`
@@ -438,10 +467,37 @@ type Claim struct {
 
 type RedEvidence struct {
 	AttemptID        string `json:"attempt_id"`
+	ReportID         string `json:"report_id,omitempty"`
 	Seq              int    `json:"seq"`
 	CompatibilityKey string `json:"compatibility_key"`
 	Kind             string `json:"kind"`
 	Fault            string `json:"fault,omitempty"`
+}
+
+type ReportEvidence struct {
+	Protocol          string `json:"protocol"`
+	ReportDigest      string `json:"report_digest"`
+	MetadataDigest    string `json:"metadata_digest"`
+	ClaimInstance     string `json:"claim_instance"`
+	By                string `json:"by"`
+	Phase             string `json:"phase"`
+	RedKind           string `json:"red_kind,omitempty"`
+	Fault             string `json:"fault,omitempty"`
+	CandidateDigest   string `json:"candidate_digest"`
+	CompatibilityHash string `json:"compatibility_hash"`
+}
+
+type ConsumedReport struct {
+	Protocol        string                 `json:"protocol"`
+	ReportDigest    string                 `json:"report_digest"`
+	MetadataDigest  string                 `json:"metadata_digest"`
+	ClaimInstance   string                 `json:"claim_instance"`
+	By              string                 `json:"by"`
+	Phase           string                 `json:"phase"`
+	CandidateDigest string                 `json:"candidate_digest"`
+	Seq             int                    `json:"seq"`
+	Result          string                 `json:"result"`
+	RedEvidence     map[string]RedEvidence `json:"red_evidence,omitempty"`
 }
 
 type ConsumedAttempt struct {
@@ -492,7 +548,19 @@ type Verification struct {
 	IsolationDirtyPaths []string               `json:"isolation_dirty_paths,omitempty"`
 	Provenance          *Provenance            `json:"provenance,omitempty"`
 	Attempt             *AttemptSummary        `json:"attempt,omitempty"`
+	Report              *ReportSummary         `json:"report,omitempty"`
 	RedEvidence         map[string]RedEvidence `json:"red_evidence,omitempty"`
+}
+
+type ReportSummary struct {
+	ID              string `json:"id"`
+	Protocol        string `json:"protocol"`
+	ReportDigest    string `json:"report_digest"`
+	MetadataDigest  string `json:"metadata_digest"`
+	ClaimInstance   string `json:"claim_instance"`
+	By              string `json:"by"`
+	Phase           string `json:"phase"`
+	CandidateDigest string `json:"candidate_digest"`
 }
 
 type AttemptSummary struct {

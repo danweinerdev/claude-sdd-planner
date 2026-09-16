@@ -529,10 +529,28 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 		for _, problem := range model.ValidateEvidenceGate(n) {
 			add(id, "%s", problem)
 		}
-		if n.Gate.Evidence == model.EvidenceObservedV1 {
+		if n.Gate.Evidence == model.EvidenceObservedV1 || n.Gate.Evidence == model.EvidenceReportedV1 {
 			for _, in := range n.Inputs {
 				if observedOwnOutput(in, sources) {
-					add(id, "observed-v1 gate cannot declare its live graph or test-evidence output as input %q", in.Path)
+					add(id, "content-bound tests gate cannot declare its live graph or test-evidence output as input %q", in.Path)
+				}
+			}
+		}
+		if n.Gate.Evidence == model.EvidenceReportedV1 {
+			checkFile := func(kind, path string) {
+				info, err := os.Stat(filepath.Join(sources.inputRepoRoot, filepath.FromSlash(path)))
+				if err == nil && info.IsDir() {
+					add(id, "reported-v1 %s %q is a directory; file-based evidence supports regular files only", kind, path)
+				}
+			}
+			for _, path := range n.Artifacts {
+				checkFile("artifact", path)
+			}
+			for _, dep := range n.Deps {
+				if dn := merged[dep]; dn != nil {
+					for _, path := range dn.Artifacts {
+						checkFile("dependency artifact", path)
+					}
 				}
 			}
 		}

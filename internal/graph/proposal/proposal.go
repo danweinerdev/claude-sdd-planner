@@ -46,11 +46,17 @@ func Exemplar() *model.Proposal {
 				Contract:  "the schema describes every supported key and rejects an unknown one",
 				Justifies: []string{"FR-NN"},
 				Gate: model.Gate{
-					Type:      model.GateTests,
-					Evidence:  model.EvidenceObservedV1,
-					Execution: &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 120},
+					Type:     model.GateTests,
+					Evidence: model.EvidenceReportedV1,
+					Report: &model.ReportProfile{
+						Format:               "go-test-json-v1",
+						Runner:               "repository-unit-tests",
+						EnvironmentKeys:      []string{},
+						TestSupportInputs:    []string{},
+						TestSupportArtifacts: []string{},
+					},
 					Tests: []model.Test{
-						{ID: "test_schema_covers_every_key", File: "tests/test_schema.ext"},
+						{Package: "example.test/project/tests", ID: "test_schema_covers_every_key", File: "tests/test_schema.ext"},
 					},
 				},
 				// An explicit empty list is a claim: this node was triaged

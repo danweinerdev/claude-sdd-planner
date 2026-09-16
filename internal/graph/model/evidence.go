@@ -21,7 +21,7 @@ func ValidateEvidenceGate(n *Node) []string {
 	}
 	g := &n.Gate
 	var out []string
-	if g.Evidence != "" && g.Evidence != EvidenceLegacy && g.Evidence != EvidenceObservedV1 {
+	if g.Evidence != "" && g.Evidence != EvidenceLegacy && g.Evidence != EvidenceObservedV1 && g.Evidence != EvidenceReportedV1 {
 		out = append(out, fmt.Sprintf("unknown evidence value %q", g.Evidence))
 	}
 	if g.Type != GateTests {
@@ -30,6 +30,9 @@ func ValidateEvidenceGate(n *Node) []string {
 		}
 		if g.Execution != nil {
 			out = append(out, "execution is allowed only on observed-v1 tests gates")
+		}
+		if g.Report != nil {
+			out = append(out, "report is allowed only on reported-v1 tests gates")
 		}
 		if len(g.Tests) != 0 {
 			out = append(out, "tests are allowed only on tests gates")
@@ -47,6 +50,50 @@ func ValidateEvidenceGate(n *Node) []string {
 	}
 	if g.Lanes != nil {
 		out = append(out, "lanes are allowed only on review gates")
+	}
+	if g.Evidence == EvidenceReportedV1 {
+		if g.Execution != nil {
+			out = append(out, "execution is forbidden on reported-v1 tests gates")
+		}
+		if g.Report == nil {
+			return append(out, "reported-v1 tests gate requires report")
+		}
+		if len(g.Tests) == 0 {
+			out = append(out, "reported-v1 tests gate requires at least one test")
+		}
+		if g.Report.Format != "go-test-json-v1" {
+			out = append(out, "report format must be \"go-test-json-v1\"")
+		}
+		if strings.TrimSpace(g.Report.Runner) == "" {
+			out = append(out, "report runner must be a nonempty logical identity")
+		}
+		if g.Report.EnvironmentKeys == nil {
+			out = append(out, "report environment_keys must be an explicit array")
+		}
+		if g.Report.TestSupportInputs == nil {
+			out = append(out, "report test_support_inputs must be an explicit array")
+		}
+		if g.Report.TestSupportArtifacts == nil {
+			out = append(out, "report test_support_artifacts must be an explicit array")
+		}
+		for _, path := range n.Artifacts {
+			if obviousDirectoryPath(path) {
+				out = append(out, fmt.Sprintf("reported-v1 artifact %q must name a file, not a directory", path))
+			}
+		}
+		for _, t := range g.Tests {
+			if strings.TrimSpace(t.Package) == "" {
+				out = append(out, fmt.Sprintf("test %q requires package", t.ID))
+			}
+			if obviousDirectoryPath(t.File) {
+				out = append(out, fmt.Sprintf("test file %q must name a file, not a directory", t.File))
+			}
+		}
+		out = append(out, validateReportMembership(n, g.Report)...)
+		return out
+	}
+	if g.Report != nil {
+		out = append(out, "report is forbidden unless evidence is reported-v1")
 	}
 	if g.Evidence != EvidenceObservedV1 {
 		if g.Execution != nil {
@@ -154,4 +201,72 @@ func ValidateEvidenceGate(n *Node) []string {
 		}
 	}
 	return out
+}
+
+func validateReportMembership(n *Node, p *ReportProfile) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, key := range p.EnvironmentKeys {
+		folded := strings.ToUpper(key)
+		if !environmentKeyPattern.MatchString(key) {
+			out = append(out, fmt.Sprintf("environment_keys entry %q is not a valid environment name", key))
+		}
+		if seen[folded] {
+			out = append(out, fmt.Sprintf("environment_keys contains duplicate %q", key))
+		}
+		seen[folded] = true
+	}
+	inputs, artifacts := map[string]bool{}, map[string]bool{}
+	for _, in := range n.Inputs {
+		inputs[InputKey(in)] = true
+	}
+	for _, a := range n.Artifacts {
+		artifacts[a] = true
+	}
+	seenInputs := map[string]bool{}
+	for _, key := range p.TestSupportInputs {
+		if strings.TrimSpace(key) == "" {
+			out = append(out, "test_support_inputs contains an empty key")
+		}
+		if seenInputs[key] {
+			out = append(out, fmt.Sprintf("test_support_inputs contains duplicate %q", key))
+		}
+		seenInputs[key] = true
+		if !inputs[key] {
+			out = append(out, fmt.Sprintf("test_support_inputs key %q is not declared in inputs", key))
+		}
+	}
+	seenArtifacts := map[string]bool{}
+	for _, path := range p.TestSupportArtifacts {
+		if strings.TrimSpace(path) == "" {
+			out = append(out, "test_support_artifacts contains an empty path")
+		}
+		if seenArtifacts[path] {
+			out = append(out, fmt.Sprintf("test_support_artifacts contains duplicate %q", path))
+		}
+		seenArtifacts[path] = true
+		if obviousDirectoryPath(path) {
+			out = append(out, fmt.Sprintf("test_support_artifacts path %q must name a file, not a directory", path))
+		}
+		if !artifacts[path] {
+			out = append(out, fmt.Sprintf("test_support_artifacts path %q is not declared in artifacts", path))
+		}
+	}
+	whole := map[string]bool{}
+	for _, in := range n.Inputs {
+		if in.Root == InputRootRepository && in.Section == nil {
+			whole[in.Path] = true
+		}
+	}
+	for _, t := range n.Gate.Tests {
+		if !artifacts[t.File] && !whole[t.File] {
+			out = append(out, fmt.Sprintf("test file %q must be a declared artifact or whole repository input", t.File))
+		}
+	}
+	return out
+}
+
+func obviousDirectoryPath(path string) bool {
+	path = strings.TrimSpace(path)
+	return path == "." || path == ".." || strings.HasSuffix(path, "/") || strings.HasSuffix(path, `\`)
 }

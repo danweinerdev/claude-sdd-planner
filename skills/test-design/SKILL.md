@@ -38,6 +38,6 @@ Real entrypoint exercised, collaborators and fixtures, how injection or setup re
 Expected behavioral RED reason. Add a sensitivity experiment only for a named uncertainty the ordinary baseline cannot establish; describe isolation and restoration. Never prescribe a synthetic setup/build failure as RED.
 
 ## Execution
-Selected test identities, targeted discovery/execution command or profile, surrounding regressions, and intended evidence mode. Mark runtime capabilities as unchecked until the coordinator checks them.
+Package-qualified selected test identities, repository-owned discovery/execution tooling or profile, surrounding regressions, and intended evidence mode. For `reported-v1`, copy the required `{format, runner, environment_keys, test_support_inputs, test_support_artifacts}` profile without turning the logical runner identity into an SDD command. Mark repository-producer and SDD admission capabilities as unchecked until they are checked.
 
 The card is working context, not a graph node or completion artifact. Do not write graph state. The same context may continue to generation; an optional fresh non-inheriting context may challenge the card when available, receiving this complete card and its referenced material.

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	graphdigest "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	graphinputs "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/inputs"
@@ -30,6 +31,9 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/vcs"
 	"golang.org/x/mod/modfile"
 )
+
+// This package is historical experimental tooling. Production sdd does not
+// import it; report decoding remains in internal/testevidence.
 
 const Protocol = "observed-v1"
 const maxHeaderBytes int64 = 4 << 20
@@ -110,33 +114,39 @@ type RunOptions struct {
 	PlanDir, PlanningRoot, RepoRoot string
 	Node, By, Phase, RedKind, Fault string
 	Now                             func() time.Time
+	Cost                            *evidencecost.Recorder
+	CallerOwnsCostSnapshot          bool
 }
 
 type RunResult struct {
-	AttemptID       string       `json:"attempt_id,omitempty"`
-	ExecutionStatus string       `json:"execution_status"`
-	Result          string       `json:"result,omitempty"`
-	Tests           []TestResult `json:"tests,omitempty"`
-	Refusal         string       `json:"refusal,omitempty"`
-	Complete        bool         `json:"complete"`
-	Diagnostic      string       `json:"diagnostic,omitempty"`
-	StdoutExcerpt   string       `json:"stdout_excerpt,omitempty"`
-	StderrExcerpt   string       `json:"stderr_excerpt,omitempty"`
+	AttemptID       string                `json:"attempt_id,omitempty"`
+	ExecutionStatus string                `json:"execution_status"`
+	Result          string                `json:"result,omitempty"`
+	Tests           []TestResult          `json:"tests,omitempty"`
+	Refusal         string                `json:"refusal,omitempty"`
+	Complete        bool                  `json:"complete"`
+	Diagnostic      string                `json:"diagnostic,omitempty"`
+	StdoutExcerpt   string                `json:"stdout_excerpt,omitempty"`
+	StderrExcerpt   string                `json:"stderr_excerpt,omitempty"`
+	Cost            *evidencecost.Summary `json:"cost,omitempty"`
 }
 
 type CheckOptions struct {
 	PlanDir, PlanningRoot, RepoRoot string
 	Node, By, AttemptID, Expect     string
 	Now                             func() time.Time
+	Cost                            *evidencecost.Recorder
+	CallerOwnsCostSnapshot          bool
 }
 
 type CheckResult struct {
-	Eligible      bool              `json:"eligible"`
-	Attempt       *Attempt          `json:"attempt,omitempty"`
-	Current       Candidate         `json:"current,omitempty"`
-	Compatibility map[string]string `json:"compatibility,omitempty"`
-	Failed        []string          `json:"failed,omitempty"`
-	Refusal       string            `json:"refusal,omitempty"`
+	Eligible      bool                  `json:"eligible"`
+	Attempt       *Attempt              `json:"attempt,omitempty"`
+	Current       Candidate             `json:"current,omitempty"`
+	Compatibility map[string]string     `json:"compatibility,omitempty"`
+	Failed        []string              `json:"failed,omitempty"`
+	Refusal       string                `json:"refusal,omitempty"`
+	Cost          *evidencecost.Summary `json:"cost,omitempty"`
 }
 
 type CleanupOptions struct {
@@ -219,7 +229,13 @@ func Cleanup(o CleanupOptions) (*CleanupResult, error) {
 	return res, nil
 }
 
-func Run(ctx context.Context, o RunOptions) (*RunResult, error) {
+func Run(ctx context.Context, o RunOptions) (out *RunResult, outErr error) {
+	defer func() {
+		if out != nil && o.Cost != nil && !o.CallerOwnsCostSnapshot {
+			s := o.Cost.Snapshot()
+			out.Cost = &s
+		}
+	}()
 	if o.Now == nil {
 		o.Now = time.Now
 	}
@@ -242,7 +258,7 @@ func Run(ctx context.Context, o RunOptions) (*RunResult, error) {
 	if strings.ContainsAny(o.Fault, "\r\n") || len(o.Fault) > 200 {
 		return nil, fmt.Errorf("test run: --fault must be one concise line of at most 200 bytes")
 	}
-	g, node, workspace, err := loadCurrent(o.PlanDir, o.RepoRoot, o.Node, o.By, o.Now())
+	g, node, workspace, err := loadCurrent(o.PlanDir, o.RepoRoot, o.Node, o.By, o.Now(), o.Cost)
 	if err != nil {
 		return nil, err
 	}
@@ -257,11 +273,11 @@ func Run(ctx context.Context, o RunOptions) (*RunResult, error) {
 	if expires.Sub(o.Now()) < needed {
 		return nil, fmt.Errorf("test run: claim lease has insufficient time remaining for profile probes, timeout, cleanup, and admission headroom")
 	}
-	prepared, err := prepareGo(ctx, workspace, o.PlanDir, node)
+	prepared, err := prepareGo(ctx, workspace, o.PlanDir, node, o.Cost)
 	if err != nil {
 		return nil, fmt.Errorf("test run: %w", err)
 	}
-	before, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, workspace, g, node, prepared.Selected)
+	before, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, workspace, g, node, prepared.Selected, o.Cost)
 	if err != nil {
 		return nil, fmt.Errorf("test run: candidate before execution: %w", err)
 	}
@@ -279,39 +295,46 @@ func Run(ctx context.Context, o RunOptions) (*RunResult, error) {
 	}
 	defer releaseLock()
 	started := o.Now().UTC()
-	revision, err := executionRevision(workspace)
+	revision, err := executionRevision(workspace, o.Cost)
 	if err != nil {
 		return recordAttemptFailure(id, dir, "provenance-incomplete", fmt.Errorf("test run: capture execution revision: %w", err))
 	}
+	o.Cost.Inc(evidencecost.TestExecutionRequests)
+	endExecution := o.Cost.Start(evidencecost.TestExecution)
 	res, captureErr := procexec.Capture(ctx, prepared.Executable, prepared.Args, procexec.Policy{Dir: workspace, Env: prepared.Env, Timeout: time.Duration(node.Gate.Execution.TimeoutSeconds) * time.Second, Cleanup: procexec.DefaultCleanup})
+	endExecution()
 	if captureErr != nil {
 		return recordAttemptFailure(id, dir, "execution-incomplete", captureErr)
 	}
+	o.Cost.Inc(evidencecost.TestProcessesCompleted)
 	if err := writeExclusive(filepath.Join(dir, "stdout.json"), res.Stdout, 0o600); err != nil {
 		return recordAttemptFailure(id, dir, "storage-incomplete", err)
 	}
 	if err := writeExclusive(filepath.Join(dir, "stderr.txt"), []byte(res.Stderr), 0o600); err != nil {
 		return recordAttemptFailure(id, dir, "storage-incomplete", err)
 	}
+	o.Cost.Inc(evidencecost.ReportParses)
+	endParse := o.Cost.Start(evidencecost.ReportParse)
 	report, parseErr := ParseGoReport(res.Stdout, prepared.Selected, res.ExitCode)
+	endParse()
 	if parseErr != nil {
 		return recordAttemptFailure(id, dir, "report-incomplete", parseErr)
 	}
-	freshGraph, freshNode, freshWorkspace, err := loadCurrent(o.PlanDir, o.RepoRoot, o.Node, o.By, o.Now())
+	freshGraph, freshNode, freshWorkspace, err := loadCurrent(o.PlanDir, o.RepoRoot, o.Node, o.By, o.Now(), o.Cost)
 	if err != nil {
 		return recordAttemptFailure(id, dir, "claim-incomplete", fmt.Errorf("test run: claim changed during execution: %w", err))
 	}
 	if freshNode.Claim.Instance != node.Claim.Instance || freshWorkspace != workspace {
 		return recordAttemptFailure(id, dir, "claim-incomplete", fmt.Errorf("test run: claim instance or workspace changed during execution"))
 	}
-	afterPrepared, err := prepareGo(ctx, freshWorkspace, o.PlanDir, freshNode)
+	afterPrepared, err := prepareGo(ctx, freshWorkspace, o.PlanDir, freshNode, o.Cost)
 	if err != nil {
 		return recordAttemptFailure(id, dir, "profile-incomplete", fmt.Errorf("test run: execution profile after execution: %w", err))
 	}
 	if !equalJSON(prepared.Selected, afterPrepared.Selected) || !profilesEqual(prepared.Profile, afterPrepared.Profile) {
 		return recordAttemptFailure(id, dir, "profile-incomplete", fmt.Errorf("selected tests or execution profile changed during execution"))
 	}
-	after, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, freshWorkspace, freshGraph, freshNode, afterPrepared.Selected)
+	after, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, freshWorkspace, freshGraph, freshNode, afterPrepared.Selected, o.Cost)
 	if err != nil {
 		return recordAttemptFailure(id, dir, "candidate-incomplete", fmt.Errorf("test run: candidate after execution: %w", err))
 	}
@@ -338,7 +361,9 @@ func recordAttemptFailure(id, dir, status string, cause error) (*RunResult, erro
 		r.StdoutExcerpt = pe.Stdout
 		r.StderrExcerpt = pe.Stderr
 	}
-	payload := mustJSON(r)
+	persisted := *r
+	persisted.Cost = nil // Incomplete bundles are evidence diagnostics, never invocation telemetry.
+	payload := mustJSON(persisted)
 	if err := writeExclusive(filepath.Join(dir, "incomplete.json"), payload, 0o600); err != nil {
 		cause = fmt.Errorf("%w; writing incomplete attempt diagnostics: %v", cause, err)
 		r.Diagnostic = cause.Error()
@@ -350,14 +375,44 @@ func attemptLockPath(planDir, node, id string) string {
 	return filepath.Join(planDir, gstore.GraphDirName, "test-evidence", node, id+".active")
 }
 
-func Check(o CheckOptions) (*CheckResult, error) {
+func Check(o CheckOptions) (out *CheckResult, outErr error) {
+	defer func() {
+		if out != nil && o.Cost != nil && !o.CallerOwnsCostSnapshot {
+			s := o.Cost.Snapshot()
+			out.Cost = &s
+		}
+	}()
 	if o.Now == nil {
 		o.Now = time.Now
 	}
 	if o.Expect != "red" && o.Expect != "green" {
 		return nil, fmt.Errorf("test check: expect must be red or green")
 	}
-	g, err := gstore.Load(gstore.PathFor(o.PlanDir))
+	return checkLoadedReceipt(o)
+}
+
+// CheckForAdmission determines the receipt's phase and checks it against a
+// graph snapshot loaded by this package. Callers cannot supply either the
+// receipt or graph, so admission preflight retains the same integrity reads as
+// Check while loading the receipt header only once.
+func CheckForAdmission(o CheckOptions) (out *CheckResult, outErr error) {
+	defer func() {
+		if out != nil && o.Cost != nil && !o.CallerOwnsCostSnapshot {
+			s := o.Cost.Snapshot()
+			out.Cost = &s
+		}
+	}()
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	if o.Expect != "" {
+		return nil, fmt.Errorf("test check: admission determines expect from the attempt")
+	}
+	return checkLoadedReceipt(o)
+}
+
+func checkLoadedReceipt(o CheckOptions) (*CheckResult, error) {
+	g, err := gstore.LoadWithCost(gstore.PathFor(o.PlanDir), o.Cost)
 	if err != nil {
 		return nil, err
 	}
@@ -365,32 +420,46 @@ func Check(o CheckOptions) (*CheckResult, error) {
 	if node == nil {
 		return nil, fmt.Errorf("test check: node %q does not exist", o.Node)
 	}
-	if _, err := Load(o.PlanDir, o.Node, o.AttemptID); err != nil {
+	a, err := loadWithCost(o.PlanDir, o.Node, o.AttemptID, o.Cost)
+	if err != nil {
 		for i := range g.Nodes {
 			other := &g.Nodes[i]
 			if other.ID == o.Node {
 				continue
 			}
-			if a, foreignErr := Load(o.PlanDir, other.ID, o.AttemptID); foreignErr == nil {
+			if a, foreignErr := loadWithCost(o.PlanDir, other.ID, o.AttemptID, o.Cost); foreignErr == nil {
 				return &CheckResult{Attempt: a, Refusal: "attempt belongs to a different node"}, nil
 			}
 		}
 		return nil, err
 	}
-	return CheckCurrent(o, g, node)
+	if o.Expect == "" {
+		o.Expect = a.Phase
+	}
+	return checkFromLoadedReceipt(o, g, node, a)
 }
 
 // CheckCurrent revalidates an attempt against a caller-supplied fresh graph
 // snapshot. Graph admission uses it inside its CAS callback so source,
 // profile, claim, and compatible-red checks are repeated on every retry.
-func CheckCurrent(o CheckOptions, g *model.Graph, node *model.Node) (*CheckResult, error) {
+func CheckCurrent(o CheckOptions, g *model.Graph, node *model.Node) (out *CheckResult, outErr error) {
+	defer func() {
+		if out != nil && o.Cost != nil && !o.CallerOwnsCostSnapshot {
+			s := o.Cost.Snapshot()
+			out.Cost = &s
+		}
+	}()
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	a, err := Load(o.PlanDir, o.Node, o.AttemptID)
+	a, err := loadWithCost(o.PlanDir, o.Node, o.AttemptID, o.Cost)
 	if err != nil {
 		return nil, err
 	}
+	return checkFromLoadedReceipt(o, g, node, a)
+}
+
+func checkFromLoadedReceipt(o CheckOptions, g *model.Graph, node *model.Node, a *Attempt) (*CheckResult, error) {
 	refuse := func(s string) (*CheckResult, error) { return &CheckResult{Attempt: a, Refusal: s}, nil }
 	if node.Gate.Evidence != model.EvidenceObservedV1 {
 		return nil, fmt.Errorf("test check: node %q does not require observed-v1 evidence", o.Node)
@@ -426,32 +495,35 @@ func CheckCurrent(o CheckOptions, g *model.Graph, node *model.Node) (*CheckResul
 	if a.Phase == "diagnostic" || a.Phase != o.Expect {
 		return refuse("attempt phase cannot satisfy the expected admission")
 	}
-	raw, err := readBundleFile(o.PlanDir, o.Node, o.AttemptID, "stdout.json")
+	raw, err := readBundleFileWithCost(o.PlanDir, o.Node, o.AttemptID, "stdout.json", o.Cost)
 	if err != nil {
 		return nil, err
 	}
-	stderr, err := readBundleFile(o.PlanDir, o.Node, o.AttemptID, "stderr.txt")
+	stderr, err := readBundleFileWithCost(o.PlanDir, o.Node, o.AttemptID, "stderr.txt", o.Cost)
 	if err != nil {
 		return nil, err
 	}
 	if digestBytes(raw) != a.Execution.StdoutDigest || digestBytes(stderr) != a.Execution.StderrDigest {
 		return refuse("attempt raw output integrity check failed")
 	}
+	o.Cost.Inc(evidencecost.ReportParses)
+	endParse := o.Cost.Start(evidencecost.ReportParse)
 	report, err := ParseGoReport(raw, a.Selected, a.Execution.ExitCode)
+	endParse()
 	if err != nil {
 		return refuse("attempt report is no longer valid: " + err.Error())
 	}
 	if !equalJSON(report, a.Report) || attemptDigest(*a) != a.Digest {
 		return refuse("attempt header or parsed report integrity check failed")
 	}
-	prepared, err := prepareGo(context.Background(), workspace, o.PlanDir, node)
+	prepared, err := prepareGo(context.Background(), workspace, o.PlanDir, node, o.Cost)
 	if err != nil {
 		return nil, fmt.Errorf("test check: resolve current execution profile: %w", err)
 	}
 	if !equalJSON(prepared.Selected, a.Selected) || !profilesEqual(prepared.Profile, a.Profile) {
 		return refuse("selected tests or effective execution profile changed")
 	}
-	current, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, workspace, g, node, a.Selected)
+	current, err := snapshot(o.PlanningRoot, o.RepoRoot, o.PlanDir, workspace, g, node, a.Selected, o.Cost)
 	if err != nil {
 		return nil, fmt.Errorf("test check: current candidate: %w", err)
 	}
@@ -501,10 +573,19 @@ func CheckCurrent(o CheckOptions, g *model.Graph, node *model.Node) (*CheckResul
 func nextAdmissionSeq(g *model.Graph) int { return g.SeqCounter + 1 }
 
 func Load(planDir, node, id string) (*Attempt, error) {
+	return loadWithCost(planDir, node, id, nil)
+}
+
+// LoadWithCost is Load with optional bundle-read attribution.
+func LoadWithCost(planDir, node, id string, cost *evidencecost.Recorder) (*Attempt, error) {
+	return loadWithCost(planDir, node, id, cost)
+}
+
+func loadWithCost(planDir, node, id string, cost *evidencecost.Recorder) (*Attempt, error) {
 	if !attemptIDPattern.MatchString(id) {
 		return nil, fmt.Errorf("test evidence: invalid attempt id %q", id)
 	}
-	raw, err := readBundleFile(planDir, node, id, "header.json")
+	raw, err := readBundleFileWithCost(planDir, node, id, "header.json", cost)
 	if err != nil {
 		return nil, fmt.Errorf("test evidence: attempt is not finalized: %w", err)
 	}
@@ -582,8 +663,8 @@ func validateAttempt(a *Attempt) error {
 	return nil
 }
 
-func loadCurrent(planDir, repoRoot, nodeID, by string, now time.Time) (*model.Graph, *model.Node, string, error) {
-	g, err := gstore.Load(gstore.PathFor(planDir))
+func loadCurrent(planDir, repoRoot, nodeID, by string, now time.Time, cost *evidencecost.Recorder) (*model.Graph, *model.Node, string, error) {
+	g, err := gstore.LoadWithCost(gstore.PathFor(planDir), cost)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -637,6 +718,13 @@ func createAttemptDir(planDir, node string) (string, string, error) {
 }
 
 func readBundleFile(planDir, node, id, name string) ([]byte, error) {
+	return readBundleFileWithCost(planDir, node, id, name, nil)
+}
+
+func readBundleFileWithCost(planDir, node, id, name string, cost *evidencecost.Recorder) ([]byte, error) {
+	cost.Inc(evidencecost.BundleReadRequests)
+	end := cost.Start(evidencecost.BundleIO)
+	defer end()
 	if err := safeName(node); err != nil {
 		return nil, err
 	}
@@ -845,10 +933,16 @@ func compatibility(n *model.Node, a *Attempt) map[string]string {
 
 func (s SelectedTest) Qualified() string { return s.Package + "::" + s.ID }
 
-func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph, n *model.Node, selected []SelectedTest) (Candidate, error) {
+func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph, n *model.Node, selected []SelectedTest, costs ...*evidencecost.Recorder) (Candidate, error) {
+	var cost *evidencecost.Recorder
+	if len(costs) > 0 {
+		cost = costs[0]
+	}
+	end := cost.Start(evidencecost.CandidateSnapshot)
+	defer end()
 	c := Candidate{Obligation: n.ProofSnapshot(), Artifacts: map[string]string{}, Dependencies: map[string]map[string]string{}, Inputs: map[string]string{}, Intent: map[string]string{}, SelectedTestSources: map[string]string{}, ModuleFiles: map[string]string{}}
 	for _, a := range n.Artifacts {
-		d, e := hashRootFile(workspace, a, planDir)
+		d, e := hashRootFile(workspace, a, planDir, cost)
 		if e != nil {
 			return c, fmt.Errorf("artifact %s: %w", a, e)
 		}
@@ -861,7 +955,7 @@ func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph,
 		}
 		m := map[string]string{}
 		for _, a := range dn.Artifacts {
-			d, e := hashRootFile(workspace, a, planDir)
+			d, e := hashRootFile(workspace, a, planDir, cost)
 			if e != nil {
 				return c, fmt.Errorf("dependency artifact %s: %w", a, e)
 			}
@@ -883,6 +977,7 @@ func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph,
 	}
 	inputResolver := graphinputs.NewResolver(graphinputs.Roots{Repository: workspace, Planning: planningRoot})
 	for _, in := range n.Inputs {
+		cost.Inc(evidencecost.InputResolutions)
 		r, e := inputResolver.Resolve(in)
 		if e != nil {
 			return c, fmt.Errorf("input %s: %w", model.InputKey(in), e)
@@ -897,7 +992,7 @@ func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph,
 		c.Inputs[model.InputKey(in)] = r.Digest
 	}
 	for _, s := range selected {
-		d, e := hashRootFile(workspace, s.File, planDir)
+		d, e := hashRootFile(workspace, s.File, planDir, cost)
 		if e != nil {
 			return c, e
 		}
@@ -906,7 +1001,7 @@ func snapshot(planningRoot, repoRoot, planDir, workspace string, g *model.Graph,
 	for _, name := range []string{"go.mod", "go.sum"} {
 		p := filepath.Join(workspace, name)
 		if _, e := os.Lstat(p); e == nil {
-			b, e := readSafeRootFile(workspace, name, planDir, 4<<20)
+			b, e := readSafeRootFile(workspace, name, planDir, 4<<20, cost)
 			if e != nil {
 				return c, fmt.Errorf("read %s: %w", name, e)
 			}
@@ -936,7 +1031,10 @@ func declaredWholeSource(n *model.Node, path string) bool {
 	return false
 }
 
-func hashRootFile(root, rel, planDir string) (string, error) {
+func hashRootFile(root, rel, planDir string, costs ...*evidencecost.Recorder) (string, error) {
+	if len(costs) > 0 {
+		costs[0].Inc(evidencecost.RootHashRequests)
+	}
 	if filepath.IsAbs(rel) || filepath.ToSlash(rel) != rel || hasSegment(rel, "..") || (runtime.GOOS == "windows" && (strings.Contains(rel, ":") || unsafeRelativeComponent(rel))) {
 		return "", fmt.Errorf("unsafe root-relative path %q", rel)
 	}
@@ -1055,9 +1153,12 @@ func hasSegment(path, want string) bool {
 	return false
 }
 
-func prepareGo(ctx context.Context, workspace, planDir string, n *model.Node) (preparedGo, error) {
+func prepareGo(ctx context.Context, workspace, planDir string, n *model.Node, cost *evidencecost.Recorder) (preparedGo, error) {
+	cost.Inc(evidencecost.ProfileResolutions)
+	endProfile := cost.Start(evidencecost.ProfileResolution)
+	defer endProfile()
 	var zero preparedGo
-	modRaw, e := readSafeRootFile(workspace, "go.mod", planDir, 4<<20)
+	modRaw, e := readSafeRootFile(workspace, "go.mod", planDir, 4<<20, cost)
 	if e != nil {
 		return zero, fmt.Errorf("one root go.mod is required: %w", e)
 	}
@@ -1073,7 +1174,7 @@ func prepareGo(ctx context.Context, workspace, planDir string, n *model.Node) (p
 	pkgs := map[string]bool{}
 	var selected []SelectedTest
 	for _, t := range n.Gate.Tests {
-		raw, e := readSafeRootFile(workspace, t.File, planDir, 16<<20)
+		raw, e := readSafeRootFile(workspace, t.File, planDir, 16<<20, cost)
 		if e != nil {
 			return zero, fmt.Errorf("selected test source %s: %w", t.File, e)
 		}
@@ -1120,19 +1221,32 @@ func prepareGo(ctx context.Context, workspace, planDir string, n *model.Node) (p
 	if e != nil {
 		return zero, e
 	}
+	cost.Inc(evidencecost.ExecutableHashRequests)
+	endHash := cost.Start(evidencecost.ExecutableHash)
 	exe, e := os.ReadFile(goPath)
+	executableIdentity := ""
+	if e == nil {
+		executableIdentity = digestBytes(exe)
+	}
+	endHash()
 	if e != nil {
 		return zero, e
 	}
+	cost.Inc(evidencecost.GoProbeRequests)
+	endProbes := cost.Start(evidencecost.GoProbes)
+	defer endProbes()
 	version, e := procexec.Capture(ctx, goPath, []string{"version"}, procexec.Policy{Dir: workspace, Env: env, Timeout: 10 * time.Second})
 	if e != nil {
 		return zero, e
 	}
 	if version.ExitCode != 0 {
+		endProbes()
 		return zero, fmt.Errorf("go version exited %d", version.ExitCode)
 	}
 	keys := []string{"GOOS", "GOARCH", "CGO_ENABLED", "CC", "CXX", "GOWORK", "GOENV", "GOTOOLCHAIN", "GOFLAGS"}
+	cost.Inc(evidencecost.GoProbeRequests)
 	envResult, e := procexec.Capture(ctx, goPath, []string{"env", "-json"}, procexec.Policy{Dir: workspace, Env: env, Timeout: 10 * time.Second})
+	endProbes()
 	if e != nil {
 		return zero, e
 	}
@@ -1155,7 +1269,7 @@ func prepareGo(ctx context.Context, workspace, planDir string, n *model.Node) (p
 		identities[k] = digestBytes([]byte(value))
 	}
 	probeNanos := version.Run.Nanoseconds() + version.Cleanup.Nanoseconds() + envResult.Run.Nanoseconds() + envResult.Cleanup.Nanoseconds()
-	p := Profile{Adapter: "go-test-v1", Args: append([]string(nil), n.Gate.Execution.Args...), Argv: append([]string{"go"}, args...), TimeoutSeconds: n.Gate.Execution.TimeoutSeconds, WorkingDirectory: ".", Executable: digestBytes(exe), Version: strings.TrimSpace(string(version.Stdout)), Environment: identities, ProbeNanos: probeNanos}
+	p := Profile{Adapter: "go-test-v1", Args: append([]string(nil), n.Gate.Execution.Args...), Argv: append([]string{"go"}, args...), TimeoutSeconds: n.Gate.Execution.TimeoutSeconds, WorkingDirectory: ".", Executable: executableIdentity, Version: strings.TrimSpace(string(version.Stdout)), Environment: identities, ProbeNanos: probeNanos}
 	return preparedGo{Selected: selected, Profile: p, Args: args, Executable: goPath, Env: env}, nil
 }
 
@@ -1198,8 +1312,8 @@ func rejectSelectedNestedModule(root, dir string) error {
 	}
 	return nil
 }
-func readSafeRootFile(root, rel, planDir string, limit int64) ([]byte, error) {
-	if _, e := hashRootFile(root, rel, planDir); e != nil {
+func readSafeRootFile(root, rel, planDir string, limit int64, costs ...*evidencecost.Recorder) ([]byte, error) {
+	if _, e := hashRootFile(root, rel, planDir, costs...); e != nil {
 		return nil, e
 	}
 	p := filepath.Join(root, filepath.FromSlash(rel))
@@ -1217,12 +1331,16 @@ func readSafeRootFile(root, rel, planDir string, limit int64) ([]byte, error) {
 	defer f.Close()
 	return io.ReadAll(io.LimitReader(f, limit+1))
 }
-func executionRevision(workspace string) (string, error) {
+func executionRevision(workspace string, cost *evidencecost.Recorder) (string, error) {
+	cost.Inc(evidencecost.VCSQueryRequests)
 	repo, e := vcs.DetectChecked(workspace)
 	if e != nil {
 		return "", e
 	}
+	cost.Inc(evidencecost.VCSQueryRequests)
+	end := cost.Start(evidencecost.Provenance)
 	rev, e := repo.Head()
+	end()
 	if errors.Is(e, vcs.ErrUnsupported) {
 		return "", nil
 	}

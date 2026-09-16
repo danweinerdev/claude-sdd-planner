@@ -1,9 +1,10 @@
 ---
 title: "Test Evidence Pipeline"
 type: design
-status: approved
+status: superseded
+superseded_by: "Designs/RepositoryTestEvidence/README.md"
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 tags: [testing, tdd, evidence, skills, graph]
 related: [Designs/SddGraph/README.md, Designs/VerificationFreshness/README.md, Designs/ReviewDrivenAmendment/README.md]
 ---

@@ -13,13 +13,17 @@
       },
       "gate": {
         "type": "tests",
-        "evidence": "observed-v1",
-        "execution": {
-          "adapter": "go-test-v1",
-          "timeout_seconds": 120
+        "evidence": "reported-v1",
+        "report": {
+          "format": "go-test-json-v1",
+          "runner": "repository-unit-tests",
+          "environment_keys": [],
+          "test_support_inputs": [],
+          "test_support_artifacts": []
         },
         "tests": [
           {
+            "package": "example.test/project/tests",
             "id": "test_schema_covers_every_key",
             "file": "tests/test_schema.ext"
           }

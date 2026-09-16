@@ -330,35 +330,14 @@ func TestObservedArtifactChangesAdvanceContractRevision(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			g, err := gstore.Load(gstore.PathFor(planDir))
-			if err != nil {
-				t.Fatal(err)
+			path := gstore.PathFor(planDir)
+			before, _ := os.ReadFile(path)
+			if err := tc.mutate(planDir); err == nil || !strings.Contains(err.Error(), "reported-v1") {
+				t.Fatalf("observed setter was not retired: %v", err)
 			}
-			digestArtifact := func(path string) string {
-				if path == "t.ext" {
-					return "same"
-				}
-				return "changed"
-			}
-			if st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digestArtifact})["big"]; st.State != states.Stale {
-				t.Fatalf("fixture node is not stale before narrowing: %+v", st)
-			}
-			if err := tc.mutate(planDir); err != nil {
-				t.Fatal(err)
-			}
-			g, err = gstore.Load(gstore.PathFor(planDir))
-			if err != nil {
-				t.Fatal(err)
-			}
-			n := g.NodeByID("big")
-			if n.ContractRev != 2 {
-				t.Fatalf("artifact change contract_rev=%d, want 2", n.ContractRev)
-			}
-			if len(n.RedEvidence) != 1 {
-				t.Fatalf("implementation artifact change cleared compatible red evidence: %+v", n.RedEvidence)
-			}
-			if st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digestArtifact})["big"]; st.State == states.Green || !st.RevIncompatible {
-				t.Fatalf("old wide observation was reinterpreted as current proof: %+v", st)
+			after, _ := os.ReadFile(path)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("refused observed setter changed graph")
 			}
 		})
 	}
@@ -368,8 +347,8 @@ func TestObservedArtifactSetNoOpsAndLegacyChangesDoNotAdvanceRevision(t *testing
 	t.Run("observed direct reorder", func(t *testing.T) {
 		_, planDir := fixtureRoot(t)
 		seedObservedArtifacts(t, planDir)
-		if err := SetArtifacts(planDir, "big", "holder", []string{"t.ext", "impl.go"}); err != nil {
-			t.Fatal(err)
+		if err := SetArtifacts(planDir, "big", "holder", []string{"t.ext", "impl.go"}); err == nil || !strings.Contains(err.Error(), "reported-v1") {
+			t.Fatalf("observed no-op setter was not retired: %v", err)
 		}
 		g, _ := gstore.Load(gstore.PathFor(planDir))
 		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
@@ -380,8 +359,8 @@ func TestObservedArtifactSetNoOpsAndLegacyChangesDoNotAdvanceRevision(t *testing
 	t.Run("observed edit no-op", func(t *testing.T) {
 		_, planDir := fixtureRoot(t)
 		seedObservedArtifacts(t, planDir)
-		if err := EditArtifacts(planDir, "big", "holder", nil, []string{"absent.go"}); err != nil {
-			t.Fatal(err)
+		if err := EditArtifacts(planDir, "big", "holder", nil, []string{"absent.go"}); err == nil || !strings.Contains(err.Error(), "reported-v1") {
+			t.Fatalf("observed no-op edit was not retired: %v", err)
 		}
 		g, _ := gstore.Load(gstore.PathFor(planDir))
 		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
@@ -416,6 +395,70 @@ func TestObservedArtifactSetNoOpsAndLegacyChangesDoNotAdvanceRevision(t *testing
 			}
 		})
 	}
+}
+
+func TestReportedArtifactSettersAdvanceRevisionOnlyOnChange(t *testing.T) {
+	seed := func(t *testing.T) string {
+		t.Helper()
+		_, planDir := fixtureRoot(t)
+		if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			n := g.NodeByID("big")
+			n.Artifacts = []string{"impl.go", "t.ext"}
+			n.Gate.Evidence = model.EvidenceReportedV1
+			n.Gate.Execution = nil
+			n.Gate.Report = &model.ReportProfile{Format: "go-test-json-v1", Runner: "repo", EnvironmentKeys: []string{}, TestSupportInputs: []string{}, TestSupportArtifacts: []string{}}
+			n.Gate.Tests = []model.Test{{Package: "example.test/p", ID: "test_big", File: "t.ext"}}
+			n.Hazards = model.Hazards{}
+			n.Verification = &model.Verification{Result: model.ResultPass, Seq: 7, ContractRev: 1, Isolation: model.IsolationClean}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return planDir
+	}
+	assertNarrowed := func(t *testing.T, planDir string) {
+		t.Helper()
+		g, err := gstore.Load(gstore.PathFor(planDir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := g.NodeByID("big")
+		if n.ContractRev != 2 || n.Verification == nil || n.Verification.Seq != 7 {
+			t.Fatalf("reported narrowing lost history or revision: %+v", n)
+		}
+		state := states.Derive(states.Inputs{Graph: g})["big"]
+		if state.State == states.Green || !state.RevIncompatible {
+			t.Fatalf("old reported pass remained current: %+v", state)
+		}
+	}
+	t.Run("set-artifacts", func(t *testing.T) {
+		planDir := seed(t)
+		if err := SetArtifacts(planDir, "big", "", []string{"t.ext", "impl.go"}); err != nil {
+			t.Fatal(err)
+		}
+		g, _ := gstore.Load(gstore.PathFor(planDir))
+		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
+			t.Fatalf("no-op bumped revision to %d", got)
+		}
+		if err := SetArtifacts(planDir, "big", "", []string{"t.ext"}); err != nil {
+			t.Fatal(err)
+		}
+		assertNarrowed(t, planDir)
+	})
+	t.Run("edit-artifacts", func(t *testing.T) {
+		planDir := seed(t)
+		if err := EditArtifacts(planDir, "big", "", nil, []string{"absent.go"}); err != nil {
+			t.Fatal(err)
+		}
+		g, _ := gstore.Load(gstore.PathFor(planDir))
+		if got := g.NodeByID("big").EffectiveContractRev(); got != 1 {
+			t.Fatalf("no-op bumped revision to %d", got)
+		}
+		if err := EditArtifacts(planDir, "big", "", nil, []string{"impl.go"}); err != nil {
+			t.Fatal(err)
+		}
+		assertNarrowed(t, planDir)
+	})
 }
 
 func seedObservedArtifacts(t *testing.T, planDir string) {
@@ -468,12 +511,12 @@ func TestAmendObservedGateRequiresExplicitEvidenceSelection(t *testing.T) {
 	after.Gate.Execution = nil
 	g := &model.Graph{Version: 1, Nodes: []model.Node{old, {ID: "review", Role: model.RoleReview, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}}}
 	plan := &review.Plan{Review: "review", Amendments: []review.Amendment{{Action: review.ActionRevise, Node: "work", After: &after}}}
-	if _, _, err := applyAmendments(g, plan, "", sources, root); err == nil || !strings.Contains(err.Error(), "explicitly") {
+	if _, _, err := applyAmendments(g, plan, "", sources, root); err == nil {
 		t.Fatalf("implicit downgrade was not refused: %v", err)
 	}
 	after.Gate.Evidence = model.EvidenceLegacy
-	if _, _, err := applyAmendments(g, plan, "", sources, root); err != nil {
-		t.Fatalf("explicit legacy downgrade refused: %v", err)
+	if _, _, err := applyAmendments(g, plan, "", sources, root); err == nil {
+		t.Fatal("explicit legacy downgrade accepted")
 	}
 }
 
@@ -1674,16 +1717,14 @@ func TestObservedSetTestsPrunesOnlyIncompatibleRedEvidence(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if err := SetTests(planDir, "big", "", tc.next); err != nil {
-				t.Fatal(err)
+			path := gstore.PathFor(planDir)
+			before, _ := os.ReadFile(path)
+			if err := SetTests(planDir, "big", "", tc.next); err == nil || !strings.Contains(err.Error(), "reported-v1") {
+				t.Fatalf("observed set-tests was not retired: %v", err)
 			}
-			g, _ := gstore.Load(gstore.PathFor(planDir))
-			n := g.NodeByID("big")
-			if got := len(n.RedEvidence) == 1; got != tc.wantEvidence {
-				t.Fatalf("red evidence retained=%v, want %v: %+v", got, tc.wantEvidence, n.RedEvidence)
-			}
-			if _, got := n.RedSeqs["test_big"]; got != tc.wantInteger {
-				t.Fatalf("integer first-red retained=%v, want %v: %+v", got, tc.wantInteger, n.RedSeqs)
+			after, _ := os.ReadFile(path)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("refused observed set-tests changed graph")
 			}
 		})
 	}

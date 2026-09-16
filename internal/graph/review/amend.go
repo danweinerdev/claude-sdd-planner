@@ -364,6 +364,8 @@ func applyRevise(before *model.Node, revise map[string]any) (*model.Node, []stri
 func payloadMap(n *model.Node) (map[string]any, error) {
 	cp := *n
 	cp.IntentHashes, cp.InputHashes, cp.Claim, cp.Verification, cp.RedSeqs = nil, nil, nil, nil, nil
+	cp.RedEvidence, cp.ConsumedAttempts = nil, nil
+	cp.ReportEvidence, cp.ConsumedReports = nil, nil
 	cp.ContractRev, cp.Origin = 0, nil
 	raw, err := json.Marshal(cp)
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
@@ -35,6 +36,7 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	gsync "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/sync"
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/reportevidence"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -54,6 +56,7 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
+	c.AddCommand(graphEvidenceContextCmd())
 	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphAmendCmd())
@@ -629,14 +632,27 @@ func graphGCCmd() *cobra.Command {
 // path toward GREEN (DD-5). A red run is a SUCCESSFUL sync: recording the
 // failure is what arms red-before-green.
 func graphSyncCmd() *cobra.Command {
-	var plan, node, by, report, commandLog, attempt string
+	var plan, node, by, report, metadata, commandLog string
 	var commandExit int
-	var asJSON, verbose bool
+	var asJSON, verbose, withCost bool
 	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Record a node's observation from a test report or command result",
 		Args:  cobra.NoArgs,
-		RunE: func(c *cobra.Command, cmdArgs []string) error {
+		RunE: func(c *cobra.Command, cmdArgs []string) (outErr error) {
+			var cost *evidencecost.Recorder
+			if withCost {
+				cost = evidencecost.New(nil)
+			}
+			endPreparation := cost.Start(evidencecost.RootInputPreparation)
+			var res *gsync.Result
+			costEmitted := false
+			defer func() {
+				endPreparation()
+				if outErr != nil && withCost && !costEmitted {
+					outErr = emitGraphSyncCostError(c.OutOrStdout(), asJSON, res, outErr, cost)
+				}
+			}()
 			planDir, err := planDirFor(plan, "sync")
 			if err != nil {
 				return err
@@ -654,13 +670,19 @@ func graphSyncCmd() *cobra.Command {
 			} else {
 				return fmt.Errorf("graph sync: resolve plan sources: %w", serr)
 			}
-			opts.AttemptID = attempt
 			if report != "" {
-				raw, err := os.ReadFile(report)
+				raw, err := readBoundedFile(report, reportevidence.MaxReportBytes)
 				if err != nil {
 					return fmt.Errorf("graph sync: %w", err)
 				}
 				opts.ReportName, opts.ReportBytes = report, raw
+			}
+			if metadata != "" {
+				raw, err := readBoundedFile(metadata, reportevidence.MaxMetadataBytes)
+				if err != nil {
+					return fmt.Errorf("graph sync: %w", err)
+				}
+				opts.MetadataBytes = raw
 			}
 			if c.Flags().Changed("command-exit") {
 				opts.CommandExit = &commandExit
@@ -674,12 +696,20 @@ func graphSyncCmd() *cobra.Command {
 			}
 			cfg, _ := store.LoadConfig(".")
 			opts.TTL = time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
+			opts.Cost = cost
+			opts.CallerOwnsCostSnapshot = withCost
 
-			res, err := gsync.Run(opts)
+			endPreparation()
+			res, err = gsync.Run(opts)
 			if err != nil {
 				return err
 			}
+			if withCost && res != nil {
+				s := cost.Snapshot()
+				res.Cost = &s
+			}
 			if asJSON {
+				costEmitted = withCost
 				if err := writeJSON(res); err != nil {
 					return err
 				}
@@ -689,7 +719,13 @@ func graphSyncCmd() *cobra.Command {
 				return nil
 			}
 			if res.Historical {
-				fmt.Fprintf(c.OutOrStdout(), "attempt %s was already admitted at seq %d (%s); graph unchanged\n", res.AttemptID, res.Observation.Seq, res.Observation.Result)
+				fmt.Fprintf(c.OutOrStdout(), "report %s was already admitted at seq %d (%s); graph unchanged\n", res.ReportID, res.Observation.Seq, res.Observation.Result)
+				if withCost {
+					costEmitted = true
+					if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
+						return err
+					}
+				}
 				return nil
 			}
 			printBucket := func(name string, ids []string) {
@@ -702,6 +738,12 @@ func graphSyncCmd() *cobra.Command {
 			printUntracked(c.OutOrStdout(), res.Buckets.Untracked, verbose)
 			printBucket("ambiguous", res.Buckets.Ambiguous)
 			if !res.Recorded {
+				if withCost {
+					costEmitted = true
+					if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
+						return err
+					}
+				}
 				return &refusedError{n: 1, msg: "graph sync: " + res.Refusal}
 			}
 			fmt.Fprintf(c.OutOrStdout(), "recorded %s at seq %d (isolation %s)\n",
@@ -715,6 +757,12 @@ func graphSyncCmd() *cobra.Command {
 			if res.LogPath != "" {
 				fmt.Fprintf(c.OutOrStdout(), "output teed to %s\n", relPath(res.LogPath))
 			}
+			if withCost {
+				costEmitted = true
+				if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}
@@ -722,12 +770,102 @@ func graphSyncCmd() *cobra.Command {
 	c.Flags().StringVar(&node, "node", "", "node id to record the observation for")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the node is claimed; renews the lease)")
 	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
-	c.Flags().StringVar(&attempt, "attempt", "", "observed-v1 immutable attempt id")
+	c.Flags().StringVar(&metadata, "metadata", "", "reported-v1 execution metadata JSON")
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print every untracked report id instead of a truncated summary")
+	c.Flags().BoolVar(&withCost, "cost", false, "attribute anonymous per-invocation costs")
 	return c
+}
+
+func readBoundedFile(path string, limit int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err == nil && int64(len(b)) > limit {
+		err = fmt.Errorf("%s exceeds %d-byte limit", path, limit)
+	}
+	return b, err
+}
+
+func graphEvidenceContextCmd() *cobra.Command {
+	var plan, node, by string
+	var asJSON bool
+	c := &cobra.Command{Use: "evidence-context", Short: "Export read-only reported test evidence context", Args: cobra.NoArgs, RunE: func(c *cobra.Command, args []string) error {
+		if !asJSON {
+			return fmt.Errorf("graph evidence-context: --json is required")
+		}
+		planDir, err := planDirFor(plan, "evidence-context")
+		if err != nil {
+			return err
+		}
+		if node == "" || by == "" {
+			return fmt.Errorf("graph evidence-context: --node and --by are required")
+		}
+		planningRoot, repoRoot, err := resolveRoots(".", "")
+		if err != nil {
+			return err
+		}
+		sources, err := gcompile.NewSources(planningRoot, repoRoot, plan)
+		if err != nil {
+			return err
+		}
+		repoRoot = sources.RepositoryRoot()
+		g, err := gstore.Load(gstore.PathFor(planDir))
+		if err != nil {
+			return err
+		}
+		n := g.NodeByID(node)
+		if n == nil {
+			return fmt.Errorf("graph evidence-context: node %q does not exist", node)
+		}
+		ctx, err := reportevidence.BuildContext(planningRoot, repoRoot, planDir, g, n, by, time.Now())
+		if err != nil {
+			return err
+		}
+		return writeJSON(ctx)
+	}}
+	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
+	c.Flags().StringVar(&node, "node", "", "node id")
+	c.Flags().StringVar(&by, "by", "", "current claim holder")
+	c.Flags().BoolVar(&asJSON, "json", false, "emit JSON")
+	return c
+}
+
+func emitGraphSyncCostError(w io.Writer, asJSON bool, res *gsync.Result, operationErr error, cost *evidencecost.Recorder) error {
+	var summary evidencecost.Summary
+	if res != nil && res.Cost != nil {
+		summary = *res.Cost
+	} else {
+		summary = cost.Snapshot()
+	}
+	if res != nil && res.Cost == nil {
+		res.Cost = &summary
+	}
+	if asJSON {
+		var payload any = res
+		if res == nil {
+			payload = struct {
+				Error string               `json:"error"`
+				Cost  evidencecost.Summary `json:"cost"`
+			}{operationErr.Error(), summary}
+		}
+		if err := writeJSON(payload); err != nil {
+			return errors.Join(operationErr, fmt.Errorf("writing graph sync cost JSON: %w", err))
+		}
+		return operationErr
+	}
+	if w == nil {
+		w = io.Discard
+	}
+	if _, err := fmt.Fprintln(w, evidencecost.Format(summary)); err != nil {
+		return errors.Join(operationErr, fmt.Errorf("writing graph sync cost output: %w", err))
+	}
+	return operationErr
 }
 
 // printUntracked prints the untracked bucket: a whole-package report can
@@ -1593,6 +1731,13 @@ func planDirFor(plan, verb string) (string, error) {
 		return "", fmt.Errorf("graph %s: %w", verb, err)
 	}
 	return filepath.Join(root, "Plans", plan), nil
+}
+
+func validPlanName(plan string) error {
+	if plan == "" || filepath.Base(plan) != plan || plan == "." || plan == ".." || strings.ContainsAny(plan, `/\\`) {
+		return fmt.Errorf("invalid plan name %q", plan)
+	}
+	return nil
 }
 
 // graphProposeCmd stages one payload file as a fragment: validated

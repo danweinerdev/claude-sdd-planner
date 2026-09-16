@@ -10,9 +10,11 @@ import (
 // TestWaiverMemoConcurrencySafe passes on an unguarded memo without -race, so a
 // gate that never enables the detector cannot catch a removed lock.
 var racePackages = []string{
+	"./internal/evidencecost",
 	"./internal/rules",
 	"./internal/procexec",
 	"./internal/testevidence",
+	"./internal/reportevidence",
 	"./internal/vcs",
 	"./internal/graph/sync",
 	"./internal/graph/ops",

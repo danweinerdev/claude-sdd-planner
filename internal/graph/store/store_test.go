@@ -7,7 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
+	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
 
 func planDir(t *testing.T) string {
@@ -230,5 +232,28 @@ func TestUpdateSurfacesFnAndDecodeErrors(t *testing.T) {
 	}
 	if _, err := Update(filepath.Join(dir, "Missing-Graph.json"), func(*model.Graph) error { return nil }); err == nil {
 		t.Fatal("a missing graph must be reported")
+	}
+}
+
+func TestUpdateWithCostCountsRetriesOnlyWhenNextIterationRuns(t *testing.T) {
+	dir := planDir(t)
+	path, err := Init(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cost := evidencecost.New(nil)
+	callbacks := 0
+	_, err = updateWithCost(path, func(*model.Graph) error {
+		callbacks++
+		return nil
+	}, cost, func(path, _, expected string) error {
+		return &istore.ErrConcurrentWrite{Path: path, Expected: expected, Found: "changed"}
+	})
+	if err == nil || !strings.Contains(err.Error(), "gave up") {
+		t.Fatalf("exhaustion error = %v", err)
+	}
+	s := cost.Snapshot()
+	if callbacks != updateAttempts || s.Counters[evidencecost.GraphWriteRequests] != updateAttempts || s.Counters[evidencecost.CASConflicts] != updateAttempts || s.Counters[evidencecost.CASRetries] != updateAttempts-1 {
+		t.Fatalf("callbacks=%d counters=%+v", callbacks, s.Counters)
 	}
 }

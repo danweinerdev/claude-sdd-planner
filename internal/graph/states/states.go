@@ -357,6 +357,11 @@ func Derive(in Inputs) map[string]NodeState {
 			// deps look like now does not un-happen it.
 			ns.State = Red
 		default: // a recorded pass
+			if n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceReportedV1 {
+				if !validReportedPass(n, v) {
+					ns.ObservedEvidenceStale = true
+				}
+			}
 			if n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceObservedV1 {
 				if v.Attempt == nil || v.Attempt.Protocol != model.EvidenceObservedV1 || v.Attempt.ID == "" || !validDigestIdentity(v.Attempt.Digest) || !validDigestIdentity(v.Attempt.CandidateDigest) {
 					ns.ObservedEvidenceStale = true
@@ -600,6 +605,57 @@ func validDigestIdentity(s string) bool {
 	}
 	for _, c := range s[7:] {
 		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func validReportedPass(n *model.Node, v *model.Verification) bool {
+	if v == nil || v.Result != model.ResultPass || v.Report == nil || v.Report.Phase != "green" ||
+		v.Report.Protocol != model.EvidenceReportedV1 || !validDigestIdentity(v.Report.ID) ||
+		!validDigestIdentity(v.Report.ReportDigest) || !validDigestIdentity(v.Report.MetadataDigest) ||
+		!validDigestIdentity(v.Report.CandidateDigest) || v.Report.ClaimInstance == "" || v.Report.By == "" {
+		return false
+	}
+	e, ok := n.ReportEvidence[v.Report.ID]
+	if !ok || e.Protocol != v.Report.Protocol || e.ReportDigest != v.Report.ReportDigest ||
+		e.MetadataDigest != v.Report.MetadataDigest || e.ClaimInstance != v.Report.ClaimInstance ||
+		e.By != v.Report.By || e.Phase != v.Report.Phase || e.Phase != "green" || e.RedKind != "" || e.Fault != "" ||
+		e.CandidateDigest != v.Report.CandidateDigest || !validDigestIdentity(e.CompatibilityHash) {
+		return false
+	}
+	c, ok := n.ConsumedReports[v.Report.ID]
+	if !ok || c.Protocol != v.Report.Protocol || c.ReportDigest != v.Report.ReportDigest ||
+		c.MetadataDigest != v.Report.MetadataDigest || c.ClaimInstance != v.Report.ClaimInstance ||
+		c.By != v.Report.By || c.Phase != v.Report.Phase || c.CandidateDigest != v.Report.CandidateDigest ||
+		c.Seq != v.Seq || c.Result != v.Result || !reflect.DeepEqual(c.RedEvidence, v.RedEvidence) {
+		return false
+	}
+	for _, test := range n.Gate.Tests {
+		if len(test.Satisfies) == 0 {
+			continue
+		}
+		qid := test.Package + "::" + test.ID
+		if _, ok := v.RedEvidence[qid]; !ok {
+			return false
+		}
+	}
+	for qid, red := range v.RedEvidence {
+		if red.ReportID == "" || red.AttemptID != "" || red.Seq <= 0 || red.Seq >= v.Seq ||
+			!validDigestIdentity(red.ReportID) || !validDigestIdentity(red.CompatibilityKey) {
+			return false
+		}
+		redConsumed, ok := n.ConsumedReports[red.ReportID]
+		if !ok || redConsumed.Protocol != model.EvidenceReportedV1 || redConsumed.Result != model.ResultFail ||
+			redConsumed.Phase != "red" || redConsumed.Seq != red.Seq || redConsumed.RedEvidence[qid] != red {
+			return false
+		}
+		redEntry, ok := n.ReportEvidence[red.ReportID]
+		if !ok || redEntry.Protocol != redConsumed.Protocol || redEntry.ReportDigest != redConsumed.ReportDigest ||
+			redEntry.MetadataDigest != redConsumed.MetadataDigest || redEntry.ClaimInstance != redConsumed.ClaimInstance ||
+			redEntry.By != redConsumed.By || redEntry.Phase != redConsumed.Phase || redEntry.CandidateDigest != redConsumed.CandidateDigest ||
+			redEntry.RedKind != red.Kind || redEntry.Fault != red.Fault || !validDigestIdentity(redEntry.CompatibilityHash) {
 			return false
 		}
 	}

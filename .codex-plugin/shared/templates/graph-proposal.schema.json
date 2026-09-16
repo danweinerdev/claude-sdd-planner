@@ -127,10 +127,11 @@
           "description": "The runner-reported tests a `tests` gate is satisfied by."
         },
         "evidence": {
-          "enum": ["legacy", "observed-v1"],
-          "description": "Tests evidence protocol. Absence is legacy; observed-v1 requires an execution profile."
+          "enum": ["legacy", "reported-v1"],
+          "description": "Tests evidence protocol. reported-v1 admits repository-produced native reports; observed-v1 is historical."
         },
         "execution": { "$ref": "#/definitions/execution" },
+        "report": { "$ref": "#/definitions/report" },
         "command": {
           "type": "string",
           "description": "The check command whose exit code is a `command` gate's observation."
@@ -154,21 +155,34 @@
         {
           "if": { "properties": { "type": { "const": "command" } }, "required": ["type"] },
           "then": {
-            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["lanes"] }] }
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["report"] }, { "required": ["lanes"] }] }
           }
         },
         {
           "if": { "properties": { "type": { "const": "review" } }, "required": ["type"] },
           "then": {
-            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["command"] }] }
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["report"] }, { "required": ["command"] }] }
           }
         },
+        { "not": { "required": ["execution"] } },
         {
-          "if": { "properties": { "evidence": { "const": "observed-v1" } }, "required": ["evidence"] },
-          "then": { "required": ["execution"] },
-          "else": { "not": { "required": ["execution"] } }
+          "if": { "properties": { "evidence": { "const": "reported-v1" } }, "required": ["evidence"] },
+          "then": { "required": ["report"] },
+          "else": { "not": { "required": ["report"] } }
         }
       ]
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "runner", "environment_keys", "test_support_inputs", "test_support_artifacts"],
+      "properties": {
+        "format": { "const": "go-test-json-v1" },
+        "runner": { "type": "string", "minLength": 1 },
+        "environment_keys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+        "test_support_inputs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "test_support_artifacts": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
     },
     "execution": {
       "type": "object",
@@ -188,6 +202,7 @@
       "additionalProperties": false,
       "required": ["id", "file"],
       "properties": {
+        "package": { "type": "string", "minLength": 1, "description": "Required package identity for reported-v1 gates." },
         "id": {
           "type": "string",
           "minLength": 1,

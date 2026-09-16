@@ -49,6 +49,16 @@ go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 
 Go and network access are needed at install time only. Setup verifies the binary against the plugin's `minSddVersion` before touching anything and stops with the exact command if it's missing or too old.
 
+SDD owns graph requirements and evidence validation, not test execution. For
+`reported-v1` gates, the graph declares package-qualified tests and the report
+profile; repository-owned tooling captures context before/after its own run and
+produces native output plus strict metadata. Read-only `sdd graph
+evidence-context` exports the current binding, and `sdd graph sync --report
+... --metadata ...` validates and admits it. There is no production `sdd test`
+runner or new attempt-based admission. Historical `observed-v1` data remains
+readable, while active use requires explicit amendment and fresh evidence;
+legacy report imports retain their existing semantics.
+
 ### 2. Load the plugin
 
 **Claude Code:**

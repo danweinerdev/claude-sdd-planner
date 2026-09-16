@@ -261,7 +261,7 @@ func sameTests(a, b []model.Test) bool {
 func testProofKey(t model.Test) string {
 	sat := append([]string(nil), t.Satisfies...)
 	sort.Strings(sat)
-	return t.ID + "\x00" + t.File + "\x00" + strings.Join(sat, "\x00")
+	return t.Package + "\x00" + t.ID + "\x00" + t.File + "\x00" + strings.Join(sat, "\x00")
 }
 
 // carryOverRedSeqs computes the surviving red_seq bookkeeping across a gate
@@ -339,6 +339,9 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 		if n.Gate.Type != model.GateTests {
 			return fmt.Errorf("graph set-tests: %q has gate type %q; set-tests applies to tests gates", nodeID, n.Gate.Type)
 		}
+		if n.Gate.Evidence == model.EvidenceObservedV1 {
+			return fmt.Errorf("graph set-tests: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing tests", nodeID)
+		}
 		declared := map[string]bool{}
 		for _, h := range n.Hazards {
 			declared[h] = true
@@ -409,16 +412,19 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 		if err != nil {
 			return err
 		}
+		if n.Gate.Evidence == model.EvidenceObservedV1 {
+			return fmt.Errorf("graph set-artifacts: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing artifacts", nodeID)
+		}
 		candidate := *n
 		candidate.Artifacts = artifacts
 		if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
 			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
 		}
 		changed := !sameArtifactSet(n.Artifacts, artifacts)
-		if !changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+		if !changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
 			return nil
 		}
-		if changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+		if changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
 			n.ContractRev = n.EffectiveContractRev() + 1
 		}
 		n.Artifacts = artifacts
@@ -439,6 +445,9 @@ func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
 		n, err := artifactsNode(g, nodeID, by)
 		if err != nil {
 			return err
+		}
+		if n.Gate.Evidence == model.EvidenceObservedV1 {
+			return fmt.Errorf("graph set-artifacts: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing artifacts", nodeID)
 		}
 		current := append([]string(nil), n.Artifacts...)
 		removeSet := map[string]bool{}
@@ -473,10 +482,10 @@ func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
 			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
 		}
 		changed := !sameArtifactSet(n.Artifacts, next)
-		if !changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+		if !changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
 			return nil
 		}
-		if changed && n.Gate.Evidence == model.EvidenceObservedV1 && n.Verification != nil {
+		if changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
 			n.ContractRev = n.EffectiveContractRev() + 1
 		}
 		n.Artifacts = next

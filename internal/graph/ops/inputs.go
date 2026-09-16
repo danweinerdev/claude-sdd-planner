@@ -115,6 +115,10 @@ func planSetInputs(g *model.Graph, nodeID string, decl []model.Input, hashes map
 	if n == nil {
 		return nil, fmt.Errorf("graph set-inputs: node %q does not exist", nodeID)
 	}
+	if n.Gate.Evidence == model.EvidenceObservedV1 {
+		*refusals = append(*refusals, fmt.Sprintf("%s uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing inputs", nodeID))
+		return nil, nil
+	}
 	candidate := *n
 	candidate.Inputs = decl
 	if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {

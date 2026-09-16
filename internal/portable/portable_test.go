@@ -167,7 +167,7 @@ func TestGenerateTestCompositionResources(t *testing.T) {
 			"## Files changed", "## Test identities", "## Scaffolding introduced", "## Unresolved findings",
 		},
 		"skills/sdd-test-assess/SKILL.md": {
-			"## Resources", "skills/sdd-test-assess/SKILL.md", "valid isolated sensitivity run", "deliberate compiler-rejection harness test", "binary facts separate",
+			"## Resources", "skills/sdd-test-assess/SKILL.md", "valid isolated sensitivity run", "deliberate compiler-rejection harness test", "repository-produced metadata and deterministic validator facts",
 			"## Assessment", "Assessment: ready", "Assessment: changes-required", "Assessment: blocked", "## Located findings", "## Next action",
 		},
 	}

@@ -152,7 +152,7 @@ A successful runner process is not sufficient. Confirm the intended test identit
 - Bind evidence to the tested candidate and relevant command/configuration. Do not relabel an old report as a run against changed code or tests.
 - Report partial results as partial. A truncated report, interrupted run, or unexplained test-count mismatch is not a complete pass.
 
-A useful record identifies the selected tests and command, the tested candidate, the observed failure or pass, and the report containing that evidence. Generate mechanical details automatically where possible; narration does not substitute for execution.
+A useful record identifies the package-qualified selected tests, repository-owned runner identity, tested candidate, observed failure or pass, and native report containing that evidence. Capture mechanical execution and content-binding metadata contemporaneously with repository tooling; a model must not reconstruct output, exit status, or snapshots afterward. Evidence validators check supplied facts but do not thereby own or perform test execution. Narration does not substitute for execution.
 
 ## 10. Example: the error is not the whole contract
 

@@ -25,13 +25,13 @@ You receive from the coordinator one of two dispatch shapes.
 **Graph-node dispatch** (graph plans — the claim payload, verbatim):
 - **Node id and contract** — the falsifiable sentence that is true when you're done
 - **Cited requirement text** — inlined in the payload; no other plan reads needed
-- **Named tests** — the exact runner-visible test ids (and files) that gate the node; your tests must carry these ids
+- **Named tests** — the exact package-qualified runner-visible test ids (and files) that gate the node; your tests must carry these package and test identities
 - **Hazard triage** — the node's declared failure classes and the shape each discharging test must take
 - **Workspace path and VCS label** — you work **inside the claimed workspace** (git targets: a dedicated worktree), never the shared tree
 - **The red-first rule** — write the named tests first, run them against the unimplemented/broken state, and save that failing report; only then implement
-- **Assessed test design card and evidence mode** — preserve every fixed heading and whether the node is legacy or `observed-v1`; do not silently change either
+- **Assessed test design card and evidence mode/report profile** — preserve every fixed heading and whether the node is legacy, historical `observed-v1`, or `reported-v1`; for reported evidence preserve `{format, runner, environment_keys, test_support_inputs, test_support_artifacts}` exactly
 
-For graph nodes your deliverables change shape: the coordinator holds the claim and runs every `sdd graph sync` itself — you hand back the **raw RED/GREEN execution material appropriate to the selected evidence mode, assessment findings, and the workspace commit** (one clean commit of the complete slice inside the workspace; the passing admission's revision anchor must name the tested bytes). Everything else on this page — premise checks, spec fidelity, comment policy, evidence-not-assertion — applies unchanged.
+For graph nodes your deliverables change shape: the coordinator holds the claim and runs every `sdd graph sync` itself. You invoke repository-owned test tooling and hand back the **untouched native RED/GREEN reports, producer metadata, assessment findings, and workspace commit** (one clean commit of the complete slice inside the workspace; the passing admission's revision anchor must name the tested bytes). SDD validates evidence but does not execute tests. Everything else on this page — premise checks, spec fidelity, comment policy, evidence-not-assertion — applies unchanged.
 
 ## Path Resolution
 
@@ -65,7 +65,7 @@ The plugin directory contains `commands/`, `agents/`, and `shared/` as siblings.
 
 ### 3. Implement
 - Generate the assessed named tests first using the actual fixtures and discovery conventions. Return the skill's `Files changed`, `Test identities`, `Scaffolding introduced`, and `Unresolved findings`; stop on unresolved identity, seam, oracle, or scope mismatches.
-- Keep evidence modes distinct. For `observed-v1`, the coordinator checks help for runtime capability and owns capture/check/admission; do not pretend commands or an installed version exist or fall back to legacy. Preserve the real GREEN run while the same tested bytes are committed—do not request a duplicate run solely for the commit. For legacy nodes, return ordinary report evidence without claiming observed provenance. In either mode keep binary checker facts separate from assessment judgment; distinguish absent-behavior RED, valid sensitivity RED, and deliberate compiler-rejection harness tests from accidental setup/build/import/discovery/capture failure.
+- Keep evidence modes distinct. For `reported-v1`, check the repository's documented producer and let the coordinator check `sdd graph evidence-context --help` and `sdd graph sync --help`; missing required support blocks rather than downgrades or proving an installed version. Have repository tooling capture context immediately before execution, run the package-qualified selected tests, capture context immediately after, and emit native Go test JSON plus strict metadata. Context export is read-only: it executes/probes no tests, issues no receipt/run id, and does not produce metadata. Never invent or reconstruct runner output, exit code, timestamps, digest, environment identities, or content snapshots. Preserve the real GREEN report while the same tested bytes are committed—do not request a duplicate run solely for the commit. Historical `observed-v1` data is readable, but new attempts are retired and require an explicit amendment plus fresh evidence. Legacy nodes retain ordinary report-import semantics without acquiring reported provenance. Keep validator facts separate from assessment judgment; distinguish absent-behavior RED, valid sensitivity RED, and deliberate compiler-rejection harness tests from accidental setup/build/import/discovery/capture failure.
 - Write code for each subtask
 - Write tests alongside the code (not as an afterthought)
 - Follow the project's existing conventions for:

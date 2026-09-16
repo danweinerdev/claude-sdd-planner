@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	istore "github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 )
@@ -70,6 +71,13 @@ func Find(start string) (string, error) {
 // from landing mid-read — bare os.ReadFile races the rename on Windows and
 // surfaces as a transient sharing violation.
 func Load(path string) (*model.Graph, error) {
+	return LoadWithCost(path, nil)
+}
+
+// LoadWithCost is Load with optional per-invocation attribution.
+func LoadWithCost(path string, cost *evidencecost.Recorder) (*model.Graph, error) {
+	cost.Inc(evidencecost.GraphLoadRequests)
+	cost.Inc(evidencecost.GraphReadRequests)
 	art, err := istore.Read(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading graph: %w", err)
@@ -102,7 +110,23 @@ func Save(path string, g *model.Graph) error {
 // from the graph it is handed, never from state captured outside the call.
 // The final, written graph is returned.
 func Update(path string, fn func(*model.Graph) error) (*model.Graph, error) {
+	return UpdateWithCost(path, fn, nil)
+}
+
+// UpdateWithCost preserves Update's callback-outside-lock behavior while
+// counting actual store reads, write attempts, conflicts, and retries.
+func UpdateWithCost(path string, fn func(*model.Graph) error, cost *evidencecost.Recorder) (*model.Graph, error) {
+	return updateWithCost(path, fn, cost, istore.WriteAtomicExpecting)
+}
+
+type expectingWriter func(path, content, expectedDigest string) error
+
+func updateWithCost(path string, fn func(*model.Graph) error, cost *evidencecost.Recorder, write expectingWriter) (*model.Graph, error) {
 	for attempt := 0; attempt < updateAttempts; attempt++ {
+		if attempt > 0 {
+			cost.Inc(evidencecost.CASRetries)
+		}
+		cost.Inc(evidencecost.GraphReadRequests)
 		art, err := istore.Read(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading graph: %w", err)
@@ -122,7 +146,8 @@ func Update(path string, fn func(*model.Graph) error) (*model.Graph, error) {
 		if err != nil {
 			return nil, err
 		}
-		writeErr := istore.WriteAtomicExpecting(path, string(out), digest)
+		cost.Inc(evidencecost.GraphWriteRequests)
+		writeErr := write(path, string(out), digest)
 		if writeErr == nil {
 			return g, nil
 		}
@@ -130,6 +155,7 @@ func Update(path string, fn func(*model.Graph) error) (*model.Graph, error) {
 		if !errors.As(writeErr, &concurrent) {
 			return nil, writeErr
 		}
+		cost.Inc(evidencecost.CASConflicts)
 		// Another writer landed first; their claim/observation is now part
 		// of the state fn must be re-derived from.
 	}

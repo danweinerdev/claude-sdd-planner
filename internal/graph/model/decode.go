@@ -59,30 +59,38 @@ var toolOwnedNodeKeys = map[string]string{
 	"red_seqs":          "`graph sync` records first-failure seqs from parsed reports",
 	"red_evidence":      "`graph sync` records observed red compatibility",
 	"consumed_attempts": "`graph sync` records admitted attempt identities",
+	"report_evidence":   "`graph sync` records admitted report summaries",
+	"consumed_reports":  "`graph sync` records admitted report identities",
 	"contract_rev":      "`graph amend` advances contract revisions",
 	"origin":            "`graph amend` records which finding created a node",
 }
 
+var reportedDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
 // Allowed key sets per object, for unknown-key detection and did-you-mean.
 var (
-	graphKeys        = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements", "completed_at"}
-	proposalKeys     = []string{"version", "nodes"}
-	nodeKeys         = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs", "red_evidence", "consumed_attempts"}
-	originKeys       = []string{"review", "finding"}
-	amendmentKeys    = []string{"seq", "review", "artifact", "report_digest", "revised", "extended", "preimage_tests", "preimage_red_seqs"}
-	reviewedKeys     = []string{"contract_rev", "artifact_digests"}
-	gateKeys         = []string{"type", "evidence", "execution", "tests", "command", "lanes"}
-	executionKeys    = []string{"adapter", "args", "timeout_seconds", "environment_keys", "test_support_inputs", "test_support_artifacts"}
-	testKeys         = []string{"id", "file", "satisfies"}
-	inputKeys        = []string{"root", "path", "section"}
-	inputSectionKeys = []string{"heading_path"}
-	claimKeys        = []string{"by", "lease_expires", "workspace", "instance"}
-	verificationKeys = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "isolation_dirty_paths", "provenance", "attempt", "red_evidence"}
-	redEvidenceKeys  = []string{"attempt_id", "seq", "compatibility_key", "kind", "fault"}
-	consumedKeys     = []string{"digest", "seq", "result", "by", "phase", "red_kind", "fault", "red_evidence"}
-	attemptKeys      = []string{"id", "digest", "protocol", "claim_instance", "by", "phase", "red_kind", "fault", "started", "completed", "candidate_digest", "execution_revision"}
-	ackKeys          = []string{"seq", "node", "kind", "key", "old", "new", "by"}
-	provenanceKeys   = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
+	graphKeys          = []string{"version", "seq_counter", "revision_lineage", "nodes", "retired", "retirement_sources", "amendments", "acknowledgements", "completed_at"}
+	proposalKeys       = []string{"version", "nodes"}
+	nodeKeys           = []string{"id", "role", "contract", "contract_rev", "origin", "justifies", "intent_hashes", "inputs", "input_hashes", "deps", "gate", "hazards", "artifacts", "estimate", "phase", "history", "claim", "verification", "red_seqs", "red_evidence", "consumed_attempts", "report_evidence", "consumed_reports"}
+	originKeys         = []string{"review", "finding"}
+	amendmentKeys      = []string{"seq", "review", "artifact", "report_digest", "revised", "extended", "preimage_tests", "preimage_red_seqs"}
+	reviewedKeys       = []string{"contract_rev", "artifact_digests"}
+	gateKeys           = []string{"type", "evidence", "execution", "report", "tests", "command", "lanes"}
+	executionKeys      = []string{"adapter", "args", "timeout_seconds", "environment_keys", "test_support_inputs", "test_support_artifacts"}
+	reportKeys         = []string{"format", "runner", "environment_keys", "test_support_inputs", "test_support_artifacts"}
+	testKeys           = []string{"package", "id", "file", "satisfies"}
+	inputKeys          = []string{"root", "path", "section"}
+	inputSectionKeys   = []string{"heading_path"}
+	claimKeys          = []string{"by", "lease_expires", "workspace", "instance"}
+	verificationKeys   = []string{"result", "seq", "contract_rev", "artifact_digests", "reviewed", "dependency_digests", "input_hashes", "intent_hashes", "report_digest", "isolation", "isolation_dirty_paths", "provenance", "attempt", "report", "red_evidence"}
+	redEvidenceKeys    = []string{"attempt_id", "report_id", "seq", "compatibility_key", "kind", "fault"}
+	consumedKeys       = []string{"digest", "seq", "result", "by", "phase", "red_kind", "fault", "red_evidence"}
+	attemptKeys        = []string{"id", "digest", "protocol", "claim_instance", "by", "phase", "red_kind", "fault", "started", "completed", "candidate_digest", "execution_revision"}
+	reportSummaryKeys  = []string{"id", "protocol", "report_digest", "metadata_digest", "claim_instance", "by", "phase", "candidate_digest"}
+	reportEvidenceKeys = []string{"protocol", "report_digest", "metadata_digest", "claim_instance", "by", "phase", "red_kind", "fault", "candidate_digest", "compatibility_hash"}
+	consumedReportKeys = []string{"protocol", "report_digest", "metadata_digest", "claim_instance", "by", "phase", "candidate_digest", "seq", "result", "red_evidence"}
+	ackKeys            = []string{"seq", "node", "kind", "key", "old", "new", "by"}
+	provenanceKeys     = []string{"kind", "revision", "worktree", "changelist", "opened_files"}
 )
 
 // KeySets exposes the allowed-key vocabulary of the PROPOSAL payload shapes,
@@ -106,6 +114,7 @@ func KeySets() map[string][]string {
 		"gate":      cp(gateKeys),
 		"test":      cp(testKeys),
 		"execution": cp(executionKeys),
+		"report":    cp(reportKeys),
 	}
 }
 
@@ -132,6 +141,11 @@ func DecodeProposal(data []byte) (*Proposal, error) {
 	}
 	d := &decoder{proposal: true}
 	g := d.graph(raw)
+	for i := range g.Nodes {
+		if g.Nodes[i].Gate.Evidence == EvidenceObservedV1 {
+			d.errf(fmt.Sprintf("nodes[%d].gate.evidence", i), "observed-v1 is historical and cannot be authored; use reported-v1 with a report profile")
+		}
+	}
 	if len(d.errs) > 0 {
 		return nil, d.errs
 	}
@@ -482,6 +496,12 @@ func (d *decoder) node(path string, raw any) Node {
 		if v, present := obj["consumed_attempts"]; present {
 			n.ConsumedAttempts = d.consumedAttemptMap(path+".consumed_attempts", v)
 		}
+		if v, present := obj["report_evidence"]; present {
+			n.ReportEvidence = d.reportEvidenceMap(path+".report_evidence", v)
+		}
+		if v, present := obj["consumed_reports"]; present {
+			n.ConsumedReports = d.consumedReportMap(path+".consumed_reports", v)
+		}
 		if v, present := obj["contract_rev"]; present {
 			if r, ok := d.intVal(path+".contract_rev", v); ok {
 				if r < 1 {
@@ -616,7 +636,35 @@ func (d *decoder) gate(path string, raw any) Gate {
 	if v, present := obj["execution"]; present {
 		g.Execution = d.execution(path+".execution", v)
 	}
+	if v, present := obj["report"]; present {
+		g.Report = d.reportProfile(path+".report", v)
+	}
 	return g
+}
+
+func (d *decoder) reportProfile(path string, raw any) *ReportProfile {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object, got %s", typeName(raw))
+		return nil
+	}
+	d.unknownKeys(path, obj, reportKeys)
+	return &ReportProfile{Format: d.requiredString(path, obj, "format"), Runner: d.requiredString(path, obj, "runner"), EnvironmentKeys: d.requiredStringList(path, obj, "environment_keys"), TestSupportInputs: d.requiredStringList(path, obj, "test_support_inputs"), TestSupportArtifacts: d.requiredStringList(path, obj, "test_support_artifacts")}
+}
+
+func (d *decoder) requiredStringList(path string, obj map[string]any, key string) []string {
+	raw, ok := obj[key]
+	if !ok {
+		d.errf(path+"."+key, "missing required field")
+		return nil
+	}
+	out := d.stringList(path+"."+key, raw)
+	if out == nil {
+		if list, ok := raw.([]any); ok && len(list) == 0 {
+			return []string{}
+		}
+	}
+	return out
 }
 
 func (d *decoder) execution(path string, raw any) *ExecutionProfile {
@@ -691,6 +739,7 @@ func (d *decoder) test(path string, raw any) Test {
 	}
 	d.unknownKeys(path, obj, testKeys)
 	return Test{
+		Package:   d.optionalString(path+".package", obj["package"]),
 		ID:        d.requiredString(path, obj, "id"),
 		File:      d.requiredString(path, obj, "file"),
 		Satisfies: d.stringList(path+".satisfies", obj["satisfies"]),
@@ -900,6 +949,9 @@ func (d *decoder) verification(path string, raw any) *Verification {
 	if av, present := obj["attempt"]; present {
 		v.Attempt = d.attempt(path+".attempt", av)
 	}
+	if rv, present := obj["report"]; present {
+		v.Report = d.reportSummary(path+".report", rv)
+	}
 	if rv, present := obj["red_evidence"]; present {
 		v.RedEvidence = d.redEvidenceMap(path+".red_evidence", rv)
 	}
@@ -921,13 +973,134 @@ func (d *decoder) redEvidenceMap(path string, raw any) map[string]RedEvidence {
 			continue
 		}
 		d.unknownKeys(p, rec, redEvidenceKeys)
-		r := RedEvidence{AttemptID: d.requiredString(p, rec, "attempt_id"), CompatibilityKey: d.requiredString(p, rec, "compatibility_key"), Kind: d.requiredString(p, rec, "kind"), Fault: d.optionalString(p+".fault", rec["fault"])}
+		r := RedEvidence{AttemptID: d.optionalString(p+".attempt_id", rec["attempt_id"]), ReportID: d.optionalString(p+".report_id", rec["report_id"]), CompatibilityKey: d.requiredString(p, rec, "compatibility_key"), Kind: d.requiredString(p, rec, "kind"), Fault: d.optionalString(p+".fault", rec["fault"])}
+		if (r.AttemptID == "") == (r.ReportID == "") {
+			d.errf(p, "exactly one of attempt_id or report_id is required")
+		}
 		if x, present := rec["seq"]; present {
 			r.Seq, _ = d.intVal(p+".seq", x)
 		} else {
 			d.errf(p+".seq", "missing required field")
 		}
+		if r.Seq <= 0 {
+			d.errf(p+".seq", "must be positive")
+		}
+		if r.ReportID != "" && !reportedDigestPattern.MatchString(r.CompatibilityKey) {
+			d.errf(p+".compatibility_key", "must be a sha256 digest identity")
+		}
+		if r.Kind != "baseline" && r.Kind != "sensitivity" {
+			d.errf(p+".kind", "must be baseline or sensitivity")
+		}
+		if (r.Kind == "baseline" && r.Fault != "") || (r.Kind == "sensitivity" && strings.TrimSpace(r.Fault) == "") {
+			d.errf(p, "kind and fault contradict")
+		}
 		out[key] = r
+	}
+	return out
+}
+
+func (d *decoder) reportSummary(path string, raw any) *ReportSummary {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object")
+		return nil
+	}
+	d.unknownKeys(path, obj, reportSummaryKeys)
+	r := &ReportSummary{ID: d.requiredString(path, obj, "id"), Protocol: d.requiredString(path, obj, "protocol"), ReportDigest: d.requiredString(path, obj, "report_digest"), MetadataDigest: d.requiredString(path, obj, "metadata_digest"), ClaimInstance: d.requiredString(path, obj, "claim_instance"), By: d.requiredString(path, obj, "by"), Phase: d.requiredString(path, obj, "phase"), CandidateDigest: d.requiredString(path, obj, "candidate_digest")}
+	validateReportedFields(d, path, r.Protocol, r.ReportDigest, r.MetadataDigest, r.Phase, "", r.CandidateDigest)
+	if !reportedDigestPattern.MatchString(r.ID) {
+		d.errf(path+".id", "must be a sha256 digest identity")
+	}
+	return r
+}
+
+func (d *decoder) reportEvidenceMap(path string, raw any) map[string]ReportEvidence {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object keyed by report identity")
+		return nil
+	}
+	out := map[string]ReportEvidence{}
+	for _, id := range sortedKeys(obj) {
+		p := path + "." + id
+		if !reportedDigestPattern.MatchString(id) {
+			d.errf(p, "report identity key must be a sha256 digest")
+		}
+		rec, ok := obj[id].(map[string]any)
+		if !ok {
+			d.errf(p, "must be an object")
+			continue
+		}
+		d.unknownKeys(p, rec, reportEvidenceKeys)
+		r := ReportEvidence{Protocol: d.requiredString(p, rec, "protocol"), ReportDigest: d.requiredString(p, rec, "report_digest"), MetadataDigest: d.requiredString(p, rec, "metadata_digest"), ClaimInstance: d.requiredString(p, rec, "claim_instance"), By: d.requiredString(p, rec, "by"), Phase: d.requiredString(p, rec, "phase"), RedKind: d.optionalString(p+".red_kind", rec["red_kind"]), Fault: d.optionalString(p+".fault", rec["fault"]), CandidateDigest: d.requiredString(p, rec, "candidate_digest"), CompatibilityHash: d.requiredString(p, rec, "compatibility_hash")}
+		validateReportedFields(d, p, r.Protocol, r.ReportDigest, r.MetadataDigest, r.Phase, "", r.CandidateDigest)
+		if !reportedDigestPattern.MatchString(r.CompatibilityHash) {
+			d.errf(p+".compatibility_hash", "must be a sha256 digest identity")
+		}
+		if r.Phase == "red" {
+			if r.RedKind != "baseline" && r.RedKind != "sensitivity" {
+				d.errf(p+".red_kind", "red evidence requires baseline or sensitivity")
+			}
+			if (r.RedKind == "baseline" && r.Fault != "") || (r.RedKind == "sensitivity" && strings.TrimSpace(r.Fault) == "") {
+				d.errf(p, "red_kind and fault contradict")
+			}
+		} else if r.RedKind != "" || r.Fault != "" {
+			d.errf(p, "non-red evidence cannot carry red_kind or fault")
+		}
+		out[id] = r
+	}
+	return out
+}
+
+func validateReportedFields(d *decoder, path, protocol, reportDigest, metadataDigest, phase, result, candidateDigest string) {
+	if protocol != EvidenceReportedV1 {
+		d.errf(path+".protocol", "must be %q", EvidenceReportedV1)
+	}
+	for _, item := range []struct{ name, value string }{{"report_digest", reportDigest}, {"metadata_digest", metadataDigest}, {"candidate_digest", candidateDigest}} {
+		if !reportedDigestPattern.MatchString(item.value) {
+			d.errf(path+"."+item.name, "must be a sha256 digest identity")
+		}
+	}
+	if phase != "red" && phase != "green" {
+		d.errf(path+".phase", "must be red or green")
+	}
+	if result != "" && result != ResultPass && result != ResultFail {
+		d.errf(path+".result", "must be pass or fail")
+	}
+	if (phase == "green" && result == ResultFail) || (phase == "red" && result == ResultPass) {
+		d.errf(path, "phase and result contradict")
+	}
+}
+
+func (d *decoder) consumedReportMap(path string, raw any) map[string]ConsumedReport {
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		d.errf(path, "must be an object keyed by report identity")
+		return nil
+	}
+	out := map[string]ConsumedReport{}
+	for _, id := range sortedKeys(obj) {
+		p := path + "." + id
+		if !reportedDigestPattern.MatchString(id) {
+			d.errf(p, "report identity key must be a sha256 digest")
+		}
+		rec, ok := obj[id].(map[string]any)
+		if !ok {
+			d.errf(p, "must be an object")
+			continue
+		}
+		d.unknownKeys(p, rec, consumedReportKeys)
+		c := ConsumedReport{Protocol: d.requiredString(p, rec, "protocol"), ReportDigest: d.requiredString(p, rec, "report_digest"), MetadataDigest: d.requiredString(p, rec, "metadata_digest"), ClaimInstance: d.requiredString(p, rec, "claim_instance"), By: d.requiredString(p, rec, "by"), Phase: d.requiredString(p, rec, "phase"), CandidateDigest: d.requiredString(p, rec, "candidate_digest"), Result: d.requiredString(p, rec, "result")}
+		if v, present := rec["seq"]; present {
+			c.Seq, _ = d.intVal(p+".seq", v)
+		} else {
+			d.errf(p+".seq", "missing required field")
+		}
+		if v, present := rec["red_evidence"]; present {
+			c.RedEvidence = d.redEvidenceMap(p+".red_evidence", v)
+		}
+		validateReportedFields(d, p, c.Protocol, c.ReportDigest, c.MetadataDigest, c.Phase, c.Result, c.CandidateDigest)
+		out[id] = c
 	}
 	return out
 }

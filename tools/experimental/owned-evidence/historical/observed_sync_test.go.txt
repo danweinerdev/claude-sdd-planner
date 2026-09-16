@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/testevidence"
@@ -37,11 +38,19 @@ func TestObservedAdmissionAndHistoricalReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	drift := Options{PlanDir: planDir, RepoRoot: root, Node: "work", By: "worker", AttemptID: cap.AttemptID, Now: func() time.Time { return now }, beforePublish: func() error {
+	driftCost := evidencecost.New(nil)
+	drift := Options{PlanDir: planDir, RepoRoot: root, Node: "work", By: "worker", AttemptID: cap.AttemptID, Now: func() time.Time { return now }, Cost: driftCost, beforePublish: func() error {
 		return os.WriteFile(filepath.Join(root, "subject.go"), []byte("package pilot\nfunc Value() int { return 9 }\n"), 0o644)
 	}}
 	if _, err := Run(drift); err == nil || !strings.Contains(err.Error(), "became inadmissible") {
 		t.Fatalf("candidate drift admission err=%v", err)
+	}
+	driftSummary := driftCost.Snapshot()
+	if got := driftSummary.Counters[evidencecost.BundleReadRequests]; got != 6 {
+		t.Fatalf("observed sync bundle reads = %d, want 6 (three preflight and three CAS revalidation)", got)
+	}
+	if got := driftSummary.Counters[evidencecost.LegacyAnchorScans]; got != 0 {
+		t.Fatalf("observed sync legacy anchor scans = %d, want 0", got)
 	}
 	writeObserved(t, filepath.Join(root, "subject.go"), "package pilot\nfunc Value() int { return 1 }\n")
 	clock := now
@@ -155,6 +164,114 @@ func TestAttemptModeNamesUnsupportedGateType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestObservedAdmissionRechecksMutableInputsBeforePublish(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, root, planDir, attemptID string)
+	}{
+		{name: "current candidate", mutate: func(t *testing.T, root, _, _ string) {
+			writeObserved(t, filepath.Join(root, "subject.go"), "package pilot\nfunc Value() int { return 9 }\n")
+		}},
+		{name: "profile", mutate: func(t *testing.T, _, _, _ string) {
+			if err := os.Setenv("FEATURE_MODE", "changed"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "report", mutate: func(t *testing.T, _, planDir, attemptID string) {
+			path := filepath.Join(planDir, ".graph", "test-evidence", "work", attemptID, "stdout.json")
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "claim takeover", mutate: func(t *testing.T, _, planDir, _ string) {
+			if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+				g.NodeByID("work").Claim.Instance = "takeover"
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, planDir, now, attemptID := observedCostFixture(t, false)
+			cost := evidencecost.New(nil)
+			_, err := Run(Options{PlanDir: planDir, RepoRoot: root, Node: "work", By: "worker", AttemptID: attemptID, Now: func() time.Time { return now }, Cost: cost, beforePublish: func() error {
+				tc.mutate(t, root, planDir, attemptID)
+				return nil
+			}})
+			if err == nil {
+				t.Fatal("admission succeeded after beforePublish mutation")
+			}
+			g, loadErr := gstore.Load(gstore.PathFor(planDir))
+			if loadErr != nil {
+				t.Fatal(loadErr)
+			}
+			if g.NodeByID("work").Verification != nil {
+				t.Fatal("refused admission published an observation")
+			}
+		})
+	}
+}
+
+func TestObservedAdmissionCASRetryRechecksFreshGraphAndReceipt(t *testing.T) {
+	root, planDir, now, attemptID := observedCostFixture(t, true)
+	writeObserved(t, filepath.Join(root, "dep-new.go"), "package pilot\n")
+	cost := evidencecost.New(nil)
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: root, Node: "work", By: "worker", AttemptID: attemptID, Now: func() time.Time { return now }, Cost: cost, beforePublish: func() error {
+		_, updateErr := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+			g.NodeByID("dep").Artifacts = append(g.NodeByID("dep").Artifacts, "dep-new.go")
+			return nil
+		})
+		return updateErr
+	}})
+	if err == nil || !strings.Contains(err.Error(), "became inadmissible") || res != nil {
+		t.Fatalf("fresh dependency map was not rechecked: result=%+v err=%v", res, err)
+	}
+	summary := cost.Snapshot()
+	if got := summary.Counters[evidencecost.BundleReadRequests]; got != 9 {
+		t.Fatalf("CAS retry bundle reads = %d, want 9 (preflight plus two full rechecks)", got)
+	}
+	if summary.Counters[evidencecost.PublicationCallbacks] != 2 || summary.Counters[evidencecost.CASConflicts] != 1 || summary.Counters[evidencecost.CASRetries] != 1 {
+		t.Fatalf("CAS retry attribution = %+v", summary.Counters)
+	}
+}
+
+func observedCostFixture(t *testing.T, withDependency bool) (root, planDir string, now time.Time, attemptID string) {
+	t.Helper()
+	t.Setenv("FEATURE_MODE", "original")
+	root = t.TempDir()
+	planDir = filepath.Join(root, "Plans", "Pilot")
+	writeObserved(t, filepath.Join(root, "planning-config.json"), `{"planningRoot":"."}`)
+	writeObserved(t, filepath.Join(planDir, "README.md"), "---\ntitle: Pilot\ntype: plan\nstatus: active\ncreated: 2026-09-14\nupdated: 2026-09-14\ntags: []\nrelated: []\nphases: []\n---\n\n# Pilot\n")
+	writeObserved(t, filepath.Join(root, "go.mod"), "module example.test/pilot\n\ngo 1.22\n")
+	writeObserved(t, filepath.Join(root, "subject.go"), "package pilot\nfunc Value() int { return 1 }\n")
+	writeObserved(t, filepath.Join(root, "subject_test.go"), "package pilot\nimport \"testing\"\nfunc TestValue(t *testing.T) { if Value()!=2 { t.Fatal(\"red\") } }\n")
+	if _, err := gstore.Init(planDir); err != nil {
+		t.Fatal(err)
+	}
+	now = time.Now().UTC().Truncate(time.Second)
+	n := model.Node{ID: "work", Contract: "value", Hazards: model.Hazards{"wrong-result"}, Artifacts: []string{"subject.go", "subject_test.go", "go.mod"}, Estimate: 1, Gate: model.Gate{Type: model.GateTests, Evidence: model.EvidenceObservedV1, Tests: []model.Test{{ID: "TestValue", File: "subject_test.go", Satisfies: []string{"wrong-result"}}}, Execution: &model.ExecutionProfile{Adapter: "go-test-v1", TimeoutSeconds: 30, EnvironmentKeys: []string{"FEATURE_MODE"}}}, Claim: &model.Claim{By: "worker", Instance: "one", LeaseExpires: now.Add(2 * time.Minute).Format(time.RFC3339)}}
+	nodes := []model.Node{n}
+	if withDependency {
+		writeObserved(t, filepath.Join(root, "dep.go"), "package pilot\n")
+		n.Deps = []string{"dep"}
+		nodes[0] = n
+		nodes = append(nodes, model.Node{ID: "dep", Contract: "dependency", Hazards: model.Hazards{}, Artifacts: []string{"dep.go"}, Estimate: 1, Gate: model.Gate{Type: model.GateCommand, Command: "true"}})
+	}
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error { g.Nodes = nodes; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := testevidence.Run(context.Background(), testevidence.RunOptions{PlanDir: planDir, PlanningRoot: root, RepoRoot: root, Node: "work", By: "worker", Phase: "red", RedKind: "baseline", Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root, planDir, now, captured.AttemptID
 }
 
 func writeObserved(t *testing.T, path, body string) {
