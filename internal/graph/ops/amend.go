@@ -10,7 +10,6 @@ package ops
 // review node's deps so the review cannot re-green until it is GREEN.
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -167,7 +165,7 @@ func AmendFromReview(o AmendOptions) (*AmendResult, error) {
 	if err := review.AdmitArtifact(g, o.Plan, o.Node, artifact); err != nil {
 		return nil, fmt.Errorf("graph amend: %w", err)
 	}
-	scope, err := review.CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
+	scope, err := review.CurrentScope(g, o.Node)
 	if err != nil {
 		return nil, fmt.Errorf("graph amend: %w", err)
 	}
@@ -255,7 +253,6 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 	out.Nodes = append([]model.Node(nil), g.Nodes...)
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
 	out.RevisionLineage = cloneRevisionLineage(g.RevisionLineage)
-	out.Acknowledgements = append([]model.AcknowledgementRecord(nil), g.Acknowledgements...)
 	index := map[string]int{}
 	for i := range out.Nodes {
 		index[out.Nodes[i].ID] = i
@@ -280,16 +277,6 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			}
 			oldTests := n.Gate.Tests
 			oldRed := n.RedSeqs
-			oldGate := n.Gate
-			if a.After.Gate.Evidence == model.EvidenceObservedV1 {
-				return nil, 0, fmt.Errorf("graph amend: %q: observed-v1 is historical and cannot be authored; explicitly amend to reported-v1 with a report profile", n.ID)
-			}
-			if oldGate.Evidence == model.EvidenceObservedV1 && a.After.Gate.Evidence != model.EvidenceReportedV1 {
-				return nil, 0, fmt.Errorf("graph amend: %q: historical observed-v1 must be explicitly upgraded to reported-v1 with a report profile", n.ID)
-			}
-			if oldGate.Evidence == model.EvidenceReportedV1 && a.After.Gate.Evidence != model.EvidenceReportedV1 {
-				return nil, 0, fmt.Errorf("graph amend: %q: reported-v1 cannot be downgraded", n.ID)
-			}
 			if problems := model.ValidateEvidenceGate(a.After); len(problems) > 0 {
 				return nil, 0, fmt.Errorf("graph amend: %q: %s", n.ID, strings.Join(problems, "; "))
 			}
@@ -302,38 +289,18 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			// satisfies) is unchanged across the revise keeps its recorded
 			// red — the proof it discharges is unchanged. A changed,
 			// removed, or new test owes a fresh red at the new revision.
-			if oldGate.Evidence == n.Gate.Evidence {
-				n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
-			} else {
-				n.RedSeqs = nil
-			}
-			n.RedEvidence = carryOverRedEvidence(oldGate, n.Gate, n.RedEvidence)
+			n.RedSeqs = carryOverRedSeqs(oldTests, n.Gate.Tests, oldRed)
 			if len(oldTests) > 0 {
 				preimageTests[n.ID] = oldTests
 			}
 			if len(oldRed) > 0 {
 				preimageRedSeqs[n.ID] = oldRed
 			}
-			// Re-anchor against the snapshot: hashes belong to the new
-			// citation and input sets, never carried over.
-			n.IntentHashes = nil
-			n.InputHashes = nil
-			sources.Anchor(n)
-			if err := sources.AnchorInputs(n); err != nil {
-				return nil, 0, fmt.Errorf("graph amend: %q: %w", n.ID, err)
-			}
 			record.Revised = append(record.Revised, n.ID)
 		case review.ActionExtend:
 			n := *a.New
-			if n.Gate.Evidence == model.EvidenceObservedV1 {
-				return nil, 0, fmt.Errorf("graph amend: %q: observed-v1 is historical and cannot be authored; use reported-v1 with a report profile", n.ID)
-			}
 			if problems := model.ValidateEvidenceGate(&n); len(problems) > 0 {
 				return nil, 0, fmt.Errorf("graph amend: %q: %s", n.ID, strings.Join(problems, "; "))
-			}
-			sources.Anchor(&n)
-			if err := sources.AnchorInputs(&n); err != nil {
-				return nil, 0, fmt.Errorf("graph amend: %q: %w", n.ID, err)
 			}
 			out.Nodes = append(out.Nodes, n)
 			index[n.ID] = len(out.Nodes) - 1
@@ -357,7 +324,7 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 			v := *r.Verification
 			// Pinned from the pre-amend graph `g`, so revised members keep
 			// their old revision in the set and mismatch afterward.
-			v.Reviewed = states.LegacyReviewedSet(g, plan.Review, plan.Scope, digest.New(repoRoot).Artifact)
+			v.Reviewed = states.LegacyReviewedSet(g, plan.Review, plan.Scope)
 			r.Verification = &v
 		}
 	}
@@ -373,48 +340,6 @@ func applyAmendments(g *model.Graph, plan *review.Plan, by string, sources *gcom
 	record.Seq = out.SeqCounter
 	out.Amendments = append(out.Amendments, record)
 	return &out, record.Seq, nil
-}
-
-func carryOverRedEvidence(oldGate, newGate model.Gate, old map[string]model.RedEvidence) map[string]model.RedEvidence {
-	if len(old) == 0 || oldGate.Evidence != newGate.Evidence ||
-		(oldGate.Evidence != model.EvidenceObservedV1 && oldGate.Evidence != model.EvidenceReportedV1) {
-		return nil
-	}
-	var oldDeclaration, newDeclaration any = oldGate.Execution, newGate.Execution
-	if oldGate.Evidence == model.EvidenceReportedV1 {
-		oldDeclaration, newDeclaration = oldGate.Report, newGate.Report
-	}
-	oldProfile, _ := json.Marshal(oldDeclaration)
-	newProfile, _ := json.Marshal(newDeclaration)
-	if string(oldProfile) != string(newProfile) {
-		return nil
-	}
-	compatible := map[string]bool{}
-	for _, before := range oldGate.Tests {
-		for _, after := range newGate.Tests {
-			if testProofKey(before) == testProofKey(after) {
-				compatible[before.Package+"::"+before.ID] = true
-			}
-		}
-	}
-	out := map[string]model.RedEvidence{}
-	for qualified, rec := range old {
-		identity := qualified
-		if oldGate.Evidence == model.EvidenceObservedV1 {
-			id := qualified
-			if sep := strings.LastIndex(qualified, "::"); sep >= 0 {
-				id = qualified[sep+2:]
-			}
-			identity = "::" + id
-		}
-		if compatible[identity] {
-			out[qualified] = rec
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func containsString(list []string, s string) bool {

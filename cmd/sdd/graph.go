@@ -21,12 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
 	gconvert "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/convert"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
@@ -36,7 +34,6 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 	gsync "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/sync"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/reportevidence"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -56,20 +53,15 @@ func graphCmd() *cobra.Command {
 	c.AddCommand(graphConvertCmd())
 	c.AddCommand(graphReleaseCmd())
 	c.AddCommand(graphSyncCmd())
-	c.AddCommand(graphEvidenceContextCmd())
-	c.AddCommand(graphEvidenceContractCmd())
 	c.AddCommand(graphReverifyCmd())
 	c.AddCommand(graphReviewCmd())
 	c.AddCommand(graphAmendCmd())
-	c.AddCommand(graphAcknowledgeCmd())
 	c.AddCommand(graphRemapRevisionsCmd())
 	c.AddCommand(graphSplitCmd())
 	c.AddCommand(graphSetTestsCmd())
 	c.AddCommand(graphSetInputsCmd())
-	c.AddCommand(graphRepairIntentCmd())
 	c.AddCommand(graphRepairRedCmd())
 	c.AddCommand(graphSetArtifactsCmd())
-	c.AddCommand(graphRehashCmd())
 	c.AddCommand(graphGCCmd())
 	c.AddCommand(graphRetireCmd())
 	c.AddCommand(graphPathCmd())
@@ -185,9 +177,10 @@ func graphSetInputsCmd() *cobra.Command {
 		Short: "Replace a node's declared read-only inputs",
 		Long: `Replace one node's declared read-only inputs (whole files or Markdown
 sections) from a JSON input array. Eligibility is deliberately conservative:
-the node must be UNCLAIMED, UNVERIFIED, and carry no red observations — a node
-with evidence is never re-pointed at different input text. The tool resolves
-each input and owns the embedded input_hashes; no other node field changes.
+the node must be unclaimed. Changing inputs on a verified node advances its
+contract revision while preserving compatible red-before-green observations;
+an unverified node carrying red observations is refused. The tool resolves
+each input before recording its declaration.
 --dry-run reports the same planned change without writing the graph.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -240,83 +233,6 @@ each input and owns the embedded input_hashes; no other node field changes.
 	c.Flags().StringVar(&node, "node", "", "node id to edit")
 	c.Flags().StringVar(&file, "file", "", "JSON array of inputs: [{\"root\": \"repository|planning\", \"path\": ..., \"section\": {\"heading_path\": [...]}}]")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned change without writing the graph")
-	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
-	return c
-}
-
-// graphRepairIntentCmd backfills missing intent fingerprints on unclaimed,
-// unverified nodes (the conservative migration for nodes the split bug left
-// unanchored). Mutating: guard-covered per D-0014.
-func graphRepairIntentCmd() *cobra.Command {
-	var plan, node string
-	var dryRun, asJSON bool
-	c := &cobra.Command{
-		Use:   "repair-intent",
-		Short: "Backfill missing intent fingerprints on unclaimed, unverified nodes",
-		Long: `Backfill missing/empty intent_hashes entries on UNCLAIMED, UNVERIFIED nodes
-with no red observations. Deliberately conservative: it never overwrites a
-nonempty hash (even a stale one) and refuses atomically if any selected repair
-candidate is claimed, verified, red-observed, or cites an ambiguous/unresolved
-requirement. With no --node it considers every node, leaving already-anchored
-and D-only nodes alone; --dry-run reports the same planned changes without
-writing the graph.`,
-		Args: cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
-			if plan == "" {
-				return fmt.Errorf("graph repair-intent: --plan is required")
-			}
-			root, repoRoot, err := resolveRoots(".", "")
-			if err != nil {
-				return fmt.Errorf("graph repair-intent: %w", err)
-			}
-			res, err := ops.RepairIntent(root, repoRoot, plan, node, dryRun)
-			if err != nil {
-				var refusal *ops.RefusedError
-				if !errors.As(err, &refusal) {
-					return err // malformed/operational: exit 2
-				}
-				// Eligibility-policy refusal: authoritative, exit 1. With
-				// --json the reasons go on stdout as a structured document;
-				// without it the full reason list is the error text.
-				if asJSON {
-					if werr := writeJSON(struct {
-						OK      bool     `json:"ok"`
-						Reasons []string `json:"reasons"`
-					}{false, refusal.Reasons}); werr != nil {
-						return werr
-					}
-				}
-				return &refusedError{n: len(refusal.Reasons), msg: refusal.Error()}
-			}
-			if asJSON {
-				return writeJSON(struct {
-					OK bool `json:"ok"`
-					*ops.RepairIntentResult
-				}{true, res})
-			}
-			w := c.OutOrStdout()
-			if len(res.Changes) == 0 {
-				if dryRun {
-					fmt.Fprintln(w, "nothing to repair")
-				} else {
-					fmt.Fprintln(w, "nothing to repair (every fingerprintable citation is already anchored)")
-				}
-				return nil
-			}
-			verb := "repaired"
-			if dryRun {
-				verb = "would repair"
-			}
-			for _, ch := range res.Changes {
-				fmt.Fprintf(w, "%s %s: %s -> %s\n", verb, ch.Node, ch.Cited, ch.Hash)
-			}
-			fmt.Fprintf(w, "%s %d fingerprint(s) across %d node(s)\n", verb, len(res.Changes), len(res.Repaired))
-			return nil
-		},
-	}
-	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
-	c.Flags().StringVar(&node, "node", "", "repair only this node (default: every node)")
-	c.Flags().BoolVar(&dryRun, "dry-run", false, "report the planned backfills without writing the graph")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	return c
 }
@@ -458,7 +374,7 @@ func graphSetArtifactsCmd() *cobra.Command {
 					RerenderError string   `json:"rerender_error,omitempty"`
 				}{true, node, count, written, refused, noRender, errString(rerenderErr)})
 			}
-			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (recorded observation untouched; undigested new paths derive STALE until the next sync)\n", count, node)
+			fmt.Fprintf(c.OutOrStdout(), "set %d artifact(s) on %s (a changed verified declaration advances its contract revision)\n", count, node)
 			switch {
 			case noRender:
 				fmt.Fprintln(c.OutOrStdout(), "rendered views not refreshed (--no-render): they are stale against the graph until the next compile")
@@ -499,15 +415,7 @@ func rerenderViewsAfterEdit(planDir, plan string) (written []string, refused boo
 	if loadErr != nil {
 		return nil, false, loadErr
 	}
-	sources, srcErr := gcompile.NewSources(root, repoRoot, plan)
-	if srcErr != nil {
-		return nil, false, srcErr
-	}
-	snap := sources.IntentSnapshot()
-	digester := digest.New(repoRoot)
-	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(),
-		CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
+	st := states.Derive(states.Inputs{Graph: g})
 	closed := greview.Closed(g, st)
 	written, err = gcompile.RenderViews(root, plan, repoRoot, g, st, closed)
 	if err != nil {
@@ -531,51 +439,6 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
-}
-
-// graphRehashCmd acknowledges judged-cosmetic intent drift by re-embedding
-// current requirement fingerprints on one node.
-func graphRehashCmd() *cobra.Command {
-	var plan, node, by string
-	var cited []string
-	var asJSON bool
-	c := &cobra.Command{
-		Use:   "rehash",
-		Short: "Re-embed a node's cited intent fingerprints after judging the requirement diff cosmetic",
-		Args:  cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
-			if plan == "" || node == "" {
-				return fmt.Errorf("graph rehash: --plan and --node are required")
-			}
-			root, repoRoot, err := resolveRoots(".", "")
-			if err != nil {
-				return err
-			}
-			updated, err := ops.Rehash(root, repoRoot, plan, node, by, cited)
-			if err != nil {
-				return err
-			}
-			if asJSON {
-				return writeJSON(struct {
-					OK      bool     `json:"ok"`
-					Node    string   `json:"node"`
-					Updated []string `json:"updated"`
-				}{true, node, updated})
-			}
-			if len(updated) == 0 {
-				fmt.Fprintf(c.OutOrStdout(), "no drift: %s's embedded fingerprints already match the current sources\n", node)
-			} else {
-				fmt.Fprintf(c.OutOrStdout(), "rehashed %s: %s (judged cosmetic by the rehasher — a behavioral change is rework, not a rehash)\n", node, strings.Join(updated, ", "))
-			}
-			return nil
-		},
-	}
-	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
-	c.Flags().StringVar(&node, "node", "", "node id whose citations to rehash")
-	c.Flags().StringVar(&by, "by", "", "claimant identity (required while the node is claimed)")
-	c.Flags().StringArrayVar(&cited, "cited", nil, "citation id(s) to rehash (default: every embedded citation)")
-	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
-	return c
 }
 
 // graphGCCmd reaps abandoned workspace state: orphan ws-* directories and
@@ -633,35 +496,16 @@ func graphGCCmd() *cobra.Command {
 // path toward GREEN (DD-5). A red run is a SUCCESSFUL sync: recording the
 // failure is what arms red-before-green.
 func graphSyncCmd() *cobra.Command {
-	var plan, node, by, report, metadata, commandLog string
-	var commandExit int
-	var asJSON, verbose, withCost bool
+	var plan, node, by, report, commandLog, redKind, fault string
+	var commandExit, reportExit int
+	var asJSON, verbose bool
 	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Record a node's observation from a test report or command result",
-		Long: `Record a node's observation from a test report or command result.
-
-For reported-v1, --metadata names the repository-tooling-produced metadata
-document described by "sdd graph evidence-contract" and shaped by
-"sdd template evidence-metadata --schema". Its before and after fields must
-embed unchanged objects exported by "sdd graph evidence-context --json"
-immediately before and after execution. SDD validates supplied evidence; it
-does not execute or probe tests.`,
-		Args: cobra.NoArgs,
+		Long:  `Record a node's observation from a parsed test report or command result.`,
+		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, cmdArgs []string) (outErr error) {
-			var cost *evidencecost.Recorder
-			if withCost {
-				cost = evidencecost.New(nil)
-			}
-			endPreparation := cost.Start(evidencecost.RootInputPreparation)
 			var res *gsync.Result
-			costEmitted := false
-			defer func() {
-				endPreparation()
-				if outErr != nil && withCost && !costEmitted {
-					outErr = emitGraphSyncCostError(c.OutOrStdout(), asJSON, res, outErr, cost)
-				}
-			}()
 			planDir, err := planDirFor(plan, "sync")
 			if err != nil {
 				return err
@@ -680,19 +524,16 @@ does not execute or probe tests.`,
 				return fmt.Errorf("graph sync: resolve plan sources: %w", serr)
 			}
 			if report != "" {
-				raw, err := readBoundedFile(report, reportevidence.MaxReportBytes)
+				raw, err := readBoundedFile(report, 64<<20)
 				if err != nil {
 					return fmt.Errorf("graph sync: %w", err)
 				}
 				opts.ReportName, opts.ReportBytes = report, raw
 			}
-			if metadata != "" {
-				raw, err := readBoundedFile(metadata, reportevidence.MaxMetadataBytes)
-				if err != nil {
-					return fmt.Errorf("graph sync: %w", err)
-				}
-				opts.MetadataBytes = raw
+			if c.Flags().Changed("report-exit") {
+				opts.ReportExit = &reportExit
 			}
+			opts.RedKind, opts.Fault = redKind, fault
 			if c.Flags().Changed("command-exit") {
 				opts.CommandExit = &commandExit
 				if commandLog != "" {
@@ -705,20 +546,11 @@ does not execute or probe tests.`,
 			}
 			cfg, _ := store.LoadConfig(".")
 			opts.TTL = time.Duration(cfg.GraphLeaseTtlMinutes) * time.Minute
-			opts.Cost = cost
-			opts.CallerOwnsCostSnapshot = withCost
-
-			endPreparation()
 			res, err = gsync.Run(opts)
 			if err != nil {
 				return err
 			}
-			if withCost && res != nil {
-				s := cost.Snapshot()
-				res.Cost = &s
-			}
 			if asJSON {
-				costEmitted = withCost
 				if err := writeJSON(res); err != nil {
 					return err
 				}
@@ -728,13 +560,7 @@ does not execute or probe tests.`,
 				return nil
 			}
 			if res.Historical {
-				fmt.Fprintf(c.OutOrStdout(), "report %s was already admitted at seq %d (%s); graph unchanged\n", res.ReportID, res.Observation.Seq, res.Observation.Result)
-				if withCost {
-					costEmitted = true
-					if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
-						return err
-					}
-				}
+				fmt.Fprintf(c.OutOrStdout(), "report already recorded at seq %d (%s); graph unchanged\n", res.Observation.Seq, res.Observation.Result)
 				return nil
 			}
 			printBucket := func(name string, ids []string) {
@@ -747,12 +573,6 @@ does not execute or probe tests.`,
 			printUntracked(c.OutOrStdout(), res.Buckets.Untracked, verbose)
 			printBucket("ambiguous", res.Buckets.Ambiguous)
 			if !res.Recorded {
-				if withCost {
-					costEmitted = true
-					if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
-						return err
-					}
-				}
 				return &refusedError{n: 1, msg: "graph sync: " + res.Refusal}
 			}
 			fmt.Fprintf(c.OutOrStdout(), "recorded %s at seq %d (isolation %s)\n",
@@ -766,12 +586,6 @@ does not execute or probe tests.`,
 			if res.LogPath != "" {
 				fmt.Fprintf(c.OutOrStdout(), "output teed to %s\n", relPath(res.LogPath))
 			}
-			if withCost {
-				costEmitted = true
-				if _, err := fmt.Fprintln(c.OutOrStdout(), evidencecost.Format(*res.Cost)); err != nil {
-					return err
-				}
-			}
 			return nil
 		},
 	}
@@ -779,12 +593,13 @@ does not execute or probe tests.`,
 	c.Flags().StringVar(&node, "node", "", "node id to record the observation for")
 	c.Flags().StringVar(&by, "by", "", "claimant identity (required when the node is claimed; renews the lease)")
 	c.Flags().StringVar(&report, "report", "", "test report file: JUnit XML (.xml) or `go test -json` stream (.json)")
-	c.Flags().StringVar(&metadata, "metadata", "", "reported-v1 execution metadata JSON")
+	c.Flags().IntVar(&reportExit, "report-exit", 0, "optional captured process exit code for a package-qualified Go report")
+	c.Flags().StringVar(&redKind, "red-kind", "", "failing observation classification: baseline or sensitivity")
+	c.Flags().StringVar(&fault, "fault", "", "fault injected for a sensitivity failure")
 	c.Flags().IntVar(&commandExit, "command-exit", 0, "command gate: the check command's exit code")
 	c.Flags().StringVar(&commandLog, "command-log", "", "command gate: file with the captured output (teed to the node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print every untracked report id instead of a truncated summary")
-	c.Flags().BoolVar(&withCost, "cost", false, "attribute anonymous per-invocation costs")
 	return c
 }
 
@@ -799,107 +614,6 @@ func readBoundedFile(path string, limit int64) ([]byte, error) {
 		err = fmt.Errorf("%s exceeds %d-byte limit", path, limit)
 	}
 	return b, err
-}
-
-func graphEvidenceContextCmd() *cobra.Command {
-	var plan, node, by string
-	var asJSON bool
-	c := &cobra.Command{Use: "evidence-context", Short: "Export read-only reported test evidence context", Long: `Export read-only reported test evidence context.
-
-Repository tooling embeds this exported object unchanged as metadata.before,
-runs the selected tests, then exports and embeds another unchanged object as
-metadata.after. The metadata schema is printed by
-"sdd template evidence-metadata --schema"; the refusal contract is printed by
-"sdd graph evidence-contract". This command does not execute or probe tests.`, Args: cobra.NoArgs, RunE: func(c *cobra.Command, args []string) error {
-		if !asJSON {
-			return fmt.Errorf("graph evidence-context: --json is required")
-		}
-		planDir, err := planDirFor(plan, "evidence-context")
-		if err != nil {
-			return err
-		}
-		if node == "" || by == "" {
-			return fmt.Errorf("graph evidence-context: --node and --by are required")
-		}
-		planningRoot, repoRoot, err := resolveRoots(".", "")
-		if err != nil {
-			return err
-		}
-		sources, err := gcompile.NewSources(planningRoot, repoRoot, plan)
-		if err != nil {
-			return err
-		}
-		repoRoot = sources.RepositoryRoot()
-		g, err := gstore.Load(gstore.PathFor(planDir))
-		if err != nil {
-			return err
-		}
-		n := g.NodeByID(node)
-		if n == nil {
-			return fmt.Errorf("graph evidence-context: node %q does not exist", node)
-		}
-		ctx, err := reportevidence.BuildContext(planningRoot, repoRoot, planDir, g, n, by, time.Now())
-		if err != nil {
-			return err
-		}
-		return writeJSON(ctx)
-	}}
-	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
-	c.Flags().StringVar(&node, "node", "", "node id")
-	c.Flags().StringVar(&by, "by", "", "current claim holder")
-	c.Flags().BoolVar(&asJSON, "json", false, "emit JSON")
-	return c
-}
-
-func graphEvidenceContractCmd() *cobra.Command {
-	var asJSON bool
-	c := &cobra.Command{
-		Use:   "evidence-contract",
-		Short: "Print the reported-v1 producer contract",
-		Args:  cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
-			body := reportevidence.ContractMarkdown()
-			if asJSON {
-				body = reportevidence.SchemaJSON()
-			}
-			_, err := c.OutOrStdout().Write(body)
-			return err
-		},
-	}
-	c.Flags().BoolVar(&asJSON, "json", false, "emit the metadata JSON Schema")
-	return c
-}
-
-func emitGraphSyncCostError(w io.Writer, asJSON bool, res *gsync.Result, operationErr error, cost *evidencecost.Recorder) error {
-	var summary evidencecost.Summary
-	if res != nil && res.Cost != nil {
-		summary = *res.Cost
-	} else {
-		summary = cost.Snapshot()
-	}
-	if res != nil && res.Cost == nil {
-		res.Cost = &summary
-	}
-	if asJSON {
-		var payload any = res
-		if res == nil {
-			payload = struct {
-				Error string               `json:"error"`
-				Cost  evidencecost.Summary `json:"cost"`
-			}{operationErr.Error(), summary}
-		}
-		if err := writeJSON(payload); err != nil {
-			return errors.Join(operationErr, fmt.Errorf("writing graph sync cost JSON: %w", err))
-		}
-		return operationErr
-	}
-	if w == nil {
-		w = io.Discard
-	}
-	if _, err := fmt.Fprintln(w, evidencecost.Format(summary)); err != nil {
-		return errors.Join(operationErr, fmt.Errorf("writing graph sync cost output: %w", err))
-	}
-	return operationErr
 }
 
 // printUntracked prints the untracked bucket: a whole-package report can
@@ -1008,7 +722,7 @@ func graphRetireCmd() *cobra.Command {
 func graphReverifyCmd() *cobra.Command {
 	var plan, report, commandLog string
 	var commandExit int
-	var asJSON, verbose, all bool
+	var asJSON, verbose bool
 	c := &cobra.Command{
 		Use:   "reverify",
 		Short: "Fold one real run's results against every foldable node (the converted-plan on-ramp)",
@@ -1016,7 +730,11 @@ func graphReverifyCmd() *cobra.Command {
 
 The same --report is reused for every tests gate; the same --command-exit (and
 --command-log) is reused for every command gate; the process exit code maps
-refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
+refusals to exit code 1 (one --report or --command-exit for the whole batch).
+
+A partial report re-observes only nodes whose declared tests it fully covers.
+Uncovered nodes remain unresolved and unchanged; fully covered nodes receive a
+new observation sequence even when they were already current.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			planDir, err := planDirFor(plan, "reverify")
@@ -1027,7 +745,7 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 			if err != nil {
 				return fmt.Errorf("graph reverify: %w", err)
 			}
-			opts := gsync.ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot, All: all}
+			opts := gsync.ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot}
 			if report != "" {
 				raw, err := os.ReadFile(report)
 				if err != nil {
@@ -1089,7 +807,6 @@ refusals to exit code 1 (one --report or --command-exit for the whole batch).`,
 	c.Flags().StringVar(&commandLog, "command-log", "", "same captured output folded against every command gate (teed to each node log)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "print every untracked report id instead of a truncated summary")
-	c.Flags().BoolVar(&all, "all", false, "also re-verify nodes whose current observation is already a fresh pass")
 	return c
 }
 
@@ -1323,8 +1040,8 @@ func graphConvertCmd() *cobra.Command {
 }
 
 // compileCmd is the top-level `sdd compile`: validate the staged proposal
-// wholesale (parse -> schema -> semantic, every finding in one report),
-// embed intent fingerprints, and append the nodes to the committed graph.
+// wholesale (parse -> schema -> semantic, every finding in one report), check
+// citation coverage, and append the nodes to the committed graph.
 // Mutating: guard-covered per D-0014 (task 2.6 lands the entries).
 func compileCmd() *cobra.Command {
 	var plan string
@@ -1376,21 +1093,16 @@ func compileCmd() *cobra.Command {
 					views[i] = relPath(v)
 				}
 				return writeJSON(struct {
-					OK        bool                         `json:"ok"`
-					Graph     string                       `json:"graph"`
-					Added     []string                     `json:"added"`
-					Hashes    map[string]map[string]string `json:"intent_hashes,omitempty"`
-					Views     []string                     `json:"views,omitempty"`
-					Consumed  string                       `json:"consumed"`
-					Decisions *gcompile.DecisionSync       `json:"decisions,omitempty"`
-				}{true, relPath(res.GraphPath), res.Added, res.Hashes, views, relPath(res.Consumed), dsync})
+					OK        bool                   `json:"ok"`
+					Graph     string                 `json:"graph"`
+					Added     []string               `json:"added"`
+					Views     []string               `json:"views,omitempty"`
+					Consumed  string                 `json:"consumed"`
+					Decisions *gcompile.DecisionSync `json:"decisions,omitempty"`
+				}{true, relPath(res.GraphPath), res.Added, views, relPath(res.Consumed), dsync})
 			}
-			hashed := 0
-			for _, m := range res.Hashes {
-				hashed += len(m)
-			}
-			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d intent fingerprint(s) embedded, %d view(s) rendered); consumed %s\n",
-				len(res.Added), relPath(res.GraphPath), hashed, len(res.Views), relPath(res.Consumed))
+			fmt.Fprintf(c.OutOrStdout(), "compiled %d node(s) into %s (%d view(s) rendered); consumed %s\n",
+				len(res.Added), relPath(res.GraphPath), len(res.Views), relPath(res.Consumed))
 			if dsync != nil && len(dsync.Added) > 0 {
 				fmt.Fprintf(c.OutOrStdout(), "recorded %d design decision(s) in %s\n", len(dsync.Added), relPath(dsync.Path))
 			}
@@ -1430,13 +1142,9 @@ func graphNext(planPath string, claim bool, by, nodeID string, jsonOut bool) (bo
 		return true, fmt.Errorf("next: %w", err)
 	}
 	snap := sources.IntentSnapshot()
-	hashes := snap.Hashes()
-	digester := digest.New(repoRoot)
 	inRes := sources.InputResolver()
 	statesInputs := func(g *model.Graph) states.Inputs {
-		return states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-			CurrentIntentHashes: hashes,
-			CurrentInputHashes:  inRes.GraphHashes(g)}
+		return states.Inputs{Graph: g}
 	}
 
 	if !claim {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
@@ -108,9 +107,6 @@ phases: []
 	// requirement (Designs/PlanDecisions), so it stays GREEN through the same
 	// hash-matching path as an AC/FR citation, not through an exemption.
 	decisionNode := passNode("decision", []string{decisionID})
-	decisionNode.IntentHashes = map[string]string{
-		decisionID: intent.Hash(intent.Normalize(dispositionDecisionStatement)),
-	}
 	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{
 		passNode("deleted", []string{"AC-99"}),
 		passNode("ambiguous", []string{"AC-01"}),
@@ -130,7 +126,7 @@ phases: []
 // end-to-end counterpart to the pure states unit tests: it proves the snapshot
 // (hashes + decision exemptions) reaches Derive through the production wiring,
 // not just a hand-built Inputs.
-func TestGraphStatusReceivesIntentDispositions(t *testing.T) {
+func TestGraphStatusIgnoresIntentContent(t *testing.T) {
 	dispositionFixture(t)
 
 	var status struct {
@@ -143,15 +139,15 @@ func TestGraphStatusReceivesIntentDispositions(t *testing.T) {
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "graph", "status", "--plan", "Demo", "--json")), &status); err != nil {
 		t.Fatal(err)
 	}
-	if status.States["STALE"] != 4 || status.States["GREEN"] != 1 {
-		t.Fatalf("states must be STALE=4 GREEN=1, got %+v", status.States)
+	if status.States["GREEN"] != 5 {
+		t.Fatalf("intent content is not a state input, got %+v", status.States)
 	}
 	want := map[string]string{
-		"deleted":          "STALE",
-		"ambiguous":        "STALE",
+		"deleted":          "GREEN",
+		"ambiguous":        "GREEN",
 		"decision":         "GREEN",
-		"unknown-decision": "STALE",
-		"unanchored":       "STALE",
+		"unknown-decision": "GREEN",
+		"unanchored":       "GREEN",
 	}
 	got := map[string]string{}
 	for _, n := range status.Nodes {
@@ -163,17 +159,14 @@ func TestGraphStatusReceivesIntentDispositions(t *testing.T) {
 		}
 	}
 
-	// `graph show` surfaces the INTENT-STALE diagnostic per node, so the
-	// disposition is actionable, not just a state letter.
 	var show struct {
-		State  string   `json:"state"`
-		Intent []string `json:"stale_intent,omitempty"`
+		State string `json:"state"`
 	}
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "graph", "show", "deleted", "--plan", "Demo", "--json")), &show); err != nil {
 		t.Fatal(err)
 	}
-	if show.State != "STALE" || len(show.Intent) != 1 || show.Intent[0] != "AC-99" {
-		t.Fatalf("show deleted must report INTENT-STALE for AC-99: %+v", show)
+	if show.State != "GREEN" {
+		t.Fatalf("show must remain GREEN after intent edits: %+v", show)
 	}
 }
 
@@ -182,7 +175,7 @@ func TestGraphStatusReceivesIntentDispositions(t *testing.T) {
 // (GREEN, off the frontier) while every fail-closed STALE node is. The
 // disposition snapshot must reach the claim/frontier derivation, not just the
 // analytics render.
-func TestNextReceivesIntentDispositions(t *testing.T) {
+func TestNextDoesNotServeNodesForIntentContent(t *testing.T) {
 	dispositionFixture(t)
 
 	var out struct {
@@ -195,22 +188,14 @@ func TestNextReceivesIntentDispositions(t *testing.T) {
 	if err := json.Unmarshal([]byte(runGraphVerb(t, "next", "Plans/Demo", "--json")), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.States["STALE"] != 4 || out.States["GREEN"] != 1 {
-		t.Fatalf("next states must be STALE=4 GREEN=1, got %+v", out.States)
+	if out.States["GREEN"] != 5 {
+		t.Fatalf("next states must all remain GREEN, got %+v", out.States)
 	}
 	frontier := map[string]bool{}
 	for _, f := range out.Frontier {
 		frontier[f.ID] = true
-		if f.State != "STALE" {
-			t.Errorf("frontier node %s state = %q, want STALE", f.ID, f.State)
-		}
 	}
-	for _, id := range []string{"deleted", "ambiguous", "unknown-decision", "unanchored"} {
-		if !frontier[id] {
-			t.Errorf("frontier must include the STALE node %s (frontier: %+v)", id, out.Frontier)
-		}
-	}
-	if frontier["decision"] {
-		t.Errorf("the accepted-decision node must be GREEN and off the frontier: %+v", out.Frontier)
+	if len(frontier) != 0 {
+		t.Errorf("GREEN nodes stay off the frontier: %+v", out.Frontier)
 	}
 }

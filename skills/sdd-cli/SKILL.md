@@ -88,12 +88,11 @@ must use `sdd doctor --check`, never the default repairing invocation.
 | Copy related designs' DD bullets into the plan's decisions file without compiling a proposal | `sdd decide sync --plan P [--json]` |
 | Record a review node's observation from a frozen artifact | `sdd graph review --plan P --node R --artifact A [--by WHO] [--json]` |
 | Edit a node's declared artifact write set (holder-only) | `sdd graph set-artifacts --plan P --node N --by WHO [--add PATH]... [--remove PATH]... [--no-render] [--json]` — also re-renders the plan's generated views unless `--no-render` |
-| Record an observation from a test report or command result | `sdd graph sync --plan P --node N --by WHO --report FILE \| --command-exit N --command-log FILE [--verbose] [--json]` |
+| Record an observation from a test report or command result | `sdd graph sync --plan P --node N --by WHO --report FILE [--report-exit N] [--red-kind baseline\|sensitivity] [--fault NAME] \| --command-exit N --command-log FILE [--verbose] [--json]` |
 | Fold one report against every unclaimed, non-review node | `sdd graph reverify --plan P --report FILE \| --command-exit N --command-log FILE [--all] [--verbose] [--json]` |
 | Apply a frozen review's open findings as amendments | `sdd graph amend --plan P --node R --from-review A --expect-digest D --expect-report-digest RD [--by WHO] [--dry-run] [--json]` |
 | Record Git old→new revision lineage without changing proof | `sdd graph remap-revisions --plan P --map FILE --expect-digest D [--dry-run] [--json]` (omit the digest for preview) |
 | Render a review node's self-contained claim brief | `sdd graph show <node-id> --plan P --brief [--json]` |
-| Record that a cited requirement's or input's text changed without changing the obligation | `sdd graph acknowledge --plan P --node N (--citation ID \| --input KEY) --expect-digest D [--by WHO] [--dry-run] [--json]` — rebinds one compile anchor, writes no observation, never greens |
 | Migrate a legacy artifact | `sdd migrate <path> [--dry-run] [--diff]` |
 | Check the environment and repair repository/plugin hooks | `sdd doctor [--check] [--json]` |
 

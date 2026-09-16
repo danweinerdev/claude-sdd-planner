@@ -8,19 +8,8 @@
       "justifies": [
         "FR-01"
       ],
-      "intent_hashes": {
-        "FR-01": "sha256:cd0d3e2ad952fd96a71f498ac1510a122ee114f849443dd9cf48f6ed9f988081"
-      },
       "gate": {
         "type": "tests",
-        "evidence": "reported-v1",
-        "report": {
-          "format": "go-test-json-v1",
-          "runner": "repository-unit-tests",
-          "environment_keys": [],
-          "test_support_inputs": [],
-          "test_support_artifacts": []
-        },
         "tests": [
           {
             "package": "example.test/project/tests",
@@ -44,10 +33,6 @@
         "AC-01",
         "DD-1"
       ],
-      "intent_hashes": {
-        "AC-01": "sha256:359cb3cdb32fce1a085ada6401e2a790a5b66d4dc2ef813ab7bfde07141bf776",
-        "DD-1": "sha256:d232c7f5cda9340869abffd3e78a2d9ef2ec3261df2b31251ce7937e06503c6f"
-      },
       "deps": [
         "define-schema"
       ],
@@ -82,9 +67,6 @@
       "justifies": [
         "FR-01"
       ],
-      "intent_hashes": {
-        "FR-01": "sha256:cd0d3e2ad952fd96a71f498ac1510a122ee114f849443dd9cf48f6ed9f988081"
-      },
       "gate": {
         "type": "command",
         "command": "make build"
@@ -99,9 +81,6 @@
       "justifies": [
         "AC-01"
       ],
-      "intent_hashes": {
-        "AC-01": "sha256:359cb3cdb32fce1a085ada6401e2a790a5b66d4dc2ef813ab7bfde07141bf776"
-      },
       "deps": [
         "parse-config",
         "build-gate"

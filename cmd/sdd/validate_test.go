@@ -423,12 +423,10 @@ func TestValidate_GraphCompleteObservationClosedButLiveDrifted(t *testing.T) {
 	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core",
 		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
 		Hazards: model.Hazards{}, Estimate: 1, Artifacts: []string{"impl.txt"},
-		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
-			ArtifactDigests: map[string]string{"impl.txt": mustDigest(t, "original")}}}
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}}
 	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
 		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
-		Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean,
-			ArtifactDigests: map[string]string{"impl.txt": mustDigest(t, "original")}}}
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}}
 	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA},
 		CompletedAt: &model.CompletedAt{Revision: "deadbeef", Seq: 2}}
 	planDir := filepath.Join(root, "Plans", "Demo")
@@ -453,60 +451,8 @@ func TestValidate_GraphCompleteObservationClosedButLiveDrifted(t *testing.T) {
 	if strings.Contains(out, `"SDD199"`) {
 		t.Fatalf("observation-only closure holds; SDD199 must not fire:\n%s", out)
 	}
-	if !strings.Contains(out, `"SDD200"`) {
-		t.Fatalf("expected SDD200 in output:\n%s", out)
-	}
-	if !strings.Contains(out, "deadbeef") {
-		t.Fatalf("expected completed_at revision named in the diagnostic:\n%s", out)
-	}
-	if !jsonHasDiag(t, out, "SDD200", "warning") {
-		t.Fatalf("expected SDD200/warning, got: %s", out)
-	}
-}
-
-// TestValidate_GraphCompleteIntentDriftIsAlsoPostCompletion is SDD200: for
-// an already-complete plan, a cited requirement's text changing since
-// closure is post-completion drift too, not a reopening — observation-only
-// closure must disable the intent axis exactly as it disables digests, so
-// this reports SDD200 naming the intent kind, never SDD199.
-func TestValidate_GraphCompleteIntentDriftIsAlsoPostCompletion(t *testing.T) {
-	root := t.TempDir()
-	writeConfig(t, root)
-	writeArtifact(t, root, "Plans/Demo", "README.md", strings.Replace(nextPlanReadme("complete", ""), "phases:\n\n", "phases: []\n", 1))
-	writeArtifact(t, root, "Specs/Demo", "README.md", strings.Replace(validSpec, "Does a thing.", "Does a thing, revised.", 1))
-
-	a := model.Node{ID: "a", Contract: "does a", Phase: "01-core", Justifies: []string{"FR-01"},
-		Gate:    model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "test_a", File: "t.ext"}}},
-		Hazards: model.Hazards{}, Estimate: 1,
-		IntentHashes: map[string]string{"FR-01": mustDigest(t, "stale-anchor")},
-		Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
-			IntentHashes: map[string]string{"FR-01": mustDigest(t, "stale-anchor")}}}
-	reviewA := model.Node{ID: "review-a", Contract: "reviews a", Phase: "01-core",
-		Deps: []string{"a"}, Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
-		Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}}
-	g := &model.Graph{Version: model.SchemaVersion, Nodes: []model.Node{a, reviewA}}
-	planDir := filepath.Join(root, "Plans", "Demo")
-	if err := os.MkdirAll(planDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := captureStdout(t, func() error {
-		return cmdValidate(validateOpts{Root: root, Format: "json"})
-	})
-	if err != nil {
-		t.Fatalf("post-completion intent drift must not fail validate: %v\n%s", err, out)
-	}
-	if strings.Contains(out, `"SDD199"`) {
-		t.Fatalf("observation-only closure must disable the intent axis too; SDD199 must not fire:\n%s", out)
-	}
-	if !jsonHasDiag(t, out, "SDD200", "warning") {
-		t.Fatalf("expected SDD200/warning naming the intent drift, got: %s", out)
-	}
-	if !strings.Contains(out, "intent: a") {
-		t.Fatalf("expected the intent-drift kind and node named:\n%s", out)
+	if strings.Contains(out, `"SDD200"`) {
+		t.Fatalf("unrelated file edits do not affect graph state:\n%s", out)
 	}
 }
 

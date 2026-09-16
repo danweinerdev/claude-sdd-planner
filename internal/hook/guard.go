@@ -127,7 +127,7 @@ var sddDecideReadOnly = map[string]bool{
 // failure, same discipline as the top-level map.
 var SddGraphVerbReadOnly = map[string]bool{
 	// read surface
-	"hazards": true, "status": true, "show": true, "export": true, "evidence-context": true, "evidence-contract": true,
+	"hazards": true, "status": true, "show": true, "export": true,
 	"path": true, "risk": true, "shape": true, "audit": true,
 	// mutating, phase 2
 	"init": false, "propose": false, "assemble": false, "convert": false,
@@ -135,21 +135,17 @@ var SddGraphVerbReadOnly = map[string]bool{
 	"sync": false, "release": false, "split": false, "set-tests": false, "gc": false,
 	// mutating: records review-node observations; `amend` applies a frozen
 	// review's revise/extend findings under a digest fence
-	"review": false, "amend": false, "acknowledge": false,
+	"review": false, "amend": false,
 	// mutating: batch observation recording (the converted-plan on-ramp)
 	"reverify": false,
 	// mutating: appends to the graph's retired register
 	"retire": false,
-	// mutating: backfills missing intent fingerprints
-	"repair-intent": false,
 	// mutating: recomputes red_seqs a pre-fix revise cleared
 	"repair-red": false,
 	// mutating: replaces a node's declared read-only inputs
 	"set-inputs": false,
 	// mutating: replaces a node's declared artifact write-set
 	"set-artifacts": false,
-	// mutating: re-embeds cited intent fingerprints (cosmetic-drift ack)
-	"rehash": false,
 	// mutating: appends Git rewrite identity under a caller-supplied digest
 	"remap-revisions": false,
 }

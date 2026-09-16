@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/evidencecost"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/ops"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
@@ -19,24 +17,11 @@ import (
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
-var errReleaseMeasured = errors.New("release measured failure")
-
-type failingReleaseProvider struct{ cleanWorkspaceProvider }
-
-func (failingReleaseProvider) Release(string) error { return errReleaseMeasured }
-
-// --- parser equivalence ----------------------------------------------------
-
 const junitReport = `<?xml version="1.0"?>
-<testsuites>
-  <testsuite name="pkg">
-    <testcase name="test_a"/>
-    <testcase name="test_b"><failure message="boom"/></testcase>
-    <testcase name="test_c[1]"/>
-    <testcase name="test_c[2]"><skipped/></testcase>
-  </testsuite>
-</testsuites>
-`
+<testsuites><testsuite name="pkg">
+<testcase name="test_a"/><testcase name="test_b"><failure message="boom"/></testcase>
+<testcase name="test_c[1]"/><testcase name="test_c[2]"><skipped/></testcase>
+</testsuite></testsuites>`
 
 const goJSONReport = `{"Action":"run","Test":"test_a"}
 {"Action":"pass","Test":"test_a"}
@@ -44,8 +29,7 @@ const goJSONReport = `{"Action":"run","Test":"test_a"}
 {"Action":"fail","Test":"test_b"}
 {"Action":"pass","Test":"test_c/1"}
 {"Action":"skip","Test":"test_c/2"}
-{"Action":"pass","Test":""}
-`
+{"Action":"pass","Test":""}`
 
 func TestParsersProduceIdenticalSemantics(t *testing.T) {
 	fromXML, err := ParseReport("r.xml", []byte(junitReport))
@@ -56,8 +40,6 @@ func TestParsersProduceIdenticalSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Same outcomes for the shared ids; case spellings differ per runner
-	// (pytest brackets vs Go subtest slashes) but fold identically below.
 	byID := func(rs []TestResult) map[string]Outcome {
 		m := map[string]Outcome{}
 		for _, r := range rs {
@@ -81,16 +63,10 @@ func TestParsersProduceIdenticalSemantics(t *testing.T) {
 }
 
 func TestFoldingRules(t *testing.T) {
-	results := []TestResult{
-		{"test_all_pass[a]", Pass}, {"test_all_pass[b]", Pass},
-		{"test_one_fail[a]", Pass}, {"test_one_fail[b]", Fail},
-		{"test_exact", Pass},
-		{"test_dup", Pass}, {"test_dup", Fail},
-	}
+	results := []TestResult{{"test_all_pass[a]", Pass}, {"test_all_pass[b]", Pass}, {"test_one_fail[a]", Pass}, {"test_one_fail[b]", Fail}, {"test_exact", Pass}, {"test_dup", Pass}, {"test_dup", Fail}}
 	if f := FoldFor("test_all_pass", results); !f.Resolved || f.Outcome != Pass {
 		t.Fatalf("all-pass fold: %+v", f)
 	}
-	// One failing case fails the fold — an observation, not an ambiguity.
 	if f := FoldFor("test_one_fail", results); !f.Resolved || f.Outcome != Fail || f.Ambiguous {
 		t.Fatalf("one-fail fold: %+v", f)
 	}
@@ -100,7 +76,6 @@ func TestFoldingRules(t *testing.T) {
 	if f := FoldFor("test_one_fail[b]", results); !f.Resolved || f.Outcome != Fail {
 		t.Fatalf("one exact case is declarable: %+v", f)
 	}
-	// The same exact id passing AND failing is ambiguity, never guessed.
 	if f := FoldFor("test_dup", results); !f.Ambiguous || f.Resolved {
 		t.Fatalf("conflicting exact duplicates: %+v", f)
 	}
@@ -109,107 +84,224 @@ func TestFoldingRules(t *testing.T) {
 	}
 }
 
-// --- observation recording ---------------------------------------------------
-
-func fixture(t *testing.T, nodes ...model.Node) (planDir, repoRoot string) {
+func syncFixture(t *testing.T, test model.Test) (string, string) {
 	t.Helper()
-	repoRoot = t.TempDir()
-	planDir = filepath.Join(repoRoot, "Plans", "SamplePlan")
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
 	if err := os.MkdirAll(planDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gstore.Init(planDir); err != nil {
+	g := &model.Graph{Version: 1, Nodes: []model.Node{{ID: "n", Contract: "c", Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{test}}, Hazards: model.Hazards{}, Estimate: 1}}}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.Nodes = append(g.Nodes, nodes...)
+	return root, planDir
+}
+
+func testsNode(id string, testIDs ...string) model.Node {
+	n := model.Node{ID: id, Contract: "c", Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1}
+	for _, testID := range testIDs {
+		n.Gate.Tests = append(n.Gate.Tests, model.Test{ID: testID, File: "t.ext"})
+	}
+	return n
+}
+func fixture(t *testing.T, nodes ...model.Node) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	planDir := filepath.Join(root, "Plans", "P")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g := &model.Graph{Version: 1, Nodes: nodes}
+	if err := gstore.Save(gstore.PathFor(planDir), g); err != nil {
+		t.Fatal(err)
+	}
+	return planDir, root
+}
+
+func TestDuplicateReportIsNoOpAndDifferentReportAdvancesSequence(t *testing.T) {
+	root, dir := syncFixture(t, model.Test{ID: "TestX", File: "x_test.go"})
+	raw := []byte(`<testsuite><testcase name="TestX"/></testsuite>`)
+	first, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Historical || second.Observation.Seq != first.Observation.Seq {
+		t.Fatalf("duplicate=%+v first=%+v", second, first)
+	}
+	third, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: append(raw, '\n')})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Observation.Seq <= first.Observation.Seq {
+		t.Fatalf("third=%+v", third)
+	}
+	g, _ := gstore.Load(gstore.PathFor(dir))
+	encoded, _ := g.Encode()
+	for _, key := range []string{"artifact_digests", "dependency_digests", "input_hashes", "intent_hashes"} {
+		if strings.Contains(string(encoded), key) {
+			t.Fatalf("removed %s recorded: %s", key, encoded)
+		}
+	}
+}
+
+func TestDuplicateReportAfterContractRevisionRecordsNewSequence(t *testing.T) {
+	root, dir := syncFixture(t, model.Test{ID: "TestX", File: "x_test.go"})
+	raw := []byte(`<testsuite><testcase name="TestX"/></testsuite>`)
+	first, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gstore.Update(gstore.PathFor(dir), func(g *model.Graph) error {
+		g.NodeByID("n").ContractRev = 2
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return planDir, repoRoot
-}
-
-func testsNode(id string, testIDs ...string) model.Node {
-	n := model.Node{ID: id, Contract: "c", Gate: model.Gate{Type: model.GateTests},
-		Hazards: model.Hazards{}, Estimate: 1}
-	for _, tid := range testIDs {
-		n.Gate.Tests = append(n.Gate.Tests, model.Test{ID: tid, File: "t.ext"})
-	}
-	return n
-}
-
-func TestSyncRecordsObservationWithAnchors(t *testing.T) {
-	node := testsNode("a", "test_a", "test_b")
-	node.Artifacts = []string{"src/a.ext", "src/missing.ext"}
-	planDir, repoRoot := fixture(t, node)
-	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "src", "a.ext"), []byte("impl"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	report := `<testsuite><testcase name="test_a"/><testcase name="test_b"/><testcase name="test_stray"/></testsuite>`
-	res, err := Run(Options{
-		PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report),
-	})
+	second, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: raw})
 	if err != nil {
-		t.Fatalf("sync: %v", err)
+		t.Fatal(err)
 	}
-	if !res.Recorded || res.Observation == nil {
-		t.Fatalf("observation must record: %+v", res)
+	if second.Historical || second.Observation.Seq <= first.Observation.Seq || second.Observation.ContractRev != 2 {
+		t.Fatalf("first=%+v second=%+v", first, second)
 	}
-	v := res.Observation
-	if v.Result != model.ResultPass || v.Seq != 1 {
-		t.Fatalf("observation: %+v", v)
+}
+
+func TestCommandGateSameLogDifferentExitRecords(t *testing.T) {
+	n := model.Node{ID: "cmd", Contract: "c", Gate: model.Gate{Type: model.GateCommand, Command: "check"}, Hazards: model.Hazards{}, Estimate: 1}
+	dir, root := fixture(t, n)
+	zero, one := 0, 1
+	first, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "cmd", CommandExit: &zero, CommandLog: []byte("same")})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if v.ArtifactDigests["src/a.ext"] != digest.Bytes([]byte("impl")) {
-		t.Fatalf("artifact digest anchor: %+v", v.ArtifactDigests)
+	second, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "cmd", CommandExit: &one, CommandLog: []byte("same")})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, recorded := v.ArtifactDigests["src/missing.ext"]; recorded {
-		t.Fatal("a missing artifact stays unrecorded (states will hold the node stale — honest)")
+	if second.Historical || second.Observation.Result != model.ResultFail || second.Observation.Seq <= first.Observation.Seq {
+		t.Fatalf("first=%+v second=%+v", first, second)
 	}
-	if v.ReportDigest != digest.Bytes([]byte(report)) {
-		t.Fatal("report digest anchor missing")
+}
+
+func TestCommandGateSameExitAndLogIsNoOp(t *testing.T) {
+	n := model.Node{ID: "cmd", Contract: "c", Gate: model.Gate{Type: model.GateCommand, Command: "check"}, Hazards: model.Hazards{}, Estimate: 1}
+	dir, root := fixture(t, n)
+	exit := 0
+	first, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "cmd", CommandExit: &exit, CommandLog: []byte("same")})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if v.Isolation != model.IsolationClean {
-		t.Fatalf("single-claimant shared tree is clean: %+v", v)
+	second, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "cmd", CommandExit: &exit, CommandLog: []byte("same")})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(res.Buckets.Untracked, []string{"test_stray"}) {
-		t.Fatalf("untracked bucket: %+v", res.Buckets)
+	if !second.Recorded || !second.Historical || second.Observation.Seq != first.Observation.Seq {
+		t.Fatalf("first=%+v second=%+v", first, second)
 	}
-	// Committed, not just returned.
-	g, _ := gstore.Load(gstore.PathFor(planDir))
-	if g.SeqCounter != 1 || g.NodeByID("a").Verification == nil {
-		t.Fatal("the observation must land in the store under the incremented seq")
+	g, loadErr := gstore.Load(gstore.PathFor(dir))
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if g.SeqCounter != first.Observation.Seq {
+		t.Fatalf("duplicate burned a sequence: graph=%d first=%d", g.SeqCounter, first.Observation.Seq)
+	}
+}
+
+func TestSyncRefusesClaimLandedBeforePublish(t *testing.T) {
+	root, dir := syncFixture(t, model.Test{ID: "TestX", File: "x_test.go"})
+	raw := []byte(`<testsuite><testcase name="TestX"/></testsuite>`)
+	_, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: raw,
+		beforePublish: func() error {
+			_, e := gstore.Update(gstore.PathFor(dir), func(g *model.Graph) error {
+				g.NodeByID("n").Claim = &model.Claim{By: "other", LeaseExpires: "2099-01-01T00:00:00Z"}
+				return nil
+			})
+			return e
+		}})
+	if err == nil || !strings.Contains(err.Error(), `was claimed by "other" while this sync ran`) {
+		t.Fatalf("claim race error = %v", err)
+	}
+	g, loadErr := gstore.Load(gstore.PathFor(dir))
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if g.SeqCounter != 0 || g.NodeByID("n").Verification != nil || g.NodeByID("n").Claim == nil {
+		t.Fatalf("sync mutation landed across claim race: %+v", g)
+	}
+}
+
+func TestSyncCASRetryResetsAttemptResults(t *testing.T) {
+	n := model.Node{ID: "n", Contract: "c", Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "TestX", File: "x_test.go"}}}, Hazards: model.Hazards{}, Estimate: 1,
+		Claim: &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}}
+	dir, root := fixture(t, n)
+	raw := []byte(`<testsuite><testcase name="TestX"/></testsuite>`)
+	res, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", By: "holder", ReportName: "r.xml", ReportBytes: raw,
+		beforePublish: func() error {
+			_, e := gstore.Update(gstore.PathFor(dir), func(g *model.Graph) error {
+				g.NodeByID("n").Claim = nil
+				return nil
+			})
+			return e
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Merged || res.WorkspaceReleased != "" || res.LeaseRenewed != "" || len(res.RedSeqsAdded) != 0 {
+		t.Fatalf("stale callback result escaped CAS retry: %+v", res)
+	}
+}
+
+func TestRedClassificationValidation(t *testing.T) {
+	root, dir := syncFixture(t, model.Test{ID: "TestX", File: "x_test.go"})
+	fail := []byte(`<testsuite><testcase name="TestX"><failure/></testcase></testsuite>`)
+	if _, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: fail, RedKind: "sensitivity"}); err == nil {
+		t.Fatal("sensitivity without fault accepted")
+	}
+	res, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.xml", ReportBytes: fail, RedKind: "sensitivity", Fault: "mutant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Observation.RedKind != "sensitivity" || res.Observation.Fault != "mutant" {
+		t.Fatalf("observation=%+v", res.Observation)
+	}
+}
+
+func TestPackageQualifiedReportUsesStrictParser(t *testing.T) {
+	root, dir := syncFixture(t, model.Test{Package: "example/p", ID: "TestX", File: "x_test.go"})
+	good := []byte("{\"Action\":\"start\",\"Package\":\"example/p\"}\n{\"Action\":\"run\",\"Package\":\"example/p\",\"Test\":\"TestX\"}\n{\"Action\":\"pass\",\"Package\":\"example/p\",\"Test\":\"TestX\"}\n{\"Action\":\"pass\",\"Package\":\"example/p\"}\n")
+	res, err := Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.json", ReportBytes: good})
+	if err != nil || !res.Recorded {
+		t.Fatalf("strict parse: %+v %v", res, err)
+	}
+	root, dir = syncFixture(t, model.Test{Package: "example/p", ID: "TestX", File: "x_test.go"})
+	bad := []byte("{\"Action\":\"start\",\"Package\":\"wrong/p\"}\n{\"Action\":\"skip\",\"Package\":\"wrong/p\"}\n")
+	res, err = Run(Options{PlanDir: dir, RepoRoot: root, Node: "n", ReportName: "r.json", ReportBytes: bad})
+	if err != nil || res.Recorded || res.Refusal == "" {
+		t.Fatalf("bad strict parse: %+v %v", res, err)
 	}
 }
 
 func TestSyncRedRunRecordsRedSeqOnce(t *testing.T) {
 	planDir, repoRoot := fixture(t, testsNode("a", "test_a"))
 	failing := `<testsuite><testcase name="test_a"><failure/></testcase></testsuite>`
-	cost := evidencecost.New(nil)
-
-	first, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(failing), Cost: cost})
+	first, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(failing)})
 	if err != nil || !first.Recorded || first.Observation.Result != model.ResultFail {
 		t.Fatalf("red run records a fail observation: %+v %v", first, err)
 	}
 	if first.RedSeqsAdded["test_a"] != 1 {
 		t.Fatalf("first failure records red_seq: %+v", first.RedSeqsAdded)
 	}
-	if got := first.Cost.Counters[evidencecost.LegacyAnchorScans]; got != 1 {
-		t.Fatalf("legacy sync anchor scans = %d, want 1", got)
-	}
-	second, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(failing)})
+	second, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(failing)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(second.RedSeqsAdded) != 0 {
-		t.Fatal("red_seq is the FIRST failure's seq, recorded once and kept")
+		t.Fatal("red_seq is the first failure's seq")
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("a").RedSeqs["test_a"] != 1 {
@@ -220,27 +312,22 @@ func TestSyncRedRunRecordsRedSeqOnce(t *testing.T) {
 func TestSyncRefusesWithoutGuessing(t *testing.T) {
 	planDir, repoRoot := fixture(t, testsNode("a", "test_present", "test_absent"))
 	report := `<testsuite><testcase name="test_present"/></testsuite>`
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report)})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(report)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Recorded {
 		t.Fatal("an unresolved declared test leaves the node unverified")
 	}
-	if !reflect.DeepEqual(res.Buckets.Unresolved, []string{"test_absent"}) ||
-		!reflect.DeepEqual(res.Buckets.Updated, []string{"test_present"}) {
+	if !reflect.DeepEqual(res.Buckets.Unresolved, []string{"test_absent"}) || !reflect.DeepEqual(res.Buckets.Updated, []string{"test_present"}) {
 		t.Fatalf("buckets: %+v", res.Buckets)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("a").Verification != nil || g.SeqCounter != 0 {
 		t.Fatal("a refusal writes nothing")
 	}
-
-	// Ambiguity refuses the same way.
 	dup := `<testsuite><testcase name="test_present"/><testcase name="test_present"><failure/></testcase><testcase name="test_absent"/></testsuite>`
-	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(dup)})
+	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(dup)})
 	if err != nil || res.Recorded {
 		t.Fatalf("ambiguous ids leave the node unverified: %+v %v", res, err)
 	}
@@ -254,39 +341,28 @@ func TestSyncClaimDiscipline(t *testing.T) {
 	node.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 	planDir, repoRoot := fixture(t, node)
 	report := `<testsuite><testcase name="test_a"/></testsuite>`
-
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report), By: "impostor"}); err == nil ||
-		!strings.Contains(err.Error(), "stale claim cannot sync") {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(report), By: "impostor"}); err == nil || !strings.Contains(err.Error(), "stale claim cannot sync") {
 		t.Fatalf("a stale claimant's sync is refused: %v", err)
 	}
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report)}); err == nil {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(report)}); err == nil {
 		t.Fatal("a claimed node requires --by")
 	}
-
-	// A RED run by the holder renews the lease (the walk continues); a
-	// clean PASS by the holder MERGES instead — claim cleared atomically.
 	t0 := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 	failing := `<testsuite><testcase name="test_a"><failure/></testcase></testsuite>`
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(failing), By: "holder",
-		Now: func() time.Time { return t0 }, TTL: 20 * time.Minute})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(failing), By: "holder", Now: func() time.Time { return t0 }, TTL: 20 * time.Minute})
 	if err != nil || !res.Recorded || res.Merged {
 		t.Fatalf("holder red run records without merging: %+v %v", res, err)
 	}
 	if res.LeaseRenewed != t0.Add(20*time.Minute).UTC().Format(time.RFC3339) {
-		t.Fatalf("a non-completing sync is the liveness proof; the lease must renew: %q", res.LeaseRenewed)
+		t.Fatalf("lease must renew: %q", res.LeaseRenewed)
 	}
-
-	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder"})
+	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(report), By: "holder"})
 	if err != nil || !res.Recorded || !res.Merged {
 		t.Fatalf("a clean pass by the holder merges: %+v %v", res, err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("a").Claim != nil {
-		t.Fatal("merge clears the claim atomically with the observation")
+		t.Fatal("merge clears the claim atomically")
 	}
 }
 
@@ -295,142 +371,98 @@ func TestRedBeforeGreenGatesHazardTests(t *testing.T) {
 	n.Gate.Tests[0].Satisfies = []string{"external-format"}
 	n.Hazards = model.Hazards{"external-format"}
 	planDir, repoRoot := fixture(t, n)
-
 	passing := `<testsuite><testcase name="test_h"/></testsuite>`
-	_, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(passing)})
-	if err == nil || !strings.Contains(err.Error(), "red-before-green") {
-		t.Fatalf("a hazard-discharging test must be seen failing before its pass counts: %v", err)
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(passing)}); err == nil || !strings.Contains(err.Error(), "red-before-green") {
+		t.Fatalf("hazard test must be seen failing first: %v", err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("a").Verification != nil {
-		t.Fatal("the refused pass must not record")
+		t.Fatal("refused pass recorded")
 	}
-
 	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
-	if res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(failing)}); err != nil || !res.Recorded {
-		t.Fatalf("the red run records freely: %+v %v", res, err)
+	if res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(failing)}); err != nil || !res.Recorded {
+		t.Fatalf("red run records: %+v %v", res, err)
 	}
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(passing)})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(passing)})
 	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
-		t.Fatalf("after the recorded red, the pass counts: %+v %v", res, err)
+		t.Fatalf("pass after red: %+v %v", res, err)
 	}
 }
 
-// TestSyncPassesAfterReviseCarriesOverUnchangedHazardRed proves the
-// carry-over fix end to end: a hazard test observed red, then a gate
-// revise (via ops.SetTests, the same carry-over `graph amend` uses) that
-// adds a new test while leaving the hazard test's (id, file, satisfies)
-// unchanged. The unchanged test's red survives, so a pass syncs without a
-// fresh red-before-green refusal for it — but still owes (and gets) one for
-// the newly added test.
 func TestSyncPassesAfterReviseCarriesOverUnchangedHazardRed(t *testing.T) {
 	n := testsNode("a", "test_h")
-	n.Gate.Tests[0].Satisfies = []string{"external-format"}
-	n.Hazards = model.Hazards{"external-format"}
+	n.Gate.Tests[0].Satisfies, n.Hazards = []string{"external-format"}, model.Hazards{"external-format"}
 	planDir, repoRoot := fixture(t, n)
-
 	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := ops.SetTests(planDir, "a", "", []model.Test{
-		{ID: "test_h", File: "t.ext", Satisfies: []string{"external-format"}},
-		{ID: "test_new", File: "t.ext", Satisfies: []string{"external-format"}},
-	}); err != nil {
+	if err := ops.SetTests(planDir, "a", "", []model.Test{{ID: "test_h", File: "t.ext", Satisfies: []string{"external-format"}}, {ID: "test_new", File: "t.ext", Satisfies: []string{"external-format"}}}); err != nil {
 		t.Fatal(err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	a := g.NodeByID("a")
-	if a.ContractRev != 2 {
-		t.Fatalf("gate change must advance contract_rev: %d", a.ContractRev)
-	}
-	if seq, ok := a.RedSeqs["test_h"]; !ok || seq != 1 {
-		t.Fatalf("unchanged hazard test's red must carry over the revise: %+v", a.RedSeqs)
+	if a.ContractRev != 2 || a.RedSeqs["test_h"] != 1 {
+		t.Fatalf("unchanged red did not carry: %+v", a)
 	}
 	if _, ok := a.RedSeqs["test_new"]; ok {
-		t.Fatal("new test must not carry a fabricated red")
+		t.Fatal("new test carried fabricated red")
 	}
-
-	// The new test has never been observed failing: a pass covering both
-	// still refuses red-before-green, naming only the new test.
 	bothPassing := `<testsuite><testcase name="test_h"/><testcase name="test_new"/></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "green.xml", ReportBytes: []byte(bothPassing)}); err == nil ||
-		!strings.Contains(err.Error(), "red-before-green") || strings.Contains(err.Error(), "test_h") {
-		t.Fatalf("only the new test should still owe a red: %v", err)
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green.xml", ReportBytes: []byte(bothPassing)}); err == nil || !strings.Contains(err.Error(), "red-before-green") || strings.Contains(err.Error(), "test_h") {
+		t.Fatalf("only new test should owe red: %v", err)
 	}
-
-	// Once the new test is also observed red, the pass syncs clean —
-	// test_h's carried-over red is still honored at the new revision.
 	newFails := `<testsuite><testcase name="test_h"/><testcase name="test_new"><failure/></testcase></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "red2.xml", ReportBytes: []byte(newFails)}); err != nil {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "red2.xml", ReportBytes: []byte(newFails)}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "green2.xml", ReportBytes: []byte(bothPassing)})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green2.xml", ReportBytes: []byte(bothPassing)})
 	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
-		t.Fatalf("pass must sync once every hazard test has a red at the current revision: %+v %v", res, err)
+		t.Fatalf("pass after all reds: %+v %v", res, err)
 	}
 }
 
-// TestSyncStillRefusesWhenHazardTestItselfChanged proves the carry-over is
-// scoped to unchanged tests: a revise that changes the hazard test's file
-// clears its red, so a pass covering it still refuses red-before-green.
 func TestSyncStillRefusesWhenHazardTestItselfChanged(t *testing.T) {
 	n := testsNode("a", "test_h")
-	n.Gate.Tests[0].Satisfies = []string{"external-format"}
-	n.Hazards = model.Hazards{"external-format"}
+	n.Gate.Tests[0].Satisfies, n.Hazards = []string{"external-format"}, model.Hazards{"external-format"}
 	planDir, repoRoot := fixture(t, n)
-
 	failing := `<testsuite><testcase name="test_h"><failure/></testcase></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := ops.SetTests(planDir, "a", "", []model.Test{
-		{ID: "test_h", File: "other.ext", Satisfies: []string{"external-format"}},
-	}); err != nil {
+	if err := ops.SetTests(planDir, "a", "", []model.Test{{ID: "test_h", File: "other.ext", Satisfies: []string{"external-format"}}}); err != nil {
 		t.Fatal(err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if _, ok := g.NodeByID("a").RedSeqs["test_h"]; ok {
-		t.Fatal("a test whose definition changed must not carry over its red")
+		t.Fatal("changed test retained red")
 	}
-
 	passing := `<testsuite><testcase name="test_h"/></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "green.xml", ReportBytes: []byte(passing)}); err == nil ||
-		!strings.Contains(err.Error(), "red-before-green") {
-		t.Fatalf("the changed hazard test still owes a fresh red: %v", err)
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green.xml", ReportBytes: []byte(passing)}); err == nil || !strings.Contains(err.Error(), "red-before-green") {
+		t.Fatalf("changed test should owe red: %v", err)
 	}
 }
 
-// dirtyProvider forces shared-dirty isolation to prove provisional
-// acceptance: recorded, never merged.
 type dirtyProvider struct{}
 
-func (dirtyProvider) Kind() string  { return "plain" }
-func (dirtyProvider) Capacity() int { return 2 }
-func (dirtyProvider) Allocate(string) (provider.Workspace, error) {
-	return provider.Workspace{}, nil
-}
+func (dirtyProvider) Kind() string                                 { return "plain" }
+func (dirtyProvider) Capacity() int                                { return 2 }
+func (dirtyProvider) Allocate(string) (provider.Workspace, error)  { return provider.Workspace{}, nil }
 func (dirtyProvider) HandleFor(string) string                      { return "" }
 func (dirtyProvider) Release(string) error                         { return nil }
 func (dirtyProvider) PruneMergedBranches() ([]string, error)       { return nil, nil }
 func (dirtyProvider) Isolation(string, int) string                 { return model.IsolationSharedDirty }
 func (dirtyProvider) Provenance(string) (*model.Provenance, error) { return nil, nil }
 
-// TestSharedDirtyPassRecordsIsolationDirtyPaths: shared-dirty isolation's
-// cause — untracked or modified paths in the shared tree — is captured on
-// the observation itself, best-effort, so a later `graph show` can say why,
-// not just that.
+func syncGitOK(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
 func TestSharedDirtyPassRecordsIsolationDirtyPaths(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
@@ -446,25 +478,9 @@ func TestSharedDirtyPassRecordsIsolationDirtyPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoRoot, "stray.txt"), []byte("w"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	report := `<testsuite><testcase name="test_a"/></testsuite>`
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder",
-		Provider: dirtyProvider{}})
-	if err != nil || !res.Recorded {
-		t.Fatalf("shared-dirty pass records provisionally: %+v %v", res, err)
-	}
-	if len(res.Observation.IsolationDirtyPaths) != 1 || res.Observation.IsolationDirtyPaths[0] != "stray.txt" {
-		t.Fatalf("the untracked path must be captured on the observation: %+v", res.Observation.IsolationDirtyPaths)
-	}
-}
-
-func syncGitOK(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), By: "holder", Provider: dirtyProvider{}})
+	if err != nil || !res.Recorded || !reflect.DeepEqual(res.Observation.IsolationDirtyPaths, []string{"stray.txt"}) {
+		t.Fatalf("dirty paths: %+v %v", res, err)
 	}
 }
 
@@ -472,81 +488,57 @@ func TestSharedDirtyPassRecordsProvisionally(t *testing.T) {
 	n := testsNode("a", "test_a")
 	n.Claim = &model.Claim{By: "holder", LeaseExpires: "2099-01-01T00:00:00Z"}
 	planDir, repoRoot := fixture(t, n)
-	report := `<testsuite><testcase name="test_a"/></testsuite>`
-
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "r.xml", ReportBytes: []byte(report), By: "holder",
-		Provider: dirtyProvider{}})
-	if err != nil || !res.Recorded {
-		t.Fatalf("shared-dirty pass records provisionally: %+v %v", res, err)
-	}
-	if res.Merged {
-		t.Fatal("shared-dirty never merges; the mandatory clean re-verify does")
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "r.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), By: "holder", Provider: dirtyProvider{}})
+	if err != nil || !res.Recorded || res.Merged {
+		t.Fatalf("shared-dirty pass: %+v %v", res, err)
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
-	node := g.NodeByID("a")
-	if node.Claim == nil {
-		t.Fatal("the claim survives a provisional pass")
+	if g.NodeByID("a").Claim == nil {
+		t.Fatal("claim must survive provisional pass")
 	}
-	// And states hold it STALE, not GREEN (the DD-7 wiring).
 	derived := states.Derive(states.Inputs{Graph: g})
 	if derived["a"].State != states.Stale || !derived["a"].IsolationStale {
-		t.Fatalf("a shared-dirty pass derives STALE with the isolation cause: %+v", derived["a"])
+		t.Fatalf("shared-dirty pass state: %+v", derived["a"])
 	}
 }
 
 func TestSyncCommandGateTeesTheLog(t *testing.T) {
-	n := model.Node{ID: "build", Contract: "c", Gate: model.Gate{Type: model.GateCommand, Command: "make build"},
-		Hazards: model.Hazards{}, Estimate: 1}
+	n := model.Node{ID: "build", Contract: "c", Gate: model.Gate{Type: model.GateCommand, Command: "make build"}, Hazards: model.Hazards{}, Estimate: 1}
 	planDir, repoRoot := fixture(t, n)
-
 	exit := 0
 	logBytes := []byte("build ok\n")
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "build",
-		CommandExit: &exit, CommandLog: logBytes})
-	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass {
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "build", CommandExit: &exit, CommandLog: logBytes})
+	if err != nil || !res.Recorded || res.Observation.Result != model.ResultPass || res.Observation.ReportDigest == "" {
 		t.Fatalf("command gate pass: %+v %v", res, err)
 	}
-	if res.Observation.ReportDigest != digest.Bytes(logBytes) {
-		t.Fatal("the observation records the output digest, not the output")
-	}
 	teed, err := os.ReadFile(filepath.Join(planDir, ".graph", "logs", "build.log"))
-	if err != nil || string(teed) != string(logBytes) {
-		t.Fatalf("full output tees to the gitignored log: %v %q", err, teed)
+	if err != nil || !reflect.DeepEqual(teed, logBytes) {
+		t.Fatalf("full output tees to log: %v %q", err, teed)
 	}
-
 	exit = 2
-	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "build",
-		CommandExit: &exit, CommandLog: []byte("boom")})
+	res, err = Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "build", CommandExit: &exit, CommandLog: []byte("boom")})
 	if err != nil || res.Observation.Result != model.ResultFail {
-		t.Fatalf("nonzero exit is a fail observation: %+v %v", res, err)
+		t.Fatalf("nonzero exit: %+v %v", res, err)
 	}
 }
 
 func TestSyncGateRouting(t *testing.T) {
-	review := model.Node{ID: "gate", Contract: "c", Gate: model.Gate{Type: model.GateReview},
-		Hazards: model.Hazards{}, Estimate: 1}
-	unspecified := model.Node{ID: "conv", Contract: "c", Gate: model.Gate{Type: model.GateUnspecified},
-		Hazards: model.Hazards{}, Estimate: 1}
+	review := model.Node{ID: "gate", Contract: "c", Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1}
+	unspecified := model.Node{ID: "conv", Contract: "c", Gate: model.Gate{Type: model.GateUnspecified}, Hazards: model.Hazards{}, Estimate: 1}
 	tests := testsNode("t", "test_a")
 	planDir, repoRoot := fixture(t, review, unspecified, tests)
-
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "gate",
-		ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil ||
-		!strings.Contains(err.Error(), "sdd graph review") {
-		t.Fatalf("review gates route to `sdd graph review`: %v", err)
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "gate", ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil || !strings.Contains(err.Error(), "sdd graph review") {
+		t.Fatalf("review route: %v", err)
 	}
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "conv",
-		ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil {
-		t.Fatal("unspecified gates refuse")
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "conv", ReportName: "r.xml", ReportBytes: []byte("<testsuite/>")}); err == nil {
+		t.Fatal("unspecified gate accepted")
 	}
 	exit := 0
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "t",
-		CommandExit: &exit}); err == nil {
-		t.Fatal("a tests gate refuses --command-exit")
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "t", CommandExit: &exit}); err == nil {
+		t.Fatal("tests gate accepted command exit")
 	}
 	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "t"}); err == nil {
-		t.Fatal("a tests gate requires --report")
+		t.Fatal("tests gate omitted report")
 	}
 }
 
@@ -555,122 +547,72 @@ type graphMutatingProvider struct {
 	mutate func() error
 }
 
-func (p graphMutatingProvider) Provenance(string) (*model.Provenance, error) {
-	return nil, p.mutate()
-}
+func (p graphMutatingProvider) Provenance(string) (*model.Provenance, error) { return nil, p.mutate() }
+func (p graphMutatingProvider) Isolation(string, int) string                 { return model.IsolationClean }
 
-func (p graphMutatingProvider) Isolation(string, int) string { return model.IsolationClean }
-
-// A report is evidence for the exact contract snapshot it was folded against.
-// A concurrent amendment must be refused rather than relabeling the old report
-// with the fresh contract revision.
 func TestSyncRefusesPublicationAcrossContractRevision(t *testing.T) {
 	n := testsNode("a", "test_old")
-	n.Hazards = model.Hazards{"external-format"}
-	n.Gate.Tests[0].Satisfies = []string{"external-format"}
+	n.Hazards, n.Gate.Tests[0].Satisfies = model.Hazards{"external-format"}, []string{"external-format"}
 	planDir, repoRoot := fixture(t, n)
-	failing := `<testsuite><testcase name="test_old"><failure/></testcase></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "red.xml", ReportBytes: []byte(failing)}); err != nil {
+	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "red.xml", ReportBytes: []byte(`<testsuite><testcase name="test_old"><failure/></testcase></testsuite>`)}); err != nil {
 		t.Fatal(err)
 	}
-
 	prov := graphMutatingProvider{mutate: func() error {
 		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 			a := g.NodeByID("a")
-			a.ContractRev = 2
-			a.Contract = "revised promise"
-			a.Gate.Tests[0].ID = "test_new"
-			a.RedSeqs = nil
+			a.ContractRev, a.Contract, a.Gate.Tests[0].ID, a.RedSeqs = 2, "revised promise", "test_new", nil
 			return nil
 		})
 		return err
 	}}
-	passingOldReport := `<testsuite><testcase name="test_old"/></testsuite>`
-	if _, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "green.xml", ReportBytes: []byte(passingOldReport), Provider: prov}); err == nil ||
-		!strings.Contains(err.Error(), "contract changed") {
-		t.Fatalf("an old report must refuse when the evaluated contract changes: %v", err)
+	_, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_old"/></testsuite>`), Provider: prov})
+	if err == nil || !strings.Contains(err.Error(), "contract changed") {
+		t.Fatalf("old report publication: %v", err)
 	}
-
-	g, err := gstore.Load(gstore.PathFor(planDir))
-	if err != nil {
-		t.Fatal(err)
-	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if got := g.NodeByID("a"); got.Verification != nil && got.Verification.Result == model.ResultPass {
-		t.Fatalf("old report was published as proof of revision %d: %+v", got.EffectiveContractRev(), got.Verification)
+		t.Fatalf("old report published: %+v", got)
 	}
 }
 
-// Publication is fenced to the evaluated node, not to an unrelated graph
-// byte. A concurrent write elsewhere must survive and the store may retry the
-// observation against the fresh graph without changing its meaning.
 func TestSyncAllowsConcurrentUnrelatedGraphWrite(t *testing.T) {
-	a := testsNode("a", "test_a")
-	b := testsNode("b", "test_b")
-	planDir, repoRoot := fixture(t, a, b)
+	planDir, repoRoot := fixture(t, testsNode("a", "test_a"), testsNode("b", "test_b"))
 	prov := graphMutatingProvider{mutate: func() error {
-		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-			g.NodeByID("b").Contract = "unrelated edit"
-			return nil
-		})
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error { g.NodeByID("b").Contract = "unrelated edit"; return nil })
 		return err
 	}}
-	report := `<testsuite><testcase name="test_a"/></testsuite>`
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a",
-		ReportName: "green.xml", ReportBytes: []byte(report), Provider: prov})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), Provider: prov})
 	if err != nil || !res.Recorded {
-		t.Fatalf("unrelated graph write should not invalidate the evaluated node: %+v %v", res, err)
+		t.Fatalf("unrelated write: %+v %v", res, err)
 	}
-	g, err := gstore.Load(gstore.PathFor(planDir))
-	if err != nil {
-		t.Fatal(err)
-	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("b").Contract != "unrelated edit" || g.NodeByID("a").Verification == nil {
-		t.Fatalf("both writes must survive: %+v", g.Nodes)
+		t.Fatalf("both writes did not survive: %+v", g.Nodes)
 	}
 }
 
 func TestSyncRetriesCASAfterUnrelatedWriteDuringPublication(t *testing.T) {
-	a := testsNode("a", "test_a")
-	b := testsNode("b", "test_b")
-	planDir, repoRoot := fixture(t, a, b)
+	planDir, repoRoot := fixture(t, testsNode("a", "test_a"), testsNode("b", "test_b"))
 	hookCalls := 0
-	report := `<testsuite><testcase name="test_a"/></testsuite>`
-	cost := evidencecost.New(nil)
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", Cost: cost,
-		ReportName: "green.xml", ReportBytes: []byte(report),
-		beforePublish: func() error {
-			hookCalls++
-			_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-				g.NodeByID("b").Contract = "landed between read and CAS"
-				return nil
-			})
-			return err
-		}})
-	if err != nil || !res.Recorded {
-		t.Fatalf("the observation should retry after unrelated contention: %+v %v", res, err)
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), beforePublish: func() error {
+		hookCalls++
+		_, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error { g.NodeByID("b").Contract = "landed between read and CAS"; return nil })
+		return err
+	}})
+	if err != nil || !res.Recorded || hookCalls != 1 {
+		t.Fatalf("CAS retry: %+v calls=%d err=%v", res, hookCalls, err)
 	}
-	if hookCalls != 1 {
-		t.Fatalf("publication hook ran %d times; it must run only on the first CAS attempt", hookCalls)
-	}
-	if got := res.Cost.Counters[evidencecost.CASConflicts]; got != 1 {
-		t.Fatalf("cas conflicts = %d, want 1", got)
-	}
-	if got := res.Cost.Counters[evidencecost.CASRetries]; got != 1 {
-		t.Fatalf("cas retries = %d, want 1", got)
-	}
-	if got := res.Cost.Counters[evidencecost.PublicationCallbacks]; got != 2 {
-		t.Fatalf("publication callbacks = %d, want 2", got)
-	}
-	g, err := gstore.Load(gstore.PathFor(planDir))
-	if err != nil {
-		t.Fatal(err)
-	}
+	g, _ := gstore.Load(gstore.PathFor(planDir))
 	if g.NodeByID("b").Contract != "landed between read and CAS" || g.NodeByID("a").Verification == nil {
-		t.Fatalf("CAS retry lost one of the writes: %+v", g.Nodes)
+		t.Fatalf("CAS retry lost write: %+v", g.Nodes)
 	}
 }
+
+var errReleaseMeasured = errors.New("release measured failure")
+
+type failingReleaseProvider struct{ cleanWorkspaceProvider }
+
+func (failingReleaseProvider) Release(string) error { return errReleaseMeasured }
 
 func TestSyncAttributesWorkspaceReleaseThroughFailure(t *testing.T) {
 	n := testsNode("a", "test_a")
@@ -679,75 +621,11 @@ func TestSyncAttributesWorkspaceReleaseThroughFailure(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repoRoot, "ws"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cost := evidencecost.New(nil)
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", By: "holder", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), Provider: failingReleaseProvider{}, Cost: cost})
+	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "a", By: "holder", ReportName: "green.xml", ReportBytes: []byte(`<testsuite><testcase name="test_a"/></testsuite>`), Provider: failingReleaseProvider{}})
 	if !errors.Is(err, errReleaseMeasured) {
 		t.Fatalf("release error = %v", err)
 	}
 	if res == nil || !res.Recorded || !res.Merged || res.Observation == nil {
 		t.Fatalf("recorded result lost on release failure: %+v", res)
-	}
-	if res.Cost == nil || res.Cost.Counters[evidencecost.WorkspaceReleaseRequests] != 1 {
-		t.Fatalf("release request not attributed: %+v", res.Cost)
-	}
-	if _, ok := res.Cost.PhaseNS[evidencecost.WorkspaceRelease]; !ok {
-		t.Fatalf("release return not timed: %+v", res.Cost.PhaseNS)
-	}
-}
-
-// VerificationFreshness DD-1: a passing sync records what it exercised
-// below it — each direct dependency's artifact digests — so a later
-// re-verification of the dependency with identical bytes never stales it.
-func TestSyncRecordsDependencyDigests(t *testing.T) {
-	dep := testsNode("dep", "test_dep")
-	dep.Artifacts = []string{"src/dep.ext"}
-	consumer := testsNode("consumer", "test_c")
-	consumer.Deps = []string{"dep"}
-	planDir, repoRoot := fixture(t, dep, consumer)
-	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "src", "dep.ext"), []byte("dep impl"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "consumer",
-		ReportName: "r.xml", ReportBytes: []byte(`<testsuite><testcase name="test_c"/></testsuite>`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	v := res.Observation
-	if v.DependencyDigests == nil || v.DependencyDigests["dep"]["src/dep.ext"] != digest.Bytes([]byte("dep impl")) {
-		t.Fatalf("dependency digests not recorded: %+v", v.DependencyDigests)
-	}
-	// Bare graph fixture: no plan README, so no anchor snapshot — honest.
-	if res.AnchorSnapshot {
-		t.Fatal("a root without the plan README records no anchor snapshot")
-	}
-}
-
-// A command gate (e.g. a full-suite gate) records dependency digests
-// identically to a tests gate — the states package's derive pass gives it
-// the same staleness axis, but only if sync actually writes them here.
-func TestSyncCommandGateRecordsDependencyDigests(t *testing.T) {
-	dep := testsNode("dep", "test_dep")
-	dep.Artifacts = []string{"src/dep.ext"}
-	full := model.Node{ID: "full-gate", Contract: "c", Deps: []string{"dep"},
-		Gate: model.Gate{Type: model.GateCommand, Command: "make test"}, Hazards: model.Hazards{}, Estimate: 1}
-	planDir, repoRoot := fixture(t, dep, full)
-	if err := os.MkdirAll(filepath.Join(repoRoot, "src"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "src", "dep.ext"), []byte("dep impl"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	exit := 0
-	res, err := Run(Options{PlanDir: planDir, RepoRoot: repoRoot, Node: "full-gate",
-		CommandExit: &exit, CommandLog: []byte("ok")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	v := res.Observation
-	if v.DependencyDigests == nil || v.DependencyDigests["dep"]["src/dep.ext"] != digest.Bytes([]byte("dep impl")) {
-		t.Fatalf("command gate did not record dependency digests: %+v", v.DependencyDigests)
 	}
 }

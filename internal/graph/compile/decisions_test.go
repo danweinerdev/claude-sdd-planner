@@ -72,15 +72,12 @@ func TestNodeCitesPlanDecisionAndEmbedsFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	stage(t, root, strings.Replace(happyProposal, `"justifies": ["FR-01", "D-0001"]`, `"justifies": ["FR-01", "`+res.Entry.ID+`"]`, 1))
-	out, findings, err := Run(root, root, "SamplePlan")
+	_, findings, err := Run(root, root, "SamplePlan")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(findings) != 0 {
 		t.Fatalf("findings: %v", findings)
-	}
-	if out.Hashes["impl-fr"][res.Entry.ID] == "" {
-		t.Fatalf("no intent hash embedded for the decision citation: %+v", out.Hashes["impl-fr"])
 	}
 	g, err := gstore.Load(gstore.PathFor(planDir))
 	if err != nil {

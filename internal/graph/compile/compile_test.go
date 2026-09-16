@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -243,17 +242,6 @@ func TestCompileHappyPathEmbedsFingerprintsAndConsumes(t *testing.T) {
 	if g.RevisionLineage["1111111111111111111111111111111111111111"] != "2222222222222222222222222222222222222222" {
 		t.Fatalf("compile discarded revision lineage: %+v", g.RevisionLineage)
 	}
-	implFR := g.NodeByID("impl-fr")
-	if implFR == nil || implFR.IntentHashes["FR-01"] == "" ||
-		!strings.HasPrefix(implFR.IntentHashes["FR-01"], "sha256:") {
-		t.Fatalf("FR-01 fingerprint not embedded: %+v", implFR)
-	}
-	if h := implFR.IntentHashes[fixtureDecisionID()]; h == "" || !strings.HasPrefix(h, "sha256:") {
-		t.Fatal("plan-decision citations resolve and are fingerprinted like any other requirement")
-	}
-	if g.NodeByID("impl-ac2").IntentHashes["DD-1"] == "" {
-		t.Fatal("DD fingerprints must embed from the related design")
-	}
 	if _, err := os.Stat(res.Consumed); !os.IsNotExist(err) {
 		t.Fatalf("the compiled proposal must be consumed: %s", res.Consumed)
 	}
@@ -331,13 +319,13 @@ func TestCompileResolvesEvidenceRepoOnce(t *testing.T) {
 		g.Nodes = append(g.Nodes, model.Node{
 			ID: "existing-work", Contract: "already done", Phase: "existing",
 			Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{{ID: "TestExistingWork", File: "existing_test.go"}}}, Hazards: model.Hazards{}, Estimate: 1,
-			Justifies: []string{"FR-01"}, IntentHashes: map[string]string{"FR-01": frHash},
+			Justifies: []string{"FR-01"},
 			Verification: &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean,
 				Provenance: &model.Provenance{Kind: "git", Revision: rev}},
 		}, model.Node{
 			ID: "existing-review", Contract: "reviewed", Phase: "existing", Deps: []string{"existing-work"},
 			Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1,
-			Justifies: []string{"FR-01"}, IntentHashes: map[string]string{"FR-01": frHash},
+			Justifies: []string{"FR-01"},
 			Verification: &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean,
 				Provenance: &model.Provenance{Kind: "git", Revision: rev}},
 		})
@@ -500,49 +488,6 @@ func TestRenderedViewsValidateStructurally(t *testing.T) {
 	}
 	if len(errs) > 0 {
 		t.Fatalf("rendered views must validate structurally clean:\n%s", strings.Join(errs, "\n"))
-	}
-}
-
-// TestRewrapDoesNotChangeFingerprints is DD-4's contractual property at the
-// compile level: a whitespace-only spec rewrap must embed the same hash.
-func TestRewrapDoesNotChangeFingerprints(t *testing.T) {
-	root := fixtureRoot(t, fixtureSpec)
-	recordFixtureDecision(t, root)
-	stage(t, root, happyProposalCiting(fixtureDecisionID()))
-	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
-		t.Fatalf("first compile: %v %v", err, findings)
-	}
-	g, _ := gstore.Load(gstore.PathFor(filepath.Join(root, "Plans", "SamplePlan")))
-	first := g.NodeByID("impl-fr").IntentHashes["FR-01"]
-
-	// Rewrap FR-01 (line break moves; wording identical), then compile a
-	// second proposal citing it.
-	rewrapped := strings.Replace(fixtureSpec,
-		"SHALL accept every documented key and reject an\n  unknown key by name.",
-		"SHALL accept every documented key and\n  reject an unknown key by name.", 1)
-	if rewrapped == fixtureSpec {
-		t.Fatal("fixture rewrap did not apply")
-	}
-	if err := os.WriteFile(filepath.Join(root, "Specs/Sample/README.md"), []byte(rewrapped), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	stage(t, root, `{
-  "version": 1,
-  "nodes": [
-    {"id": "impl-fr-again", "contract": "more loader work", "justifies": ["FR-01"], "deps": ["impl-fr"],
-     "gate": {"type": "tests", "tests": [{"id": "test_fr2", "file": "t.ext"}]}, "hazards": []},
-    {"id": "gate-2", "contract": "second slice survives review", "justifies": ["AC-01"],
-     "deps": ["impl-fr-again", "feature-gate"], "gate": {"type": "review", "lanes": "full"}, "hazards": []}
-  ]
-}
-`)
-	if _, findings, err := Run(root, root, "SamplePlan"); err != nil || len(findings) != 0 {
-		t.Fatalf("second compile: %v %v", err, findings)
-	}
-	g, _ = gstore.Load(gstore.PathFor(filepath.Join(root, "Plans", "SamplePlan")))
-	second := g.NodeByID("impl-fr-again").IntentHashes["FR-01"]
-	if first != second {
-		t.Fatalf("a rewrap-only spec edit must not change the fingerprint: %s vs %s", first, second)
 	}
 }
 
@@ -711,7 +656,7 @@ func TestCompileInputSelection(t *testing.T) {
 	}
 }
 
-func TestCompileRefusesEmptyTestsAndObservedOwnOutputs(t *testing.T) {
+func TestCompileRefusesEmptyTests(t *testing.T) {
 	t.Run("empty tests", func(t *testing.T) {
 		root := fixtureRoot(t, fixtureSpec)
 		stage(t, root, `{"version":1,"nodes":[{"id":"empty","contract":"empty","justifies":["AC-01"],"gate":{"type":"tests"},"hazards":[]}]}`)
@@ -723,144 +668,6 @@ func TestCompileRefusesEmptyTestsAndObservedOwnOutputs(t *testing.T) {
 			t.Fatalf("missing empty-gate finding: %v", findings)
 		}
 	})
-	t.Run("live graph input", func(t *testing.T) {
-		root := fixtureRoot(t, fixtureSpec)
-		stage(t, root, `{"version":1,"nodes":[{"id":"reported","contract":"reported","justifies":["AC-01"],"inputs":[{"root":"planning","path":"Plans/SamplePlan/SamplePlan-Graph.json"}],"gate":{"type":"tests","evidence":"reported-v1","report":{"format":"go-test-json-v1","runner":"repo-tests","environment_keys":[],"test_support_inputs":[],"test_support_artifacts":[]},"tests":[{"package":"example.test/p","id":"TestReported","file":"reported_test.go"}]},"hazards":[],"artifacts":["reported_test.go"]}]}`)
-		_, findings, err := Run(root, root, "SamplePlan")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := fmt.Sprint(findings); !strings.Contains(got, "live graph") {
-			t.Fatalf("missing own-output finding: %v", findings)
-		}
-	})
-}
-
-func TestCompileReportedGateRefusesKnownDirectoryDependencyArtifact(t *testing.T) {
-	root := fixtureRoot(t, fixtureSpec)
-	if err := os.Mkdir(filepath.Join(root, "legacy-dir"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	payload := `{"version":1,"nodes":[{"id":"legacy","contract":"legacy","justifies":["AC-01"],"gate":{"type":"tests","tests":[{"id":"Legacy","file":"legacy_test.go"}]},"hazards":[],"artifacts":["legacy-dir"]},{"id":"reported","contract":"reported","justifies":["AC-01"],"deps":["legacy"],"gate":{"type":"tests","evidence":"reported-v1","report":{"format":"go-test-json-v1","runner":"repo","environment_keys":[],"test_support_inputs":[],"test_support_artifacts":[]},"tests":[{"package":"example.test/p","id":"Reported","file":"reported_test.go"}]},"hazards":[],"artifacts":["reported_test.go"]}]}`
-	stage(t, root, payload)
-	_, findings, err := Run(root, root, "SamplePlan")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := fmt.Sprint(findings); !strings.Contains(got, "dependency artifact") || !strings.Contains(got, "regular files only") {
-		t.Fatalf("missing file-only dependency refusal: %v", findings)
-	}
-}
-
-func TestObservedOwnOutputGuardUsesFilesystemIdentity(t *testing.T) {
-	root := fixtureRoot(t, fixtureSpec)
-	sources, err := identifierSources(root, root, "SamplePlan")
-	if err != nil {
-		t.Fatal(err)
-	}
-	planDir := filepath.Join(root, "Plans", "SamplePlan")
-	graphPath := gstore.PathFor(planDir)
-
-	t.Run("normal unrelated json input allowed", func(t *testing.T) {
-		path := filepath.Join(root, "fixture.json")
-		if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: "fixture.json"}, sources) {
-			t.Fatal("unrelated JSON was blanket-refused")
-		}
-	})
-
-	t.Run("symlink alias", func(t *testing.T) {
-		alias := filepath.Join(root, "graph-alias.json")
-		if err := os.Symlink(graphPath, alias); err != nil {
-			t.Skipf("symlinks unavailable: %v", err)
-		}
-		if !observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: "graph-alias.json"}, sources) {
-			t.Fatal("physical alias of the live graph was accepted")
-		}
-	})
-
-	t.Run("windows case alias", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows case-alias behavior")
-		}
-		rel, err := filepath.Rel(root, graphPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		alias := strings.ToUpper(filepath.ToSlash(rel))
-		if !observedOwnOutput(model.Input{Root: model.InputRootPlanning, Path: alias}, sources) {
-			t.Fatalf("case alias of live graph was accepted: %s", alias)
-		}
-	})
-
-	t.Run("pending evidence path under mapped target", func(t *testing.T) {
-		mapped := filepath.Join(root, "mapped")
-		sources.inputRepoRoot = mapped
-		path := "Plans/SamplePlan/.graph/test-evidence/work/pending.json"
-		if !observedOwnOutput(model.Input{Root: model.InputRootRepository, Path: path}, sources) {
-			t.Fatal("normalized pending evidence path under mapped target was accepted")
-		}
-	})
-}
-
-// TestValidateFlagsMissingAndPartialFingerprints: the transition gate flags a
-// stored node that cites a currently fingerprintable requirement with no
-// embedded hash (missing entirely, or present-but-empty) and names the source
-// plus the repair path — a plan-decision citation is no exception, since a
-// recorded decision is just as fingerprintable as an AC/FR.
-func TestValidateFlagsMissingAndPartialFingerprints(t *testing.T) {
-	root := fixtureRoot(t, fixtureSpec)
-	recordFixtureDecision(t, root)
-	planDir := filepath.Join(root, "Plans", "SamplePlan")
-	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.Nodes = append(g.Nodes,
-			model.Node{ID: "missing", Contract: "c", Justifies: []string{"AC-01"},
-				Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
-			model.Node{ID: "partial", Contract: "c", Justifies: []string{"AC-01", "FR-01"},
-				IntentHashes: map[string]string{"AC-01": "sha256:aaaa"},
-				Gate:         model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
-			model.Node{ID: "empty", Contract: "c", Justifies: []string{"AC-01"},
-				IntentHashes: map[string]string{"AC-01": ""},
-				Gate:         model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
-			model.Node{ID: "pd-only", Contract: "c", Justifies: []string{fixtureDecisionID()},
-				Gate: model.Gate{Type: model.GateTests}, Hazards: model.Hazards{}, Estimate: 1},
-		)
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	g, err := gstore.Load(gstore.PathFor(planDir))
-	if err != nil {
-		t.Fatal(err)
-	}
-	findings, err := Validate(root, root, "SamplePlan", g)
-	if err != nil {
-		t.Fatal(err)
-	}
-	joined := ""
-	for _, f := range findings {
-		joined += f.String() + "\n"
-	}
-	for _, want := range []string{
-		`missing: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
-		`partial: cites "FR-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
-		`empty: cites "AC-01" (defined in Specs/Sample/README.md) with no embedded intent fingerprint`,
-		`pd-only: cites "` + fixtureDecisionID() + `" (defined in Plans/SamplePlan/SamplePlan-Decisions.json) with no embedded intent fingerprint`,
-	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing finding %q in:\n%s", want, joined)
-		}
-	}
-	// The already-hashed citation must NOT be flagged.
-	if strings.Contains(joined, `partial: cites "AC-01"`) {
-		t.Errorf("a present hash must not be flagged:\n%s", joined)
-	}
-	// The finding names the supported repair path.
-	if !strings.Contains(joined, "sdd graph repair-intent") {
-		t.Errorf("the finding must name the repair path:\n%s", joined)
-	}
 }
 
 func TestLaneAwareness(t *testing.T) {
@@ -1249,7 +1056,7 @@ related: [Specs/Foreign]
   ]
 }
 `)
-	res, findings, err := Run(root, root, "SamplePlan")
+	_, findings, err := Run(root, root, "SamplePlan")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -1265,15 +1072,6 @@ related: [Specs/Foreign]
 	}
 	if len(findings) != 0 {
 		t.Fatalf("expected a clean compile, got:\n%s", joined)
-	}
-	// The foreign FR's fingerprint embedded — citability is not just
-	// non-refusal, the intent hash rides along.
-	g, err := gstore.Load(res.GraphPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if g.NodeByID("own-2").IntentHashes["FR-90"] == "" {
-		t.Fatal("the transitively-cited FR must be fingerprinted")
 	}
 }
 
@@ -1538,7 +1336,7 @@ func TestUnqualifiedCitationPrefersDirectSource(t *testing.T) {
   ]
 }
 `)
-	result, findings, err := Run(root, root, "SamplePlan")
+	_, findings, err := Run(root, root, "SamplePlan")
 	if err != nil {
 		t.Fatalf("compile failed: %v", err)
 	}
@@ -1548,13 +1346,6 @@ func TestUnqualifiedCitationPrefersDirectSource(t *testing.T) {
 			joined += f.String() + "\n"
 		}
 		t.Fatalf("unqualified citations resolvable against the plan's direct source must compile:\n%s", joined)
-	}
-	hashes := result.Hashes["w"]
-	if hashes["FR-01"] == "" {
-		t.Fatalf("FR-01 must embed an intent fingerprint (resolved to Designs/A): %v", hashes)
-	}
-	if hashes["DD-1"] == "" {
-		t.Fatalf("DD-1 must embed an intent fingerprint (resolved to Designs/A): %v", hashes)
 	}
 
 	sources, err := identifierSources(root, root, "SamplePlan")
@@ -1639,23 +1430,12 @@ func TestPerSpecACCoverageAndQualifiedCitations(t *testing.T) {
 	if _, _, err := proposal.Assemble(filepath.Join(root, "Plans", "SamplePlan")); err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
-	res, findings, err := Run(root, root, "SamplePlan")
+	_, findings, err = Run(root, root, "SamplePlan")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
 	if len(findings) != 0 {
 		t.Fatalf("expected clean compile, got:\n%v", findings)
-	}
-	g, err := gstore.Load(res.GraphPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w1 := g.NodeByID("w1")
-	if !strings.HasPrefix(w1.IntentHashes["Specs/Sample:AC-01"], "sha256:") {
-		t.Fatalf("qualified citation must fingerprint under its written spelling: %+v", w1.IntentHashes)
-	}
-	if !strings.HasPrefix(g.NodeByID("w3").IntentHashes["Other:AC-01"], "sha256:") {
-		t.Fatalf("basename-qualified citation must fingerprint: %+v", g.NodeByID("w3").IntentHashes)
 	}
 }
 

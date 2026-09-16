@@ -40,10 +40,6 @@ func TestAuditEmptyGraphIsNonemptyJSON(t *testing.T) {
 func TestAuditCountsCoverageAndTestDiagnostics(t *testing.T) {
 	root := fixtureRoot(t, fixtureSpec)
 	planDir := root + "/Plans/SamplePlan"
-	sources, err := NewSources(root, root, "SamplePlan")
-	if err != nil {
-		t.Fatal(err)
-	}
 	nodes := []model.Node{
 		{ID: "a", Contract: "fr work", Justifies: []string{"FR-01"},
 			Gate: model.Gate{Type: model.GateTests, Tests: []model.Test{
@@ -55,9 +51,6 @@ func TestAuditCountsCoverageAndTestDiagnostics(t *testing.T) {
 			}}, Hazards: model.Hazards{}, Estimate: 1},
 		{ID: "gate", Contract: "review", Justifies: []string{"AC-01"}, Deps: []string{"b"},
 			Gate: model.Gate{Type: model.GateReview}, Hazards: model.Hazards{}, Estimate: 1},
-	}
-	for i := range nodes {
-		sources.Anchor(&nodes[i])
 	}
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
 		g.Nodes = nodes

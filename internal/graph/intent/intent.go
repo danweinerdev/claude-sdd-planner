@@ -1,7 +1,6 @@
-// Package intent computes the requirement fingerprints behind INTENT-STALE
-// (Designs/SddGraph DD-4): compile embeds the SHA-256 of each cited
-// requirement's normalized text into the citing node, and reads recompute it
-// — a mismatch means the spec moved under the node.
+// Package intent discovers and normalizes citable requirement definitions.
+// Compile uses this index to check citation resolution and coverage; hashes
+// remain an internal comparison aid and are not persisted as graph freshness.
 //
 // The hash input is defined, not incidental (DD-4 "Hash input, defined"):
 // the span from an identifier's definition token to the next definition or

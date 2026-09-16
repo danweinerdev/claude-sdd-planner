@@ -1,8 +1,7 @@
 // Package compile is the enforcement core of the plan graph (Designs/SddGraph
 // DD-4, DD-9, DD-11): it takes the staged proposal, validates every semantic
-// invariant in ONE batched pass, embeds the intent fingerprints that make
-// spec edits ripple (INTENT-STALE), and appends the nodes to the committed
-// graph under the store's compare-and-swap.
+// invariant in ONE batched pass, checks citation coverage, and appends the
+// nodes to the committed graph under the store's compare-and-swap.
 //
 // Refusals are authoritative and complete: the repair loop is an edit to the
 // payload file, and it should need exactly one round trip, so compile never
@@ -26,7 +25,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/decisions"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/intent"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
@@ -43,15 +41,8 @@ import (
 // closed predicate. One closure, applied to both the preflight preview and
 // the written graph, so the dry-run and the render can never disagree.
 func deriveClosure(repoRoot string, sources *sourceSet, inRes *InputResolver) func(*model.Graph) (map[string]states.NodeState, map[string]bool) {
-	snap := sources.intentSnapshot()
-	digester := digest.New(repoRoot)
 	return func(g *model.Graph) (map[string]states.NodeState, map[string]bool) {
-		st := states.Derive(states.Inputs{
-			Graph:               g,
-			ArtifactDigest:      digester.Artifact,
-			CurrentIntentHashes: snap.Hashes(),
-			CurrentInputHashes:  inRes.GraphHashes(g),
-		})
+		st := states.Derive(states.Inputs{Graph: g})
 		return st, states.Closed(g, st)
 	}
 }
@@ -70,8 +61,6 @@ type Result struct {
 	GraphPath string
 	// Added is the appended node ids, in proposal order.
 	Added []string
-	// Hashes is node id -> cited id -> embedded intent hash.
-	Hashes map[string]map[string]string
 	// Consumed is the proposal (or single fragment) file that was consumed.
 	Consumed string
 	// Views is every rendered view file this compile wrote or refreshed.
@@ -113,18 +102,9 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 		return nil, findings, nil
 	}
 
-	// Embed fingerprints, then append under the store's compare-and-swap.
-	hashes := map[string]map[string]string{}
 	var added []string
 	for i := range p.Nodes {
 		n := &p.Nodes[i]
-		Anchor(n, sources.resolveItem)
-		if err := inRes.AnchorInputs(n); err != nil {
-			return nil, nil, fmt.Errorf("compile: %w", err)
-		}
-		if len(n.IntentHashes) > 0 {
-			hashes[n.ID] = n.IntentHashes
-		}
 		added = append(added, n.ID)
 	}
 	// Preflight the render targets BEFORE the graph write: a view refusal
@@ -171,7 +151,7 @@ func Run(root, repoRoot, plan string) (*Result, []Finding, error) {
 	if err := os.Remove(payloadPath); err != nil {
 		return nil, nil, fmt.Errorf("compile: graph written but %s could not be consumed: %w", payloadPath, err)
 	}
-	return &Result{GraphPath: graphPath, Added: added, Hashes: hashes, Consumed: payloadPath, Views: views}, nil, nil
+	return &Result{GraphPath: graphPath, Added: added, Consumed: payloadPath, Views: views}, nil, nil
 }
 
 // Validate runs the full semantic pass over a graph as it stands (an empty
@@ -472,15 +452,10 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 		add("graph", "%s", problem)
 	}
 
-	// Merged view: master nodes plus proposal nodes. stored marks the master
-	// nodes — the missing-fingerprint guard applies to them (a committed node
-	// must carry a hash for every fingerprintable citation), while proposal
-	// nodes are construction input compile anchors AFTER this pass.
+	// Merged view: master nodes plus proposal nodes.
 	merged := map[string]*model.Node{}
-	stored := map[string]bool{}
 	for i := range g.Nodes {
 		merged[g.Nodes[i].ID] = &g.Nodes[i]
-		stored[g.Nodes[i].ID] = true
 	}
 	// Duplicate ids: within the proposal, and against the master graph
 	// (phase-1 review followup FU-01 — the model layer deliberately does not
@@ -528,31 +503,6 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 		}
 		for _, problem := range model.ValidateEvidenceGate(n) {
 			add(id, "%s", problem)
-		}
-		if n.Gate.Evidence == model.EvidenceObservedV1 || n.Gate.Evidence == model.EvidenceReportedV1 {
-			for _, in := range n.Inputs {
-				if observedOwnOutput(in, sources) {
-					add(id, "content-bound tests gate cannot declare its live graph or test-evidence output as input %q", in.Path)
-				}
-			}
-		}
-		if n.Gate.Evidence == model.EvidenceReportedV1 {
-			checkFile := func(kind, path string) {
-				info, err := os.Stat(filepath.Join(sources.inputRepoRoot, filepath.FromSlash(path)))
-				if err == nil && info.IsDir() {
-					add(id, "reported-v1 %s %q is a directory; file-based evidence supports regular files only", kind, path)
-				}
-			}
-			for _, path := range n.Artifacts {
-				checkFile("artifact", path)
-			}
-			for _, dep := range n.Deps {
-				if dn := merged[dep]; dn != nil {
-					for _, path := range dn.Artifacts {
-						checkFile("dependency artifact", path)
-					}
-				}
-			}
 		}
 
 		// Dangling deps.
@@ -640,14 +590,6 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 				if strings.HasPrefix(hit.ID, "AC-") {
 					citedACs[acKey(hit.SourceRel, hit.ID)] = true
 				}
-				// The fail-closed half of INTENT-STALE: a committed node
-				// citing a currently fingerprintable requirement with no
-				// embedded hash (missing, or present but empty) cannot be
-				// verified against the text it claims to satisfy. Proposal
-				// nodes are exempt — compile anchors them after this pass.
-				if stored[id] && n.IntentHashes[cited] == "" {
-					add(id, "cites %q (defined in %s) with no embedded intent fingerprint; repair with `sdd graph repair-intent --plan <plan> --node %s`", cited, hit.SourceRel, id)
-				}
 				continue
 			}
 			if suggestions := sources.index.Ambiguous(cited); len(suggestions) > 0 {
@@ -670,20 +612,12 @@ func semanticFindings(g *model.Graph, p *model.Proposal, sources *sourceSet, inR
 			seenTests[key] = true
 		}
 
-		// Declared inputs: every one must resolve (missing/ambiguous
-		// headings, escapes, directories, binary/non-Markdown sections all
-		// refuse — never fall back), and a committed node must carry the
-		// embedded fingerprint for each. Proposal nodes are anchored after
-		// this pass, so the missing-fingerprint guard applies only to stored
-		// nodes — the same split compile makes for citations.
+		// Declared inputs must resolve; missing or ambiguous headings,
+		// escapes, directories, and binary/non-Markdown sections refuse.
 		for _, spec := range n.Inputs {
-			key := model.InputKey(spec)
 			if _, err := inRes.Resolve(spec); err != nil {
 				add(id, "declared input %q does not resolve: %v", describeInputSpec(spec), err)
 				continue
-			}
-			if stored[id] && n.InputHashes[key] == "" {
-				add(id, "declares input %q with no embedded input fingerprint; re-set it with `sdd graph set-inputs --plan <plan> --node %s`", describeInputSpec(spec), id)
 			}
 		}
 	}

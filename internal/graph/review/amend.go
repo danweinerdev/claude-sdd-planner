@@ -13,6 +13,8 @@ package review
 // store's compare-and-swap.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,7 +25,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/rules"
 )
@@ -107,7 +108,8 @@ func ReadArtifact(root, artifact string) (*Artifact, error) {
 		return nil, fmt.Errorf("%s: %v", artifact, err)
 	}
 	rel = filepath.ToSlash(rel)
-	return &Artifact{Path: path, Rel: rel, Qualifier: rules.SourceQualifier(rel), ReportDigest: digest.Bytes(raw), Facts: f}, nil
+	sum := sha256.Sum256(raw)
+	return &Artifact{Path: path, Rel: rel, Qualifier: rules.SourceQualifier(rel), ReportDigest: "sha256:" + hex.EncodeToString(sum[:]), Facts: f}, nil
 }
 
 func relEscapes(rel string) bool {
@@ -363,9 +365,7 @@ func applyRevise(before *model.Node, revise map[string]any) (*model.Node, []stri
 // dropped) as a generic map, the overlay base for a revise.
 func payloadMap(n *model.Node) (map[string]any, error) {
 	cp := *n
-	cp.IntentHashes, cp.InputHashes, cp.Claim, cp.Verification, cp.RedSeqs = nil, nil, nil, nil, nil
-	cp.RedEvidence, cp.ConsumedAttempts = nil, nil
-	cp.ReportEvidence, cp.ConsumedReports = nil, nil
+	cp.Claim, cp.Verification, cp.RedSeqs = nil, nil, nil
 	cp.ContractRev, cp.Origin = 0, nil
 	raw, err := json.Marshal(cp)
 	if err != nil {

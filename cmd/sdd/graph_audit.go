@@ -78,23 +78,11 @@ func graphAuditCmd() *cobra.Command {
 				fmt.Fprintf(w, "stale nodes: %d\n", len(rep.Stale))
 				for _, s := range rep.Stale {
 					var reasons []string
-					if s.SeqStale {
-						reasons = append(reasons, "seq (legacy observation)")
-					}
 					if len(s.DependencyStale) > 0 {
 						reasons = append(reasons, "dependency:"+strings.Join(s.DependencyStale, ","))
 					}
 					if len(s.ReviewStale) > 0 {
 						reasons = append(reasons, "review:"+strings.Join(s.ReviewStale, ","))
-					}
-					if len(s.DigestStale) > 0 {
-						reasons = append(reasons, "digest:"+strings.Join(s.DigestStale, ","))
-					}
-					if len(s.IntentStale) > 0 {
-						reasons = append(reasons, "intent:"+strings.Join(s.IntentStale, ","))
-					}
-					if len(s.InputStale) > 0 {
-						reasons = append(reasons, "input:"+strings.Join(s.InputStale, ","))
 					}
 					fmt.Fprintf(w, "  %s (%s)\n", s.ID, strings.Join(reasons, "; "))
 				}

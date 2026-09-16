@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
-	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -73,7 +71,7 @@ func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	if err != nil {
 		return nil, err
 	}
-	root, repoRoot, err := resolveRoots(".", "")
+	_, _, err = resolveRoots(".", "")
 	if err != nil {
 		return nil, fmt.Errorf("graph %s: %w", verb, err)
 	}
@@ -81,15 +79,7 @@ func loadAnalytics(plan, verb string) (*analyticsCtx, error) {
 	if err != nil {
 		return nil, err
 	}
-	sources, err := gcompile.NewSources(root, repoRoot, plan)
-	if err != nil {
-		return nil, fmt.Errorf("graph %s: %w", verb, err)
-	}
-	snap := sources.IntentSnapshot()
-	digester := digest.New(repoRoot)
-	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(),
-		CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
+	st := states.Derive(states.Inputs{Graph: g})
 	ctx := &analyticsCtx{planDir: planDir, g: g, st: st, closed: greview.Closed(g, st),
 		adjacency: algorithms.Graph{}, estimate: map[string]int{}}
 	for i := range g.Nodes {
@@ -255,7 +245,6 @@ func graphStatusCmd() *cobra.Command {
 				ContractRev int           `json:"contract_rev"`
 				Claimed     string        `json:"claimed_by,omitempty"`
 				Reasons     *staleReasons `json:"reasons,omitempty"`
-				Advisories  []string      `json:"advisories,omitempty"`
 			}
 			lines := make([]line, 0, len(ctx.g.Nodes))
 			for i := range ctx.g.Nodes {
@@ -271,7 +260,6 @@ func graphStatusCmd() *cobra.Command {
 					l.Claimed = n.Claim.By
 				}
 				l.Reasons = staleReasonsFor(n, ns)
-				l.Advisories = ns.AnchorAdvisory
 				lines = append(lines, l)
 			}
 			sort.Slice(lines, func(i, j int) bool { return lines[i].ID < lines[j].ID })
@@ -339,13 +327,9 @@ func graphShowCmd() *cobra.Command {
 					ContractRev int                  `json:"contract_rev"`
 					State       string               `json:"state"`
 					Closed      bool                 `json:"closed"`
-					Stale       []string             `json:"stale_artifacts,omitempty"`
-					Intent      []string             `json:"stale_intent,omitempty"`
-					Inputs      []string             `json:"stale_inputs,omitempty"`
 					Reasons     *staleReasons        `json:"reasons,omitempty"`
-					Advisories  []string             `json:"advisories,omitempty"`
 					Lineage     *revisionLineageView `json:"revision_lineage,omitempty"`
-				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], ns.DigestStale, ns.IntentStale, ns.InputStale, staleReasonsFor(n, ns), ns.AnchorAdvisory, nodeRevisionLineage(ctx.g, n)})
+				}{true, n, n.EffectiveRole(), n.EffectiveContractRev(), string(ns.State), ctx.closed[n.ID], staleReasonsFor(n, ns), nodeRevisionLineage(ctx.g, n)})
 			}
 			w := c.OutOrStdout()
 			if brief {
@@ -377,20 +361,8 @@ func graphShowCmd() *cobra.Command {
 			if ctx.closed[n.ID] {
 				fmt.Fprintln(w, "  closure: closed (completion-grade)")
 			}
-			if len(ns.DigestStale) > 0 {
-				fmt.Fprintf(w, "  stale artifacts: %s\n", strings.Join(ns.DigestStale, ", "))
-			}
-			if len(ns.IntentStale) > 0 {
-				fmt.Fprintf(w, "  INTENT-STALE: %s (re-read the cited requirements)\n", strings.Join(ns.IntentStale, ", "))
-			}
-			if len(ns.InputStale) > 0 {
-				fmt.Fprintf(w, "  INPUT-STALE: %s (re-read the declared inputs)\n", strings.Join(ns.InputStale, ", "))
-			}
 			if ns.RevIncompatible {
 				fmt.Fprintln(w, "  REV-INCOMPATIBLE: the latest observation predates a revise; it is history, not proof")
-			}
-			if ns.SeqStale {
-				fmt.Fprintln(w, "  SEQ-STALE: legacy observation (no dependency digests); a dependency re-verified after it — re-sync to record what this node exercises")
 			}
 			if ns.IsolationStale {
 				var cause string
@@ -406,9 +378,6 @@ func graphShowCmd() *cobra.Command {
 			if len(ns.DependencyStale) > 0 {
 				fmt.Fprintf(w, "  DEPENDENCY-STALE: %s changed since this run exercised it (re-run the gate)\n", strings.Join(ns.DependencyStale, ", "))
 			}
-			if len(ns.AnchorAdvisory) > 0 {
-				fmt.Fprintf(w, "  advisory: text changed since the anchor for %s (judge it: `sdd graph acknowledge`, or rework)\n", strings.Join(ns.AnchorAdvisory, ", "))
-			}
 			if len(ns.ReviewStale) > 0 {
 				fmt.Fprintf(w, "  REVIEW-STALE: %s changed since this review (re-review)\n", strings.Join(ns.ReviewStale, ", "))
 			}
@@ -420,7 +389,7 @@ func graphShowCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&plan, "plan", "", "plan name (directory under Plans/)")
 	c.Flags().BoolVar(&asJSON, "json", false, "emit the result as JSON")
-	c.Flags().BoolVar(&brief, "brief", false, "self-contained claim brief: for a review node, the reviewed contracts, artifacts, digests, and lanes")
+	c.Flags().BoolVar(&brief, "brief", false, "self-contained claim brief: for a review node, the reviewed contracts, artifacts, and lanes")
 	return c
 }
 
@@ -583,11 +552,7 @@ func printBrief(w io.Writer, g *model.Graph, n *model.Node, st map[string]states
 // STALE, with its items, so a driver routes on the cause.
 type staleReasons struct {
 	Dependency []string `json:"dependency,omitempty"`
-	Digest     []string `json:"digest,omitempty"`
-	Intent     []string `json:"intent,omitempty"`
-	Input      []string `json:"input,omitempty"`
 	Review     []string `json:"review,omitempty"`
-	Seq        bool     `json:"seq,omitempty"`
 	Revision   bool     `json:"revision,omitempty"`
 	Isolation  bool     `json:"isolation,omitempty"`
 	// IsolationCause names why: the untracked or modified paths sync
@@ -615,8 +580,7 @@ func staleReasonsFor(n *model.Node, ns states.NodeState) *staleReasons {
 		return nil
 	}
 	r := &staleReasons{
-		Dependency: ns.DependencyStale, Digest: ns.DigestStale, Intent: ns.IntentStale,
-		Input: ns.InputStale, Review: ns.ReviewStale, Seq: ns.SeqStale,
+		Dependency: ns.DependencyStale, Review: ns.ReviewStale,
 		Revision: ns.RevIncompatible, Isolation: ns.IsolationStale,
 	}
 	if ns.IsolationStale && n.Verification != nil {

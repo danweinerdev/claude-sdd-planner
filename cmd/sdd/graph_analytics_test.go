@@ -180,6 +180,7 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 	const recorded = "1111111111111111111111111111111111111111"
 	const rewritten = "2222222222222222222222222222222222222222"
 	ctx.g.NodeByID("m").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean, Provenance: &model.Provenance{Kind: "git", Revision: recorded}}
+	ctx.g.NodeByID("a").Verification = &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean}
 	ctx.g.RevisionLineage = map[string]string{recorded: rewritten}
 	if err := gstore.Save(gstore.PathFor(ctx.planDir), ctx.g); err != nil {
 		t.Fatal(err)
@@ -218,7 +219,7 @@ func TestGraphAnalyticsStatusShowExport(t *testing.T) {
 		{"mermaid", "a --> m"},
 		{"dot", "digraph plan"},
 		{"dot", `"m" -> "y";`},
-		{"plan", "1. a — does a [READY, estimate 1]"},
+		{"plan", "1. a — does a [GREEN, estimate 1]"},
 		{"shape", "silhouette: HOURGLASS"},
 	} {
 		if out := runGraphVerb(t, "graph", "export", "--plan", "Demo", "--format", tc.format); !strings.Contains(out, tc.want) {

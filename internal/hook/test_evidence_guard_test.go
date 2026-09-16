@@ -34,9 +34,15 @@ func TestTestEvidenceGuard(t *testing.T) {
 			deny:    true,
 		},
 		{
-			name:    "quality scanner may read evidence contract",
+			name:    "removed evidence contract is not allowlisted",
 			agent:   "quality-scanner",
 			command: "sdd graph evidence-contract --json",
+			deny:    true,
+		},
+		{
+			name:    "quality scanner may read graph status",
+			agent:   "quality-scanner",
+			command: "sdd graph status --plan Sample --json",
 		},
 		{
 			name:    "unrestricted agent remains unaffected",

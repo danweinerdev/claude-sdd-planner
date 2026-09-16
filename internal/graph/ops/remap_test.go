@@ -72,7 +72,7 @@ func newRemapFixture(t *testing.T) remapFixture {
 	write("Plans/Demo/README.md", "---\ntitle: Demo\ntype: plan\nstatus: active\ncreated: 2026-09-12\nupdated: 2026-09-12\ntags: []\nrelated: []\nphases: []\n---\n\n# Demo\n")
 	n := model.Node{ID: "work", Contract: "works", Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{}, Estimate: 1,
 		Claim:        &model.Claim{By: "worker", LeaseExpires: "2099-01-01T00:00:00Z", Workspace: "ws"},
-		Verification: &model.Verification{Result: model.ResultPass, Seq: 7, ContractRev: 2, ArtifactDigests: map[string]string{"topic.txt": "sha256:proof"}, ReportDigest: "sha256:report", Isolation: model.IsolationClean, Provenance: &model.Provenance{Kind: "git", Revision: old, Worktree: "ws"}},
+		Verification: &model.Verification{Result: model.ResultPass, Seq: 7, ContractRev: 2, ReportDigest: "sha256:report", Isolation: model.IsolationClean, Provenance: &model.Provenance{Kind: "git", Revision: old, Worktree: "ws"}},
 		RedSeqs:      map[string]int{"test_work": 4}, ContractRev: 2}
 	g := &model.Graph{Version: model.SchemaVersion, SeqCounter: 9, Nodes: []model.Node{n}, Retired: []string{"retired"}, RetirementSources: map[string]model.RetirementRecord{"retired": {Source: model.RetirementSource{VCS: "git", Revision: base, Path: "old.md", SourceID: "1.1"}}}, Amendments: []model.AmendmentRecord{{Seq: 8, Review: "review", Artifact: "reviews/frozen.md", ReportDigest: "sha256:frozen"}}}
 	graphPath := gstore.PathFor(filepath.Join(root, "Plans", "Demo"))

@@ -239,11 +239,8 @@ func TestReverifySingleSelfLoopRefuses(t *testing.T) {
 	}
 }
 
-// TestReverifyFreshGreenNodesAreSkippedByDefault: a node whose current
-// observation is already a fresh pass (GREEN — not STALE, not RED) must not
-// have a redundant pass observation appended by an ordinary reverify; it is
-// reported as skipped instead. --all overrides the skip.
-func TestReverifyFreshGreenNodesAreSkippedByDefault(t *testing.T) {
+// Reverify deliberately re-observes every foldable node.
+func TestReverifyFreshGreenNodesAreReobserved(t *testing.T) {
 	fresh := testsNode("fresh", "test_fresh")
 	stale := testsNode("stale", "test_stale")
 	planDir, repoRoot := fixture(t, fresh, stale)
@@ -272,36 +269,53 @@ func TestReverifyFreshGreenNodesAreSkippedByDefault(t *testing.T) {
 	for _, o := range res.Outcomes {
 		byNode[o.Node] = o
 	}
-	if !strings.Contains(byNode["fresh"].Skipped, "fresh, skipped") {
-		t.Fatalf("a fresh GREEN node must be skipped by default: %+v", byNode["fresh"])
+	if byNode["fresh"].Result != model.ResultPass {
+		t.Fatalf("a fresh GREEN node must be deliberately re-observed: %+v", byNode["fresh"])
 	}
 	if byNode["stale"].Result != model.ResultPass {
 		t.Fatalf("an unobserved node must still record: %+v", byNode["stale"])
 	}
 	g, _ := gstore.Load(gstore.PathFor(planDir))
-	if g.NodeByID("fresh").Verification.Seq != 1 {
-		t.Fatalf("a skipped fresh node must not gain a new observation: seq=%d", g.NodeByID("fresh").Verification.Seq)
+	if g.NodeByID("fresh").Verification.Seq <= 1 {
+		t.Fatalf("a re-observed fresh node must gain a new observation: seq=%d", g.NodeByID("fresh").Verification.Seq)
 	}
 
-	// --all re-attempts the fresh node too.
-	res, err = Reverify(ReverifyOptions{
-		PlanDir: planDir, RepoRoot: repoRoot,
-		ReportName: "r.xml", ReportBytes: []byte(report),
-		All: true,
-	})
+}
+
+func TestReverifyPartialReportLeavesUncoveredNodeUnchanged(t *testing.T) {
+	covered := testsNode("covered", "test_covered")
+	uncovered := testsNode("uncovered", "test_one")
+	uncovered.Gate.Tests = append(uncovered.Gate.Tests, model.Test{ID: "test_two", File: "t.ext"})
+	planDir, repoRoot := fixture(t, covered, uncovered)
+	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
+		g.SeqCounter = 2
+		g.NodeByID("covered").Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean, ReportDigest: "old-covered"}
+		g.NodeByID("uncovered").Verification = &model.Verification{Result: model.ResultPass, Seq: 2, Isolation: model.IsolationClean, ReportDigest: "old-uncovered"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	report := []byte(`<testsuite><testcase name="test_covered"/><testcase name="test_one"/></testsuite>`)
+	res, err := Reverify(ReverifyOptions{PlanDir: planDir, RepoRoot: repoRoot, ReportName: "partial.xml", ReportBytes: report})
 	if err != nil {
-		t.Fatalf("reverify --all: %v", err)
+		t.Fatal(err)
 	}
-	byNode = map[string]ReverifyOutcome{}
-	for _, o := range res.Outcomes {
-		byNode[o.Node] = o
+	byNode := map[string]ReverifyOutcome{}
+	for _, outcome := range res.Outcomes {
+		byNode[outcome.Node] = outcome
 	}
-	if byNode["fresh"].Result != model.ResultPass {
-		t.Fatalf("--all must re-attempt an already-fresh node: %+v", byNode["fresh"])
+	if byNode["covered"].Result != model.ResultPass || byNode["covered"].Seq <= 2 {
+		t.Fatalf("fully covered node was not deliberately re-observed: %+v", byNode["covered"])
 	}
-	g, _ = gstore.Load(gstore.PathFor(planDir))
-	if g.NodeByID("fresh").Verification.Seq == 1 {
-		t.Fatal("--all must append a new observation to the previously-fresh node")
+	if byNode["uncovered"].Refused == "" || byNode["uncovered"].Result != "" {
+		t.Fatalf("partially covered node did not stay unresolved: %+v", byNode["uncovered"])
+	}
+	g, loadErr := gstore.Load(gstore.PathFor(planDir))
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if g.NodeByID("uncovered").Verification.Seq != 2 || g.NodeByID("uncovered").Verification.ReportDigest != "old-uncovered" {
+		t.Fatalf("partial report changed uncovered node: %+v", g.NodeByID("uncovered").Verification)
 	}
 }
 

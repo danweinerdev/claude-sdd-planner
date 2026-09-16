@@ -9,14 +9,6 @@
       ],
       "gate": {
         "type": "tests",
-        "evidence": "reported-v1",
-        "report": {
-          "format": "go-test-json-v1",
-          "runner": "repository-unit-tests",
-          "environment_keys": [],
-          "test_support_inputs": [],
-          "test_support_artifacts": []
-        },
         "tests": [
           {
             "package": "example.test/project/tests",

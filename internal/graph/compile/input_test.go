@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
@@ -72,9 +71,7 @@ func stagedInputProposal() string {
 	return strings.Replace(inputProposal, "{{PD}}", fixtureDecisionID(), 1)
 }
 
-// TestCompileAnchorsInputs: compile embeds a digest per declared input — a
-// whole-file input and a section input key distinctly, both sha256-prefixed.
-func TestCompileAnchorsInputs(t *testing.T) {
+func TestCompileKeepsInputsAsDeclarations(t *testing.T) {
 	root := fixtureRoot(t, specOneAC())
 	recordFixtureDecision(t, root)
 	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n")
@@ -89,16 +86,12 @@ func TestCompileAnchorsInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := g.NodeByID("impl-input")
-	wholeKey := `{"root":"repository","path":"docs/context.md"}`
-	sectionKey := `{"root":"repository","path":"docs/context.md","section":{"heading_path":["Alpha"]}}`
-	if !strings.HasPrefix(n.InputHashes[wholeKey], "sha256:") {
-		t.Fatalf("whole-file input hash not embedded: %+v", n.InputHashes)
+	if len(n.Inputs) != 2 {
+		t.Fatalf("inputs=%+v", n.Inputs)
 	}
-	if !strings.HasPrefix(n.InputHashes[sectionKey], "sha256:") {
-		t.Fatalf("section input hash not embedded: %+v", n.InputHashes)
-	}
-	if n.InputHashes[wholeKey] == n.InputHashes[sectionKey] {
-		t.Fatalf("whole-file and section fingerprints must differ")
+	raw, _ := g.Encode()
+	if strings.Contains(string(raw), "input_hashes") {
+		t.Fatalf("compile emitted removed hashes: %s", raw)
 	}
 }
 
@@ -159,42 +152,6 @@ func TestInputSectionEditsVsUnrelatedEdits(t *testing.T) {
 	}
 	if afterSection.Digest != afterUnrelated.Digest {
 		t.Fatalf("an edit to an unrelated section must not change the selected section's fingerprint")
-	}
-}
-
-// TestInputStaleDeriveWiring: a recorded-pass node whose declared input no
-// longer matches its embedded fingerprint derives STALE with the input key
-// named in InputStale.
-func TestInputStaleDeriveWiring(t *testing.T) {
-	root := fixtureRoot(t, specOneAC())
-	recordFixtureDecision(t, root)
-	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nalpha body\n")
-	stage(t, root, stagedInputProposal())
-	res, findings, err := Run(root, root, "SamplePlan")
-	if err != nil || len(findings) != 0 {
-		t.Fatalf("compile: %v %v", err, findings)
-	}
-	g, err := gstore.Load(res.GraphPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	n := g.NodeByID("impl-input")
-	n.Verification = &model.Verification{Result: model.ResultPass, Seq: 1, Isolation: model.IsolationClean}
-
-	// Matching content: GREEN.
-	derive := func() states.NodeState {
-		return states.Derive(states.Inputs{Graph: g, CurrentInputHashes: NewInputResolver(root, root).GraphHashes(g)})[n.ID]
-	}
-	if s := derive(); s.State != states.Green {
-		t.Fatalf("matching input must derive GREEN: %+v", s)
-	}
-
-	// Edit the whole file: both declared inputs drift, and the node is stale.
-	// A fresh resolver each derive models a fresh command (the resolver
-	// memoizes within one invocation, never across one).
-	writeInputFile(t, root, "docs/context.md", "# Context\n\n## Alpha\n\nALPHA CHANGED\n")
-	if s := derive(); s.State != states.Stale || len(s.InputStale) == 0 {
-		t.Fatalf("edited input must derive STALE: %+v", s)
 	}
 }
 

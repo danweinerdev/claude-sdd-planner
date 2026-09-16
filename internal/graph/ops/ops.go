@@ -17,7 +17,6 @@ import (
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/claims"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/hazards"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
@@ -64,26 +63,10 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 		return nil, fmt.Errorf("graph split: a split produces at least two children; %d supplied", len(p.Nodes))
 	}
 
-	// One citation-resolution snapshot for the whole split. The children are
-	// anchored against it AND the before/after validations re-derive from it,
-	// so a spec edit landing mid-split cannot re-anchor children against text
-	// the gate did not validate.
 	sources, err := gcompile.NewSources(root, repoRoot, plan)
 	if err != nil {
 		return nil, err
 	}
-	// Anchor each child's OWN justifications — never the original's map. A
-	// child cites a subset of the original's requirements, and copying the
-	// original's hashes would bless citations the child no longer carries.
-	// This runs BEFORE semantic validation so the missing-fingerprint guard
-	// sees anchored children, not unfingerprinted construction input.
-	for i := range p.Nodes {
-		sources.Anchor(&p.Nodes[i])
-		if err := sources.AnchorInputs(&p.Nodes[i]); err != nil {
-			return nil, fmt.Errorf("graph split: child %q: %w", p.Nodes[i].ID, err)
-		}
-	}
-
 	// The whole gate moves inside the store's compare-and-swap: the candidate
 	// is re-derived from the FRESH graph, and before/after are both computed
 	// here — against the same snapshot — rather than against a stale outer
@@ -94,7 +77,7 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 		if err != nil {
 			return err
 		}
-		rebuilt, splitRes, err := applySplit(fresh, nodeID, p, digest.New(repoRoot).Artifact)
+		rebuilt, splitRes, err := applySplit(fresh, nodeID, p)
 		if err != nil {
 			return err
 		}
@@ -121,7 +104,7 @@ func splitWith(root, repoRoot, plan, nodeID string, childrenPayload []byte, upda
 
 // applySplit computes the post-split graph without touching disk. Pure so
 // the gate can inspect the candidate and the CAS cycle can re-derive it.
-func applySplit(g *model.Graph, nodeID string, p *model.Proposal, artifactDigest func(string) string) (*model.Graph, *SplitResult, error) {
+func applySplit(g *model.Graph, nodeID string, p *model.Proposal) (*model.Graph, *SplitResult, error) {
 	original := g.NodeByID(nodeID)
 	if original == nil {
 		return nil, nil, fmt.Errorf("graph split: node %q does not exist", nodeID)
@@ -173,7 +156,6 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal, artifactDigest
 	out.Nodes = nil
 	out.Amendments = append([]model.AmendmentRecord(nil), g.Amendments...)
 	out.RevisionLineage = cloneRevisionLineage(g.RevisionLineage)
-	out.Acknowledgements = append([]model.AcknowledgementRecord(nil), g.Acknowledgements...)
 	out.Retired = append(append([]string(nil), g.Retired...), nodeID)
 	sort.Strings(out.Retired)
 
@@ -202,7 +184,7 @@ func applySplit(g *model.Graph, nodeID string, p *model.Proposal, artifactDigest
 				return nil, nil, err
 			}
 			v := *n.Verification
-			v.Reviewed = states.LegacyReviewedSet(g, n.ID, priorScope, artifactDigest)
+			v.Reviewed = states.LegacyReviewedSet(g, n.ID, priorScope)
 			n.Verification = &v
 		}
 		var deps []string
@@ -339,9 +321,6 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 		if n.Gate.Type != model.GateTests {
 			return fmt.Errorf("graph set-tests: %q has gate type %q; set-tests applies to tests gates", nodeID, n.Gate.Type)
 		}
-		if n.Gate.Evidence == model.EvidenceObservedV1 {
-			return fmt.Errorf("graph set-tests: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing tests", nodeID)
-		}
 		declared := map[string]bool{}
 		for _, h := range n.Hazards {
 			declared[h] = true
@@ -360,7 +339,6 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 			return nil
 		}
 		oldTests := n.Gate.Tests
-		oldGate := n.Gate
 		candidate := *n
 		candidate.Gate = n.Gate
 		candidate.Gate.Tests = tests
@@ -377,10 +355,8 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 			// or new test owes a fresh red at the new revision.
 			n.ContractRev = n.EffectiveContractRev() + 1
 			n.RedSeqs = carryOverRedSeqs(oldTests, tests, n.RedSeqs)
-			n.RedEvidence = carryOverRedEvidence(oldGate, candidate.Gate, n.RedEvidence)
 			return nil
 		}
-		n.RedEvidence = carryOverRedEvidence(oldGate, candidate.Gate, n.RedEvidence)
 		for id := range n.RedSeqs {
 			if !seen[id] {
 				delete(n.RedSeqs, id)
@@ -394,12 +370,9 @@ func SetTests(planDir, nodeID, by string, tests []model.Test) error {
 // SetArtifacts replaces a node's declared artifact write-set under the lock.
 // Holder-only when the node is claimed. The verb exists for the same reason
 // set-tests does: a declaration can be wrong — most often an over-broad
-// directory write-set that overlaps descendants' files, which re-stales the
-// node on every one of their verified merges (digest staleness exists to
-// catch silent edits, not verified downstream work). The recorded
-// observation is untouched history: a newly declared path with no recorded
-// digest derives STALE until the node's next real sync — a redeclared
-// write-set owes a fresh observation.
+// directory write-set that overlaps descendants' files. Changing the set on
+// a verified node advances its contract revision, making the prior
+// observation historical until the next real sync.
 func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 	if len(artifacts) == 0 {
 		return fmt.Errorf("graph set-artifacts: at least one artifact is required (a node with no write-set anchors nothing)")
@@ -412,19 +385,16 @@ func SetArtifacts(planDir, nodeID, by string, artifacts []string) error {
 		if err != nil {
 			return err
 		}
-		if n.Gate.Evidence == model.EvidenceObservedV1 {
-			return fmt.Errorf("graph set-artifacts: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing artifacts", nodeID)
-		}
 		candidate := *n
 		candidate.Artifacts = artifacts
 		if problems := model.ValidateEvidenceGate(&candidate); len(problems) > 0 {
 			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
 		}
 		changed := !sameArtifactSet(n.Artifacts, artifacts)
-		if !changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
+		if !changed && n.Verification != nil {
 			return nil
 		}
-		if changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
+		if changed && n.Verification != nil {
 			n.ContractRev = n.EffectiveContractRev() + 1
 		}
 		n.Artifacts = artifacts
@@ -445,9 +415,6 @@ func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
 		n, err := artifactsNode(g, nodeID, by)
 		if err != nil {
 			return err
-		}
-		if n.Gate.Evidence == model.EvidenceObservedV1 {
-			return fmt.Errorf("graph set-artifacts: %q uses historical observed-v1; explicitly amend it to reported-v1 with a report profile before editing artifacts", nodeID)
 		}
 		current := append([]string(nil), n.Artifacts...)
 		removeSet := map[string]bool{}
@@ -482,10 +449,10 @@ func EditArtifacts(planDir, nodeID, by string, add, remove []string) error {
 			return fmt.Errorf("graph set-artifacts: %s", strings.Join(problems, "; "))
 		}
 		changed := !sameArtifactSet(n.Artifacts, next)
-		if !changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
+		if !changed && n.Verification != nil {
 			return nil
 		}
-		if changed && n.Gate.Evidence == model.EvidenceReportedV1 && n.Verification != nil {
+		if changed && n.Verification != nil {
 			n.ContractRev = n.EffectiveContractRev() + 1
 		}
 		n.Artifacts = next
@@ -540,65 +507,9 @@ func artifactsNode(g *model.Graph, nodeID, by string) (*model.Node, error) {
 		return nil, fmt.Errorf("graph set-artifacts: %q is claimed by %q; only the holder edits its artifacts", nodeID, n.Claim.By)
 	}
 	if n.Gate.Type == model.GateReview {
-		return nil, fmt.Errorf("graph set-artifacts: %q is a review gate; its recorded digests are the reviewed diff, not a declared write-set", nodeID)
+		return nil, fmt.Errorf("graph set-artifacts: %q is a review gate; review gates do not own a declared write-set", nodeID)
 	}
 	return n, nil
-}
-
-// Rehash re-embeds a node's cited intent fingerprints from the current
-// sources — the acknowledgment that ends an INTENT-STALE episode after the
-// walker re-read the cited requirement's diff and judged the change
-// **cosmetic**. Deliberately explicit and scoped: one node, optionally a
-// subset of its citations; a behavioral change is rework, never a rehash.
-// Holder-only while claimed. A citation that no longer resolves refuses —
-// that is a replan signal, not drift to paper over.
-func Rehash(root, repoRoot, plan, nodeID, by string, cited []string) ([]string, error) {
-	snap, err := gcompile.LoadIntentSnapshot(root, repoRoot, plan)
-	if err != nil {
-		return nil, fmt.Errorf("graph rehash: %w", err)
-	}
-	items := snap.Items
-	planDir := filepath.Join(root, "Plans", plan)
-	var updated []string
-	_, err = gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		updated = updated[:0]
-		n := g.NodeByID(nodeID)
-		if n == nil {
-			return fmt.Errorf("graph rehash: node %q does not exist", nodeID)
-		}
-		if n.Claim != nil && n.Claim.By != by {
-			return fmt.Errorf("graph rehash: %q is claimed by %q; only the holder acknowledges its intent drift", nodeID, n.Claim.By)
-		}
-		if len(n.IntentHashes) == 0 {
-			return fmt.Errorf("graph rehash: %q embeds no intent fingerprints", nodeID)
-		}
-		targets := cited
-		if len(targets) == 0 {
-			for key := range n.IntentHashes {
-				targets = append(targets, key)
-			}
-			sort.Strings(targets)
-		}
-		for _, key := range targets {
-			recorded, tracked := n.IntentHashes[key]
-			if !tracked {
-				return fmt.Errorf("graph rehash: %q does not fingerprint %q; rehash covers embedded citations only", nodeID, key)
-			}
-			current, ok := items[key]
-			if !ok {
-				return fmt.Errorf("graph rehash: citation %q no longer resolves in the current sources — that is not cosmetic drift; rework or replan the node", key)
-			}
-			if current.Hash != recorded {
-				updated = append(updated, key)
-			}
-			n.IntentHashes[key] = current.Hash
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return updated, nil
 }
 
 // Retire appends an id to the graph's append-only retired register without

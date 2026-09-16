@@ -22,7 +22,6 @@ import (
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
 	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -76,23 +75,11 @@ func graphPlanDir(path string) (planDir, plan string, ok bool, err error) {
 // graphDerive loads the graph and derives its three-axis state plus
 // closure, exactly as `sdd graph status` does.
 func graphDerive(planDir, plan string) (*model.Graph, map[string]states.NodeState, map[string]bool, error) {
-	root, repoRoot, err := resolveRoots(".", "")
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	g, err := gstore.Load(gstore.PathFor(planDir))
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	sources, err := gcompile.NewSources(root, repoRoot, plan)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	snap := sources.IntentSnapshot()
-	digester := digest.New(repoRoot)
-	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(),
-		CurrentInputHashes:  sources.InputResolver().GraphHashes(g)})
+	st := states.Derive(states.Inputs{Graph: g})
 	closed := greview.Closed(g, st)
 	return g, st, closed, nil
 }

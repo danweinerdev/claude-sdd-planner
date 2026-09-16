@@ -1,9 +1,10 @@
 ---
 title: "VerificationFreshness — Staleness Keyed on What a Proof Consumed"
 type: design
-status: approved
+status: superseded
+superseded_by: "Designs/SequenceFreshness/README.md"
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-16
 tags: [architecture, execution, graph, staleness, evidence, sdd-cli]
 related: [Designs/SddGraph, Designs/ReviewDrivenAmendment, Designs/GitRevisionLineage]
 ---

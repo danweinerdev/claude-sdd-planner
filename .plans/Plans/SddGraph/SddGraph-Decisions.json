@@ -126,5 +126,11 @@
     "id": "pd-769e9114",
     "date": "2026-09-15",
     "statement": "SDD owns graph requirements and evidence validation, not test execution. The graph-walking agent invokes repository-owned test tooling and supplies reports to sdd, which validates that the required tests were present, executed, and satisfied the gate before recording an observation."
+  },
+  {
+    "id": "pd-d72f3bca",
+    "date": "2026-09-16",
+    "statement": "Node state derives from structure, observation sequence, contract revision, isolation, and red-before-green — never from content digests. A GREEN node stays GREEN until a dependency is deliberately re-verified with a higher sequence or its own contract revision advances; file, dependency, input, and intent hashes do not drive staleness and are removed from state derivation and observations rather than kept unused. Review nodes bind to reviewed contract revisions and sequence, not artifact bytes. Declared artifacts and inputs remain review-visible declarations only. Evidence remains a parsed mechanical report recorded through the binary; re-verification is a deliberate act of the walker or reviewer, not a consequence of a hash changing.",
+    "supersedes": "pd-e3d07dab, SddReframing:pd-bc49f26c, SddReframing:pd-79b23f23, SddReframing:pd-63211691, SddReframing:pd-71f9a0e0, SddReframing:pd-4e463be3, SddReframing:pd-c096f644"
   }
 ]

@@ -14,7 +14,7 @@ Read the complete design card, cited intent, and current source/tests. Confirm e
 
 Author the smallest focused tests and necessary test-only scaffolding described by the card. If the approved card requires a new interface so the tests compile, a minimal interface-only stub may be added in the real source; it must contain no production behavior or validation, must not make the intended RED disappear, and must never overwrite existing working code. Preserve exact declared runner-visible identities. Exercise the real subject, keep the oracle independent of unfinished implementation logic, and verify fault injection reaches the intended boundary. Do not implement production behavior, add unrelated implementation, hardcode a pseudo-outcome, weaken an assertion to make it pass, or substitute a renamed test silently.
 
-Do not claim RED, GREEN, discovery, or admissible evidence from generated text. Execution and metadata production happen through repository-owned tooling after generation; `sdd` validates the supplied evidence and never supplies the missing execution facts.
+Do not claim RED, GREEN, discovery, or admissible evidence from generated text. Execution and native report production happen through repository-owned tooling after generation; `sdd` validates the supplied report and never supplies missing execution facts.
 
 Return exactly these headings:
 

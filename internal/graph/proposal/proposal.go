@@ -46,15 +46,7 @@ func Exemplar() *model.Proposal {
 				Contract:  "the schema describes every supported key and rejects an unknown one",
 				Justifies: []string{"FR-NN"},
 				Gate: model.Gate{
-					Type:     model.GateTests,
-					Evidence: model.EvidenceReportedV1,
-					Report: &model.ReportProfile{
-						Format:               "go-test-json-v1",
-						Runner:               "repository-unit-tests",
-						EnvironmentKeys:      []string{},
-						TestSupportInputs:    []string{},
-						TestSupportArtifacts: []string{},
-					},
+					Type: model.GateTests,
 					Tests: []model.Test{
 						{Package: "example.test/project/tests", ID: "test_schema_covers_every_key", File: "tests/test_schema.ext"},
 					},

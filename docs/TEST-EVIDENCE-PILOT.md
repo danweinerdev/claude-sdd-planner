@@ -11,39 +11,9 @@ The 2026-09-14 pilot evaluated an experimental, binary-owned `observed-v1` execu
 3. `sdd graph sync --attempt` admits compatible evidence; the graph still owns observations, red history, and closure.
 4. `sdd test cleanup` explicitly removes eligible inactive attempt storage without deleting admitted history.
 
-These commands and attempt bundles describe the former experiment, not the production interface. Production SDD owns graph requirements and evidence validation, not test execution: repository tooling now produces native output plus strict metadata for `reported-v1`, and `sdd graph sync --report ... --metadata ...` validates it. There is no production `sdd test`, hidden execution flag, or new attempt admission. Existing `observed-v1` history remains readable; active gates require explicit amendment and fresh evidence. Existing legacy imports retain their actual semantics and do not acquire stronger provenance by being renamed.
+Decision `SddGraph:pd-d72f3bca` retired both this pilot path and its successor `reported-v1`. These commands, protocols, attempt bundles, context exports, and metadata are historical only and no longer exist in the production interface. Production SDD owns graph requirements and evidence validation, not test execution: repository tooling supplies untouched native reports to `sdd graph sync --report`, with optional `--report-exit`. There is no production `sdd test`.
 
-## Exercise the corrected ownership flow
-
-Run from the repository root:
-
-```bash
-go test -count=1 ./cmd/sdd -run '^TestReportedEvidencePilot$' -v
-```
-
-This current test uses a temporary Git repository and a repository-owned
-producer that runs real Go tests. It captures before/after context, supplies
-native output and metadata to SDD, verifies behavioral RED then GREEN,
-fast-forwards the tested implementation, and checks historical replay does
-not mutate the graph. It also refuses a real build failure without arming
-RED and poisons the Go executable on the SDD context/admission path to catch
-unintended execution or toolchain probes. This is an ownership/validation
-exercise, not a new generated-test quality comparison or performance study.
-
-The former `TestEvidencePilot` sources are archived under
-`tools/experimental/owned-evidence/historical/`; they are not registered in
-the current CLI suite. Reproducing that older controlled comparison needs
-its historical source/binary contract, not the removed production commands.
-The independently generated settings fixtures remain under
-`internal/testevidence/testdata/settings-pilot/`. No test calls a remote model.
-
-For the full repository gate on Windows, put the installed MinGW-w64 compiler on PATH and run:
-
-```bash
-CGO_ENABLED=1 CC=gcc CXX=g++ make test
-```
-
-No global environment configuration is required or changed. At the time of measurement, the pilot was a regular test rather than an opt-in skip. That records how the experiment was gathered; it does not make its runner API a production path.
+The retired ownership exercise was named `TestReportedEvidencePilot`; consult Git history for its source and exact run contract. Its removal is intentional, so this document provides no runnable instructions for the retired interface. The independently generated settings fixtures remain under `internal/testevidence/testdata/settings-pilot/`. No test called a remote model.
 
 ## Workload and comparison
 
@@ -73,14 +43,14 @@ The standalone controlled run on 2026-09-14 produced:
 
 The preserved initial composed persistence fixture **missed** the loader holdout. The refined fixture detected it. This supports the need for assessment and a correction loop; it does not establish that a particular skill sequence always generates better tests.
 
-The experimental graph workflow also completed three RED/GREEN work nodes, using eight actual attempts and four red admissions (one additional red sequence exercised claim replacement). It verified seven distinct refusals under that former protocol: foreign-node evidence, changed candidate, changed intent, replaced claim instance, raw-report import into an observed gate, an empty tests gate, and a live-graph input. These are retained measurements, not claims that old reports satisfy `reported-v1`.
+The experimental graph workflow also completed three RED/GREEN work nodes, using eight actual attempts and four red admissions (one additional red sequence exercised claim replacement). It verified seven distinct refusals under that former protocol: foreign-node evidence, changed candidate, changed intent, replaced claim instance, raw-report import into an observed gate, an empty tests gate, and a live-graph input. These are retained measurements only; neither retired protocol is current evidence guidance.
 
 The run verified that:
 
 - Replaying admitted RED after GREEN changes no graph sequence, claim, or latest observation.
-- An unrelated observation and a byte-identical commit/rebase do not require another test execution for unchanged evidence.
-- Review and acceptance closure are derived before intentionally changing dependency bytes.
-- A subsequent dependency-content change makes the consumer stale.
+- Under that retired protocol, unrelated observations and byte-identical rewrites did not require another execution.
+- Review and acceptance closure were derived before intentionally changing dependency bytes.
+- Under that retired model, a subsequent dependency-content change made the consumer stale. Current state instead changes when a dependency is deliberately re-verified at a higher sequence or its `contract_rev` advances.
 
 The four-lane records in the automated fixture are explicitly **synthetic protocol records**, not independent model reviews. They test the existing review storage/admission path. Generated-test quality was assessed separately; fixture records alone make no claim about that quality.
 
@@ -95,6 +65,6 @@ This is one small controlled workload, not a randomized or statistical study. Fe
 ## Boundaries
 
 - The former observed adapter targeted ordinary packages in one Go module, with explicit supported flags and declared inputs; it remains experimental evidence-gathering history, not production execution guidance.
-- Evidence validity is content/profile/claim-bound, not a proof that the assertions are meaningful. Semantic assessment and existing review remain necessary.
-- Whole-file test/support identity is deliberately conservative; a changed test file can require replacement red evidence.
+- The retired evidence binding did not prove that assertions were meaningful. Semantic assessment and review remain necessary.
+- Whole-file test/support identity was a conservative property of the retired experiment, not current freshness guidance.
 - No branch-integration redesign, verification cache, general framework adapter, or release/version publication is part of this pilot.

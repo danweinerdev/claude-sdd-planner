@@ -84,6 +84,8 @@ findings:
 
 Findings with `status: fixed | deferred | rejected | answered` produce no amendment; `deferred` is recorded in the review node's `history`. `sdd graph review` with zero open findings records a pass; with any open finding it writes nothing and instead prints the amendment preview plus an `expect-digest` for the graph and an `expect-report-digest` for the reviewed artifact. Pass both to `sdd graph amend`; if either changes, re-preview rather than applying stale findings. See `skills/sdd-implement/SKILL.md` for the full claim → review → amend flow.
 
+A passing graph review observation binds the reviewed scope and each reviewed node's `contract_rev` and observation sequence. A scope change, reviewed revision advance, or newer reviewed observation makes that review node stale. Declared artifacts and inputs remain visible to reviewers but are not hashed into the binding. Re-verification is a deliberate new review, never an automatic consequence of file changes.
+
 Artifact `status`: `open` while the review is being written; `resolved` when the closing gate holds; `superseded` when a newer review of the same target replaces it (link both ways). Two verdicts resolve: **`Aligned`**, where every finding has a terminal disposition (`fixed`, `deferred`, `rejected`, `answered`) — the only verdict that completes a phase or greens a review node; and **`Amend`**, where every `open` finding carries an `action` (`revise` or `extend`) and at least one is open — the frozen findings report `sdd graph amend` consumes. An open finding without an action never resolves under either verdict, and a review whose findings would need both shapes is two reviews.
 
 ## Phase-completion review gate

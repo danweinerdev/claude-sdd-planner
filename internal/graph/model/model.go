@@ -10,17 +10,17 @@
 //     state or cache field to these structs is a design violation, not an
 //     optimization.
 //
-//   - Decoding is strict. Unknown keys are errors carrying a JSON path and
+//   - Authored payload decoding is strict. Unknown and removed keys are errors carrying a JSON path and
 //     a did-you-mean suggestion; malformed values are errors naming the
 //     valid forms; all decode errors are accumulated and reported together,
 //     never one at a time. A silently dropped payload key becomes a wrong
 //     graph that validates — the exact failure strict decoding exists to
 //     prevent.
 //
-// Proposal payloads are the same node shape minus the tool-owned fields
-// (`intent_hashes`, `claim`, `verification`, `red_seqs`): the tool computes
-// those, so a payload carrying one is refused rather than honored — the same
-// posture the artifact compiler takes for tool-owned frontmatter (FR-18).
+// Proposal payloads are the same node shape minus tool-owned fields (`claim`,
+// `verification`, `red_seqs`, `contract_rev`, and `origin`). Payloads carrying
+// tool-owned or removed evidence fields are refused. Committed graphs tolerate
+// removed evidence fields for backward-compatible reads and ignore them.
 package model
 
 import (
@@ -61,12 +61,6 @@ const (
 	GateCommand     = "command"
 	GateReview      = "review"
 	GateUnspecified = "unspecified"
-)
-
-const (
-	EvidenceObservedV1 = "observed-v1"
-	EvidenceReportedV1 = "reported-v1"
-	EvidenceLegacy     = "legacy"
 )
 
 // NeedsContractPrefix marks a converted node whose v1 task title could not
@@ -143,9 +137,6 @@ type Graph struct {
 	// frozen review artifact whose findings were applied, so the same
 	// artifact can never be applied twice.
 	Amendments []AmendmentRecord `json:"amendments,omitempty"`
-	// Acknowledgements is the append-only register of anchor rebinding
-	// judgments (VerificationFreshness DD-3).
-	Acknowledgements []AcknowledgementRecord `json:"acknowledgements,omitempty"`
 	// CompletedAt is tool-owned: the closing identity `sdd plan complete`
 	// recorded when the graph closed — the target repository's HEAD
 	// revision plus the graph's seq_counter at that moment. It exists so
@@ -211,13 +202,9 @@ type Node struct {
 	ContractRev int `json:"contract_rev,omitempty"`
 	// Origin is tool-owned provenance for a node created by an `extend`
 	// amendment: the frozen review artifact and finding that demanded it.
-	Origin *Origin `json:"origin,omitempty"`
-	// IntentHashes is tool-owned: SHA-256 over the normalized text of each
-	// cited requirement, embedded by compile and rechecked on read
-	// (INTENT-STALE, DD-4). Rejected in proposal payloads.
-	IntentHashes map[string]string `json:"intent_hashes,omitempty"`
-	Deps         []string          `json:"deps,omitempty"`
-	Gate         Gate              `json:"gate"`
+	Origin *Origin  `json:"origin,omitempty"`
+	Deps   []string `json:"deps,omitempty"`
+	Gate   Gate     `json:"gate"`
 	// Hazards is nil when untriaged (serialized as the string sentinel) and
 	// an empty non-nil slice when the payload explicitly claims "no failure
 	// classes". The two are different claims and never conflated.
@@ -235,13 +222,8 @@ type Node struct {
 	// history line grants no GREEN (DD-15: no retroactive observations).
 	History string `json:"history,omitempty"`
 	// Inputs is the node's declared read-only context: whole files, or
-	// sections of Markdown files, the work reads but never writes. Compile
-	// fingerprints each at embed time so a later edit to a declared input
-	// ripples INPUT-STALE, the same posture intent hashes give citations.
+	// sections of Markdown files, the work reads but never writes.
 	Inputs []Input `json:"inputs,omitempty"`
-	// InputHashes is tool-owned: the fingerprint of each declared input,
-	// keyed by InputKey. Rejected in proposal payloads.
-	InputHashes map[string]string `json:"input_hashes,omitempty"`
 	// Claim is tool-owned transient bookkeeping (DD-10): cleared on merge or
 	// lease expiry, the only mutable non-observation field.
 	Claim *Claim `json:"claim,omitempty"`
@@ -252,11 +234,7 @@ type Node struct {
 	// observed failure. The merge gate's red-before-green check reads it —
 	// a test never seen to fail proves nothing about the code that makes it
 	// pass (DD-5).
-	RedSeqs          map[string]int             `json:"red_seqs,omitempty"`
-	RedEvidence      map[string]RedEvidence     `json:"red_evidence,omitempty"`
-	ConsumedAttempts map[string]ConsumedAttempt `json:"consumed_attempts,omitempty"`
-	ReportEvidence   map[string]ReportEvidence  `json:"report_evidence,omitempty"`
-	ConsumedReports  map[string]ConsumedReport  `json:"consumed_reports,omitempty"`
+	RedSeqs map[string]int `json:"red_seqs,omitempty"`
 }
 
 // Origin records which review finding created an extend node.
@@ -301,10 +279,7 @@ func (h Hazards) MarshalJSON() ([]byte, error) {
 // Gate is how a node's contract is verified. Exactly one of the type-specific
 // fields is meaningful, keyed by Type (DD-9).
 type Gate struct {
-	Type      string            `json:"type"`
-	Evidence  string            `json:"evidence,omitempty"`
-	Execution *ExecutionProfile `json:"execution,omitempty"`
-	Report    *ReportProfile    `json:"report,omitempty"`
+	Type string `json:"type"`
 	// Tests names the runner-reported test ids a `tests` gate is satisfied
 	// by.
 	Tests []Test `json:"tests,omitempty"`
@@ -324,48 +299,13 @@ type Gate struct {
 func (g Gate) MarshalJSON() ([]byte, error) {
 	type wireTest = Test
 	out := struct {
-		Type      string            `json:"type"`
-		Evidence  string            `json:"evidence,omitempty"`
-		Execution *ExecutionProfile `json:"execution,omitempty"`
-		Report    *ReportProfile    `json:"report,omitempty"`
-		Tests     []wireTest        `json:"tests,omitempty"`
-		Command   string            `json:"command,omitempty"`
-		Lanes     *Lanes            `json:"lanes,omitempty"`
-	}{Type: g.Type, Evidence: g.Evidence, Execution: g.Execution, Report: g.Report, Tests: g.Tests, Command: g.Command}
+		Type    string     `json:"type"`
+		Tests   []wireTest `json:"tests,omitempty"`
+		Command string     `json:"command,omitempty"`
+		Lanes   *Lanes     `json:"lanes,omitempty"`
+	}{Type: g.Type, Tests: g.Tests, Command: g.Command}
 	if g.Type == GateReview || g.Lanes != nil {
 		out.Lanes = &g.Lanes
-	}
-	return json.Marshal(out)
-}
-
-type ExecutionProfile struct {
-	Adapter              string   `json:"adapter"`
-	Args                 []string `json:"args,omitempty"`
-	TimeoutSeconds       int      `json:"timeout_seconds"`
-	EnvironmentKeys      []string `json:"environment_keys,omitempty"`
-	TestSupportInputs    []string `json:"test_support_inputs,omitempty"`
-	TestSupportArtifacts []string `json:"test_support_artifacts,omitempty"`
-}
-
-type ReportProfile struct {
-	Format               string   `json:"format"`
-	Runner               string   `json:"runner"`
-	EnvironmentKeys      []string `json:"environment_keys"`
-	TestSupportInputs    []string `json:"test_support_inputs"`
-	TestSupportArtifacts []string `json:"test_support_artifacts"`
-}
-
-func (p ReportProfile) MarshalJSON() ([]byte, error) {
-	type wire ReportProfile
-	out := wire(p)
-	if out.EnvironmentKeys == nil {
-		out.EnvironmentKeys = []string{}
-	}
-	if out.TestSupportInputs == nil {
-		out.TestSupportInputs = []string{}
-	}
-	if out.TestSupportArtifacts == nil {
-		out.TestSupportArtifacts = []string{}
 	}
 	return json.Marshal(out)
 }
@@ -447,10 +387,8 @@ type RetirementRecord struct {
 	ReplacedBy []string         `json:"replaced_by,omitempty"`
 }
 
-// InputKey returns the stable map key a declared input is fingerprinted
-// under: the root selector, the path, and — when a section is selected — the
-// heading path. A structured encoding prevents literal slashes or '#' in a
-// path/title from aliasing another declaration and corrupting the resolver cache.
+// InputKey returns the stable identity of a declared input: the root selector,
+// path, and optional heading path. A structured encoding prevents aliases.
 func InputKey(in Input) string {
 	key, _ := json.Marshal(in) // This concrete string/slice struct cannot fail encoding.
 	return string(key)
@@ -465,131 +403,31 @@ type Claim struct {
 	Instance     string `json:"instance,omitempty"`
 }
 
-type RedEvidence struct {
-	AttemptID        string `json:"attempt_id"`
-	ReportID         string `json:"report_id,omitempty"`
-	Seq              int    `json:"seq"`
-	CompatibilityKey string `json:"compatibility_key"`
-	Kind             string `json:"kind"`
-	Fault            string `json:"fault,omitempty"`
-}
-
-type ReportEvidence struct {
-	Protocol          string `json:"protocol"`
-	ReportDigest      string `json:"report_digest"`
-	MetadataDigest    string `json:"metadata_digest"`
-	ClaimInstance     string `json:"claim_instance"`
-	By                string `json:"by"`
-	Phase             string `json:"phase"`
-	RedKind           string `json:"red_kind,omitempty"`
-	Fault             string `json:"fault,omitempty"`
-	CandidateDigest   string `json:"candidate_digest"`
-	CompatibilityHash string `json:"compatibility_hash"`
-}
-
-type ConsumedReport struct {
-	Protocol        string                 `json:"protocol"`
-	ReportDigest    string                 `json:"report_digest"`
-	MetadataDigest  string                 `json:"metadata_digest"`
-	ClaimInstance   string                 `json:"claim_instance"`
-	By              string                 `json:"by"`
-	Phase           string                 `json:"phase"`
-	CandidateDigest string                 `json:"candidate_digest"`
-	Seq             int                    `json:"seq"`
-	Result          string                 `json:"result"`
-	RedEvidence     map[string]RedEvidence `json:"red_evidence,omitempty"`
-}
-
-type ConsumedAttempt struct {
-	Digest      string                 `json:"digest"`
-	Seq         int                    `json:"seq"`
-	Result      string                 `json:"result"`
-	By          string                 `json:"by,omitempty"`
-	Phase       string                 `json:"phase,omitempty"`
-	RedKind     string                 `json:"red_kind,omitempty"`
-	Fault       string                 `json:"fault,omitempty"`
-	RedEvidence map[string]RedEvidence `json:"red_evidence,omitempty"`
-}
-
-// Verification is one recorded observation: what a parsed report said, with
-// enough provenance to detect drift. It is the only path to GREEN (DD-5) and
-// anchors to content digests plus seq, with VCS revisions as supplementary
-// provenance (DD-6).
+// Verification is one recorded observation: what a parsed report said at a
+// graph sequence and contract revision. It is the only path to GREEN (DD-5);
+// the report digest and VCS identity are provenance, not freshness state.
 type Verification struct {
 	Result string `json:"result"`
 	Seq    int    `json:"seq"`
 	// ContractRev is the node's contract revision this observation was
 	// recorded against; an observation from another revision is history,
 	// never current proof (ReviewDrivenAmendment DD-3). Absent means 1.
-	ContractRev     int               `json:"contract_rev,omitempty"`
-	ArtifactDigests map[string]string `json:"artifact_digests,omitempty"`
+	ContractRev int `json:"contract_rev,omitempty"`
 	// Reviewed is a review node's reviewed set: for every node in scope at
-	// recording time, its contract revision and artifact digests. The
-	// review is current proof only while every entry still matches
+	// recording time, its contract revision. The review is current proof only
+	// while every entry still matches
 	// (ReviewDrivenAmendment DD-9).
-	Reviewed map[string]ReviewedRef `json:"reviewed,omitempty"`
-	// DependencyDigests is the identity of what this run exercised below
-	// it: for each direct dependency, that node's artifact digests when the
-	// observation was recorded. Staleness compares bytes, never observation
-	// order (VerificationFreshness DD-1). Absent on observations recorded
-	// before this field existed; those keep sequence semantics.
-	DependencyDigests map[string]map[string]string `json:"dependency_digests,omitempty"`
-	// InputHashes / IntentHashes are the fingerprints the run saw for the
-	// node's declared inputs and citations, distinct from the node's
-	// compile-time anchors of the same names (VerificationFreshness DD-2).
-	InputHashes  map[string]string `json:"input_hashes,omitempty"`
-	IntentHashes map[string]string `json:"intent_hashes,omitempty"`
-	ReportDigest string            `json:"report_digest,omitempty"`
-	Isolation    string            `json:"isolation"`
+	Reviewed     map[string]ReviewedRef `json:"reviewed,omitempty"`
+	ReportDigest string                 `json:"report_digest,omitempty"`
+	RedKind      string                 `json:"red_kind,omitempty"`
+	Fault        string                 `json:"fault,omitempty"`
+	Isolation    string                 `json:"isolation"`
 	// IsolationDirtyPaths names the untracked or modified paths sync
 	// observed in the workspace when Isolation is shared-dirty — the cause
 	// behind a later `reasons.isolation`, best-effort (nil when the VCS
 	// could not be asked, e.g. p4/plain).
-	IsolationDirtyPaths []string               `json:"isolation_dirty_paths,omitempty"`
-	Provenance          *Provenance            `json:"provenance,omitempty"`
-	Attempt             *AttemptSummary        `json:"attempt,omitempty"`
-	Report              *ReportSummary         `json:"report,omitempty"`
-	RedEvidence         map[string]RedEvidence `json:"red_evidence,omitempty"`
-}
-
-type ReportSummary struct {
-	ID              string `json:"id"`
-	Protocol        string `json:"protocol"`
-	ReportDigest    string `json:"report_digest"`
-	MetadataDigest  string `json:"metadata_digest"`
-	ClaimInstance   string `json:"claim_instance"`
-	By              string `json:"by"`
-	Phase           string `json:"phase"`
-	CandidateDigest string `json:"candidate_digest"`
-}
-
-type AttemptSummary struct {
-	ID                string `json:"id"`
-	Digest            string `json:"digest"`
-	Protocol          string `json:"protocol"`
-	ClaimInstance     string `json:"claim_instance"`
-	By                string `json:"by"`
-	Phase             string `json:"phase"`
-	RedKind           string `json:"red_kind,omitempty"`
-	Fault             string `json:"fault,omitempty"`
-	Started           string `json:"started"`
-	Completed         string `json:"completed"`
-	CandidateDigest   string `json:"candidate_digest"`
-	ExecutionRevision string `json:"execution_revision,omitempty"`
-}
-
-// AcknowledgementRecord is one recorded judgment that a citation's or
-// input's text changed without changing the obligation: the node's compile
-// anchor was rebound from Old to New by By (VerificationFreshness DD-3).
-// It writes no observation and can green nothing.
-type AcknowledgementRecord struct {
-	Seq  int    `json:"seq"`
-	Node string `json:"node"`
-	Kind string `json:"kind"` // "citation" | "input"
-	Key  string `json:"key"`
-	Old  string `json:"old,omitempty"`
-	New  string `json:"new"`
-	By   string `json:"by,omitempty"`
+	IsolationDirtyPaths []string    `json:"isolation_dirty_paths,omitempty"`
+	Provenance          *Provenance `json:"provenance,omitempty"`
 }
 
 // ProofSnapshot fingerprints every graph-owned field that determines what
@@ -602,27 +440,24 @@ func (n *Node) ProofSnapshot() string {
 		return ""
 	}
 	raw, _ := json.Marshal(struct {
-		Role         string
-		Contract     string
-		ContractRev  int
-		Justifies    []string
-		Deps         []string
-		Gate         Gate
-		Hazards      Hazards
-		Artifacts    []string
-		Inputs       []Input
-		IntentHashes map[string]string
-		InputHashes  map[string]string
+		Role        string
+		Contract    string
+		ContractRev int
+		Justifies   []string
+		Deps        []string
+		Gate        Gate
+		Hazards     Hazards
+		Artifacts   []string
+		Inputs      []Input
 	}{n.EffectiveRole(), n.Contract, n.EffectiveContractRev(), n.Justifies, n.Deps, n.Gate,
-		n.Hazards, n.Artifacts, n.Inputs, n.IntentHashes, n.InputHashes})
+		n.Hazards, n.Artifacts, n.Inputs})
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // ReviewedRef is one node's identity as a review observed it.
 type ReviewedRef struct {
-	ContractRev     int               `json:"contract_rev"`
-	ArtifactDigests map[string]string `json:"artifact_digests,omitempty"`
+	ContractRev int `json:"contract_rev"`
 }
 
 // EffectiveContractRev returns the revision the observation was recorded
@@ -636,7 +471,7 @@ func (v *Verification) EffectiveContractRev() int {
 
 // Provenance is whatever the VCS natively produces: a git commit and
 // worktree, a p4 changelist and opened files, or nothing for plain trees.
-// Supplementary by design — the digest anchor is load-bearing (DD-6).
+// Supplementary by design; sequence and contract revision are load-bearing.
 type Provenance struct {
 	Kind        string   `json:"kind"`
 	Revision    string   `json:"revision,omitempty"`

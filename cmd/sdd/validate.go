@@ -17,8 +17,6 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/artifact"
-	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	greview "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/review"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -428,7 +426,6 @@ func graphCompleteButUnclosedDiagnostics(r *rules.Root, resolved, repoRoot strin
 			continue
 		}
 		planDir := filepath.Dir(a.AbsPath)
-		plan := filepath.Base(planDir)
 		graphPath := gstore.PathFor(planDir)
 		if _, statErr := os.Stat(graphPath); statErr != nil {
 			if os.IsNotExist(statErr) {
@@ -440,14 +437,6 @@ func graphCompleteButUnclosedDiagnostics(r *rules.Root, resolved, repoRoot strin
 		if err != nil {
 			continue // a malformed/unreadable graph is the graph subsystem's own refusal to report, not validate's.
 		}
-		sources, err := gcompile.NewSources(resolved, repoRoot, plan)
-		if err != nil {
-			return nil, err
-		}
-		snap := sources.IntentSnapshot()
-		digester := digest.New(repoRoot)
-		inputHashes := sources.InputResolver().GraphHashes(g)
-
 		// Observation-only: every current-vs-recorded comparison axis is
 		// disabled, so only the recorded observations themselves (pass/fail,
 		// review scope, seq ordering) can withhold closure.
@@ -469,32 +458,22 @@ func graphCompleteButUnclosedDiagnostics(r *rules.Root, resolved, repoRoot strin
 			continue
 		}
 
-		st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digester.Artifact,
-			CurrentIntentHashes: snap.Hashes(), CurrentInputHashes: inputHashes})
+		st := states.Derive(states.Inputs{Graph: g})
 		closed := greview.Closed(g, st)
 
-		drift := map[string][]string{"artifact": nil, "dependency": nil, "intent": nil, "input": nil}
+		drift := map[string][]string{"dependency": nil}
 		for _, n := range g.Nodes {
 			if closed[n.ID] {
 				continue
 			}
 			ns := st[n.ID]
-			if len(ns.DigestStale) > 0 {
-				drift["artifact"] = append(drift["artifact"], n.ID)
-			}
 			if len(ns.DependencyStale) > 0 {
 				drift["dependency"] = append(drift["dependency"], n.ID)
-			}
-			if len(ns.IntentStale) > 0 {
-				drift["intent"] = append(drift["intent"], n.ID)
-			}
-			if len(ns.InputStale) > 0 {
-				drift["input"] = append(drift["input"], n.ID)
 			}
 		}
 		total := 0
 		var parts []string
-		for _, kind := range []string{"artifact", "dependency", "intent", "input"} {
+		for _, kind := range []string{"dependency"} {
 			nodes := drift[kind]
 			if len(nodes) == 0 {
 				continue

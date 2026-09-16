@@ -149,9 +149,8 @@ Graph plans record their own closing identity: `sdd plan complete` writes
 `completed_at` (the target repository's HEAD revision and the graph's
 `seq_counter`) into the committed graph when it closes. `sdd validate`
 judges a `complete` graph plan's closure by its recorded observations, not
-the live tree, so later maintenance touching a closed node's artifact is
-reported as informational post-completion drift (`SDD200`), never as
-reopening the plan; only a graph that was never actually closed by its own
+later file-byte comparisons. Maintenance does not itself create observations
+or reopen the plan; only a graph that was never actually closed by its own
 observations is an error (`SDD199`).
 
 ## Legacy completed artifacts

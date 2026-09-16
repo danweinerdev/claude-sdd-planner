@@ -49,17 +49,21 @@ go install github.com/danweinerdev/claude-sdd-planner/v2/cmd/sdd@latest
 
 Go and network access are needed at install time only. Setup verifies the binary against the plugin's `minSddVersion` before touching anything and stops with the exact command if it's missing or too old.
 
-The graph family is `graph init|propose|assemble|convert|hazards|evidence-context|evidence-contract|sync|reverify|review|amend|acknowledge|remap-revisions|release|split|set-tests|set-inputs|set-artifacts|rehash|repair-intent|gc|retire|status|show|path|risk|shape|export|audit`.
+The graph family is `graph init|propose|assemble|convert|hazards|sync|reverify|review|amend|remap-revisions|release|split|set-tests|set-inputs|repair-red|set-artifacts|gc|retire|status|show|path|risk|shape|export|audit`.
 
-SDD owns graph requirements and evidence validation, not test execution. For
-`reported-v1` gates, the graph declares package-qualified tests and the report
-profile; repository-owned tooling captures context before/after its own run and
-produces native output plus strict metadata. Read-only `sdd graph
-evidence-context` exports the current binding, and `sdd graph sync --report
-... --metadata ...` validates and admits it. There is no production `sdd test`
-runner or new attempt-based admission. Historical `observed-v1` data remains
-readable, while active use requires explicit amendment and fresh evidence;
-legacy report imports retain their existing semantics.
+SDD owns graph requirements and evidence validation, not test execution.
+Repository-owned tooling runs the declared tests and supplies its untouched
+native report to `sdd graph sync --report` (with optional `--report-exit`). Tests
+that declare `package` use the strict package-qualified Go JSON parser. Failing
+observations use `--red-kind baseline|sensitivity`, with `--fault` for
+sensitivity runs. There is no production `sdd test` runner.
+
+Node state derives from graph structure, observation sequence, `contract_rev`,
+isolation, and red-before-green. A GREEN node remains GREEN until a direct
+dependency is deliberately re-verified at a higher sequence or its revision
+advances. Review observations bind reviewed revisions and sequences. Artifacts
+and inputs are review-visible declarations, never freshness hashes; rerunning a
+gate or review is always a deliberate act.
 
 ### 2. Load the plugin
 
@@ -101,13 +105,13 @@ a uniquely selected Markdown section, including PRDs outside the planning direct
 `repository` resolves against the plan's configured target repository; `planning` uses
 the planning root. Markdown inputs need no SDD frontmatter. A heading-path suffix must
 select exactly one section (including its nested subsections); missing or ambiguous
-matches refuse rather than falling back. Compile and split fingerprint the selected
-content, and edits outside that selection do not stale it. Missing inputs refuse claims.
+matches refuse rather than falling back. Inputs are declarations rather than
+freshness keys; file edits do not change node state. Missing inputs refuse claims.
 
 `sdd graph set-inputs --plan Feature --node storage --file inputs.json --dry-run`
 previews a JSON input array for an untouched node; remove `--dry-run` to apply.
 `sdd graph audit --plan Feature --json` reports source coverage, input resolution,
-source staleness, test identity sharing and structural findings using the compiler's
+test identity sharing, state counts, and structural findings using the compiler's
 own checks. FR/NFR/DD coverage is reported separately from mandatory AC coverage.
 
 Historical retirement is different: the old file can leave the worktree while an ID
@@ -138,8 +142,8 @@ with all runtimes, independently of Claude Code's plugin hooks.
 The hook prints a Git-private mapping file. For already-recorded commits, use
 `sdd graph remap-revisions --plan Feature --map <file> --dry-run`, then apply
 with the printed `--expect-digest`. This records old→new lineage without changing
-the revision that was actually tested. Proof is keyed on artifact digests, so a
-byte-identical rebase never re-verifies; only files changed by the rebase do.
+the revision that was actually tested. Rebase and fast-forward never change node
+state; any re-verification is a separate deliberate run and sync.
 See [the Git integration workflow](shared/vcs-detection.md) for restrictions,
 worktree lifetime, and the full command sequence.
 

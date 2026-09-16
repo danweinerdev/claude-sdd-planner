@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -39,13 +38,10 @@ func graphInputFindings(r *Root, emit func(Diagnostic)) {
 		resolver := inputs.NewResolver(inputs.Roots{Repository: r.RepoForArtifact(plan.Rel), Planning: r.Dir})
 		for _, n := range graph.Nodes {
 			for _, spec := range n.Inputs {
-				resolved, err := resolver.Resolve(spec)
+				_, err := resolver.Resolve(spec)
 				if err != nil {
 					finding(fmt.Sprintf("Node %q input %s: %v", n.ID, model.InputKey(spec), err))
 					continue
-				}
-				if n.InputHashes[resolved.Key] == "" {
-					finding(fmt.Sprintf("Node %q input %s has no embedded fingerprint.", n.ID, resolved.Key))
 				}
 			}
 		}
@@ -58,10 +54,9 @@ func inputRuleFixture(missing bool) map[string]string {
 	if missing {
 		decl.Section.HeadingPath = []string{"Missing"}
 	}
-	digest := sha256.Sum256([]byte("## Storage\nSelected behavior.\n"))
 	g := model.Graph{Version: 1, Nodes: []model.Node{{ID: "probe", Contract: "c", Justifies: []string{},
 		Gate: model.Gate{Type: model.GateCommand, Command: "true"}, Hazards: model.Hazards{},
-		Inputs: []model.Input{decl}, InputHashes: map[string]string{model.InputKey(decl): fmt.Sprintf("sha256:%x", digest)}, Estimate: 1}}}
+		Inputs: []model.Input{decl}, Estimate: 1}}}
 	encoded, _ := json.Marshal(g)
 	files := map[string]string{
 		"Plans/P/README.md":    validPlan(false),
@@ -74,7 +69,7 @@ func inputRuleFixture(missing bool) map[string]string {
 func init() {
 	Register(&Rule{
 		Code: "SDD180", Severity: Error, Native: true,
-		What:      "a declared graph input is unresolved or lacks its tool-owned fingerprint",
+		What:      "a declared graph input is unresolved",
 		CheckRoot: graphInputFindings,
 		Good:      []Example{{Name: "repository-prd-section", Files: inputRuleFixture(false)}},
 		Bad:       []Example{{Name: "missing-prd-section", Files: inputRuleFixture(true)}},

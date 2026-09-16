@@ -22,8 +22,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -41,40 +39,16 @@ func Scope(g *model.Graph, gateID string) ([]string, error) {
 	return states.ReviewScope(g, gateID)
 }
 
-// CurrentScope derives scope with every staleness axis wired against the
-// shared tree. This is the publication-grade scope used by review recording
-// and review-driven amendment; Scope remains the graph-only compatibility
-// surface for callers that have no roots.
-func CurrentScope(root, repoRoot, plan string, g *model.Graph, gateID string) ([]string, error) {
-	sources, err := gcompile.NewSources(root, repoRoot, plan)
-	if err != nil {
-		// Pre-fingerprint graphs may have no related source surface. Preserve
-		// that shape only when no node carries an intent/input promise that
-		// would otherwise be silently disabled.
-		for i := range g.Nodes {
-			n := &g.Nodes[i]
-			if len(n.IntentHashes) > 0 || len(n.InputHashes) > 0 || len(n.Inputs) > 0 {
-				return nil, fmt.Errorf("loading current proof inputs: %w", err)
-			}
-		}
-		sources = nil
-	}
-	in := states.Inputs{Graph: g, ArtifactDigest: digest.New(repoRoot).Artifact}
-	if sources != nil {
-		in.CurrentIntentHashes = sources.IntentSnapshot().Hashes()
-		in.CurrentInputHashes = sources.InputResolver().GraphHashes(g)
-	}
-	return states.ReviewScopeFromStates(g, gateID, states.Derive(in))
+// CurrentScope derives publication-grade scope from current graph state.
+func CurrentScope(g *model.Graph, gateID string) ([]string, error) {
+	return states.ReviewScopeFromStates(g, gateID, states.Derive(states.Inputs{Graph: g}))
 }
 
 // Closed derives the completion-grade predicate (D-0022): a node is closed
 // when its own state is GREEN AND it lies inside the scope of a full review
 // gate whose recorded observation is a pass and whose own derived state is
-// GREEN — gate GREEN is what "matching diff digest" means, because the
-// gate's observation records the aggregate scope-artifact digests and any
-// drift derives the gate STALE (ordinary digest staleness). GREEN without
-// such coverage is assumed-closed: sufficient to build on, never
-// completion-grade.
+// GREEN. GREEN without such coverage is sufficient to build on, never
+// completion-grade closure.
 func Closed(g *model.Graph, statesByID map[string]states.NodeState) map[string]bool {
 	return states.Closed(g, statesByID)
 }
@@ -307,7 +281,7 @@ func Check(o Options) (*CheckResult, error) {
 		return nil, fmt.Errorf("graph review: %w", err)
 	}
 
-	scope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
+	scope, err := CurrentScope(g, o.Node)
 	if err != nil {
 		return nil, fmt.Errorf("graph review: %w", err)
 	}
@@ -346,10 +320,8 @@ func splitAmendProblems(msg string) []string {
 // AND that carries no open findings. Open findings never demote anything:
 // they are amendments (revise / extend), previewed here and applied by
 // `sdd graph amend --from-review` under a digest fence
-// (ReviewDrivenAmendment DD-2, DD-7). A pass records the reviewed set —
-// every scope node's contract revision and artifact digests — so a later
-// contract-only change stales the review even when the bytes did not move
-// (DD-9).
+// (ReviewDrivenAmendment DD-2, DD-7). A pass records each scope node's
+// contract revision so a later contract change stales the review (DD-9).
 func Record(o Options) (*Result, error) {
 	if o.Now == nil {
 		o.Now = time.Now
@@ -399,11 +371,10 @@ func Record(o Options) (*Result, error) {
 	// Scope subtraction is based on fully current inner reviews. Graph-only
 	// GREEN is insufficient: artifact, requirement, or declared-input drift
 	// makes an inner gate stale and puts its region back into this increment.
-	scope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, g, o.Node)
+	scope, err := CurrentScope(g, o.Node)
 	if err != nil {
 		return nil, fmt.Errorf("graph review: %w", err)
 	}
-	digester := digest.New(o.RepoRoot)
 
 	// Open findings are amendments, not demotions. Plan them now so a
 	// malformed finding refuses here, then hand the preview back unwritten:
@@ -420,30 +391,12 @@ func Record(o Options) (*Result, error) {
 		return &Result{Node: o.Node, Artifact: o.Artifact, Scope: scope, Plan: plan,
 			ExpectDigest: expect, ExpectReportDigest: reportDigest}, nil
 	}
-	// The reviewed set (DD-9): every scope node's contract revision and
-	// artifact digests, digested from the shared tree (a review is of
-	// merged, committed state). The aggregate artifact digests are also
-	// recorded on the observation so drift in any of them derives the node
-	// STALE via ordinary digest staleness (DD-6).
-	agg := map[string]string{}
+	// The reviewed set binds each scope node's contract revision. Sequence
+	// binding is the review observation's own sequence.
 	reviewed := map[string]model.ReviewedRef{}
 	for _, id := range scope {
 		sn := g.NodeByID(id)
-		ref := model.ReviewedRef{ContractRev: sn.EffectiveContractRev()}
-		for _, a := range sn.Artifacts {
-			d := digester.Artifact(a)
-			if d == "" {
-				continue
-			}
-			if ref.ArtifactDigests == nil {
-				ref.ArtifactDigests = map[string]string{}
-			}
-			ref.ArtifactDigests[a] = d
-			if _, seen := agg[a]; !seen {
-				agg[a] = d
-			}
-		}
-		reviewed[id] = ref
+		reviewed[id] = model.ReviewedRef{ContractRev: sn.EffectiveContractRev()}
 	}
 	evaluatedGate := node.ProofSnapshot()
 	evaluatedScope := make(map[string]string, len(scope))
@@ -477,7 +430,7 @@ func Record(o Options) (*Result, error) {
 		if n.Claim != nil && n.Claim.By != o.By {
 			return fmt.Errorf("graph review: %q was claimed by %q while this record ran", o.Node, n.Claim.By)
 		}
-		currentScope, err := CurrentScope(o.Root, o.RepoRoot, o.Plan, fresh, o.Node)
+		currentScope, err := CurrentScope(fresh, o.Node)
 		if err != nil {
 			return err
 		}
@@ -507,14 +460,13 @@ func Record(o Options) (*Result, error) {
 		}
 		fresh.SeqCounter++
 		n.Verification = &model.Verification{
-			Result:          model.ResultPass,
-			Seq:             fresh.SeqCounter,
-			ContractRev:     node.EffectiveContractRev(),
-			ArtifactDigests: agg,
-			Reviewed:        reviewed,
-			ReportDigest:    reportDigest,
-			Isolation:       model.IsolationClean,
-			Provenance:      provenance,
+			Result:       model.ResultPass,
+			Seq:          fresh.SeqCounter,
+			ContractRev:  node.EffectiveContractRev(),
+			Reviewed:     reviewed,
+			ReportDigest: reportDigest,
+			Isolation:    model.IsolationClean,
+			Provenance:   provenance,
 		}
 		res.Observation = n.Verification
 		if n.Claim != nil && n.Claim.By == o.By {

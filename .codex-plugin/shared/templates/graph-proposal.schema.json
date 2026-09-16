@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal/schema.json",
   "title": "sdd graph proposal payload",
-  "description": "A batched node proposal for `sdd graph propose`. Observation, claim, red-evidence, consumed-attempt, hash, revision, and origin fields are tool-owned and refused in payloads.",
+  "description": "A batched node proposal for `sdd graph propose`. Observation, claim, revision, and origin fields are tool-owned and refused in payloads.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "nodes"],
@@ -54,7 +54,7 @@
         "artifacts": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
-          "description": "Repo-relative paths this node's implementation writes. Declared write-set: drives parallel-safety and digest anchoring."
+          "description": "Repo-relative paths this node's implementation writes. The declared write-set drives parallel-safety."
         },
         "estimate": {
           "type": "integer",
@@ -77,7 +77,7 @@
         "inputs": {
           "type": "array",
           "items": { "$ref": "#/definitions/input" },
-          "description": "Declared read-only context this node reads but never writes: whole files, or sections of Markdown files. Compile fingerprints each at embed time; an edit to a declared input later derives INPUT-STALE. Paths resolve against the declared root (repository or planning), never the working directory."
+          "description": "Declared read-only context this node reads but never writes: whole files, or sections of Markdown files. Paths resolve against the declared root (repository or planning), never the working directory."
         }
       }
     },
@@ -126,12 +126,6 @@
           "items": { "$ref": "#/definitions/test" },
           "description": "The runner-reported tests a `tests` gate is satisfied by."
         },
-        "evidence": {
-          "enum": ["legacy", "reported-v1"],
-          "description": "Tests evidence protocol. reported-v1 admits repository-produced native reports; observed-v1 is historical."
-        },
-        "execution": { "$ref": "#/definitions/execution" },
-        "report": { "$ref": "#/definitions/report" },
         "command": {
           "type": "string",
           "description": "The check command whose exit code is a `command` gate's observation."
@@ -155,54 +149,23 @@
         {
           "if": { "properties": { "type": { "const": "command" } }, "required": ["type"] },
           "then": {
-            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["report"] }, { "required": ["lanes"] }] }
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["lanes"] }] }
           }
         },
         {
           "if": { "properties": { "type": { "const": "review" } }, "required": ["type"] },
           "then": {
-            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["evidence"] }, { "required": ["execution"] }, { "required": ["report"] }, { "required": ["command"] }] }
+            "not": { "anyOf": [{ "required": ["tests"] }, { "required": ["command"] }] }
           }
-        },
-        { "not": { "required": ["execution"] } },
-        {
-          "if": { "properties": { "evidence": { "const": "reported-v1" } }, "required": ["evidence"] },
-          "then": { "required": ["report"] },
-          "else": { "not": { "required": ["report"] } }
         }
       ]
-    },
-    "report": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["format", "runner", "environment_keys", "test_support_inputs", "test_support_artifacts"],
-      "properties": {
-        "format": { "const": "go-test-json-v1" },
-        "runner": { "type": "string", "minLength": 1 },
-        "environment_keys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
-        "test_support_inputs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-        "test_support_artifacts": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
-      }
-    },
-    "execution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["adapter", "timeout_seconds"],
-      "properties": {
-        "adapter": { "const": "go-test-v1" },
-        "args": { "type": "array", "items": { "type": "string" } },
-        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 9223372031 },
-        "environment_keys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
-        "test_support_inputs": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-        "test_support_artifacts": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
-      }
     },
     "test": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "file"],
       "properties": {
-        "package": { "type": "string", "minLength": 1, "description": "Required package identity for reported-v1 gates." },
+        "package": { "type": "string", "minLength": 1, "description": "Optional package identity; when any test sets it, sync strictly parses a package-qualified Go JSON report." },
         "id": {
           "type": "string",
           "minLength": 1,

@@ -1,9 +1,10 @@
 ---
 title: Repository Test Evidence
 type: design
-status: draft
+status: superseded
+superseded_by: "Designs/SequenceFreshness/README.md"
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 tags: [testing, evidence, graph, ownership]
 related: [Designs/SddGraph/README.md, Designs/VerificationFreshness/README.md]
 supersedes: Designs/TestEvidencePipeline/README.md

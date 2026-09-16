@@ -6,24 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/inputs"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
-func TestStatusAndNextReceiveInputDrift(t *testing.T) {
+func TestStatusAndNextIgnoreInputContentEdits(t *testing.T) {
 	root := dispositionFixture(t)
 	writeArtifact(t, root, "docs/PRDs", "wire.md", "# Wire\n## Selected\nOriginal.\n## Other\nUnrelated.\n")
 	decl := model.Input{Root: model.InputRootRepository, Path: "docs/PRDs/wire.md", Section: &model.InputSection{HeadingPath: []string{"Selected"}}}
-	resolved, err := inputs.NewResolver(inputs.Roots{Repository: root, Planning: root}).Resolve(decl)
-	if err != nil {
-		t.Fatal(err)
-	}
 	graphPath := gstore.PathFor(filepath.Join(root, "Plans", "Demo"))
 	if _, err := gstore.Update(graphPath, func(g *model.Graph) error {
 		n := g.NodeByID("decision")
 		n.Inputs = []model.Input{decl}
-		n.InputHashes = map[string]string{model.InputKey(decl): resolved.Digest}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -38,19 +32,19 @@ func TestStatusAndNextReceiveInputDrift(t *testing.T) {
 				t.Fatal(err)
 			}
 			if result.States["STALE"] != want {
-				t.Fatalf("%v did not receive input drift: %+v, want %d stale", args, result.States, want)
+				t.Fatalf("%v changed state from input content: %+v, want %d stale", args, result.States, want)
 			}
 		}
 	}
-	check(4) // Four unrelated intent-stale fixture nodes; this node is green.
+	check(0)
 	writeArtifact(t, root, "docs/PRDs", "wire.md", "# Wire\n## Selected\nOriginal.\n## Other\nEdited only here.\n")
-	check(4)
+	check(0)
 	writeArtifact(t, root, "docs/PRDs", "wire.md", "# Wire\n## Selected\nChanged contract.\n## Other\nEdited only here.\n")
-	check(5)
+	check(0)
 	if err := os.Remove(filepath.Join(root, "docs/PRDs/wire.md")); err != nil {
 		t.Fatal(err)
 	}
-	check(5)
+	check(0)
 }
 
 func TestNextRefusesMissingInputBeforeClaim(t *testing.T) {

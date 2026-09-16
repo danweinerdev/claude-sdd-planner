@@ -18,15 +18,11 @@ package sync
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/algorithms"
-	gcompile "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/compile"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
 )
 
@@ -43,11 +39,6 @@ type ReverifyOptions struct {
 	Provider    provider.Provider
 	Now         func() time.Time
 	TTL         time.Duration
-	// All re-attempts nodes whose current observation is already a fresh
-	// pass (GREEN — not STALE, not RED). The default skips them: reverify
-	// exists to fold one run against unverified/stale work, not to append a
-	// redundant pass observation to nodes that already have current proof.
-	All bool
 }
 
 // ReverifyOutcome is one node's result in the batch.
@@ -119,22 +110,6 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 		// error text; the aggregate untracked list is best-effort.
 	}
 
-	// Best-effort derived states, used only to skip nodes whose current
-	// observation is already a fresh pass (DD-1's digest/intent/input axes
-	// wired when the plan's sources resolve; graph-only semantics otherwise
-	// — a caller without a repo checkout still gets seq/digest staleness).
-	var statesByID map[string]states.NodeState
-	if !o.All {
-		in := states.Inputs{Graph: g}
-		if sources, serr := gcompile.NewSources(filepath.Dir(filepath.Dir(o.PlanDir)), o.RepoRoot, filepath.Base(o.PlanDir)); serr == nil {
-			snap := sources.IntentSnapshot()
-			in.ArtifactDigest = digest.New(o.RepoRoot).Artifact
-			in.CurrentIntentHashes = snap.Hashes()
-			in.CurrentInputHashes = sources.InputResolver().GraphHashes(g)
-		}
-		statesByID = states.Derive(in)
-	}
-
 	for _, id := range algorithms.TopoSort(adjacency) {
 		n := byID[id]
 		out := ReverifyOutcome{Node: id}
@@ -143,12 +118,6 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 			out.Skipped = "claimed by " + n.Claim.By + " (the holder owns its observations)"
 		case n.Gate.Type == model.GateReview:
 			out.Skipped = "review gate (its observation is a frozen review artifact; use `sdd graph review`)"
-		case n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceObservedV1:
-			out.Skipped = "historical observed-v1 gate (explicitly amend to reported-v1 for fresh evidence)"
-		case n.Gate.Type == model.GateTests && n.Gate.Evidence == model.EvidenceReportedV1:
-			out.Skipped = "requires node-specific --report and --metadata admission by its live claim holder"
-		case !o.All && statesByID[id].State == states.Green:
-			out.Skipped = "fresh, skipped (already a current pass; pass --all to re-verify anyway)"
 		case n.Gate.Type == model.GateTests && o.ReportBytes == nil:
 			out.Skipped = "tests gate, no --report supplied"
 		case n.Gate.Type == model.GateCommand && o.CommandExit == nil:
@@ -165,6 +134,7 @@ func Reverify(o ReverifyOptions) (*ReverifyResult, error) {
 				runOpts.ReportName = o.ReportName
 				runOpts.ReportBytes = o.ReportBytes
 			}
+			runOpts.reverify = true
 			r, err := Run(runOpts)
 			switch {
 			case err != nil:

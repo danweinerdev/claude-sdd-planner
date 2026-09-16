@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/provider"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
@@ -102,7 +101,7 @@ func deriveWithDigests(t *testing.T, root, planDir string) map[string]states.Nod
 	if err != nil {
 		t.Fatal(err)
 	}
-	return states.Derive(states.Inputs{Graph: g, ArtifactDigest: digest.New(root).Artifact})
+	return states.Derive(states.Inputs{Graph: g})
 }
 
 func TestScopeNestedGatesDisjointCover(t *testing.T) {
@@ -368,10 +367,7 @@ func TestRecordGreensGateAndStalesOnDrift(t *testing.T) {
 	writeFile(t, root, "src/b.ext", "content b")
 	// The work observations must anchor the CURRENT bytes or the members
 	// derive digest-stale themselves.
-	d := digest.New(root)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.NodeByID("a").Verification.ArtifactDigests = map[string]string{"src/a.ext": d.Artifact("src/a.ext")}
-		g.NodeByID("b").Verification.ArtifactDigests = map[string]string{"src/b.ext": d.Artifact("src/b.ext")}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -386,9 +382,6 @@ func TestRecordGreensGateAndStalesOnDrift(t *testing.T) {
 	if !reflect.DeepEqual(res.Scope, []string{"a", "b"}) {
 		t.Fatalf("scope: %v", res.Scope)
 	}
-	if len(res.Observation.ArtifactDigests) != 2 {
-		t.Fatalf("the gate observation records the aggregate scope diff: %+v", res.Observation.ArtifactDigests)
-	}
 	if res.Observation.ReportDigest == "" {
 		t.Fatal("the artifact's own digest anchors the observation")
 	}
@@ -398,12 +391,11 @@ func TestRecordGreensGateAndStalesOnDrift(t *testing.T) {
 		t.Fatalf("the gate derives GREEN from the frozen Aligned artifact: %+v", st["g1"])
 	}
 
-	// Drift one scope artifact: the reviewed diff is no longer the diff on
-	// disk — the gate derives STALE via ordinary digest staleness.
+	// Repository edits are not state inputs; only a new observation stales it.
 	writeFile(t, root, "src/a.ext", "content a CHANGED")
 	st = deriveWithDigests(t, root, planDir)
-	if st["g1"].State != states.Stale || len(st["g1"].DigestStale) == 0 {
-		t.Fatalf("scope drift must derive the gate STALE: %+v", st["g1"])
+	if st["g1"].State != states.Green {
+		t.Fatalf("unobserved file edits must not change state: %+v", st["g1"])
 	}
 }
 
@@ -480,7 +472,7 @@ func TestRecordBindsReviewedSetAndStalesOnContractRevision(t *testing.T) {
 		t.Fatalf("record: %v", err)
 	}
 	obs := res.Observation
-	if obs.ContractRev != 1 || len(obs.Reviewed) != 2 || obs.Reviewed["a"].ContractRev != 1 || obs.Reviewed["a"].ArtifactDigests["src/a.ext"] == "" {
+	if obs.ContractRev != 1 || len(obs.Reviewed) != 2 || obs.Reviewed["a"].ContractRev != 1 {
 		t.Fatalf("reviewed set not recorded: %+v", obs)
 	}
 	if st := deriveWithDigests(t, root, planDir); st["g1"].State != states.Green {
@@ -738,9 +730,7 @@ func TestClosedPredicate(t *testing.T) {
 	free.Verification = pass(2)
 	root, planDir := fixture(t, 2, a, b, gate, free)
 	writeFile(t, root, "src/a.ext", "content a")
-	d := digest.New(root)
 	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.NodeByID("a").Verification.ArtifactDigests = map[string]string{"src/a.ext": d.Artifact("src/a.ext")}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -752,7 +742,7 @@ func TestClosedPredicate(t *testing.T) {
 	}
 
 	g, _ := gstore.Load(gstore.PathFor(planDir))
-	st := states.Derive(states.Inputs{Graph: g, ArtifactDigest: digest.New(root).Artifact})
+	st := states.Derive(states.Inputs{Graph: g})
 	closed := Closed(g, st)
 	if !closed["a"] {
 		t.Fatal("GREEN inside a GREEN frozen full gate's scope is closed")
@@ -767,10 +757,10 @@ func TestClosedPredicate(t *testing.T) {
 		t.Fatal("a GREEN recorded full gate is closed by its own frozen review")
 	}
 
-	// Drift the reviewed artifact: the gate goes STALE, and closure is
-	// withdrawn — a stale gate certifies nothing.
-	writeFile(t, root, "src/a.ext", "content a CHANGED")
-	st = states.Derive(states.Inputs{Graph: g, ArtifactDigest: digest.New(root).Artifact})
+	// A deliberate re-verification after the review stales the gate and
+	// withdraws closure.
+	g.NodeByID("a").Verification = pass(g.NodeByID("g1").Verification.Seq + 1)
+	st = states.Derive(states.Inputs{Graph: g})
 	closed = Closed(g, st)
 	if closed["a"] {
 		t.Fatal("a stale gate must withdraw closure")
@@ -879,43 +869,6 @@ func TestClosedDoesNotSubtractAStaleInnerFullReview(t *testing.T) {
 	closed := Closed(g, derived)
 	if !closed["a"] || !closed["outer"] || closed["inner"] {
 		t.Fatalf("outer current review must absorb the stale inner region without closing the stale gate: %v", closed)
-	}
-}
-
-func TestRecordScopeDoesNotSubtractArtifactStaleInnerReview(t *testing.T) {
-	a := work("a", nil, "src/a.ext")
-	inner := fullGate("inner", []string{"a"})
-	outer := fullGate("outer", []string{"inner"})
-	root, _ := fixture(t, 2, a, inner, outer)
-	writeFile(t, root, "src/a.ext", "current\n")
-	current := digest.New(root).Artifact("src/a.ext")
-
-	planDir := filepath.Join(root, "Plans", "P")
-	if _, err := gstore.Update(gstore.PathFor(planDir), func(g *model.Graph) error {
-		g.NodeByID("a").Verification = &model.Verification{
-			Result: model.ResultPass, Seq: 1, ContractRev: 1,
-			ArtifactDigests: map[string]string{"src/a.ext": current}, Isolation: model.IsolationClean,
-		}
-		g.NodeByID("inner").Verification = &model.Verification{
-			Result: model.ResultPass, Seq: 2, ContractRev: 1,
-			ArtifactDigests: map[string]string{"src/a.ext": "sha256:stale"},
-			Reviewed: map[string]model.ReviewedRef{"a": {
-				ContractRev: 1, ArtifactDigests: map[string]string{"src/a.ext": current},
-			}},
-			Isolation: model.IsolationClean,
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, root, "reviews/outer.md", artifactText("resolved", true, "Aligned", allPass(), ""))
-
-	res, err := Record(Options{Root: root, RepoRoot: root, Plan: "P", Node: "outer", Artifact: "reviews/outer.md"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"a", "inner"}; !reflect.DeepEqual(res.Scope, want) {
-		t.Fatalf("artifact-stale inner review must not subtract its region: got %v want %v", res.Scope, want)
 	}
 }
 

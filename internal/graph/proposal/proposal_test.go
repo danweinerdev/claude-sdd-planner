@@ -263,37 +263,14 @@ func TestSchemaGatePredicatesForbidFieldsOnWrongGateTypes(t *testing.T) {
 	gate := definition(t, doc, "gate")
 	raw, _ := json.Marshal(gate["allOf"])
 	s := string(raw)
-	for _, requiredPredicate := range []string{`"required":["type"]`, `"required":["evidence"]`} {
+	for _, requiredPredicate := range []string{`"required":["type"]`} {
 		if !strings.Contains(s, requiredPredicate) {
 			t.Errorf("conditional lacks presence predicate %s: %s", requiredPredicate, s)
 		}
 	}
-	for _, field := range []string{"tests", "evidence", "execution", "command", "lanes"} {
+	for _, field := range []string{"tests", "command", "lanes"} {
 		if !strings.Contains(s, `"required":["`+field+`"]`) {
 			t.Errorf("schema conditions never require/forbid %q by presence: %s", field, s)
 		}
-	}
-	if !strings.Contains(s, `"not":{"required":["execution"]}`) {
-		t.Errorf("authoring schema does not forbid retired execution profiles: %s", s)
-	}
-}
-
-func TestSchemaExecutionBoundsAndCollectionsMatchModel(t *testing.T) {
-	doc := schemaDoc(t)
-	execution := definition(t, doc, "execution")
-	props := execution["properties"].(map[string]any)
-	timeout := props["timeout_seconds"].(map[string]any)
-	if got := int64(timeout["maximum"].(float64)); got != int64(model.MaxExecutionTimeoutSeconds) {
-		t.Fatalf("schema timeout maximum=%d, model=%d", got, model.MaxExecutionTimeoutSeconds)
-	}
-	for _, field := range []string{"environment_keys", "test_support_inputs", "test_support_artifacts"} {
-		p := props[field].(map[string]any)
-		if unique, _ := p["uniqueItems"].(bool); !unique {
-			t.Errorf("%s does not reject duplicates", field)
-		}
-	}
-	envItems := props["environment_keys"].(map[string]any)["items"].(map[string]any)
-	if envItems["pattern"] != `^[A-Za-z_][A-Za-z0-9_]*$` {
-		t.Fatalf("environment key pattern=%v", envItems["pattern"])
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/digest"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/model"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/states"
 	gstore "github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/store"
@@ -70,13 +69,8 @@ type FamilyCoverage struct {
 // StaleNode is one node's derived staleness reasons.
 type StaleNode struct {
 	ID              string   `json:"id"`
-	SeqStale        bool     `json:"seq_stale,omitempty"`
 	DependencyStale []string `json:"dependency_stale,omitempty"`
-	DigestStale     []string `json:"digest_stale,omitempty"`
-	IntentStale     []string `json:"intent_stale,omitempty"`
-	InputStale      []string `json:"input_stale,omitempty"`
 	ReviewStale     []string `json:"review_stale,omitempty"`
-	AnchorAdvisory  []string `json:"anchor_advisory,omitempty"`
 }
 
 // DuplicateTest is a test id declared twice within one node.
@@ -128,17 +122,9 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 	if len(rep.Findings) > 0 {
 		rep.OK = false
 	}
-
-	// Derived states with every axis wired (digest, intent, input).
-	snap := sources.IntentSnapshot()
 	inRes := sources.InputResolver()
-	digester := digest.New(repoRoot)
-	st := states.Derive(states.Inputs{
-		Graph:               g,
-		ArtifactDigest:      digester.Artifact,
-		CurrentIntentHashes: snap.Hashes(),
-		CurrentInputHashes:  inRes.GraphHashes(g),
-	})
+
+	st := states.Derive(states.Inputs{Graph: g})
 
 	rep.Counts.Nodes = len(g.Nodes)
 	rep.Counts.Retired = len(g.Retired)
@@ -164,9 +150,7 @@ func Audit(root, repoRoot, plan string) (*AuditReport, error) {
 		ns := st[n.ID]
 		if ns.State == states.Stale {
 			rep.Stale = append(rep.Stale, StaleNode{
-				ID: n.ID, SeqStale: ns.SeqStale, DependencyStale: ns.DependencyStale,
-				DigestStale: ns.DigestStale, IntentStale: ns.IntentStale, InputStale: ns.InputStale,
-				ReviewStale: ns.ReviewStale, AnchorAdvisory: ns.AnchorAdvisory,
+				ID: n.ID, DependencyStale: ns.DependencyStale, ReviewStale: ns.ReviewStale,
 			})
 		}
 

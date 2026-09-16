@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/graph/proposal"
-	"github.com/danweinerdev/claude-sdd-planner/v2/internal/reportevidence"
 	"github.com/danweinerdev/claude-sdd-planner/v2/internal/schema"
 )
 
@@ -52,7 +51,6 @@ type templateOpts struct {
 // The non-markdown templates are JSON payload skeletons plus their JSON
 // Schemas, generated from their owning Go packages.
 const graphProposalType = "graph-proposal"
-const evidenceMetadataType = "evidence-metadata"
 
 func cmdTemplate(artifactType string, o templateOpts) error {
 	if o.Check {
@@ -64,19 +62,11 @@ func cmdTemplate(artifactType string, o templateOpts) error {
 
 	var body string
 	switch {
-	case artifactType == graphProposalType || artifactType == evidenceMetadataType:
+	case artifactType == graphProposalType:
 		if o.ForApply {
 			return fmt.Errorf("template: --for-apply applies only to markdown artifact types")
 		}
-		if artifactType == evidenceMetadataType && o.Schema {
-			body = string(reportevidence.SchemaJSON())
-		} else if artifactType == evidenceMetadataType {
-			raw, err := reportevidence.ExemplarJSON()
-			if err != nil {
-				return fmt.Errorf("template: %w", err)
-			}
-			body = string(raw)
-		} else if o.Schema {
+		if o.Schema {
 			body = string(proposal.SchemaJSON())
 		} else {
 			raw, err := proposal.ExemplarJSON()
@@ -86,7 +76,7 @@ func cmdTemplate(artifactType string, o templateOpts) error {
 			body = string(raw)
 		}
 	case o.Schema:
-		return fmt.Errorf("template: --schema applies only to %s or %s", graphProposalType, evidenceMetadataType)
+		return fmt.Errorf("template: --schema applies only to %s", graphProposalType)
 	default:
 		var err error
 		body, err = renderTemplateFor(artifactType, o.ForApply)
@@ -308,8 +298,6 @@ func checkTemplates(dir string, jsonOut bool) error {
 	}{
 		{graphProposalType + ".json", proposal.ExemplarJSON},
 		{graphProposalType + ".schema.json", func() ([]byte, error) { return proposal.SchemaJSON(), nil }},
-		{evidenceMetadataType + ".json", reportevidence.ExemplarJSON},
-		{evidenceMetadataType + ".schema.json", func() ([]byte, error) { return reportevidence.SchemaJSON(), nil }},
 	} {
 		path := filepath.Join(dir, gen.name)
 		raw, err := os.ReadFile(path)

@@ -232,8 +232,11 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if string(out) != fullGraph {
-		t.Fatalf("round-trip is not byte-identical.\n--- got ---\n%s\n--- want ---\n%s", out, fullGraph)
+	if strings.Contains(string(out), "intent_hashes") || strings.Contains(string(out), "artifact_digests") {
+		t.Fatalf("removed legacy fields survived normalization:\n%s", out)
+	}
+	if _, err := DecodeGraph(out); err != nil {
+		t.Fatalf("normalized graph does not decode: %v", err)
 	}
 }
 
@@ -368,11 +371,9 @@ func TestBatchedErrors(t *testing.T) {
 
 func TestProposalRejectsToolOwnedFields(t *testing.T) {
 	cases := map[string]string{
-		"intent_hashes": `"intent_hashes": {"AC-01": "sha256:x"}`,
-		"input_hashes":  `"input_hashes": {"repository:docs/x.md": "sha256:x"}`,
-		"claim":         `"claim": {"by": "me", "lease_expires": "2026-08-31T00:00:00Z"}`,
-		"verification":  `"verification": {"result": "pass", "seq": 1, "isolation": "clean"}`,
-		"red_seqs":      `"red_seqs": {"test_x": 1}`,
+		"claim":        `"claim": {"by": "me", "lease_expires": "2026-08-31T00:00:00Z"}`,
+		"verification": `"verification": {"result": "pass", "seq": 1, "isolation": "clean"}`,
+		"red_seqs":     `"red_seqs": {"test_x": 1}`,
 	}
 	for key, field := range cases {
 		src := `{"version": 1, "nodes": [{"id": "a", "contract": "c", "hazards": [],

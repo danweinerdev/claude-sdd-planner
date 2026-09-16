@@ -54,14 +54,12 @@ fast-forwarding the primary branch**. Do not create merge commits. Run
 deliberately. On the primary branch, use `git merge --ff-only <node-branch>`;
 this advances the branch without creating a merge commit.
 
-**A rebase does not by itself cost verification.** Graph proof is anchored to
-artifact digests; the commit id is supplementary provenance. A node whose
-files come through the rebase byte-identical stays GREEN. Only a node whose
-files changed in the rebase (conflict resolution) derives STALE by digest, and
-only that node re-runs its gate and syncs a fresh observation. Check with
-`sdd graph status` after the fast-forward; never re-verify on the commit id
-alone. The rewritten commit ids are recorded as lineage (below) so provenance
-stays followable.
+**A rebase or fast-forward never changes graph state.** This remains true when
+conflict resolution changes bytes. Re-verification happens only when the walker
+or reviewer deliberately runs the relevant gate and syncs a new observation;
+Git integration does not trigger it. Check `sdd graph status` after the
+fast-forward. Rewritten commit ids may be recorded as lineage (below) so
+provenance stays followable, but lineage is not verification.
 
 Serialize integrations: after each fast-forward, rebase the next node branch
 onto the updated primary branch. If the fast-forward refuses because primary
@@ -112,12 +110,11 @@ creates retention refs automatically.
 Lineage records identity, **not proof**: `revision_lineage` preserves the old→new
 chain while original observations, their provenance, `contract_rev`, sequence
 numbers, and frozen reviews stay unchanged. `graph show` distinguishes recorded
-and rewritten revisions. Remapping neither grants nor withdraws GREEN: a node
-whose artifact digests still match its observation stays current across the
-rewrite, and a node whose digests changed re-verifies through `sync` (or the
-applicable `reverify` batch) regardless of lineage. If the first passing
-observation is recorded only after rebase, it already names the new commit and
-may need no lineage remap.
+and rewritten revisions. Remapping neither grants nor withdraws GREEN and never
+runs verification. If the walker decides the integrated result needs another
+observation, it deliberately runs the gate and uses `sync` (or the applicable
+`reverify` batch). If the first passing observation is recorded only after
+rebase, it already names the new commit and may need no lineage remap.
 
 ### Reclaiming worktrees and branches
 

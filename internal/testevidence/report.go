@@ -1,4 +1,4 @@
-// Package testevidence validates reports produced by owned test executions.
+// Package testevidence validates repository-produced test reports.
 package testevidence
 
 import (
@@ -43,14 +43,24 @@ type Report struct {
 }
 
 func ParseGoReport(raw []byte, selected []SelectedTest, exitCode int) (Report, error) {
+	return parseGoReport(raw, selected, &exitCode)
+}
+
+// ParseGoReportWithoutExit validates report completeness without inventing a
+// process exit code when repository tooling did not capture one.
+func ParseGoReportWithoutExit(raw []byte, selected []SelectedTest) (Report, error) {
+	return parseGoReport(raw, selected, nil)
+}
+
+func parseGoReport(raw []byte, selected []SelectedTest, exitCode *int) (Report, error) {
 	if len(selected) == 0 {
 		return Report{}, fmt.Errorf("Go report has no selected tests")
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return Report{}, fmt.Errorf("Go report is empty")
 	}
-	if exitCode < 0 {
-		return Report{}, fmt.Errorf("Go report has invalid exit code %d", exitCode)
+	if exitCode != nil && *exitCode < 0 {
+		return Report{}, fmt.Errorf("Go report has invalid exit code %d", *exitCode)
 	}
 
 	selectedPackages := make(map[string]bool)
@@ -253,11 +263,11 @@ func ParseGoReport(raw []byte, selected []SelectedTest, exitCode int) (Report, e
 			}
 		}
 	}
-	if exitCode == 0 && anyFailure {
+	if exitCode != nil && *exitCode == 0 && anyFailure {
 		return Report{}, fmt.Errorf("Go report failed despite zero process exit code")
 	}
-	if exitCode != 0 && !anyFailure {
-		return Report{}, fmt.Errorf("nonzero process exit code %d has no accounted package failure", exitCode)
+	if exitCode != nil && *exitCode != 0 && !anyFailure {
+		return Report{}, fmt.Errorf("nonzero process exit code %d has no accounted package failure", *exitCode)
 	}
 	if anyFailure {
 		report.Result = "fail"
