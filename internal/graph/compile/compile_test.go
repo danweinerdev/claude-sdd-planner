@@ -844,9 +844,11 @@ func TestFrozenViewReopenedThenReclosedReRenders(t *testing.T) {
 	// the phase re-closes. The graph itself proves this is a legitimate
 	// reclose (every node closed again); the only projected difference is
 	// the Observation line. This must re-render, not refuse.
+	g.SeqCounter += 2
 	g.Nodes[0].Verification = pass(3)
-	st["a"] = states.NodeState{ID: "a", State: states.Green}
-	reclosed := map[string]bool{"a": true, "g1": true}
+	g.Nodes[1].Verification = pass(4)
+	st = states.Derive(states.Inputs{Graph: g})
+	reclosed := states.Closed(g, st)
 	written, err := renderViews(root, "P", "", g, st, reclosed)
 	if err != nil {
 		t.Fatalf("a reopened-then-reclosed phase must re-render, not refuse: %v", err)
@@ -860,6 +862,9 @@ func TestFrozenViewReopenedThenReclosedReRenders(t *testing.T) {
 	}
 	if !strings.Contains(reclosedDoc, "at seq 3") {
 		t.Fatalf("reclosed re-render must carry the fresh observation:\n%s", reclosedDoc)
+	}
+	if !strings.Contains(reclosedDoc, "(schema v1, seq 4).") {
+		t.Fatalf("reclosed re-render must carry the current global sequence:\n%s", reclosedDoc)
 	}
 
 	// An unrelated hand edit to a frozen view (not shaped like a

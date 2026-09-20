@@ -100,7 +100,9 @@ func renderPhaseDoc(planDir, plan string, g *model.Graph, ph phaseGroup, created
 					existingBefore := existingBody[:loc[0]]
 					existingAfter := existingBody[loc[1]:]
 					normalizeCore := func(s string) string {
-						return createdLineRe.ReplaceAllString(updatedLineRe.ReplaceAllString(s, "updated: {DATE}"), "created: {DATE}")
+						s = createdLineRe.ReplaceAllString(updatedLineRe.ReplaceAllString(s, "updated: {DATE}"), "created: {DATE}")
+						s, _ = normalizePhaseOverviewSeq(s)
+						return s
 					}
 					normalizeBefore := func(s string) string {
 						return verifiedLineRe.ReplaceAllString(s, "- Verified: {VERIFIED_DATE}")
@@ -267,7 +269,37 @@ var (
 	// renderings before deciding whether a frozen-view difference is a
 	// genuine history change or only a legitimate reclose.
 	observationLineRe = regexp.MustCompile(`(?m)^- Observation: .*\n`)
+	// phaseOverviewSeqLineRe recognizes only the renderer-owned line directly
+	// beneath the document's first `## Overview` heading. The global sequence
+	// is current metadata, not frozen phase history; node text and malformed
+	// stamps must remain ordinary byte differences.
+	phaseOverviewSeqLineRe = regexp.MustCompile(`^Rendered view of [0-9]+ node\(s\) from the plan graph \(schema v[0-9]+, seq [0-9]+\)\.$`)
 )
+
+// normalizePhaseOverviewSeq replaces the sequence in the renderer-owned
+// Overview line with a comparison token. It deliberately examines only the
+// line immediately below the first Overview heading, so seq-like node text is
+// never normalized. found is false for a missing or malformed renderer stamp.
+func normalizePhaseOverviewSeq(content string) (normalized string, found bool) {
+	const heading = "## Overview\n\n"
+	headingAt := strings.Index(content, heading)
+	if headingAt < 0 {
+		return content, false
+	}
+	lineAt := headingAt + len(heading)
+	lineEnd := strings.IndexByte(content[lineAt:], '\n')
+	if lineEnd < 0 {
+		lineEnd = len(content) - lineAt
+	}
+	line := content[lineAt : lineAt+lineEnd]
+	if !phaseOverviewSeqLineRe.MatchString(line) {
+		return content, false
+	}
+	seqAt := strings.LastIndex(line, "seq ") + len("seq ")
+	seqEnd := strings.LastIndex(line, ").")
+	line = line[:seqAt] + "{SEQ}" + line[seqEnd:]
+	return content[:lineAt] + line + content[lineAt+lineEnd:], true
+}
 
 // reclosedNoOtherChange reports whether existingCore and contentCore (both
 // already date-normalized) differ ONLY in their per-node `- Observation:
@@ -417,7 +449,11 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 		existingCore, existingEvidenceBody, existingHasEvidence := stripPhaseEvidenceSection(string(existing))
 		contentCore, contentEvidenceBody, contentHasEvidence := stripPhaseEvidenceSection(content)
 		filledContentCore := fillDates(contentCore, created, prevUpdated)
-		refuse := !contentHasEvidence || !existingHasEvidence || filledContentCore != existingCore
+		normalizedExistingCore, existingHasOverviewSeq := normalizePhaseOverviewSeq(existingCore)
+		normalizedContentCore, contentHasOverviewSeq := normalizePhaseOverviewSeq(filledContentCore)
+		coreSameIgnoringSeq := existingHasOverviewSeq && contentHasOverviewSeq && normalizedContentCore == normalizedExistingCore
+		seqOnlyCoreChange := filledContentCore != existingCore && coreSameIgnoringSeq
+		refuse := !contentHasEvidence || !existingHasEvidence || !coreSameIgnoringSeq
 		// The reopen-then-reclose escape (task 1): when the graph knows the
 		// phase was legitimately reopened (a node's verification or
 		// contract_rev moved) and has re-closed it, the ONLY difference in the
@@ -426,8 +462,8 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 		// unchanged, and the new rendering is ITSELF frozen (every node closed
 		// again). That is a re-close, not a genuine history change: re-render
 		// instead of refusing.
-		if refuse && contentHasEvidence && existingHasEvidence &&
-			reclosedNoOtherChange(existingCore, filledContentCore, strings.Contains(content, frozenViewMarker)) {
+		if refuse && contentHasEvidence && existingHasEvidence && existingHasOverviewSeq && contentHasOverviewSeq &&
+			reclosedNoOtherChange(normalizedExistingCore, normalizedContentCore, strings.Contains(content, frozenViewMarker)) {
 			refuse = false
 		}
 		if !refuse {
@@ -452,6 +488,12 @@ func planWrite(path, content, plan string) (write bool, filled string, err error
 				if noRecheckRegression(existingEvidenceBody, filledContentBody) {
 					return false, "", fmt.Errorf("compile: %s is a frozen view, and this render could not confirm the recorded revision still exists — no target repository resolved at render time, so its Identity recheck line would regress from a real probe result to \"no recheck ran\"; resolve the target repository (or delete the frozen view file explicitly and recompile if the phase was legitimately reopened) and try again", path)
 				}
+			}
+			// A global counter advance with no phase or evidence change is a
+			// byte-preserving no-op for an already-frozen view. Keep its original
+			// Overview stamp and frontmatter dates exactly as recorded.
+			if !refuse && seqOnlyCoreChange && filledContentBody == existingEvidenceBody {
+				return false, "", nil
 			}
 		}
 		if refuse {
