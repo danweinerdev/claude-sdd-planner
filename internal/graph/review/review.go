@@ -123,7 +123,9 @@ type Result struct {
 // AdmitArtifact applies the provenance/admissibility policy shared by review
 // recording and review-driven amendment. A frozen artifact is evidence, not a
 // bearer token: it must bind to this plan, satisfy this gate's lane contract,
-// and be unused by every prior observation or amendment.
+// and be unused by every prior observation or amendment. Aligned evidence must
+// contain every required lane; Amend reports may omit lanes that did not run,
+// while every required lane they do contain remains strictly validated.
 func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 	if err := ValidatePlanName(plan); err != nil {
 		return err
@@ -203,11 +205,11 @@ func AdmitArtifact(g *model.Graph, plan, nodeID string, art *Artifact) error {
 // laneResultProblems is the admission rule for lane results, shared by
 // AdmitArtifact and Check: under `verdict: Aligned` every required lane must
 // report a PASS-prefixed result (the strict all-pass phase-completion
-// posture); under `verdict: Amend` a lane may additionally report the
+// posture). Under `verdict: Amend`, required lane rows are optional, but every
+// required lane present must report either a PASS-prefixed result or the
 // truthful non-passing token `rules.NonPassingLaneResult` (`CHANGES/Amend`).
-// Any other verdict, a duplicate lane, a missing lane, or an unrecognized
-// token stays refused regardless of verdict — a placeholder or malformed
-// result is never admissible evidence.
+// A duplicate lane or an unrecognized token stays refused regardless of
+// verdict — a placeholder or malformed result is never admissible evidence.
 func laneResultProblems(f *facts, required []string) []string {
 	laneResults := map[string]string{}
 	duplicates := map[string]bool{}
@@ -225,7 +227,9 @@ func laneResultProblems(f *facts, required []string) []string {
 		case duplicates[lane]:
 			problems = append(problems, fmt.Sprintf("lane %s appears more than once", lane))
 		case !ok:
-			problems = append(problems, fmt.Sprintf("lane %s is absent from the artifact", lane))
+			if !amend {
+				problems = append(problems, fmt.Sprintf("lane %s is absent from the artifact", lane))
+			}
 		case strings.HasPrefix(res, "PASS"):
 			// Always admissible.
 		case amend && res == rules.NonPassingLaneResult:

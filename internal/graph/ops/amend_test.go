@@ -170,7 +170,7 @@ func TestAmendRefusesForeignOrInadmissibleReviewArtifacts(t *testing.T) {
 	}{
 		{"foreign plan", `review_of: "Plans/SamplePlan/README.md"`, `review_of: "Plans/Foreign/README.md"`, "not under Plans/SamplePlan/"},
 		{"unaligned verdict", "verdict: Amend", "verdict: Misaligned", "verdict is"},
-		{"missing lane", "  - lane: review_quality\n    result: PASS/Aligned\n    evidence: \"looked\"\n", "", "review_quality is absent"},
+		{"invalid present lane", "  - lane: review_quality\n    result: PASS/Aligned\n    evidence: \"looked\"\n", "  - lane: review_quality\n    result: TODO/Unfilled\n    evidence: \"looked\"\n", "review_quality reports"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

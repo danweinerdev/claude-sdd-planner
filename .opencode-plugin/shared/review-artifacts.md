@@ -182,7 +182,10 @@ claims, and a frozen review only ever makes one of them:
   open finding is classified `revise`/`extend` with its graph consequence —
   but one or more lanes may report `CHANGES/Amend`, and nothing about the
   reviewed work is accepted. The review exists to drive `sdd graph amend`,
-  not to close anything.
+  not to close anything. A general, non-phase frozen `Amend` review may omit
+  code-lane records when those lanes did not run; `sdd graph review` returns
+  only an amendment preview and cannot green the review node. Phase reviews
+  and every `Aligned` completion retain the strict four-lane requirement.
 - **Implementation accepted** (frozen `Aligned`): every lane reports
   `PASS/Aligned` and every finding has a terminal disposition. This is the
   only verdict that completes a phase (the strict all-pass phase-completion
